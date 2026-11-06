@@ -7,6 +7,14 @@ from .permission_engine import (
     PermissionDeniedError,
     PermissionEngine,
 )
+from .pipeline_types import (
+    FindingSeverity,
+    FindingStatus,
+    PipelineGateResult,
+    SecurityFinding,
+    StackType,
+)
+from .qa_security_pipeline import QASecurityPipeline
 from .redaction import redact_data, redact_string
 from .session_manager import SessionManager, UserRole, UserSession
 
@@ -23,6 +31,7 @@ class SecurityCore:
         self.kill_switch = KillSwitch(audit_trail=self.audit)
         self.approval_engine = ApprovalEngine(audit_trail=self.audit)
         self.permission_engine = PermissionEngine(audit_trail=self.audit)
+        self.pipeline = QASecurityPipeline(audit_trail=self.audit)
 
 
 __all__ = [
@@ -30,11 +39,17 @@ __all__ = [
     "READ_ONLY_ROLES",
     "ApprovalEngine",
     "AuditTrail",
+    "FindingSeverity",
+    "FindingStatus",
     "KillSwitch",
     "PermissionDeniedError",
     "PermissionEngine",
+    "PipelineGateResult",
+    "QASecurityPipeline",
     "SecurityCore",
+    "SecurityFinding",
     "SessionManager",
+    "StackType",
     "UnauthorizedApprovalError",
     "UserRole",
     "UserSession",
