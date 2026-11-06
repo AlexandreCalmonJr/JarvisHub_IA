@@ -1,0 +1,89 @@
+import pytest
+import hashlib
+from pathlib import Path
+
+from packages.contracts.agent import AgentRole
+from packages.contracts.security import ProjectWorkMode
+from agents.registry import AgentRegistry
+from services.security_core import SecurityCore
+from services.project_workspace import (
+    ProjectWorkspaceService,
+    ProjectScanner,
+    ProjectAnalyzer,
+)
+
+
+def test_agent_registry_initial_agents():
+    registry = AgentRegistry()
+    agents = registry.list_agents()
+    assert len(agents) >= 9
+
+    # Verifica os agentes prioritários
+    roles = {a.role for a in agents}
+    assert AgentRole.JARVIS_MASTER in roles
+    assert AgentRole.SOFTWARE_ARCHITECT in roles
+    assert AgentRole.FRONTEND_MOBILE_DEVELOPER in roles
+    assert AgentRole.BACKEND_DEVELOPER in roles
+    assert AgentRole.CYBERSECURITY_ENGINEER in roles
+
+    # Verifica permissões do arquiteto (somente-leitura)
+    arch = registry.get_profile(AgentRole.SOFTWARE_ARCHITECT)
+    assert arch.is_read_only is True
+    assert "read_file" in arch.allowed_tools
+
+
+def test_project_workspace_scan_and_analysis_on_flutter_project():
+    demo_path = Path("workspace/demo_flutter_app").resolve()
+    assert demo_path.exists()
+
+    # Hash dos arquivos antes da análise para comprovar integridade read-only
+    pubspec_before = (demo_path / "pubspec.yaml").read_bytes()
+    main_dart_before = (demo_path / "lib" / "main.dart").read_bytes()
+
+    security_core = SecurityCore()
+    workspace_service = ProjectWorkspaceService(security_core=security_core)
+
+    report = workspace_service.register_and_scan(
+        project_id="demo-flutter",
+        folder_path=str(demo_path),
+        mode=ProjectWorkMode.READ_ONLY,
+    )
+
+    # 1. Validação do Relatório de Arquitetura
+    assert report.project_id == "demo-flutter"
+    assert report.project_name == "demo_flutter_app"
+    assert "Flutter" in report.project_type
+    assert "lib/main.dart" in report.entry_points
+    assert "flutter" in report.key_dependencies
+    assert "cupertino_icons" in report.key_dependencies
+
+    # 2. Validação do Inventário
+    inventory = workspace_service.get_inventory("demo-flutter")
+    assert inventory is not None
+    assert inventory.total_files >= 3
+    assert any("pubspec.yaml" in m for m in inventory.manifests_found)
+    assert ".dart" in inventory.languages
+
+    # 3. Comprovação Absoluta de Read-Only (Arquivos Não Modificados)
+    pubspec_after = (demo_path / "pubspec.yaml").read_bytes()
+    main_dart_after = (demo_path / "lib" / "main.dart").read_bytes()
+    assert pubspec_before == pubspec_after
+    assert main_dart_before == main_dart_after
+
+
+def test_project_analyzer_detects_security_hotspot(tmp_path):
+    project_dir = tmp_path / "vuln_app"
+    project_dir.mkdir()
+    source_file = project_dir / "service.py"
+    source_file.write_text('API_KEY = "sk-1234567890abcdef12345678"\nurl = "http://api.insecure.com/data"\n')
+
+    scanner = ProjectScanner()
+    inventory = scanner.scan("vuln-proj", project_dir)
+
+    analyzer = ProjectAnalyzer()
+    report = analyzer.analyze(inventory)
+
+    assert len(report.security_hotspots) == 2
+    rules = {h.rule for h in report.security_hotspots}
+    assert "HARDCODED_CREDENTIAL" in rules
+    assert "UNENCRYPTED_HTTP" in rules
