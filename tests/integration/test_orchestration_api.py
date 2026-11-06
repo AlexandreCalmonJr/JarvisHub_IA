@@ -6,6 +6,15 @@ from packages.contracts.agent import AgentRole
 
 
 @pytest.mark.asyncio
+async def test_api_serves_dashboard_html():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/")
+        assert res.status_code == 200
+        assert "JARVIS AI HUB" in res.text
+
+
+@pytest.mark.asyncio
 async def test_api_health_check():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

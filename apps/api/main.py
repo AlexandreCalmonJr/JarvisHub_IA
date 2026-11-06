@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from services.model_runtime import ModelManager, OllamaAdapter
@@ -142,3 +145,9 @@ async def trigger_kill_switch(payload: KillSwitchRequest):
         return {"status": "task_cancelled", "task_id": payload.task_id}
     else:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
+
+
+# Monta dashboard web estático se compilado
+dist_path = Path("apps/dashboard/dist")
+if dist_path.exists():
+    app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="dashboard")
