@@ -88,3 +88,17 @@ class AgentTaskRequest(BaseModel):
     project_path: str | None = None
     allowed_tools: list[str] = Field(default_factory=list)
     context_data: dict[str, Any] = Field(default_factory=dict)
+
+
+class InterAgentMessage(BaseModel):
+    """Mensagem tipada para comunicação estruturada entre agentes com controle de ciclos."""
+
+    id: str
+    task_id: str
+    sender: AgentRole
+    recipient: AgentRole
+    event_type: str
+    context_summary: str
+    expected_output: str
+    cycle: int = 1
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
