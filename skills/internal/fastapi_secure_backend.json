@@ -1,0 +1,24 @@
+{
+  "id": "fastapi_secure_backend",
+  "name": "FastAPI Secure Backend Practices",
+  "version": "1.0.0",
+  "origin": "internal",
+  "license": "MIT",
+  "description": "Padrões de segurança, tipagem e observabilidade para microsserviços e monólitos FastAPI.",
+  "domain": "backend",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "content_hash": "53cc0a49c9259812f4cd87bf9cec33977410cc8c3b818af3288e1da9e454b913",
+  "is_approved": true,
+  "is_revoked": false,
+  "instructions": "Endpoints devem utilizar Pydantic v2 para validação de entrada e saída. Não expor exceções internas não tratadas no payload HTTP. Utilizar injeção de dependência para autenticação e sessões.",
+  "templates": {
+    "router_template": "@router.get('/endpoint', response_model=StandardResponse)\nasync def handler(user=Depends(get_current_user)): ..."
+  },
+  "created_at": "2026-11-06T00:06:42.741132Z",
+  "updated_at": "2026-11-06T00:06:42.741132Z"
+}

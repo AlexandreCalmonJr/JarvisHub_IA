@@ -1,0 +1,24 @@
+{
+  "id": "flutter_clean_architecture",
+  "name": "Flutter Clean Architecture & State",
+  "version": "1.0.0",
+  "origin": "internal",
+  "license": "MIT",
+  "description": "Boas práticas e convenções para desenvolvimento Flutter/Dart com separação de responsabilidades.",
+  "domain": "flutter",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "content_hash": "f8e7ede3cd00803c5b75579a9ad20b3890125ec426ebf1460b716a65f9a77076",
+  "is_approved": true,
+  "is_revoked": false,
+  "instructions": "Ao desenvolver ou analisar código Flutter, separa as camadas de apresentação (Widgets), lógica de negócios (BLoC/Cubit) e acesso a dados (Repositories). Evita chamadas HTTP diretas nos métodos build().",
+  "templates": {
+    "bloc_template": "abstract class FeatureEvent {}\nabstract class FeatureState {}\nclass FeatureBloc extends Bloc<FeatureEvent, FeatureState> { ... }"
+  },
+  "created_at": "2026-11-06T00:06:42.740600Z",
+  "updated_at": "2026-11-06T00:06:42.740600Z"
+}

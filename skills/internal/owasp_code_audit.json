@@ -1,0 +1,24 @@
+{
+  "id": "owasp_code_audit",
+  "name": "OWASP Secure Code Audit",
+  "version": "1.0.0",
+  "origin": "internal",
+  "license": "MIT",
+  "description": "Procedimento de auditoria contra OWASP Top 10 e OWASP LLM Top 10.",
+  "domain": "security",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "content_hash": "26c7bec9864ee55a345a8dd9f6001ddd2c199f688829e63661fa9582525a982e",
+  "is_approved": true,
+  "is_revoked": false,
+  "instructions": "Verificar ausência de injeção SQL/Comando, desativação de transporte sem TLS, exposição de chaves privadas ou tokens no repositório e validação de permissões no backend para qualquer mutação.",
+  "templates": {
+    "audit_checklist": "1. Injeção de código/SQL: verificado\n2. Segredos em código: verificado\n3. Prevenção de Path Traversal: verificado"
+  },
+  "created_at": "2026-11-06T00:06:42.741132Z",
+  "updated_at": "2026-11-06T00:06:42.741132Z"
+}
