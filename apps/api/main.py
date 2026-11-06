@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -326,6 +327,15 @@ async def revoke_mobile_device(payload: DeviceRevokeRequest):
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
 
+
+# Monta aplicativo mobile Flutter (PWA) se compilado
+mobile_dist = Path("apps/mobile/build/web")
+if mobile_dist.exists():
+    @app.get("/mobile")
+    async def redirect_mobile():
+        return RedirectResponse(url="/mobile/")
+
+    app.mount("/mobile", StaticFiles(directory=str(mobile_dist), html=True), name="mobile_app")
 
 # Monta dashboard web estático se compilado
 dist_path = Path("apps/dashboard/dist")

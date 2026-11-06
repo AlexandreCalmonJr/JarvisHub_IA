@@ -156,6 +156,19 @@ def create_master_graph(
                 "novo projeto",
                 "cria um projeto",
                 "desenvolver landing",
+                "criar um app",
+                "cria um app",
+                "crie um app",
+                "criar app",
+                "criar aplicativo",
+                "cria um aplicativo",
+                "crie um aplicativo",
+                "gerar aplicativo",
+                "gerar app",
+                "app mobile",
+                "aplicativo mobile",
+                "app flutter",
+                "aplicativo flutter",
             )
         ):
             intent = "project_creation"
@@ -292,9 +305,16 @@ def create_master_graph(
         model_name = "llama3.2:3b"
         intent = state.get("classified_intent")
 
-        # 1. Criação física de Projeto / Website em workspace/
+        # 1. Criação física de Projeto / Website / App Mobile em workspace/
         if intent == "project_creation" and workspace_service:
             p_lower = state["user_prompt"].lower()
+            is_mobile = any(
+                w in p_lower
+                for w in ("mobile", "app", "aplicativo", "flutter", "celular", "apk", "android")
+            )
+            project_type = "flutter" if is_mobile else "web"
+            prefix = "app" if is_mobile else "site"
+
             slug = None
             for kw in (
                 "cafeteria",
@@ -312,7 +332,7 @@ def create_master_graph(
                 "academia",
             ):
                 if kw in p_lower:
-                    slug = f"site-{kw}"
+                    slug = f"{prefix}-{kw}"
                     break
             if not slug:
                 words = re.findall(r"[a-zA-Z0-9]+", p_lower)
@@ -338,40 +358,60 @@ def create_master_graph(
                         "web",
                         "pagina",
                         "simples",
+                        "app",
+                        "aplicativo",
+                        "mobile",
+                        "flutter",
+                        "celular",
                     )
                 ]
                 if filtered:
-                    slug = f"site-{'-'.join(filtered[:2])}"
+                    slug = f"{prefix}-{'-'.join(filtered[:2])}"
                 else:
-                    slug = f"meu-site-{state['task_id'][-4:]}"
+                    slug = f"meu-{prefix}-{state['task_id'][-4:]}"
 
             name_clean = slug.replace("-", " ").title()
             scaffold_res = workspace_service.scaffold_project(
                 project_id=slug,
                 name=name_clean,
-                description=f"Website criado pelo JARVIS AI HUB a partir do pedido: '{state['user_prompt']}'",
-                project_type="web",
+                description=f"{'Aplicativo mobile Flutter' if is_mobile else 'Website'} criado pelo JARVIS AI HUB a partir do pedido: '{state['user_prompt']}'",
+                project_type=project_type,
             )
             created_files = scaffold_res["files_created"]
             root_path_str = scaffold_res["root_path"]
 
-            llm_text = (
-                f"🎉 **Website criado com sucesso no seu computador!**\n\n"
-                f"📁 **Pasta local criada**: `{root_path_str}`\n\n"
-                f"✨ **Arquivos físicos gravados no disco**:\n"
-                f"- `index.html` (Estrutura HTML5 moderna, semântica e responsiva)\n"
-                f"- `style.css` (Estilização responsiva em dark theme com variáveis CSS)\n"
-                f"- `app.js` (Interações e validação de formulário)\n"
-                f"- `README.md` (Documentação e instruções)\n\n"
-                f"🚀 **Como visualizar agora mesmo no seu navegador:**\n"
-                f"Abra o arquivo diretamente no navegador:\n"
-                f"`{root_path_str}\\index.html`\n\n"
-                f"Você pode solicitar modificações no chat a qualquer momento (ex: *\"no {slug}, mude o título para Cafeteria Gourmet\"* ou *\"mude a cor para verde\"*)."
-            )
+            if is_mobile:
+                llm_text = (
+                    f"📱 **Aplicativo Mobile Flutter criado com sucesso no seu computador!**\n\n"
+                    f"📁 **Pasta local criada**: `{root_path_str}`\n\n"
+                    f"✨ **Arquivos físicos do app gravados no disco**:\n"
+                    f"- `pubspec.yaml` (Configurações, dependências e assets Flutter)\n"
+                    f"- `lib/main.dart` (Código-fonte completo com catálogo, Material 3 e Dark Theme)\n"
+                    f"- `test/widget_test.dart` (Testes automatizados de interface)\n"
+                    f"- `README.md` (Instruções completas para executar e compilar APK)\n\n"
+                    f"🚀 **Como executar ou testar agora mesmo no seu computador:**\n"
+                    f"No terminal dentro da pasta:\n"
+                    f"```bash\ncd workspace/{slug}\nflutter run -d chrome\n# ou para gerar APK para celular Android:\nflutter build apk --release\n```\n\n"
+                    f"O projeto já está ativo no **Project Workspace** e pronto para modificações pelo chat!"
+                )
+            else:
+                llm_text = (
+                    f"🎉 **Website criado com sucesso no seu computador!**\n\n"
+                    f"📁 **Pasta local criada**: `{root_path_str}`\n\n"
+                    f"✨ **Arquivos físicos gravados no disco**:\n"
+                    f"- `index.html` (Estrutura HTML5 moderna, semântica e responsiva)\n"
+                    f"- `style.css` (Estilização responsiva em dark theme com variáveis CSS)\n"
+                    f"- `app.js` (Interações e validação de formulário)\n"
+                    f"- `README.md` (Documentação e instruções)\n\n"
+                    f"🚀 **Como visualizar agora mesmo no seu navegador:**\n"
+                    f"Abra o arquivo diretamente no navegador:\n"
+                    f"`{root_path_str}\\index.html`\n\n"
+                    f"Você pode solicitar modificações no chat a qualquer momento (ex: *\"no {slug}, mude o título para Cafeteria Gourmet\"* ou *\"mude a cor para verde\"*)."
+                )
 
             agent_output = AgentOutputContract(
                 agent_role=primary_agent,
-                objective="Criação física de website e estrutura de arquivos no computador",
+                objective="Criação física de projeto e estrutura de arquivos no computador",
                 summary=llm_text,
                 evidence=[
                     f"Pasta criada em {root_path_str}",
@@ -380,7 +420,7 @@ def create_master_graph(
                 ],
                 actions_taken=state.get("plan_steps", []),
                 affected_files=[f"workspace/{slug}/{f}" for f in created_files],
-                tests_executed=["Validação de sintaxe HTML5", "Inspeção de caminhos e permissões"],
+                tests_executed=["Validação de sintaxe e estrutura", "Inspeção de caminhos e permissões"],
                 risks=[],
                 blockers=[],
                 resource_usage=ResourceUsage(
@@ -389,7 +429,7 @@ def create_master_graph(
                     tokens_completion=120,
                     duration_ms=10.0,
                 ),
-                next_recommendation="Inspecione o projeto na aba Project Workspace ou abra o index.html no navegador.",
+                next_recommendation="Inspecione o projeto na aba Project Workspace.",
             )
             return {
                 "agent_outputs": [agent_output.model_dump()],

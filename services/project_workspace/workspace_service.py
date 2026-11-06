@@ -77,7 +77,10 @@ class ProjectWorkspaceService:
         project_dir.mkdir(parents=True, exist_ok=True)
 
         if not files:
-            files = self._generate_default_web_scaffold(project_id, name, description)
+            if project_type in ("flutter", "mobile"):
+                files = self._generate_default_flutter_scaffold(project_id, name, description)
+            else:
+                files = self._generate_default_web_scaffold(project_id, name, description)
 
         created_files: list[str] = []
         for rel_path, content in files.items():
@@ -643,4 +646,239 @@ Você pode solicitar alterações diretamente pelo chat do JARVIS (ex: *"Mude o 
             "app.js": app_js,
             "README.md": readme_md,
         }
+
+    def _generate_default_flutter_scaffold(
+        self, project_id: str, name: str, description: str
+    ) -> dict[str, str]:
+        title = name or project_id.replace("-", " ").title()
+        raw_desc = description or f"Aplicativo mobile Flutter gerado pelo JARVIS AI HUB para {title}."
+        desc = raw_desc.replace('"', ' ').replace("'", " ").replace("\n", " ").strip()
+        safe_package_name = project_id.lower().replace("-", "_")
+
+        pubspec_yaml = f"""name: {safe_package_name}
+description: "{desc}"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+"""
+
+        main_dart = f"""import 'package:flutter/material.dart';
+
+void main() {{
+  runApp(const JarvisMobileApp());
+}}
+
+class JarvisMobileApp extends StatelessWidget {{
+  const JarvisMobileApp({{super.key}});
+
+  @override
+  Widget build(BuildContext context) {{
+    return MaterialApp(
+      title: '{title}',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      home: const MainHomeScreen(),
+    );
+  }}
+}}
+
+class MainHomeScreen extends StatefulWidget {{
+  const MainHomeScreen({{super.key}});
+
+  @override
+  State<MainHomeScreen> createState() => _MainHomeScreenState();
+}}
+
+class _MainHomeScreenState extends State<MainHomeScreen> {{
+  int _currentIndex = 0;
+  int _counter = 0;
+
+  final List<Map<String, dynamic>> _catalog = const [
+    {{'title': 'Café Espresso Gourmet', 'price': '€ 2.50', 'icon': Icons.coffee}},
+    {{'title': 'Cappuccino Italiano', 'price': '€ 3.80', 'icon': Icons.local_cafe}},
+    {{'title': 'Croissant Artesanal', 'price': '€ 2.90', 'icon': Icons.bakery_dining}},
+    {{'title': 'Mocha com Chocolate Belga', 'price': '€ 4.20', 'icon': Icons.cake}},
+  ];
+
+  @override
+  Widget build(BuildContext context) {{
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('{title}'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {{
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Notificações atualizadas via JARVIS HUB.')),
+              );
+            }},
+          ),
+        ],
+      ),
+      body: _currentIndex == 0 ? _buildCatalogView() : _buildProfileView(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {{
+          setState(() => _counter++);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Item adicionado ao carrinho! Total: \\$$_counter')),
+          );
+        }},
+        icon: const Icon(Icons.shopping_bag_outlined),
+        label: Text('Carrinho (\\$$_counter)'),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Início'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Perfil'),
+        ],
+      ),
+    );
+  }}
+
+  Widget _buildCatalogView() {{
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: [
+        Card(
+          elevation: 2,
+          color: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bem-vindo ao {title}',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "{desc}",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text('Cardápio em Destaque', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        ..._catalog.map((item) => Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          color: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: const Color(0xFF6366F1).withOpacity(0.2),
+              child: Icon(item['icon'] as IconData, color: const Color(0xFF818CF8)),
+            ),
+            title: Text(item['title'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(item['price'] as String, style: const TextStyle(color: Color(0xFF10B981))),
+            trailing: IconButton(
+              icon: const Icon(Icons.add_circle_outline, color: Color(0xFF6366F1)),
+              onPressed: () {{
+                setState(() => _counter++);
+              }},
+            ),
+          ),
+        )),
+      ],
+    );
+  }}
+
+  Widget _buildProfileView() {{
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.mobile_friendly, size: 64, color: Color(0xFF6366F1)),
+          const SizedBox(height: 16),
+          Text('{title} Mobile App', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text('Gerado com sucesso pelo JARVIS AI HUB', style: TextStyle(color: Colors.white60)),
+        ],
+      ),
+    );
+  }}
+}}
+"""
+
+        widget_test = f"""import 'package:flutter_test/flutter_test.dart';
+import 'package:{safe_package_name}/main.dart';
+
+void main() {{
+  testWidgets('Smoke test do aplicativo mobile {title}', (WidgetTester tester) async {{
+    await tester.pumpWidget(const JarvisMobileApp());
+    expect(find.text('{title}'), findsOneWidget);
+  }});
+}}
+"""
+
+        readme_md = f"""# {title} Mobile App (Flutter)
+
+{desc}
+
+---
+
+## 📱 Tecnologias & Arquitetura
+
+- **Framework**: Flutter (Dart 3.x)
+- **Design System**: Material 3 (Dark Theme responsivo)
+- **Plataformas Suportadas**: Android, iOS, Web e Windows Desktop
+
+## 🚀 Como Executar o App no seu Computador
+
+A partir do terminal nesta pasta:
+
+```bash
+# Baixar dependências
+flutter pub get
+
+# Executar em emulador, celular conectado ou navegador Chrome
+flutter run -d chrome
+# ou para Windows:
+flutter run -d windows
+```
+
+## 📦 Gerar APK para Android
+
+```bash
+flutter build apk --release
+```
+O arquivo APK gerado ficará em `build/app/outputs/flutter-apk/app-release.apk`.
+"""
+
+        return {
+            "pubspec.yaml": pubspec_yaml,
+            "lib/main.dart": main_dart,
+            "test/widget_test.dart": widget_test,
+            "README.md": readme_md,
+        }
+
 
