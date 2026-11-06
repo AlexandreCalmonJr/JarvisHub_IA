@@ -1,0 +1,22 @@
+{
+  "id": "ecc_threat_modeling_stride",
+  "name": "ECC STRIDE Threat Modeling & Trust Boundaries",
+  "version": "1.5.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "security",
+  "description": "Metodologia STRIDE para identificar spoofing, tampering, repúdio, vazamento de informação, DoS e elevação de privilégio.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Mapeie cada fronteira de confiança (trust boundary) entre cliente, backend e banco de dados. Identifique as ameaças potenciais antes de iniciar a escrita do código e planeie mitigações em nível de arquitetura.",
+  "templates": {
+    "threat_matrix": "| Ameaça | Categoria | Impacto | Mitigação |\n| Injeção em token | Spoofing | Alto | Assinatura HMAC-SHA256 |"
+  },
+  "content_hash": "5383ec90b74be6a20e61ebe0e954eced5a6986c232fcc0bac37c53a92161bb56",
+  "is_approved": true,
+  "is_revoked": false
+}

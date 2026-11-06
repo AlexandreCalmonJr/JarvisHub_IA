@@ -1,0 +1,22 @@
+{
+  "id": "ecc_security_hardening",
+  "name": "ECC Application Security Hardening (OWASP Top 10)",
+  "version": "2.0.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "security",
+  "description": "Defesas contra injeção SQL, XSS, quebra de autenticação e vazamento de tokens sensíveis.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Nunca concatene variáveis de utilizador em queries SQL ou comandos de sistema. Use consultas parametrizadas, tokens JWT com algoritmo fixo (ex: Ed25519 ou RS256) e sanitização rigorosa de inputs.",
+  "templates": {
+    "safe_query": "cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))"
+  },
+  "content_hash": "74c3b646538bcbaf1c2666b822a77ff4cefe57501ed485b6218937becf564fb7",
+  "is_approved": true,
+  "is_revoked": false
+}

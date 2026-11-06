@@ -1,0 +1,22 @@
+{
+  "id": "ecc_sql_indexing_tuning",
+  "name": "ECC SQL Indexing Strategy & Query Optimization",
+  "version": "1.1.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "data",
+  "description": "Estratégias avançadas de indexação B-Tree, cobertura de índices compostos e análise de planos de execução.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Evite scans sequenciais em tabelas grandes. Crie índices compostos alinhados com filtros WHERE frequentes e ordenações ORDER BY. Evite cálculos de função em colunas indexadas.",
+  "templates": {
+    "composite_index": "CREATE INDEX idx_orders_customer_date ON orders(customer_id, created_at DESC);"
+  },
+  "content_hash": "e86eff380021e6b7e2416f73b6a73f33d3e717b2b47fb78550bae0fecac43c17",
+  "is_approved": true,
+  "is_revoked": false
+}

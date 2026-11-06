@@ -15,6 +15,7 @@ class SkillMetadata(BaseModel):
     domain: str  # flutter, web, backend, data, security, ops, management
     allowed_tools: list[str] = Field(default_factory=list)
     required_permissions: list[str] = Field(default_factory=list)
+    assigned_agents: list[str] = Field(default_factory=list)
     content_hash: str
     is_approved: bool = False
     is_revoked: bool = False

@@ -1,4 +1,4 @@
-import { SystemHealth, ApprovalRequestItem, TaskStateResponse } from './types';
+import { SystemHealth, ApprovalRequestItem, TaskStateResponse, SkillInfo, AgentInfo } from './types';
 
 const API_BASE = '/api/v1';
 
@@ -66,7 +66,7 @@ export async function fetchModels(): Promise<any> {
   return res.json();
 }
 
-export async function fetchSkills(): Promise<any[]> {
+export async function fetchSkills(): Promise<SkillInfo[]> {
   const res = await fetch(`${API_BASE}/skills`);
   if (!res.ok) return [];
   return res.json();
@@ -74,6 +74,22 @@ export async function fetchSkills(): Promise<any[]> {
 
 export async function toggleSkill(skillId: string): Promise<any> {
   const res = await fetch(`${API_BASE}/skills/${skillId}/toggle`, { method: 'POST' });
+  return res.json();
+}
+
+export async function assignSkillAgents(skillId: string, agentRoles: string[]): Promise<any> {
+  const res = await fetch(`${API_BASE}/skills/${skillId}/assign-agents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent_roles: agentRoles }),
+  });
+  if (!res.ok) throw new Error('Falha ao associar agentes à skill');
+  return res.json();
+}
+
+export async function fetchAgents(): Promise<AgentInfo[]> {
+  const res = await fetch(`${API_BASE}/agents`);
+  if (!res.ok) return [];
   return res.json();
 }
 

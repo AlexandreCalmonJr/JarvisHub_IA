@@ -1,0 +1,22 @@
+{
+  "id": "ecc_data_pipeline_etl",
+  "name": "ECC Robust ETL Pipeline & Idempotent Batches",
+  "version": "1.2.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "data",
+  "description": "Desenho de pipelines de dados idempotentes com processamento em lote, dead-letter queues e checkpoints.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Garanta que a execução repetida de um batch produza exatamente o mesmo resultado final sem duplicações (upsert / merge). Registre estatísticas de linhas rejeitadas para auditoria.",
+  "templates": {
+    "upsert_sql": "INSERT INTO sales(id, val) VALUES(?, ?) ON CONFLICT(id) DO UPDATE SET val=excluded.val;"
+  },
+  "content_hash": "a26098a0e19fc998212fccadfb5211c535d8011438a64b9097435d13c74efbb5",
+  "is_approved": true,
+  "is_revoked": false
+}

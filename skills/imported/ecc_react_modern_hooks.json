@@ -1,0 +1,22 @@
+{
+  "id": "ecc_react_modern_hooks",
+  "name": "ECC React 19 Modern Hooks & A11y Standards",
+  "version": "1.4.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "web",
+  "description": "Padrões modernos de React 19, Server Components, memoização seletiva e acessibilidade (ARIA/WCAG).",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Priorize functional components puros. Utilize useActionState ou hooks customizados para orquestração assíncrona. Assegure conformidade de acessibilidade (ARIA labels e foco por teclado).",
+  "templates": {
+    "hook_sample": "export function useDebounce<T>(value: T, delay: number): T {\n  const [debounced, setDebounced] = useState(value);\n  useEffect(() => {\n    const h = setTimeout(() => setDebounced(value), delay);\n    return () => clearTimeout(h);\n  }, [value, delay]);\n  return debounced;\n}"
+  },
+  "content_hash": "6cc75eb188e67e4879ecd5309726cafc8aee00cd8bd22b4126c3dcdc4597172b",
+  "is_approved": true,
+  "is_revoked": false
+}

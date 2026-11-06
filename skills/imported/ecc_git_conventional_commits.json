@@ -1,0 +1,22 @@
+{
+  "id": "ecc_git_conventional_commits",
+  "name": "ECC Conventional Commits & Safe Git Worktrees",
+  "version": "1.0.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "ops",
+  "description": "Padrão semântico de histórico de commits (feat, fix, docs, chore) e isolamento em worktrees.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Formate mensagens de commit como '<tipo>(<escopo>): <descrição curta no imperativo>'. Nunca misture refatoração com novas funcionalidades no mesmo commit.",
+  "templates": {
+    "commit_msg": "feat(auth): implement token revocation on device lost"
+  },
+  "content_hash": "79d9f7d1ad5dd695fc77cc6175606bbd62cbb13b58b7ae10be92bffe1f740863",
+  "is_approved": true,
+  "is_revoked": false
+}

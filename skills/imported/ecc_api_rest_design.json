@@ -1,0 +1,22 @@
+{
+  "id": "ecc_api_rest_design",
+  "name": "ECC RESTful API Design & OpenAPI Contracts",
+  "version": "1.2.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "backend",
+  "description": "Especificações RESTful previsíveis: verbos semânticos, códigos HTTP padronizados e schemas OpenAPI 3.1.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Utilize GET para leitura idempotente, POST para criação, PUT para substituição e PATCH para atualizações parciais. Erros devem retornar formato estruturado RFC 7807 (Problem Details).",
+  "templates": {
+    "problem_details": "class ProblemDetail(BaseModel):\n    type: str = 'about:blank'\n    title: str\n    status: int\n    detail: str\n    instance: str | None = None"
+  },
+  "content_hash": "c625de49e3549ea2007702a8fca67d5bc4e092aaf70f1b47bd8826cd904ea475",
+  "is_approved": true,
+  "is_revoked": false
+}

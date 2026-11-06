@@ -1,0 +1,22 @@
+{
+  "id": "ecc_clean_architecture",
+  "name": "ECC Clean Architecture & Hexagonal Patterns",
+  "version": "1.2.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "backend",
+  "description": "Padrões arquiteturais limpos: separação estrita de entidades de domínio, casos de uso e adaptadores de infraestrutura.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Isole a lógica de negócios central em entidades e casos de uso sem dependências de frameworks externos. Utilize inversão de dependência (IoC) e repositórios desacoplados para banco de dados e APIs.",
+  "templates": {
+    "use_case": "class ExecuteTaskUseCase:\n    def __init__(self, repo: IRepository):\n        self.repo = repo\n    async def execute(self, cmd: Command) -> Result: ..."
+  },
+  "content_hash": "b5732937dca5aa19d3cd2b823ad94fc6ac9e9d22cb223e208e4554d20a762839",
+  "is_approved": true,
+  "is_revoked": false
+}

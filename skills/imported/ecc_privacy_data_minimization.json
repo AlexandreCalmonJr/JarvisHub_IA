@@ -1,0 +1,22 @@
+{
+  "id": "ecc_privacy_data_minimization",
+  "name": "ECC Data Minimization & Privacy Protection (RGPD)",
+  "version": "1.1.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "security",
+  "description": "Políticas de minimização de dados, mascaramento de PII e retenção controlada.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Colete e processe apenas os campos de dados estritamente necessários para o objetivo da tarefa. Aplique ofuscação em identificadores pessoais (e-mails, números de telemóvel, dados de saúde) antes do envio.",
+  "templates": {
+    "mask_pii": "def mask_email(email: str) -> str:\n    parts = email.split('@')\n    return parts[0][:2] + '***@' + parts[1]"
+  },
+  "content_hash": "2d4d44a1967fe81dccb2249b9eaee07e497cc411ba95807b8d7094ab53ed2d61",
+  "is_approved": true,
+  "is_revoked": false
+}

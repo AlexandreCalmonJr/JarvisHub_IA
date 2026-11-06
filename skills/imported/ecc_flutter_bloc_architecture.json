@@ -1,0 +1,22 @@
+{
+  "id": "ecc_flutter_bloc_architecture",
+  "name": "ECC Flutter BLoC Reactive Architecture",
+  "version": "1.3.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "flutter",
+  "description": "Gestão de estado reativa e imutável para aplicações Flutter com separação estrita de Events, States e Blocs.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Mantenha a UI como função pura do estado (State). Qualquer interação do utilizador deve disparar um Event. Use Freezed ou Equatable para garantir imutabilidade.",
+  "templates": {
+    "bloc_sample": "class CounterBloc extends Bloc<CounterEvent, CounterState> {\n  CounterBloc() : super(const CounterState.initial()) {\n    on<IncrementEvent>((event, emit) => emit(state.copyWith(count: state.count + 1)));\n  }\n}"
+  },
+  "content_hash": "ebd1b4931351d4bccdf138848e7839b58c74f0521276c2eadc3f740711700864",
+  "is_approved": true,
+  "is_revoked": false
+}

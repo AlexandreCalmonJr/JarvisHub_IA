@@ -1,0 +1,22 @@
+{
+  "id": "ecc_incident_root_cause_analysis",
+  "name": "ECC Post-Mortem & Incident Root Cause Analysis",
+  "version": "1.0.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "ops",
+  "description": "Estrutura para análise de causa raiz de incidentes (5 Whys), geração de relatórios post-mortem e ações preventivas.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Construa uma cronologia precisa a partir dos registros de auditoria. Aplique os 5 Porquês para determinar a falha de processo ou arquitetura subjacente, gerando itens de ação com donos definidos.",
+  "templates": {
+    "post_mortem": "# Relatório de Incidente Post-Mortem\n- Causa Raiz: ...\n- Impacto: ...\n- Ações Corretivas: ..."
+  },
+  "content_hash": "f3398712b246e5b71ec8b658bf7dec70afc1f20d43d95503ff69087748d5f5f7",
+  "is_approved": true,
+  "is_revoked": false
+}

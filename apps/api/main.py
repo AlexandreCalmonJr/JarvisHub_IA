@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from agents.profiles.catalog import AGENT_PROFILES
 from services.memory import DatabaseManager
 from services.model_runtime import ModelManager, OllamaAdapter
 from services.orchestration import JarvisMaster, TaskState
@@ -31,16 +32,16 @@ db_manager = DatabaseManager()
 resource_manager = ResourceManager(audit_trail=security_core.audit)
 skills_catalog = SkillsCatalog()
 
-# Popula catálogo com skills internas
-skills_dir = Path("skills/internal")
-if skills_dir.exists():
-    for f in skills_dir.glob("*.json"):
-        try:
-            skill_dict = json.loads(f.read_text(encoding="utf-8"))
-            meta = SkillMetadata(**skill_dict)
-            skills_catalog.register_skill(meta, auto_approve=True)
-        except Exception as exc:
-            logger.warning("Falha ao carregar skill interna %s: %s", f.name, exc)
+# Popula catálogo com skills internas e importadas (ECC)
+for s_dir in [Path("skills/internal"), Path("skills/imported")]:
+    if s_dir.exists():
+        for f in s_dir.glob("*.json"):
+            try:
+                skill_dict = json.loads(f.read_text(encoding="utf-8"))
+                meta = SkillMetadata(**skill_dict)
+                skills_catalog.register_skill(meta, auto_approve=True)
+            except Exception as exc:
+                logger.warning("Falha ao carregar skill %s: %s", f.name, exc)
 
 app = FastAPI(
     title="JARVIS AI HUB API",
@@ -83,6 +84,10 @@ class DevicePairRequest(BaseModel):
 class DeviceRevokeRequest(BaseModel):
     device_id: str = Field(..., description="Identificador do dispositivo a revogar")
     reason: str = "Revogação pelo utilizador"
+
+
+class AssignAgentsRequest(BaseModel):
+    agent_roles: list[str] = Field(..., description="Lista de papéis de agentes associados à skill")
 
 
 @app.get("/api")
@@ -212,6 +217,30 @@ async def toggle_skill_endpoint(skill_id: str):
             return {"status": "approved", "skill": approved}
         except ValueError as ve:
             raise HTTPException(status_code=404, detail=str(ve))
+
+
+@app.post("/api/v1/skills/{skill_id}/assign-agents")
+async def assign_agents_endpoint(skill_id: str, payload: AssignAgentsRequest):
+    try:
+        updated = skills_catalog.assign_agents(skill_id, payload.agent_roles)
+        return {"status": "updated", "skill": updated}
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+
+
+@app.get("/api/v1/agents")
+async def list_agents_endpoint():
+    return [
+        {
+            "role": profile.role.value if hasattr(profile.role, "value") else str(profile.role),
+            "name": profile.name,
+            "mission": profile.mission,
+            "preferred_model": profile.preferred_model,
+            "is_read_only": profile.is_read_only,
+            "allowed_tools": profile.allowed_tools,
+        }
+        for profile in AGENT_PROFILES.values()
+    ]
 
 
 @app.get("/api/v1/approvals")

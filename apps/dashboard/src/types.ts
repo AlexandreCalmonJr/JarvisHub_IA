@@ -51,3 +51,23 @@ export interface AgentInfo {
   is_read_only: boolean;
   allowed_tools: string[];
 }
+
+export interface SkillInfo {
+  id: string;
+  name: string;
+  version: string;
+  origin: string;
+  license: string;
+  description: string;
+  domain: string;
+  allowed_tools: string[];
+  required_permissions: string[];
+  assigned_agents: string[];
+  content_hash: string;
+  is_approved: boolean;
+  is_revoked: boolean;
+  instructions: string;
+  templates?: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
+}

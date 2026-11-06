@@ -1,0 +1,23 @@
+{
+  "id": "ecc_tdd_workflows",
+  "name": "ECC Test-Driven Development (TDD)",
+  "version": "1.1.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "qa",
+  "description": "Fluxo red-green-refactor rigoroso: escrita de testes unitários determinísticos antes da implementação da funcionalidade.",
+  "allowed_tools": [
+    "read_file",
+    "run_tests"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Escreva primeiro um teste que falhe (Red). Implemente a menor quantidade de código para fazê-lo passar (Green). Refatore para eliminar duplicidades mantendo 100% dos testes verdes.",
+  "templates": {
+    "pytest_tdd": "def test_should_compute_correct_balance():\n    account = Account(initial=100)\n    account.deposit(50)\n    assert account.balance == 150"
+  },
+  "content_hash": "f1f3121f5950bd92d29f4ca924a899075c71b619b596e9c1c0eca0fdf28a3536",
+  "is_approved": true,
+  "is_revoked": false
+}

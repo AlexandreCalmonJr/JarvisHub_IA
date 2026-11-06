@@ -1,0 +1,22 @@
+{
+  "id": "ecc_docker_containerization",
+  "name": "ECC Hardened Multi-Stage Docker Containerization",
+  "version": "1.3.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "ops",
+  "description": "Construção de imagens Docker mínimas, sem root, com build multi-etapas para reduzir superfície de ataque.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Utilize imagem base Alpine ou distroless. Remova gerenciadores de pacotes e ferramentas de build na imagem final. Execute o processo sempre com utilizador não-privilegiado (UID 10001).",
+  "templates": {
+    "dockerfile": "FROM python:3.12-alpine AS builder\nWORKDIR /app\nCOPY . .\nFROM python:3.12-alpine\nUSER 10001\nCMD ['uvicorn', 'apps.api.main:app']"
+  },
+  "content_hash": "2ce579adcd2082b275d99e300f6d3e287026ddbc8a4ef69f6b86743aefbccf95",
+  "is_approved": true,
+  "is_revoked": false
+}

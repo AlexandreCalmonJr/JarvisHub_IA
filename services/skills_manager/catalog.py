@@ -1,6 +1,33 @@
 from .types import SkillMetadata
 from .validator import SkillValidationError, SkillValidator
 
+DEFAULT_DOMAIN_AGENTS: dict[str, list[str]] = {
+    "backend": ["backend_developer", "software_architect", "code_reviewer"],
+    "qa": ["qa_engineer", "code_reviewer"],
+    "security": [
+        "cybersecurity_engineer",
+        "secure_code_auditor",
+        "threat_modeling_security_architect",
+        "api_security_specialist",
+        "ai_security_red_team",
+    ],
+    "flutter": ["frontend_mobile_developer", "ux_ui_designer"],
+    "web": ["frontend_mobile_developer", "ux_ui_designer", "software_architect"],
+    "data": [
+        "data_scientist",
+        "data_engineer_pipelines",
+        "data_engineering_intelligence",
+        "business_intelligence",
+    ],
+    "ops": [
+        "devops_engineer",
+        "automation_engineer",
+        "network_infrastructure_engineer",
+        "soc_incident_response",
+    ],
+    "management": ["jarvis_master", "project_manager", "project_designer_planner"],
+}
+
 
 class SkillsCatalog:
     """
@@ -23,6 +50,10 @@ class SkillsCatalog:
             )
 
         skill.is_approved = auto_approve
+
+        # Atribui agentes padrão do domínio se nenhum estiver associado
+        if not skill.assigned_agents:
+            skill.assigned_agents = DEFAULT_DOMAIN_AGENTS.get(skill.domain, ["jarvis_master"])
 
         # Guarda no histórico para suporte a rollback
         if skill.id not in self._history:
@@ -47,6 +78,21 @@ class SkillsCatalog:
         skill.is_approved = False
         skill.is_revoked = True
         return skill
+
+    def assign_agents(self, skill_id: str, agent_roles: list[str]) -> SkillMetadata:
+        skill = self._skills.get(skill_id)
+        if not skill:
+            raise ValueError(f"Skill '{skill_id}' não encontrada.")
+        skill.assigned_agents = agent_roles
+        return skill
+
+    def get_skills_for_agent(self, agent_role: str) -> list[SkillMetadata]:
+        """Retorna todas as skills ativas associadas a um agente específico."""
+        return [
+            s
+            for s in self._skills.values()
+            if s.is_approved and not s.is_revoked and agent_role in s.assigned_agents
+        ]
 
     def rollback_skill(self, skill_id: str) -> SkillMetadata:
         history = self._history.get(skill_id, [])

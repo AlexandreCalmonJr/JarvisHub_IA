@@ -37,8 +37,31 @@ async def test_api_skills_endpoint():
         resp = await ac.get("/api/v1/skills")
         assert resp.status_code == 200
         skills = resp.json()
-        assert len(skills) >= 7
+        assert len(skills) >= 23
         assert any(s["id"] == "fastapi_secure_backend" for s in skills)
+        assert any(s["id"] == "ecc_clean_architecture" for s in skills)
+        assert any(s["id"] == "ecc_prompt_injection_defense" for s in skills)
+
+
+@pytest.mark.asyncio
+async def test_api_agents_and_skill_assignment():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Testa listagem de agentes
+        resp = await ac.get("/api/v1/agents")
+        assert resp.status_code == 200
+        agents = resp.json()
+        assert len(agents) == 26
+        assert any(a["role"] == "jarvis_master" for a in agents)
+        assert any(a["role"] == "cybersecurity_engineer" for a in agents)
+
+        # Testa atribuição personalizada de agentes a uma skill
+        payload = {"agent_roles": ["backend_developer", "software_architect", "secure_code_auditor"]}
+        assign_resp = await ac.post("/api/v1/skills/ecc_clean_architecture/assign-agents", json=payload)
+        assert assign_resp.status_code == 200
+        data = assign_resp.json()
+        assert data["status"] == "updated"
+        assert "secure_code_auditor" in data["skill"]["assigned_agents"]
 
 
 @pytest.mark.asyncio

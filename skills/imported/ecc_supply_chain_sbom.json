@@ -1,0 +1,22 @@
+{
+  "id": "ecc_supply_chain_sbom",
+  "name": "ECC Software Supply Chain & SBOM Verification",
+  "version": "1.2.0",
+  "origin": "https://github.com/affaan-m/ECC@commit-c8e1a9",
+  "license": "MIT",
+  "domain": "security",
+  "description": "Geração e auditoria de SBOM (Software Bill of Materials) e bloqueio de dependências vulneráveis.",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "instructions": "Monitore dependências diretas e transitivas contra bases CVE/OSV. Gere inventário SBOM CycloneDX/SPDX e bloqueie releases caso existam vulnerabilidades com pontuação CVSS >= 7.0.",
+  "templates": {
+    "audit_check": "assert finding.cvss < 7.0, f'Vulnerabilidade crítica na dependência: {finding.package}'"
+  },
+  "content_hash": "f78ec661402dd6a04899805f589a047910e8d0b2393bf87123074920fec5df36",
+  "is_approved": true,
+  "is_revoked": false
+}
