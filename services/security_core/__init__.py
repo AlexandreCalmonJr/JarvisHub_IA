@@ -1,5 +1,6 @@
 from .approval_engine import ApprovalEngine, UnauthorizedApprovalError
 from .audit_trail import AuditTrail
+from .device_auth import DeviceAuthManager, DeviceRegistration
 from .kill_switch import KillSwitch
 from .permission_engine import (
     CRITICAL_OPERATIONS,
@@ -32,6 +33,7 @@ class SecurityCore:
         self.approval_engine = ApprovalEngine(audit_trail=self.audit)
         self.permission_engine = PermissionEngine(audit_trail=self.audit)
         self.pipeline = QASecurityPipeline(audit_trail=self.audit)
+        self.device_auth = DeviceAuthManager(audit_trail=self.audit)
 
 
 __all__ = [
@@ -39,6 +41,8 @@ __all__ = [
     "READ_ONLY_ROLES",
     "ApprovalEngine",
     "AuditTrail",
+    "DeviceAuthManager",
+    "DeviceRegistration",
     "FindingSeverity",
     "FindingStatus",
     "KillSwitch",

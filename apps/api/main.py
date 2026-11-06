@@ -55,6 +55,15 @@ class KillSwitchRequest(BaseModel):
     reason: str = "Ação acionada pelo utilizador"
 
 
+class DevicePairRequest(BaseModel):
+    device_name: str = Field(..., description="Nome de identificação do dispositivo móvel")
+
+
+class DeviceRevokeRequest(BaseModel):
+    device_id: str = Field(..., description="Identificador do dispositivo a revogar")
+    reason: str = "Revogação pelo utilizador"
+
+
 @app.get("/")
 async def root():
     return {
@@ -145,6 +154,31 @@ async def trigger_kill_switch(payload: KillSwitchRequest):
         return {"status": "task_cancelled", "task_id": payload.task_id}
     else:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
+
+
+@app.post("/api/v1/mobile/pair")
+async def pair_mobile_device(payload: DevicePairRequest):
+    reg = security_core.device_auth.pair_device(payload.device_name)
+    return {
+        "status": "paired",
+        "device_id": reg.device_id,
+        "device_name": reg.device_name,
+        "device_token": reg.device_token,
+    }
+
+
+@app.get("/api/v1/mobile/devices")
+async def list_mobile_devices():
+    return security_core.device_auth.list_devices()
+
+
+@app.post("/api/v1/mobile/revoke")
+async def revoke_mobile_device(payload: DeviceRevokeRequest):
+    try:
+        revoked = security_core.device_auth.revoke_device(payload.device_id, reason=payload.reason)
+        return {"status": "revoked", "device_id": revoked.device_id}
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
 
 
 # Monta dashboard web estático se compilado
