@@ -87,3 +87,39 @@ def test_project_analyzer_detects_security_hotspot(tmp_path):
     rules = {h.rule for h in report.security_hotspots}
     assert "HARDCODED_CREDENTIAL" in rules
     assert "UNENCRYPTED_HTTP" in rules
+
+
+def test_project_workspace_scaffold_and_file_modification(tmp_path):
+    security_core = SecurityCore()
+    workspace_service = ProjectWorkspaceService(security_core=security_core)
+
+    # 1. Criação física de projeto web
+    res = workspace_service.scaffold_project(
+        project_id="test-site-cafe",
+        name="Cafeteria Teste",
+        description="Site de teste",
+        project_type="web",
+    )
+    assert res["project_id"] == "test-site-cafe"
+    assert "index.html" in res["files_created"]
+    assert "style.css" in res["files_created"]
+
+    # 2. Leitura física do arquivo no disco
+    content = workspace_service.read_project_file("test-site-cafe", "index.html")
+    assert "<title>Cafeteria Teste</title>" in content
+
+    # 3. Modificação física no disco com geração de diff e backup
+    mod_res = workspace_service.modify_project_file(
+        project_id="test-site-cafe",
+        rel_path="index.html",
+        new_content=content.replace("Cafeteria Teste", "Cafeteria Imperial"),
+        reason="Teste de modificação",
+    )
+    assert mod_res["status"] == "modified"
+    assert "-    <title>Cafeteria Teste</title>" in mod_res["diff"]
+    assert "+    <title>Cafeteria Imperial</title>" in mod_res["diff"]
+
+    # Verifica backup gerado
+    backup_path = Path("workspace/test-site-cafe/index.html.bak")
+    assert backup_path.exists()
+    assert "Cafeteria Teste" in backup_path.read_text(encoding="utf-8")

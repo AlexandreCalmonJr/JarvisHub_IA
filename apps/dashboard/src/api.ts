@@ -93,6 +93,12 @@ export async function fetchAgents(): Promise<AgentInfo[]> {
   return res.json();
 }
 
+export async function fetchWorkspaceProjects(): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/workspace/projects`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function fetchResources(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/resources`);
   if (!res.ok) throw new Error('Falha ao carregar recursos');

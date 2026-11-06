@@ -11,6 +11,7 @@ from agents.profiles.catalog import AGENT_PROFILES
 from services.memory import DatabaseManager
 from services.model_runtime import ModelManager, OllamaAdapter
 from services.orchestration import JarvisMaster, TaskState
+from services.project_workspace import ProjectWorkspaceService
 from services.resource_manager import ResourceManager
 from services.security_core import SecurityCore, UnauthorizedApprovalError
 from services.skills_manager import SkillMetadata, SkillsCatalog
@@ -19,6 +20,7 @@ logger = logging.getLogger("jarvis.api")
 
 # Inicialização dos serviços centrais do monólito modular
 security_core = SecurityCore()
+workspace_service = ProjectWorkspaceService(security_core=security_core)
 model_manager = ModelManager(
     adapter=OllamaAdapter(),
     kill_switch=security_core.kill_switch,
@@ -27,6 +29,7 @@ model_manager = ModelManager(
 jarvis_master = JarvisMaster(
     security_core=security_core,
     model_manager=model_manager,
+    workspace_service=workspace_service,
 )
 db_manager = DatabaseManager()
 resource_manager = ResourceManager(audit_trail=security_core.audit)
@@ -241,6 +244,11 @@ async def list_agents_endpoint():
         }
         for profile in AGENT_PROFILES.values()
     ]
+
+
+@app.get("/api/v1/workspace/projects")
+async def list_workspace_projects_endpoint():
+    return workspace_service.list_available_projects()
 
 
 @app.get("/api/v1/approvals")

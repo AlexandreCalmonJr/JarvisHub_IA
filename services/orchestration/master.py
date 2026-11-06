@@ -1,11 +1,12 @@
 import uuid
+from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
 
 from services.model_runtime import ModelManager
 from services.security_core import SecurityCore
 
-from .graph import create_master_graph
+from .graph import create_master_graph, execute_workspace_modification
 from .state import TaskState
 
 
@@ -20,14 +21,17 @@ class JarvisMaster:
         security_core: SecurityCore,
         model_manager: ModelManager,
         checkpointer: MemorySaver | None = None,
+        workspace_service: Any = None,
     ):
         self.security_core = security_core
         self.model_manager = model_manager
         self.checkpointer = checkpointer or MemorySaver()
+        self.workspace_service = workspace_service
         self.graph = create_master_graph(
             security_core=self.security_core,
             model_manager=self.model_manager,
             checkpointer=self.checkpointer,
+            workspace_service=self.workspace_service,
         )
 
     async def execute_task(
@@ -65,7 +69,7 @@ class JarvisMaster:
         return result_state
 
     async def resume_after_approval(self, task_id: str, approved_by: str) -> TaskState:
-        """Retoma uma tarefa que estava pausada aguardando aprovação humana."""
+        """Retoma uma tarefa que estava pausada aguardando aprovação humana e aplica alterações se aplicável."""
         config = {"configurable": {"thread_id": task_id}}
         checkpoint = await self.graph.aget_state(config)
         if not checkpoint or not checkpoint.values:
@@ -73,8 +77,24 @@ class JarvisMaster:
 
         current_values = dict(checkpoint.values)
         current_values["approval_required"] = False
+
+        mod_extra = ""
+        if (
+            self.workspace_service
+            and current_values.get("classified_intent") == "code_modification"
+        ):
+            try:
+                msg, _ = execute_workspace_modification(
+                    workspace_service=self.workspace_service,
+                    user_prompt=current_values.get("user_prompt", ""),
+                    project_id=current_values.get("project_id"),
+                )
+                mod_extra = f"\n\n{msg}"
+            except Exception as e:
+                mod_extra = f"\n\n[Aviso]: Não foi possível gravar alteração física no disco: {e}"
+
         current_values["final_summary"] = (
-            f"Aprovação concedida por '{approved_by}'. Retomando execução da tarefa."
+            f"Aprovação concedida por '{approved_by}'. A alteração foi autorizada e executada no sistema.{mod_extra}"
         )
         current_values["is_completed"] = True
 
