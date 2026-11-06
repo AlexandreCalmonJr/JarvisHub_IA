@@ -85,7 +85,7 @@ class DeviceRevokeRequest(BaseModel):
     reason: str = "Revogação pelo utilizador"
 
 
-@app.get("/")
+@app.get("/api")
 async def root():
     return {
         "name": "JARVIS AI HUB API",
