@@ -10,6 +10,8 @@ import {
   ListTodo,
   Server,
   BookOpen,
+  Smartphone,
+  ExternalLink,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -111,6 +113,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
+
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-color)' }}>
+        <a
+          href="/mobile/"
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-secondary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            width: '100%',
+            fontSize: '0.8rem',
+            padding: '8px 12px',
+            textDecoration: 'none',
+            color: 'var(--text-primary)',
+          }}
+        >
+          <Smartphone size={16} color="var(--accent-color)" />
+          <span>Abrir App Mobile</span>
+          <ExternalLink size={12} color="var(--text-secondary)" />
+        </a>
+      </div>
 
       <div style={{
         padding: '16px 20px',
