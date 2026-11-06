@@ -53,7 +53,9 @@ export const App: React.FC = () => {
         backgroundColor: 'var(--bg-primary)',
       }}>
         {activeTab === 'overview' && <Overview health={health} approvals={approvals} />}
-        {activeTab === 'chat' && <ChatMaster />}
+        <div style={{ display: activeTab === 'chat' ? 'block' : 'none', height: '100%' }}>
+          <ChatMaster />
+        </div>
         {activeTab === 'approvals' && <ApprovalCenter approvals={approvals} onRefresh={loadData} />}
         {activeTab === 'workspace' && <ProjectWorkspaceView />}
         {activeTab === 'agents' && <AgentCenterView />}

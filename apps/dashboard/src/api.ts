@@ -8,11 +8,11 @@ export async function fetchHealth(): Promise<SystemHealth> {
   return res.json();
 }
 
-export async function sendChatMessage(prompt: string, projectId?: string): Promise<TaskStateResponse> {
+export async function sendChatMessage(prompt: string, projectId?: string, sessionId?: string): Promise<TaskStateResponse> {
   const res = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, project_id: projectId }),
+    body: JSON.stringify({ prompt, project_id: projectId, session_id: sessionId }),
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Erro desconhecido' }));
