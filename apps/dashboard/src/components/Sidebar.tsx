@@ -7,6 +7,9 @@ import {
   Users,
   Lock,
   Cpu,
+  ListTodo,
+  Server,
+  BookOpen,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,6 +34,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     { id: 'workspace', label: 'Project Workspace', icon: FolderGit2 },
     { id: 'agents', label: 'Agent Center (26)', icon: Users },
+    { id: 'tasks', label: 'Task Manager', icon: ListTodo },
+    { id: 'models', label: 'Model Manager', icon: Server },
+    { id: 'skills', label: 'Skills Manager', icon: BookOpen },
     { id: 'security', label: 'Security & Kill Switch', icon: Lock },
   ];
 
@@ -69,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      <nav style={{ padding: '16px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <nav style={{ padding: '16px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;

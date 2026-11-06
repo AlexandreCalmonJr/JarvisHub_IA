@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -146,3 +146,29 @@ class DatabaseManager:
                 (limit,),
             )
             return [dict(r) for r in cur.fetchall()]
+
+    def purge_old_tasks(self, days_retention: int = 30) -> int:
+        cutoff = (datetime.now(UTC) - timedelta(days=days_retention)).isoformat()
+        with self._get_connection() as conn:
+            cur = conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
+            return cur.rowcount
+
+    def export_project_data(self, project_id: str) -> dict[str, Any]:
+        with self._get_connection() as conn:
+            proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+            if not proj:
+                raise ValueError(f"Projeto '{project_id}' não encontrado.")
+            tasks = conn.execute(
+                "SELECT id, session_id, prompt, intent, is_completed, created_at FROM tasks WHERE project_id = ?",
+                (project_id,),
+            ).fetchall()
+            memory = conn.execute(
+                "SELECT category, key, content, sources_json, updated_at FROM project_memory WHERE project_id = ?",
+                (project_id,),
+            ).fetchall()
+            return {
+                "project": dict(proj),
+                "tasks": [dict(t) for t in tasks],
+                "memory": [dict(m) for m in memory],
+                "exported_at": datetime.now(UTC).isoformat(),
+            }

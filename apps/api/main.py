@@ -1,3 +1,5 @@
+import json
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -5,9 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from services.memory import DatabaseManager
 from services.model_runtime import ModelManager, OllamaAdapter
 from services.orchestration import JarvisMaster, TaskState
+from services.resource_manager import ResourceManager
 from services.security_core import SecurityCore, UnauthorizedApprovalError
+from services.skills_manager import SkillMetadata, SkillsCatalog
+
+logger = logging.getLogger("jarvis.api")
 
 # Inicialização dos serviços centrais do monólito modular
 security_core = SecurityCore()
@@ -20,6 +27,20 @@ jarvis_master = JarvisMaster(
     security_core=security_core,
     model_manager=model_manager,
 )
+db_manager = DatabaseManager()
+resource_manager = ResourceManager(audit_trail=security_core.audit)
+skills_catalog = SkillsCatalog()
+
+# Popula catálogo com skills internas
+skills_dir = Path("skills/internal")
+if skills_dir.exists():
+    for f in skills_dir.glob("*.json"):
+        try:
+            skill_dict = json.loads(f.read_text(encoding="utf-8"))
+            meta = SkillMetadata(**skill_dict)
+            skills_catalog.register_skill(meta, auto_approve=True)
+        except Exception as exc:
+            logger.warning("Falha ao carregar skill interna %s: %s", f.name, exc)
 
 app = FastAPI(
     title="JARVIS AI HUB API",
@@ -100,9 +121,97 @@ async def chat_endpoint(request: ChatRequest):
             session_id=request.session_id,
             project_id=request.project_id,
         )
+        try:
+            if request.project_id:
+                db_manager.register_project(
+                    project_id=request.project_id,
+                    name=request.project_id,
+                    root_path=f"workspace/{request.project_id}",
+                )
+            db_manager.save_task(
+                task_id=result.task_id,
+                session_id=result.session_id,
+                prompt=request.prompt,
+                state_dict=result.model_dump(),
+                project_id=request.project_id,
+            )
+        except Exception as exc:
+            logger.warning("Falha ao salvar tarefa no banco de dados: %s", exc)
         return result
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/v1/system/resources")
+async def system_resources():
+    return resource_manager.collect_metrics(
+        queue_active=model_manager.queue.active_count,
+        queue_waiting=model_manager.queue.waiting_count,
+    )
+
+
+@app.get("/api/v1/tasks")
+async def list_tasks_endpoint(limit: int = 50):
+    return db_manager.list_tasks(limit=limit)
+
+
+@app.get("/api/v1/models")
+async def list_models_endpoint():
+    return {
+        "models": [
+            {
+                "name": "llama3.2:3b",
+                "role": "Master, Orquestração e JSON",
+                "speed": "10.29 t/s",
+                "context": 131072,
+                "status": "ready",
+            },
+            {
+                "name": "qwen2.5-coder:7b",
+                "role": "Fullstack Coding, Refatoração e Diffs",
+                "speed": "4.80 t/s",
+                "context": 32768,
+                "status": "ready",
+            },
+            {
+                "name": "qwen2.5:7b",
+                "role": "Arquitetura, Raciocínio Complexo e QA",
+                "speed": "4.50 t/s",
+                "context": 32768,
+                "status": "ready",
+            },
+        ],
+        "concurrency_limit": 1,
+        "queue_status": {
+            "active": model_manager.queue.active_count,
+            "waiting": model_manager.queue.waiting_count,
+        },
+        "hybrid_gateway": {
+            "enabled": False,
+            "max_budget_usd": 5.0,
+            "current_spend_usd": 0.0,
+            "fallback_route": "ollama_local",
+        },
+    }
+
+
+@app.get("/api/v1/skills")
+async def list_skills_endpoint():
+    return skills_catalog.list_all_skills()
+
+
+@app.post("/api/v1/skills/{skill_id}/toggle")
+async def toggle_skill_endpoint(skill_id: str):
+    skill = skills_catalog.get_skill(skill_id)
+    if skill:
+        revoked = skills_catalog.revoke_skill(skill_id, reason="Desativado via dashboard")
+        return {"status": "revoked", "skill": revoked}
+    else:
+        try:
+            approved = skills_catalog.approve_skill(skill_id)
+            return {"status": "approved", "skill": approved}
+        except ValueError as ve:
+            raise HTTPException(status_code=404, detail=str(ve))
 
 
 @app.get("/api/v1/approvals")

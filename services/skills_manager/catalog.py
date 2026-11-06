@@ -75,3 +75,6 @@ class SkillsCatalog:
             if s.domain == domain and s.is_approved and not s.is_revoked
         ]
         return matches[:limit]
+
+    def list_all_skills(self) -> list[SkillMetadata]:
+        return list(self._skills.values())

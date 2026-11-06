@@ -5,6 +5,9 @@ import { ChatMaster } from './components/ChatMaster';
 import { ApprovalCenter } from './components/ApprovalCenter';
 import { ProjectWorkspaceView } from './components/ProjectWorkspaceView';
 import { AgentCenterView } from './components/AgentCenterView';
+import { TaskManagerView } from './components/TaskManagerView';
+import { ModelManagerView } from './components/ModelManagerView';
+import { SkillsManagerView } from './components/SkillsManagerView';
 import { SecurityCenterView } from './components/SecurityCenterView';
 import { SystemHealth, ApprovalRequestItem } from './types';
 import { fetchHealth, fetchApprovals } from './api';
@@ -54,6 +57,9 @@ export const App: React.FC = () => {
         {activeTab === 'approvals' && <ApprovalCenter approvals={approvals} onRefresh={loadData} />}
         {activeTab === 'workspace' && <ProjectWorkspaceView />}
         {activeTab === 'agents' && <AgentCenterView />}
+        {activeTab === 'tasks' && <TaskManagerView />}
+        {activeTab === 'models' && <ModelManagerView />}
+        {activeTab === 'skills' && <SkillsManagerView />}
         {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
       </main>
     </div>

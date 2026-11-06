@@ -53,3 +53,32 @@ export async function triggerKillSwitch(target: 'global' | 'task', taskId?: stri
   });
   return res.json();
 }
+
+export async function fetchTasks(): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/tasks`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchModels(): Promise<any> {
+  const res = await fetch(`${API_BASE}/models`);
+  if (!res.ok) throw new Error('Falha ao carregar modelos');
+  return res.json();
+}
+
+export async function fetchSkills(): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/skills`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function toggleSkill(skillId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/skills/${skillId}/toggle`, { method: 'POST' });
+  return res.json();
+}
+
+export async function fetchResources(): Promise<any> {
+  const res = await fetch(`${API_BASE}/system/resources`);
+  if (!res.ok) throw new Error('Falha ao carregar recursos');
+  return res.json();
+}
