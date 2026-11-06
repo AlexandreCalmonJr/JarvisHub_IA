@@ -75,10 +75,13 @@ class DatabaseManager:
             );
             """)
 
-    def register_project(self, project_id: str, name: str, root_path: str, mode: str = "read_only") -> None:
+    def register_project(
+        self, project_id: str, name: str, root_path: str, mode: str = "read_only"
+    ) -> None:
         now = datetime.now(UTC).isoformat()
         with self._get_connection() as conn:
-            conn.execute("""
+            conn.execute(
+                """
             INSERT INTO projects (id, name, root_path, mode, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
@@ -86,7 +89,9 @@ class DatabaseManager:
                 root_path=excluded.root_path,
                 mode=excluded.mode,
                 updated_at=excluded.updated_at
-            """, (project_id, name, root_path, mode, now, now))
+            """,
+                (project_id, name, root_path, mode, now, now),
+            )
 
     def save_task(
         self,
