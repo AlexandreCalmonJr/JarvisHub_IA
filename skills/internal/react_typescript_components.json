@@ -1,0 +1,24 @@
+{
+  "id": "react_typescript_components",
+  "name": "React & TypeScript Component Standards",
+  "version": "1.0.0",
+  "origin": "internal",
+  "license": "MIT",
+  "description": "Padrões para componentes React funcionais com TypeScript estrito, acessibilidade e isolamento de estado.",
+  "domain": "web",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "content_hash": "1596cd981a3f0aef9da442de407412c676e1c7873d8f6d9815471b8a96f3758d",
+  "is_approved": true,
+  "is_revoked": false,
+  "instructions": "Escrever componentes funcionais tipados com React.FC ou props explícitas. Evitar useEffect redundante. Garantir atributos de acessibilidade (ARIA labels e semântica HTML).",
+  "templates": {
+    "component_template": "interface Props { title: string; }\nexport const Card: React.FC<Props> = ({ title }) => <div role='region'><h2>{title}</h2></div>;"
+  },
+  "created_at": "2026-11-06T00:18:26.123416Z",
+  "updated_at": "2026-11-06T00:18:26.123416Z"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "devops_ci_cd_git",
+  "name": "DevOps CI/CD & Worktree Automation",
+  "version": "1.0.0",
+  "origin": "internal",
+  "license": "MIT",
+  "description": "Automação de pipelines de CI, containers Docker sem privilégios e Git worktrees seguras.",
+  "domain": "operations",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "content_hash": "6b53e98f4e183956481469acdaeb93ee89c23a625b25adc768c3dec3adeeefb5",
+  "is_approved": true,
+  "is_revoked": false,
+  "instructions": "Pipelines devem executar linter, SAST e testes unitários como gates obrigatórios. Containers não devem rodar como root.",
+  "templates": {
+    "ci_job_template": "name: CI\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps: [checkout, run_tests]"
+  },
+  "created_at": "2026-11-06T00:18:26.123416Z",
+  "updated_at": "2026-11-06T00:18:26.123416Z"
+}

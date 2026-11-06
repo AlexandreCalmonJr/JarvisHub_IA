@@ -1,0 +1,24 @@
+{
+  "id": "prd_planning_management",
+  "name": "PRD & User Story Planning",
+  "version": "1.0.0",
+  "origin": "internal",
+  "license": "MIT",
+  "description": "Elaboração de Product Requirement Documents, backlog, critérios de aceitação e estimativas.",
+  "domain": "management",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "content_hash": "515fb6f1d1d361cbdf61833499246022ef4afb2d5d3ab11c03e432fbdba63f93",
+  "is_approved": true,
+  "is_revoked": false,
+  "instructions": "Toda história de usuário deve seguir o formato 'Como [persona], quero [ação] para que [benefício]'. Critérios de aceitação devem ser verificáveis com Given/When/Then.",
+  "templates": {
+    "user_story_template": "Como desenvolvedor, quero aprovar alterações via API para que código não testado não chegue a produção."
+  },
+  "created_at": "2026-11-06T00:18:26.123416Z",
+  "updated_at": "2026-11-06T00:18:26.123416Z"
+}

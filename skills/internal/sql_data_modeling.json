@@ -1,0 +1,24 @@
+{
+  "id": "sql_data_modeling",
+  "name": "SQL Data Modeling & ETL Guidelines",
+  "version": "1.0.0",
+  "origin": "internal",
+  "license": "MIT",
+  "description": "Modelagem relacional, índices, idempotência em migrações e consultas otimizadas.",
+  "domain": "data",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "required_permissions": [
+    "read_only"
+  ],
+  "content_hash": "a37a60a5cec6ef581c252590c21b630184bfc6950607f295cc70d87b9cc18ba3",
+  "is_approved": true,
+  "is_revoked": false,
+  "instructions": "Criar esquemas normalizados com chaves primárias e integridade referencial. Criar índices para colunas de busca frequente. Todas as operações de carga devem ser idempotentes.",
+  "templates": {
+    "migration_template": "CREATE TABLE IF NOT EXISTS metrics (\n  id TEXT PRIMARY KEY,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);"
+  },
+  "created_at": "2026-11-06T00:18:26.123416Z",
+  "updated_at": "2026-11-06T00:18:26.123416Z"
+}
