@@ -1,4 +1,5 @@
 from .adapter import BaseModelAdapter, MockAdapter, OllamaAdapter
+from .hybrid_router import CostBudgetExceededError, HybridModelRouter, OnlineProviderConfig
 from .inference_queue import InferenceQueue, InferenceQueueError
 from .model_manager import ModelManager
 from .types import (
@@ -11,6 +12,8 @@ from .types import (
 
 __all__ = [
     "BaseModelAdapter",
+    "CostBudgetExceededError",
+    "HybridModelRouter",
     "InferenceQueue",
     "InferenceQueueError",
     "InferenceRequest",
@@ -21,4 +24,5 @@ __all__ = [
     "ModelProvider",
     "ModelRoleMapping",
     "OllamaAdapter",
+    "OnlineProviderConfig",
 ]

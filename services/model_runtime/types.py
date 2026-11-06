@@ -23,6 +23,7 @@ class InferenceRequest(BaseModel):
     temperature: float = 0.2
     max_tokens: int | None = 2048
     format_json: bool = False
+    contains_sensitive_data: bool = False
     task_id: str | None = None
     timeout_seconds: float = 60.0
 
