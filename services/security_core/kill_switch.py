@@ -1,6 +1,6 @@
-from typing import Set, Optional
-from .audit_trail import AuditTrail
 from packages.contracts.security import AuditEventSeverity
+
+from .audit_trail import AuditTrail
 
 
 class KillSwitch:
@@ -10,10 +10,10 @@ class KillSwitch:
     ou suspender totalmente as operações do sistema.
     """
 
-    def __init__(self, audit_trail: Optional[AuditTrail] = None):
+    def __init__(self, audit_trail: AuditTrail | None = None):
         self._global_kill: bool = False
-        self._cancelled_tasks: Set[str] = set()
-        self._blocked_tools: Set[str] = set()
+        self._cancelled_tasks: set[str] = set()
+        self._blocked_tools: set[str] = set()
         self._audit_trail = audit_trail
 
     def trigger_global_kill(self, reason: str = "Intervenção manual de emergência") -> None:

@@ -1,7 +1,6 @@
-from typing import Dict, List, Optional
-from packages.contracts.agent import AgentRole
-from packages.agent_sdk.base_agent import AgentProfile
 from agents.profiles.catalog import AGENT_PROFILES
+from packages.agent_sdk.base_agent import AgentProfile
+from packages.contracts.agent import AgentRole
 
 
 class AgentRegistry:
@@ -11,17 +10,17 @@ class AgentRegistry:
     """
 
     def __init__(self):
-        self._profiles: Dict[AgentRole, AgentProfile] = dict(AGENT_PROFILES)
+        self._profiles: dict[AgentRole, AgentProfile] = dict(AGENT_PROFILES)
 
-    def get_profile(self, role: AgentRole) -> Optional[AgentProfile]:
+    def get_profile(self, role: AgentRole) -> AgentProfile | None:
         return self._profiles.get(role)
 
     def register_profile(self, profile: AgentProfile) -> None:
         self._profiles[profile.role] = profile
 
-    def list_agents(self) -> List[AgentProfile]:
+    def list_agents(self) -> list[AgentProfile]:
         return list(self._profiles.values())
 
-    def get_allowed_tools(self, role: AgentRole) -> List[str]:
+    def get_allowed_tools(self, role: AgentRole) -> list[str]:
         profile = self.get_profile(role)
         return profile.allowed_tools if profile else []

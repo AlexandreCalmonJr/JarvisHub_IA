@@ -1,6 +1,7 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, security_core
+from httpx import ASGITransport, AsyncClient
+
+from apps.api.main import app
 from packages.contracts.agent import AgentRole
 
 
@@ -59,7 +60,11 @@ async def test_api_chat_code_modification_creates_approval():
         # Aprovação legítima por utilizador humano
         valid_res = await client.post(
             f"/api/v1/approvals/{approval_id}/decide",
-            json={"action": "approve", "decided_by": "tech_lead_user", "reason": "Aprovado em code review"},
+            json={
+                "action": "approve",
+                "decided_by": "tech_lead_user",
+                "reason": "Aprovado em code review",
+            },
         )
         assert valid_res.status_code == 200
         assert valid_res.json()["status"] == "approved"

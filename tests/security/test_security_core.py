@@ -1,11 +1,11 @@
 import pytest
-from pathlib import Path
+
 from packages.contracts.agent import AgentRole
 from packages.contracts.approval import ApprovalStatus
-from packages.contracts.security import ProjectWorkMode, AuditEventSeverity
+from packages.contracts.security import AuditEventSeverity, ProjectWorkMode
 from services.security_core import (
-    SecurityCore,
     PermissionDeniedError,
+    SecurityCore,
     UnauthorizedApprovalError,
     redact_data,
     redact_string,
@@ -58,13 +58,18 @@ def test_path_traversal_prevention(security, tmp_path):
 
     # Verifica que o evento de bloqueio foi auditado
     events = security.audit.list_events(project_id="proj-1")
-    assert any(e.operation == "PATH_TRAVERSAL_BLOCKED" and e.severity == AuditEventSeverity.SECURITY_ALERT for e in events)
+    assert any(
+        e.operation == "PATH_TRAVERSAL_BLOCKED" and e.severity == AuditEventSeverity.SECURITY_ALERT
+        for e in events
+    )
 
 
 def test_read_only_agent_cannot_write(security, tmp_path):
     project_root = tmp_path / "demo_proj"
     project_root.mkdir()
-    security.permission_engine.register_project("proj-read", str(project_root), mode=ProjectWorkMode.EDIT_APPROVED)
+    security.permission_engine.register_project(
+        "proj-read", str(project_root), mode=ProjectWorkMode.EDIT_APPROVED
+    )
 
     # Code Reviewer (perfil analítico) não pode fazer escrita
     with pytest.raises(PermissionDeniedError, match="perfil estritamente de leitura"):
@@ -78,10 +83,14 @@ def test_read_only_agent_cannot_write(security, tmp_path):
 def test_read_only_project_mode_blocks_modification(security, tmp_path):
     project_root = tmp_path / "protected_proj"
     project_root.mkdir()
-    security.permission_engine.register_project("proj-prot", str(project_root), mode=ProjectWorkMode.READ_ONLY)
+    security.permission_engine.register_project(
+        "proj-prot", str(project_root), mode=ProjectWorkMode.READ_ONLY
+    )
 
     # Mesmo um Developer é bloqueado se o projeto estiver em modo READ_ONLY
-    with pytest.raises(PermissionDeniedError, match="Operações de alteração de arquivos estão desativadas"):
+    with pytest.raises(
+        PermissionDeniedError, match="Operações de alteração de arquivos estão desativadas"
+    ):
         security.permission_engine.check_operation_permission(
             agent_role=AgentRole.BACKEND_DEVELOPER,
             project_id="proj-prot",
@@ -93,11 +102,15 @@ def test_read_only_project_mode_blocks_modification(security, tmp_path):
 def test_agent_cannot_change_project_mode(security, tmp_path):
     project_root = tmp_path / "proj"
     project_root.mkdir()
-    security.permission_engine.register_project("p1", str(project_root), mode=ProjectWorkMode.READ_ONLY)
+    security.permission_engine.register_project(
+        "p1", str(project_root), mode=ProjectWorkMode.READ_ONLY
+    )
 
     # Agente tentando mudar modo de projeto é rejeitado
     with pytest.raises(PermissionDeniedError, match="Agentes de IA não têm permissão"):
-        security.permission_engine.set_project_mode("p1", ProjectWorkMode.EDIT_APPROVED, authorized_by=AgentRole.JARVIS_MASTER.value)
+        security.permission_engine.set_project_mode(
+            "p1", ProjectWorkMode.EDIT_APPROVED, authorized_by=AgentRole.JARVIS_MASTER.value
+        )
 
 
 def test_approval_lifecycle_and_agent_self_approval_blocked(security):
@@ -115,7 +128,9 @@ def test_approval_lifecycle_and_agent_self_approval_blocked(security):
         security.approval_engine.approve_request(req.id, decided_by=AgentRole.JARVIS_MASTER.value)
 
     # Aprovação por utilizador humano legítimo é aceite
-    approved_req = security.approval_engine.approve_request(req.id, decided_by="admin_user", decision_reason="Autorizado pelo arquiteto")
+    approved_req = security.approval_engine.approve_request(
+        req.id, decided_by="admin_user", decision_reason="Autorizado pelo arquiteto"
+    )
     assert approved_req.status == ApprovalStatus.APPROVED
     assert approved_req.decided_by == "admin_user"
 

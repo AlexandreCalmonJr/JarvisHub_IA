@@ -1,16 +1,14 @@
-import pytest
-import hashlib
 from pathlib import Path
 
+from agents.registry import AgentRegistry
 from packages.contracts.agent import AgentRole
 from packages.contracts.security import ProjectWorkMode
-from agents.registry import AgentRegistry
-from services.security_core import SecurityCore
 from services.project_workspace import (
-    ProjectWorkspaceService,
-    ProjectScanner,
     ProjectAnalyzer,
+    ProjectScanner,
+    ProjectWorkspaceService,
 )
+from services.security_core import SecurityCore
 
 
 def test_agent_registry_initial_agents():
@@ -75,7 +73,9 @@ def test_project_analyzer_detects_security_hotspot(tmp_path):
     project_dir = tmp_path / "vuln_app"
     project_dir.mkdir()
     source_file = project_dir / "service.py"
-    source_file.write_text('API_KEY = "sk-1234567890abcdef12345678"\nurl = "http://api.insecure.com/data"\n')
+    source_file.write_text(
+        'API_KEY = "sk-1234567890abcdef12345678"\nurl = "http://api.insecure.com/data"\n'
+    )
 
     scanner = ProjectScanner()
     inventory = scanner.scan("vuln-proj", project_dir)

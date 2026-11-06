@@ -1,9 +1,9 @@
-from typing import Optional, List
-from services.security_core import KillSwitch, AuditTrail
 from packages.contracts.security import AuditEventSeverity
-from .types import InferenceRequest, InferenceResponse, ModelMetadata, ModelRoleMapping
+from services.security_core import AuditTrail, KillSwitch
+
 from .adapter import BaseModelAdapter, OllamaAdapter
-from .inference_queue import InferenceQueue, InferenceQueueError
+from .inference_queue import InferenceQueue
+from .types import InferenceRequest, InferenceResponse, ModelMetadata, ModelRoleMapping
 
 
 class ModelManager:
@@ -14,10 +14,10 @@ class ModelManager:
 
     def __init__(
         self,
-        adapter: Optional[BaseModelAdapter] = None,
+        adapter: BaseModelAdapter | None = None,
         max_concurrent_inferences: int = 1,
-        kill_switch: Optional[KillSwitch] = None,
-        audit_trail: Optional[AuditTrail] = None,
+        kill_switch: KillSwitch | None = None,
+        audit_trail: AuditTrail | None = None,
     ):
         self.adapter = adapter or OllamaAdapter()
         self.queue = InferenceQueue(max_concurrent=max_concurrent_inferences)
@@ -27,7 +27,7 @@ class ModelManager:
     async def check_health(self) -> bool:
         return await self.adapter.health_check()
 
-    async def list_available_models(self) -> List[ModelMetadata]:
+    async def list_available_models(self) -> list[ModelMetadata]:
         return await self.adapter.list_models()
 
     def select_model_for_role(self, role_str: str) -> str:

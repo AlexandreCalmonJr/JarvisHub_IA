@@ -1,10 +1,11 @@
 import uuid
-from typing import Dict, Optional, List
-from datetime import datetime, timezone
-from packages.contracts.approval import ApprovalRequest, ApprovalStatus
+from datetime import UTC, datetime
+
 from packages.contracts.agent import AgentRole
-from .audit_trail import AuditTrail
+from packages.contracts.approval import ApprovalRequest, ApprovalStatus
 from packages.contracts.security import AuditEventSeverity
+
+from .audit_trail import AuditTrail
 
 
 class UnauthorizedApprovalError(Exception):
@@ -19,8 +20,8 @@ class ApprovalEngine:
     Agentes NUNCA podem autoaprovar solicitações.
     """
 
-    def __init__(self, audit_trail: Optional[AuditTrail] = None):
-        self._requests: Dict[str, ApprovalRequest] = {}
+    def __init__(self, audit_trail: AuditTrail | None = None):
+        self._requests: dict[str, ApprovalRequest] = {}
         self._audit_trail = audit_trail
 
     def create_request(
@@ -29,8 +30,8 @@ class ApprovalEngine:
         agent_role: str,
         operation: str,
         impact_summary: str,
-        affected_resources: List[str],
-        proposed_diff: Optional[str] = None,
+        affected_resources: list[str],
+        proposed_diff: str | None = None,
         reversible: bool = True,
     ) -> ApprovalRequest:
         req_id = f"appr-{uuid.uuid4().hex[:10]}"
@@ -62,17 +63,17 @@ class ApprovalEngine:
             )
         return request
 
-    def get_request(self, request_id: str) -> Optional[ApprovalRequest]:
+    def get_request(self, request_id: str) -> ApprovalRequest | None:
         return self._requests.get(request_id)
 
-    def list_pending_requests(self) -> List[ApprovalRequest]:
+    def list_pending_requests(self) -> list[ApprovalRequest]:
         return [r for r in self._requests.values() if r.status == ApprovalStatus.PENDING]
 
     def approve_request(
         self,
         request_id: str,
         decided_by: str,
-        decision_reason: Optional[str] = None,
+        decision_reason: str | None = None,
     ) -> ApprovalRequest:
         request = self._requests.get(request_id)
         if not request:
@@ -83,7 +84,11 @@ class ApprovalEngine:
 
         # Regra de Segurança Crítica: Agente NUNCA pode aprovar operações!
         known_agents = [r.value for r in AgentRole]
-        if decided_by in known_agents or decided_by.lower().startswith("agent_") or not decided_by.strip():
+        if (
+            decided_by in known_agents
+            or decided_by.lower().startswith("agent_")
+            or not decided_by.strip()
+        ):
             if self._audit_trail:
                 self._audit_trail.record_event(
                     operation="SELF_APPROVAL_ATTEMPT_BLOCKED",
@@ -93,10 +98,12 @@ class ApprovalEngine:
                     severity=AuditEventSeverity.SECURITY_ALERT,
                     reason="Tentativa proibida de autoaprovação por perfil de agente.",
                 )
-            raise UnauthorizedApprovalError("Agentes de IA não possuem permissão para autoaprovar pedidos!")
+            raise UnauthorizedApprovalError(
+                "Agentes de IA não possuem permissão para autoaprovar pedidos!"
+            )
 
         request.status = ApprovalStatus.APPROVED
-        request.decided_at = datetime.now(timezone.utc)
+        request.decided_at = datetime.now(UTC)
         request.decided_by = decided_by
         request.decision_reason = decision_reason
 
@@ -123,7 +130,7 @@ class ApprovalEngine:
             raise ValueError(f"Pedido de aprovação '{request_id}' não encontrado.")
 
         request.status = ApprovalStatus.REJECTED
-        request.decided_at = datetime.now(timezone.utc)
+        request.decided_at = datetime.now(UTC)
         request.decided_by = decided_by
         request.decision_reason = reason
 

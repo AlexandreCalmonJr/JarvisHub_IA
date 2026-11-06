@@ -1,7 +1,8 @@
+from datetime import UTC, datetime
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import Any
+
 from pydantic import BaseModel, Field
-from datetime import datetime, timezone
 
 
 class AgentRole(str, Enum):
@@ -35,9 +36,9 @@ class AgentRole(str, Enum):
 
 class ResourceUsage(BaseModel):
     model_name: str
-    tokens_prompt: Optional[int] = 0
-    tokens_completion: Optional[int] = 0
-    duration_ms: Optional[float] = 0.0
+    tokens_prompt: int | None = 0
+    tokens_completion: int | None = 0
+    duration_ms: float | None = 0.0
 
 
 class AgentOutputContract(BaseModel):
@@ -46,18 +47,36 @@ class AgentOutputContract(BaseModel):
     Objetivo, resumo, evidências, ações executadas, arquivos afetados,
     testes, riscos, bloqueios, uso de recursos e próxima recomendação.
     """
+
     agent_role: AgentRole
     objective: str = Field(..., description="Objetivo específico atribuído à execução")
     summary: str = Field(..., description="Resumo executivo do trabalho realizado")
-    evidence: List[str] = Field(default_factory=list, description="Fatos, linhas de código e dados verificáveis")
-    actions_taken: List[str] = Field(default_factory=list, description="Ações concretas executadas pelo agente")
-    affected_files: List[str] = Field(default_factory=list, description="Caminhos de arquivos lidos, analisados ou alterados")
-    tests_executed: List[str] = Field(default_factory=list, description="Testes unitários/integração ou verificações realizadas")
-    risks: List[str] = Field(default_factory=list, description="Riscos técnicos, de segurança ou de regressão identificados")
-    blockers: List[str] = Field(default_factory=list, description="Bloqueios ou necessidades de autorização humana pendente")
-    resource_usage: ResourceUsage = Field(default_factory=lambda: ResourceUsage(model_name="unknown"))
-    next_recommendation: str = Field(..., description="Próximo passo recomendado para o JARVIS Master ou utilizador")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    evidence: list[str] = Field(
+        default_factory=list, description="Fatos, linhas de código e dados verificáveis"
+    )
+    actions_taken: list[str] = Field(
+        default_factory=list, description="Ações concretas executadas pelo agente"
+    )
+    affected_files: list[str] = Field(
+        default_factory=list, description="Caminhos de arquivos lidos, analisados ou alterados"
+    )
+    tests_executed: list[str] = Field(
+        default_factory=list, description="Testes unitários/integração ou verificações realizadas"
+    )
+    risks: list[str] = Field(
+        default_factory=list,
+        description="Riscos técnicos, de segurança ou de regressão identificados",
+    )
+    blockers: list[str] = Field(
+        default_factory=list, description="Bloqueios ou necessidades de autorização humana pendente"
+    )
+    resource_usage: ResourceUsage = Field(
+        default_factory=lambda: ResourceUsage(model_name="unknown")
+    )
+    next_recommendation: str = Field(
+        ..., description="Próximo passo recomendado para o JARVIS Master ou utilizador"
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AgentTaskRequest(BaseModel):
@@ -65,7 +84,7 @@ class AgentTaskRequest(BaseModel):
     session_id: str
     agent_role: AgentRole
     user_prompt: str
-    project_id: Optional[str] = None
-    project_path: Optional[str] = None
-    allowed_tools: List[str] = Field(default_factory=list)
-    context_data: Dict[str, Any] = Field(default_factory=dict)
+    project_id: str | None = None
+    project_path: str | None = None
+    allowed_tools: list[str] = Field(default_factory=list)
+    context_data: dict[str, Any] = Field(default_factory=dict)

@@ -1,6 +1,6 @@
 import asyncio
-from typing import Optional, Callable, Awaitable, Any
-import time
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 
 class InferenceQueueError(Exception):
@@ -31,7 +31,7 @@ class InferenceQueue:
     async def execute(
         self,
         coro_func: Callable[[], Awaitable[Any]],
-        task_id: Optional[str] = None,
+        task_id: str | None = None,
         timeout_seconds: float = 90.0,
     ) -> Any:
         self._waiting_count += 1
@@ -45,6 +45,8 @@ class InferenceQueue:
                         return await coro_func()
                     finally:
                         self._active_count -= 1
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._waiting_count = max(0, self._waiting_count - 1)
-            raise InferenceQueueError(f"A inferência excedeu o tempo limite na fila ({timeout_seconds}s).")
+            raise InferenceQueueError(
+                f"A inferência excedeu o tempo limite na fila ({timeout_seconds}s)."
+            )

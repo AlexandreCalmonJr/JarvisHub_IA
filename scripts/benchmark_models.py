@@ -1,6 +1,7 @@
 import asyncio
 import time
-from services.model_runtime import ModelManager, OllamaAdapter, InferenceRequest
+
+from services.model_runtime import InferenceRequest, ModelManager, OllamaAdapter
 
 
 async def run_benchmark():
@@ -47,7 +48,9 @@ async def run_benchmark():
         t0 = time.perf_counter()
         res = await manager.generate(req)
         total_time = time.perf_counter() - t0
-        print(f"-> Latência: {res.duration_ms} ms | Tokens/s: {res.tokens_per_second} | Prompt tokens: {res.prompt_tokens} | Completion tokens: {res.completion_tokens}")
+        print(
+            f"-> Latência: {res.duration_ms} ms | Tokens/s: {res.tokens_per_second} | Prompt tokens: {res.prompt_tokens} | Completion tokens: {res.completion_tokens}"
+        )
         print(f"-> Amostra da resposta:\n{res.content[:200]}...")
 
 

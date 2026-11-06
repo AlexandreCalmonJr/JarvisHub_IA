@@ -1,8 +1,10 @@
 import time
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
+from typing import Any
+
 import httpx
-from .types import InferenceRequest, InferenceResponse, ModelMetadata, ModelProvider
+
+from .types import InferenceRequest, InferenceResponse, ModelMetadata
 
 
 class BaseModelAdapter(ABC):
@@ -13,7 +15,7 @@ class BaseModelAdapter(ABC):
         pass
 
     @abstractmethod
-    async def list_models(self) -> List[ModelMetadata]:
+    async def list_models(self) -> list[ModelMetadata]:
         pass
 
     @abstractmethod
@@ -35,7 +37,7 @@ class OllamaAdapter(BaseModelAdapter):
         except Exception:
             return False
 
-    async def list_models(self) -> List[ModelMetadata]:
+    async def list_models(self) -> list[ModelMetadata]:
         async with httpx.AsyncClient(timeout=5.0) as client:
             res = await client.get(f"{self.base_url}/api/tags")
             res.raise_for_status()
@@ -57,7 +59,7 @@ class OllamaAdapter(BaseModelAdapter):
         return models
 
     async def generate(self, request: InferenceRequest) -> InferenceResponse:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": request.model_name,
             "prompt": request.prompt,
             "stream": False,
@@ -86,7 +88,7 @@ class OllamaAdapter(BaseModelAdapter):
 
         # Cálculo preciso de tokens/segundo retornado diretamente pelo engine do Ollama ou fallback
         if eval_duration_ns > 0:
-            tokens_per_second = (completion_tokens / (eval_duration_ns / 1e9))
+            tokens_per_second = completion_tokens / (eval_duration_ns / 1e9)
         elif duration_ms > 0 and completion_tokens > 0:
             tokens_per_second = completion_tokens / (duration_ms / 1000.0)
         else:
@@ -111,7 +113,7 @@ class MockAdapter(BaseModelAdapter):
     async def health_check(self) -> bool:
         return True
 
-    async def list_models(self) -> List[ModelMetadata]:
+    async def list_models(self) -> list[ModelMetadata]:
         return [
             ModelMetadata(
                 name="mock-model",

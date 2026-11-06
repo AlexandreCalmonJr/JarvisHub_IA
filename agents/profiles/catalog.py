@@ -1,9 +1,7 @@
-from typing import Dict
-from packages.contracts.agent import AgentRole
 from packages.agent_sdk.base_agent import AgentProfile
+from packages.contracts.agent import AgentRole
 
-
-AGENT_PROFILES: Dict[AgentRole, AgentProfile] = {
+AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
     AgentRole.JARVIS_MASTER: AgentProfile(
         role=AgentRole.JARVIS_MASTER,
         name="JARVIS Master",

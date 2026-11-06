@@ -1,13 +1,13 @@
-from .scanner import ProjectScanner, ProjectInventory, FileInfo
-from .analyzer import ProjectAnalyzer, ArchitectureReport, SecurityHotspot
+from .analyzer import ArchitectureReport, ProjectAnalyzer, SecurityHotspot
+from .scanner import FileInfo, ProjectInventory, ProjectScanner
 from .workspace_service import ProjectWorkspaceService
 
 __all__ = [
-    "ProjectScanner",
-    "ProjectInventory",
+    "ArchitectureReport",
     "FileInfo",
     "ProjectAnalyzer",
-    "ArchitectureReport",
-    "SecurityHotspot",
+    "ProjectInventory",
+    "ProjectScanner",
     "ProjectWorkspaceService",
+    "SecurityHotspot",
 ]

@@ -1,7 +1,7 @@
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional, List, Dict, Any
+
 from pydantic import BaseModel, Field
-from datetime import datetime, timezone
 
 
 class ModelProvider(str, Enum):
@@ -18,12 +18,12 @@ class ModelRoleMapping(str, Enum):
 
 class InferenceRequest(BaseModel):
     prompt: str
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = None
     model_name: str = ModelRoleMapping.DEFAULT_MASTER.value
     temperature: float = 0.2
-    max_tokens: Optional[int] = 2048
+    max_tokens: int | None = 2048
     format_json: bool = False
-    task_id: Optional[str] = None
+    task_id: str | None = None
     timeout_seconds: float = 60.0
 
 
@@ -34,7 +34,7 @@ class InferenceResponse(BaseModel):
     completion_tokens: int = 0
     duration_ms: float = 0.0
     tokens_per_second: float = 0.0
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class ModelMetadata(BaseModel):

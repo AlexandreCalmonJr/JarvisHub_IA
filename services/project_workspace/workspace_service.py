@@ -1,9 +1,8 @@
-from pathlib import Path
-from typing import Optional, Dict
 from packages.contracts.security import ProjectWorkMode
 from services.security_core import SecurityCore
-from .scanner import ProjectScanner, ProjectInventory
-from .analyzer import ProjectAnalyzer, ArchitectureReport
+
+from .analyzer import ArchitectureReport, ProjectAnalyzer
+from .scanner import ProjectInventory, ProjectScanner
 
 
 class ProjectWorkspaceService:
@@ -16,8 +15,8 @@ class ProjectWorkspaceService:
         self.security_core = security_core
         self.scanner = ProjectScanner()
         self.analyzer = ProjectAnalyzer()
-        self._inventories: Dict[str, ProjectInventory] = {}
-        self._reports: Dict[str, ArchitectureReport] = {}
+        self._inventories: dict[str, ProjectInventory] = {}
+        self._reports: dict[str, ArchitectureReport] = {}
 
     def register_and_scan(
         self,
@@ -44,8 +43,8 @@ class ProjectWorkspaceService:
 
         return report
 
-    def get_inventory(self, project_id: str) -> Optional[ProjectInventory]:
+    def get_inventory(self, project_id: str) -> ProjectInventory | None:
         return self._inventories.get(project_id)
 
-    def get_report(self, project_id: str) -> Optional[ArchitectureReport]:
+    def get_report(self, project_id: str) -> ArchitectureReport | None:
         return self._reports.get(project_id)

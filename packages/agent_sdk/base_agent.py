@@ -1,16 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
+
 from pydantic import BaseModel, Field
 
-from packages.contracts.agent import AgentRole, AgentOutputContract, AgentTaskRequest, ResourceUsage
-from services.model_runtime import ModelManager, InferenceRequest
+from packages.contracts.agent import AgentOutputContract, AgentRole, AgentTaskRequest
+from services.model_runtime import ModelManager
 
 
 class AgentProfile(BaseModel):
     role: AgentRole
     name: str
     mission: str
-    allowed_tools: List[str] = Field(default_factory=list)
+    allowed_tools: list[str] = Field(default_factory=list)
     system_prompt: str
     preferred_model: str = "llama3.2:3b"
     is_read_only: bool = True

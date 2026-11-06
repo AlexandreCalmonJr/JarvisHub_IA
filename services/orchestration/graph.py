@@ -1,12 +1,12 @@
-import uuid
-from typing import Dict, Any, List
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from typing import Any
 
-from packages.contracts.agent import AgentRole, AgentOutputContract, ResourceUsage
-from packages.contracts.approval import ApprovalStatus
-from services.security_core import SecurityCore, PermissionDeniedError
-from services.model_runtime import ModelManager, InferenceRequest
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+
+from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
+from services.model_runtime import ModelManager
+from services.security_core import PermissionDeniedError, SecurityCore
+
 from .state import TaskState
 
 
@@ -21,15 +21,20 @@ def create_master_graph(
     START -> classify_intent -> plan_task -> verify_policy -> [se requer aprovação: pause/finalize | senão: execute_or_delegate] -> validate_output -> finalize_task -> END
     """
 
-    async def classify_intent(state: TaskState) -> Dict[str, Any]:
+    async def classify_intent(state: TaskState) -> dict[str, Any]:
         prompt = state["user_prompt"].lower()
         if any(w in prompt for w in ("arquitetura", "estrutura", "diagrama", "módulos")):
             intent = "architecture_analysis"
             agents = [AgentRole.SOFTWARE_ARCHITECT.value]
-        elif any(w in prompt for w in ("segurança", "vulnerabilidade", "threat", "owasp", "auditar")):
+        elif any(
+            w in prompt for w in ("segurança", "vulnerabilidade", "threat", "owasp", "auditar")
+        ):
             intent = "security_audit"
             agents = [AgentRole.CYBERSECURITY_ENGINEER.value, AgentRole.SECURE_CODE_AUDITOR.value]
-        elif any(w in prompt for w in ("editar", "alterar", "adicionar", "corrigir", "implementar", "fix")):
+        elif any(
+            w in prompt
+            for w in ("editar", "alterar", "adicionar", "corrigir", "implementar", "fix")
+        ):
             intent = "code_modification"
             agents = [AgentRole.BACKEND_DEVELOPER.value, AgentRole.QA_ENGINEER.value]
         elif any(w in prompt for w in ("teste", "testes", "qa", "validar")):
@@ -44,22 +49,22 @@ def create_master_graph(
             "selected_agents": agents,
         }
 
-    async def plan_task(state: TaskState) -> Dict[str, Any]:
+    async def plan_task(state: TaskState) -> dict[str, Any]:
         intent = state.get("classified_intent", "general_planning")
         prompt = state["user_prompt"]
 
         steps = [
             f"1. Interpretar contexto e objetivo do pedido: '{prompt[:60]}...'",
-            f"2. Validar conformidade de segurança e modo de trabalho do projeto.",
+            "2. Validar conformidade de segurança e modo de trabalho do projeto.",
             f"3. Executar análise com os especialistas selecionados: {', '.join(state.get('selected_agents', []))}.",
-            f"4. Consolidar plano, riscos e recomendações de próximos passos.",
+            "4. Consolidar plano, riscos e recomendações de próximos passos.",
         ]
         return {"plan_steps": steps}
 
-    async def verify_policy(state: TaskState) -> Dict[str, Any]:
+    async def verify_policy(state: TaskState) -> dict[str, Any]:
         intent = state.get("classified_intent")
         project_id = state.get("project_id")
-        violations: List[str] = []
+        violations: list[str] = []
         approval_required = False
         approval_id = None
 
@@ -95,7 +100,7 @@ def create_master_graph(
             "approval_id": approval_id,
         }
 
-    async def execute_or_delegate(state: TaskState) -> Dict[str, Any]:
+    async def execute_or_delegate(state: TaskState) -> dict[str, Any]:
         selected = state.get("selected_agents", [AgentRole.JARVIS_MASTER.value])
         primary_agent = selected[0]
 
@@ -110,7 +115,9 @@ def create_master_graph(
             tests_executed=["Verificação estática e de políticas"],
             risks=["Nenhum risco detetado na fase de planeamento"],
             blockers=[],
-            resource_usage=ResourceUsage(model_name="llama3.2:3b", tokens_prompt=40, tokens_completion=60),
+            resource_usage=ResourceUsage(
+                model_name="llama3.2:3b", tokens_prompt=40, tokens_completion=60
+            ),
             next_recommendation="Submeter recomendações ao utilizador para revisão.",
         )
 
@@ -119,7 +126,7 @@ def create_master_graph(
             "current_step": 1,
         }
 
-    async def validate_output(state: TaskState) -> Dict[str, Any]:
+    async def validate_output(state: TaskState) -> dict[str, Any]:
         # Valida conformidade do output com o contrato dos agentes
         outputs = state.get("agent_outputs", [])
         validated = []
@@ -129,7 +136,7 @@ def create_master_graph(
             validated.append(contract.model_dump())
         return {"agent_outputs": validated}
 
-    async def finalize_task(state: TaskState) -> Dict[str, Any]:
+    async def finalize_task(state: TaskState) -> dict[str, Any]:
         if state.get("approval_required"):
             appr_id = state.get("approval_id")
             summary = (

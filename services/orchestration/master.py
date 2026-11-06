@@ -1,9 +1,10 @@
 import uuid
-from typing import Optional, Dict, Any
+
 from langgraph.checkpoint.memory import MemorySaver
 
-from services.security_core import SecurityCore
 from services.model_runtime import ModelManager
+from services.security_core import SecurityCore
+
 from .graph import create_master_graph
 from .state import TaskState
 
@@ -18,7 +19,7 @@ class JarvisMaster:
         self,
         security_core: SecurityCore,
         model_manager: ModelManager,
-        checkpointer: Optional[MemorySaver] = None,
+        checkpointer: MemorySaver | None = None,
     ):
         self.security_core = security_core
         self.model_manager = model_manager
@@ -32,9 +33,9 @@ class JarvisMaster:
     async def execute_task(
         self,
         user_prompt: str,
-        session_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        task_id: Optional[str] = None,
+        session_id: str | None = None,
+        project_id: str | None = None,
+        task_id: str | None = None,
     ) -> TaskState:
         actual_task_id = task_id or f"tsk-{uuid.uuid4().hex[:8]}"
         actual_session_id = session_id or f"ses-{uuid.uuid4().hex[:8]}"
@@ -72,7 +73,9 @@ class JarvisMaster:
 
         current_values = dict(checkpoint.values)
         current_values["approval_required"] = False
-        current_values["final_summary"] = f"Aprovação concedida por '{approved_by}'. Retomando execução da tarefa."
+        current_values["final_summary"] = (
+            f"Aprovação concedida por '{approved_by}'. Retomando execução da tarefa."
+        )
         current_values["is_completed"] = True
 
         await self.graph.aupdate_state(config, current_values)

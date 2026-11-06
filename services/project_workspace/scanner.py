@@ -1,10 +1,9 @@
 import os
 from pathlib import Path
-from typing import List, Dict, Set, Any
+
 from pydantic import BaseModel, Field
 
-
-DEFAULT_EXCLUDED_DIRS: Set[str] = {
+DEFAULT_EXCLUDED_DIRS: set[str] = {
     ".git",
     ".idea",
     ".vscode",
@@ -19,16 +18,31 @@ DEFAULT_EXCLUDED_DIRS: Set[str] = {
     ".cache",
 }
 
-DEFAULT_EXCLUDED_FILES: Set[str] = {
+DEFAULT_EXCLUDED_FILES: set[str] = {
     ".DS_Store",
     "Thumbs.db",
     "desktop.ini",
 }
 
-BINARY_EXTENSIONS: Set[str] = {
-    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf",
-    ".exe", ".dll", ".so", ".dylib", ".apk", ".aab",
-    ".zip", ".tar", ".gz", ".7z", ".bin", ".pyc",
+BINARY_EXTENSIONS: set[str] = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".pdf",
+    ".exe",
+    ".dll",
+    ".so",
+    ".dylib",
+    ".apk",
+    ".aab",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".7z",
+    ".bin",
+    ".pyc",
 }
 
 
@@ -45,9 +59,9 @@ class ProjectInventory(BaseModel):
     root_path: str
     total_files: int = 0
     total_size_bytes: int = 0
-    languages: Dict[str, int] = Field(default_factory=dict)
-    manifests_found: List[str] = Field(default_factory=list)
-    files: List[FileInfo] = Field(default_factory=list)
+    languages: dict[str, int] = Field(default_factory=dict)
+    manifests_found: list[str] = Field(default_factory=list)
+    files: list[FileInfo] = Field(default_factory=list)
 
 
 class ProjectScanner:
@@ -108,8 +122,12 @@ class ProjectScanner:
 
                 is_bin = ext in BINARY_EXTENSIONS
                 is_manifest = filename in (
-                    "pubspec.yaml", "package.json", "pyproject.toml",
-                    "requirements.txt", "pom.xml", "build.gradle",
+                    "pubspec.yaml",
+                    "package.json",
+                    "pyproject.toml",
+                    "requirements.txt",
+                    "pom.xml",
+                    "build.gradle",
                 ) or filename.endswith(".csproj")
 
                 info = FileInfo(

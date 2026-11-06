@@ -1,7 +1,9 @@
 import uuid
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
+
 from packages.contracts.security import AuditEvent, AuditEventSeverity
+
 from .redaction import redact_data
 
 
@@ -12,26 +14,26 @@ class AuditTrail:
     """
 
     def __init__(self):
-        self._events: List[AuditEvent] = []
+        self._events: list[AuditEvent] = []
 
     def record_event(
         self,
         operation: str,
         status: str,
-        agent_role: Optional[str] = None,
-        project_id: Optional[str] = None,
-        tool_name: Optional[str] = None,
-        user_id: Optional[str] = "system",
-        parameters: Optional[Dict[str, Any]] = None,
+        agent_role: str | None = None,
+        project_id: str | None = None,
+        tool_name: str | None = None,
+        user_id: str | None = "system",
+        parameters: dict[str, Any] | None = None,
         severity: AuditEventSeverity = AuditEventSeverity.INFO,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> AuditEvent:
         event_id = f"aud-{uuid.uuid4().hex[:12]}"
         redacted_params = redact_data(parameters or {})
-        
+
         event = AuditEvent(
             id=event_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             severity=severity,
             user_id=user_id,
             agent_role=agent_role,
@@ -47,11 +49,11 @@ class AuditTrail:
 
     def list_events(
         self,
-        project_id: Optional[str] = None,
-        agent_role: Optional[str] = None,
-        severity: Optional[AuditEventSeverity] = None,
+        project_id: str | None = None,
+        agent_role: str | None = None,
+        severity: AuditEventSeverity | None = None,
         limit: int = 100,
-    ) -> List[AuditEvent]:
+    ) -> list[AuditEvent]:
         filtered = self._events
         if project_id:
             filtered = [e for e in filtered if e.project_id == project_id]

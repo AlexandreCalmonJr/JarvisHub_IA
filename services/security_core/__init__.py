@@ -1,8 +1,14 @@
-from .redaction import redact_string, redact_data
+from .approval_engine import ApprovalEngine, UnauthorizedApprovalError
 from .audit_trail import AuditTrail
 from .kill_switch import KillSwitch
-from .approval_engine import ApprovalEngine, UnauthorizedApprovalError
-from .permission_engine import PermissionEngine, PermissionDeniedError, CRITICAL_OPERATIONS, READ_ONLY_ROLES
+from .permission_engine import (
+    CRITICAL_OPERATIONS,
+    READ_ONLY_ROLES,
+    PermissionDeniedError,
+    PermissionEngine,
+)
+from .redaction import redact_data, redact_string
+from .session_manager import SessionManager, UserRole, UserSession
 
 
 class SecurityCore:
@@ -13,21 +19,25 @@ class SecurityCore:
 
     def __init__(self):
         self.audit = AuditTrail()
+        self.sessions = SessionManager()
         self.kill_switch = KillSwitch(audit_trail=self.audit)
         self.approval_engine = ApprovalEngine(audit_trail=self.audit)
         self.permission_engine = PermissionEngine(audit_trail=self.audit)
 
 
 __all__ = [
-    "SecurityCore",
-    "AuditTrail",
-    "KillSwitch",
-    "ApprovalEngine",
-    "PermissionEngine",
-    "UnauthorizedApprovalError",
-    "PermissionDeniedError",
     "CRITICAL_OPERATIONS",
     "READ_ONLY_ROLES",
-    "redact_string",
+    "ApprovalEngine",
+    "AuditTrail",
+    "KillSwitch",
+    "PermissionDeniedError",
+    "PermissionEngine",
+    "SecurityCore",
+    "SessionManager",
+    "UnauthorizedApprovalError",
+    "UserRole",
+    "UserSession",
     "redact_data",
+    "redact_string",
 ]

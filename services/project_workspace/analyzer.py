@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+
 from pydantic import BaseModel, Field
 
 from .scanner import ProjectInventory
@@ -18,11 +18,11 @@ class ArchitectureReport(BaseModel):
     project_id: str
     project_name: str
     project_type: str
-    entry_points: List[str] = Field(default_factory=list)
-    key_dependencies: Dict[str, str] = Field(default_factory=dict)
+    entry_points: list[str] = Field(default_factory=list)
+    key_dependencies: dict[str, str] = Field(default_factory=dict)
     architecture_pattern: str = "Desconhecido"
-    security_hotspots: List[SecurityHotspot] = Field(default_factory=list)
-    recommendations: List[str] = Field(default_factory=list)
+    security_hotspots: list[SecurityHotspot] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
 
 
 class ProjectAnalyzer:
@@ -35,11 +35,11 @@ class ProjectAnalyzer:
         root_path = Path(inventory.root_path)
         project_type = "Genérico / Poliglota"
         project_name = root_path.name
-        entry_points: List[str] = []
-        dependencies: Dict[str, str] = {}
+        entry_points: list[str] = []
+        dependencies: dict[str, str] = {}
         architecture_pattern = "Modular"
-        recommendations: List[str] = []
-        hotspots: List[SecurityHotspot] = []
+        recommendations: list[str] = []
+        hotspots: list[SecurityHotspot] = []
 
         # 1. Detecção de Flutter
         if any("pubspec.yaml" in m for m in inventory.manifests_found):
@@ -67,7 +67,9 @@ class ProjectAnalyzer:
             if (root_path / "lib" / "main.dart").exists():
                 entry_points.append("lib/main.dart")
             architecture_pattern = "Flutter Widget Tree com Gerenciamento de Estado"
-            recommendations.append("Manter separação estrita entre UI e lógica de negócio via BLoC ou Provider.")
+            recommendations.append(
+                "Manter separação estrita entre UI e lógica de negócio via BLoC ou Provider."
+            )
 
         # 2. Detecção de Python
         elif any(m in ("pyproject.toml", "requirements.txt") for m in inventory.manifests_found):
@@ -76,11 +78,15 @@ class ProjectAnalyzer:
                 entry_points.append("apps/api/main.py")
             elif (root_path / "main.py").exists():
                 entry_points.append("main.py")
-            recommendations.append("Garantir validação estrita com Pydantic e execução em virtualenv.")
+            recommendations.append(
+                "Garantir validação estrita com Pydantic e execução em virtualenv."
+            )
 
         # 3. Análise Estática de Riscos / Hotspots em Arquivos Fonte
-        secret_regex = re.compile(r'(?i)(api[_-]?key|secret|password)\s*[:=]\s*["\']([^"\'\s]{8,})["\']')
-        http_regex = re.compile(r'http://[a-zA-Z0-9.-]+')
+        secret_regex = re.compile(
+            r'(?i)(api[_-]?key|secret|password)\s*[:=]\s*["\']([^"\'\s]{8,})["\']'
+        )
+        http_regex = re.compile(r"http://[a-zA-Z0-9.-]+")
 
         for f in inventory.files:
             if f.is_binary or f.extension not in (".dart", ".py", ".ts", ".js", ".json"):
@@ -121,7 +127,9 @@ class ProjectAnalyzer:
         if not hotspots:
             recommendations.append("Nenhum segredo em texto claro detetado na varredura inicial.")
         else:
-            recommendations.append(f"Corrigir {len(hotspots)} potenciais vulnerabilidades/segredos identificados nos arquivos.")
+            recommendations.append(
+                f"Corrigir {len(hotspots)} potenciais vulnerabilidades/segredos identificados nos arquivos."
+            )
 
         return ArchitectureReport(
             project_id=inventory.project_id,

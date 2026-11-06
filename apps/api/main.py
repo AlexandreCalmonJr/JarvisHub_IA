@@ -1,12 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends, Body
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
 
-from services.security_core import SecurityCore, UnauthorizedApprovalError
 from services.model_runtime import ModelManager, OllamaAdapter
 from services.orchestration import JarvisMaster, TaskState
-
+from services.security_core import SecurityCore, UnauthorizedApprovalError
 
 # Inicialização dos serviços centrais do monólito modular
 security_core = SecurityCore()
@@ -38,19 +36,19 @@ app.add_middleware(
 # Schemas para API
 class ChatRequest(BaseModel):
     prompt: str = Field(..., description="Instrução ou pedido do utilizador")
-    session_id: Optional[str] = None
-    project_id: Optional[str] = None
+    session_id: str | None = None
+    project_id: str | None = None
 
 
 class ApprovalDecisionRequest(BaseModel):
     action: str = Field(..., description="'approve' ou 'reject'")
     decided_by: str = Field(..., description="Identificador do utilizador humano autorizador")
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class KillSwitchRequest(BaseModel):
     target: str = Field(..., description="'global' ou 'task'")
-    task_id: Optional[str] = None
+    task_id: str | None = None
     reason: str = "Ação acionada pelo utilizador"
 
 
@@ -77,9 +75,7 @@ async def health_check():
                 "active": model_manager.queue.active_count,
                 "waiting": model_manager.queue.waiting_count,
             },
-            "kill_switch": {
-                "global_killed": security_core.kill_switch.is_global_killed()
-            },
+            "kill_switch": {"global_killed": security_core.kill_switch.is_global_killed()},
         },
     }
 
@@ -139,7 +135,9 @@ async def trigger_kill_switch(payload: KillSwitchRequest):
         return {"status": "global_kill_activated"}
     elif payload.target == "task":
         if not payload.task_id:
-            raise HTTPException(status_code=400, detail="task_id é obrigatório para cancelar tarefa.")
+            raise HTTPException(
+                status_code=400, detail="task_id é obrigatório para cancelar tarefa."
+            )
         security_core.kill_switch.cancel_task(payload.task_id, reason=payload.reason)
         return {"status": "task_cancelled", "task_id": payload.task_id}
     else:

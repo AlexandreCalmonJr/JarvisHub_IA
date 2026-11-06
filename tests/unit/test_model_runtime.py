@@ -1,12 +1,13 @@
-import pytest
 import asyncio
+
+import pytest
+
 from services.model_runtime import (
-    ModelManager,
-    MockAdapter,
-    InferenceRequest,
-    ModelRoleMapping,
     InferenceQueue,
-    InferenceQueueError,
+    InferenceRequest,
+    MockAdapter,
+    ModelManager,
+    ModelRoleMapping,
 )
 from services.security_core import KillSwitch
 
@@ -29,9 +30,17 @@ async def test_model_manager_generate(mock_manager):
 
 @pytest.mark.asyncio
 async def test_model_manager_role_selection(mock_manager):
-    assert mock_manager.select_model_for_role("jarvis_master") == ModelRoleMapping.DEFAULT_MASTER.value
-    assert mock_manager.select_model_for_role("backend_developer") == ModelRoleMapping.DEFAULT_CODER.value
-    assert mock_manager.select_model_for_role("threat_modeling_security_architect") == ModelRoleMapping.DEFAULT_REASONING.value
+    assert (
+        mock_manager.select_model_for_role("jarvis_master") == ModelRoleMapping.DEFAULT_MASTER.value
+    )
+    assert (
+        mock_manager.select_model_for_role("backend_developer")
+        == ModelRoleMapping.DEFAULT_CODER.value
+    )
+    assert (
+        mock_manager.select_model_for_role("threat_modeling_security_architect")
+        == ModelRoleMapping.DEFAULT_REASONING.value
+    )
 
 
 @pytest.mark.asyncio

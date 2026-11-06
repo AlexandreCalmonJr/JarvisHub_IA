@@ -1,12 +1,9 @@
-import pytest
-from datetime import datetime
 from packages.contracts import (
-    AgentRole,
     AgentOutputContract,
-    ResourceUsage,
+    AgentRole,
     ApprovalRequest,
     ApprovalStatus,
-    ProjectWorkMode,
+    ResourceUsage,
 )
 
 
@@ -26,7 +23,9 @@ def test_agent_output_contract_valid():
         tests_executed=["pytest tests/unit"],
         risks=["Nenhum risco de escrita imediata"],
         blockers=[],
-        resource_usage=ResourceUsage(model_name="llama3.2:3b", tokens_prompt=120, tokens_completion=80),
+        resource_usage=ResourceUsage(
+            model_name="llama3.2:3b", tokens_prompt=120, tokens_completion=80
+        ),
         next_recommendation="Prosseguir para a Fase 2 de Segurança.",
     )
     assert output.agent_role == AgentRole.JARVIS_MASTER
