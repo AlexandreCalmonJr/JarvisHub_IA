@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from packages.contracts.agent import AgentRole
 from packages.contracts.approval import ApprovalRequest, ApprovalStatus
@@ -18,11 +19,91 @@ class ApprovalEngine:
     Garante que qualquer ação de alto impacto (escrita, execução, exclusão, Git)
     seja pausada e somente executada após autorização explícita de um utilizador humano.
     Agentes NUNCA podem autoaprovar solicitações.
+    Suporta persistência via DatabaseManager (SQLite) com recuperação controlada de estado.
     """
 
-    def __init__(self, audit_trail: AuditTrail | None = None):
+    def __init__(self, audit_trail: AuditTrail | None = None, db_manager: Any | None = None):
         self._requests: dict[str, ApprovalRequest] = {}
         self._audit_trail = audit_trail
+        self._db_manager = db_manager
+        if self._db_manager:
+            self._load_from_db()
+
+    def set_db_manager(self, db_manager: Any) -> None:
+        """Vincula o gerenciador de persistência SQLite e sincroniza o estado."""
+        self._db_manager = db_manager
+        self._load_from_db()
+        for req in self._requests.values():
+            self._save_to_db(req)
+
+    def _load_from_db(self) -> None:
+        if not self._db_manager:
+            return
+        try:
+            rows = self._db_manager.list_approvals()
+            for row in rows:
+                req_id = row["id"]
+                req_at = (
+                    datetime.fromisoformat(row["requested_at"])
+                    if isinstance(row.get("requested_at"), str)
+                    else (row.get("requested_at") or datetime.now(UTC))
+                )
+                dec_at = (
+                    datetime.fromisoformat(row["decided_at"])
+                    if isinstance(row.get("decided_at"), str)
+                    else row.get("decided_at")
+                )
+                raw_status = row.get("status", "pending")
+                try:
+                    status = ApprovalStatus(raw_status)
+                except Exception:
+                    status = ApprovalStatus.PENDING
+
+                req = ApprovalRequest(
+                    id=req_id,
+                    task_id=row.get("task_id", ""),
+                    agent_role=row.get("agent_role", "unknown"),
+                    operation=row.get("operation", "unknown"),
+                    impact_summary=row.get("impact_summary", ""),
+                    affected_resources=list(row.get("affected_resources") or []),
+                    proposed_diff=row.get("proposed_diff"),
+                    reversible=bool(row.get("reversible", True)),
+                    status=status,
+                    requested_at=req_at,
+                    decided_at=dec_at,
+                    decided_by=row.get("decided_by"),
+                    decision_reason=row.get("decision_reason"),
+                )
+                self._requests[req_id] = req
+        except Exception:
+            pass
+
+    def _save_to_db(self, request: ApprovalRequest) -> None:
+        if not self._db_manager:
+            return
+        try:
+            status_val = (
+                request.status.value
+                if hasattr(request.status, "value")
+                else str(request.status)
+            )
+            self._db_manager.save_approval(
+                id=request.id,
+                task_id=request.task_id,
+                agent_role=request.agent_role,
+                operation=request.operation,
+                impact_summary=request.impact_summary,
+                affected_resources=request.affected_resources,
+                proposed_diff=request.proposed_diff,
+                reversible=request.reversible,
+                status=status_val,
+                requested_at=request.requested_at,
+                decided_at=request.decided_at,
+                decided_by=request.decided_by,
+                decision_reason=request.decision_reason,
+            )
+        except Exception:
+            pass
 
     def create_request(
         self,
@@ -47,6 +128,7 @@ class ApprovalEngine:
             status=ApprovalStatus.PENDING,
         )
         self._requests[req_id] = request
+        self._save_to_db(request)
 
         if self._audit_trail:
             self._audit_trail.record_event(
@@ -64,7 +146,46 @@ class ApprovalEngine:
         return request
 
     def get_request(self, request_id: str) -> ApprovalRequest | None:
-        return self._requests.get(request_id)
+        req = self._requests.get(request_id)
+        if not req and self._db_manager:
+            try:
+                row = self._db_manager.get_approval(request_id)
+                if row:
+                    req_at = (
+                        datetime.fromisoformat(row["requested_at"])
+                        if isinstance(row.get("requested_at"), str)
+                        else (row.get("requested_at") or datetime.now(UTC))
+                    )
+                    dec_at = (
+                        datetime.fromisoformat(row["decided_at"])
+                        if isinstance(row.get("decided_at"), str)
+                        else row.get("decided_at")
+                    )
+                    raw_status = row.get("status", "pending")
+                    try:
+                        status = ApprovalStatus(raw_status)
+                    except Exception:
+                        status = ApprovalStatus.PENDING
+
+                    req = ApprovalRequest(
+                        id=row["id"],
+                        task_id=row.get("task_id", ""),
+                        agent_role=row.get("agent_role", "unknown"),
+                        operation=row.get("operation", "unknown"),
+                        impact_summary=row.get("impact_summary", ""),
+                        affected_resources=list(row.get("affected_resources") or []),
+                        proposed_diff=row.get("proposed_diff"),
+                        reversible=bool(row.get("reversible", True)),
+                        status=status,
+                        requested_at=req_at,
+                        decided_at=dec_at,
+                        decided_by=row.get("decided_by"),
+                        decision_reason=row.get("decision_reason"),
+                    )
+                    self._requests[req.id] = req
+            except Exception:
+                pass
+        return req
 
     def list_pending_requests(self) -> list[ApprovalRequest]:
         return [r for r in self._requests.values() if r.status == ApprovalStatus.PENDING]
@@ -75,7 +196,7 @@ class ApprovalEngine:
         decided_by: str,
         decision_reason: str | None = None,
     ) -> ApprovalRequest:
-        request = self._requests.get(request_id)
+        request = self.get_request(request_id)
         if not request:
             raise ValueError(f"Pedido de aprovação '{request_id}' não encontrado.")
 
@@ -106,6 +227,7 @@ class ApprovalEngine:
         request.decided_at = datetime.now(UTC)
         request.decided_by = decided_by
         request.decision_reason = decision_reason
+        self._save_to_db(request)
 
         if self._audit_trail:
             self._audit_trail.record_event(
@@ -125,7 +247,7 @@ class ApprovalEngine:
         decided_by: str,
         reason: str,
     ) -> ApprovalRequest:
-        request = self._requests.get(request_id)
+        request = self.get_request(request_id)
         if not request:
             raise ValueError(f"Pedido de aprovação '{request_id}' não encontrado.")
 
@@ -133,6 +255,7 @@ class ApprovalEngine:
         request.decided_at = datetime.now(UTC)
         request.decided_by = decided_by
         request.decision_reason = reason
+        self._save_to_db(request)
 
         if self._audit_trail:
             self._audit_trail.record_event(

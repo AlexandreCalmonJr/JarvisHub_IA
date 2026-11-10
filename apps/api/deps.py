@@ -182,6 +182,7 @@ model_manager = ModelManager(
     hybrid_router=hybrid_router,
 )
 db_manager = DatabaseManager(db_path=str(data_dir / "jarvis.db"))
+security_core.set_db_manager(db_manager)
 resource_manager = ResourceManager(audit_trail=security_core.audit)
 skills_catalog = SkillsCatalog()
 agent_registry = AgentRegistry()

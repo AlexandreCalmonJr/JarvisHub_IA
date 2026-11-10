@@ -4,6 +4,7 @@ import os
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -68,50 +69,116 @@ class DeviceAuthManager:
     Gestor de autenticação de dispositivos móveis para acesso seguro via Tailscale/VPN.
     Suporta emparelhamento por token criptográfico, validação de requisições e revogação imediata.
 
-    Os registos podem ser persistidos em disco (hash do token, scopes e estado de
-    revogação) para sobreviver a reinícios do servidor.
+    Os registos são persistidos no banco relacional SQLite (DatabaseManager) e/ou em disco
+    (hash do token, scopes e estado de revogação) para sobreviver a reinícios do servidor.
+    O token original NUNCA é persistido em texto simples.
     """
 
-    def __init__(self, audit_trail: AuditTrail | None = None, store_path: Path | None = None):
+    def __init__(
+        self,
+        audit_trail: AuditTrail | None = None,
+        store_path: Path | None = None,
+        db_manager: Any | None = None,
+    ):
         self.audit_trail = audit_trail
         self.store_path = Path(store_path) if store_path else None
+        self.db_manager = db_manager
         self._devices: dict[str, DeviceRegistration] = {}
         self._hash_to_device: dict[str, str] = {}
-        if self.store_path:
-            self._load()
+        self._load()
+
+    def set_db_manager(self, db_manager: Any) -> None:
+        """Vincula o gerenciador de banco de dados SQLite e sincroniza dispositivos."""
+        self.db_manager = db_manager
+        self._load()
+        if self.db_manager:
+            for reg in self._devices.values():
+                self._save_device_to_db(reg)
 
     # ------------------------------------------------------------------
     # Persistência
     # ------------------------------------------------------------------
     def _load(self) -> None:
-        if not self.store_path or not self.store_path.exists():
+        loaded_from_db = False
+        if self.db_manager:
+            try:
+                db_devices = self.db_manager.list_devices(include_revoked=True)
+                for item in db_devices:
+                    p_at = (
+                        datetime.fromisoformat(item["paired_at"])
+                        if isinstance(item.get("paired_at"), str)
+                        else (item.get("paired_at") or datetime.now(UTC))
+                    )
+                    ls_at = (
+                        datetime.fromisoformat(item["last_seen_at"])
+                        if isinstance(item.get("last_seen_at"), str)
+                        else (item.get("last_seen_at") or datetime.now(UTC))
+                    )
+                    reg = DeviceRegistration(
+                        device_id=item["device_id"],
+                        device_name=item.get("device_name", "unknown"),
+                        device_token=None,
+                        token_hash=item.get("token_hash", ""),
+                        scopes=list(item.get("scopes", [])),
+                        is_revoked=bool(item.get("is_revoked", False)),
+                        paired_at=p_at,
+                        last_seen_at=ls_at,
+                    )
+                    self._devices[reg.device_id] = reg
+                    if reg.token_hash:
+                        self._hash_to_device[reg.token_hash] = reg.device_id
+                if self._devices:
+                    loaded_from_db = True
+            except Exception:
+                pass
+
+        if not loaded_from_db and self.store_path and self.store_path.exists():
+            try:
+                raw = json.loads(self.store_path.read_text(encoding="utf-8"))
+                for item in raw.get("devices", []):
+                    reg = DeviceRegistration(
+                        device_id=item["device_id"],
+                        device_name=item.get("device_name", "unknown"),
+                        device_token=None,
+                        token_hash=item.get("token_hash", ""),
+                        scopes=list(item.get("scopes", [])),
+                        is_revoked=bool(item.get("is_revoked", False)),
+                        paired_at=datetime.fromisoformat(item["paired_at"])
+                        if item.get("paired_at")
+                        else datetime.now(UTC),
+                        last_seen_at=datetime.fromisoformat(item["last_seen_at"])
+                        if item.get("last_seen_at")
+                        else datetime.now(UTC),
+                    )
+                    self._devices[reg.device_id] = reg
+                    if reg.token_hash:
+                        self._hash_to_device[reg.token_hash] = reg.device_id
+                    if self.db_manager:
+                        self._save_device_to_db(reg)
+            except Exception:
+                pass
+
+    def _save_device_to_db(self, reg: DeviceRegistration) -> None:
+        if not self.db_manager:
             return
         try:
-            raw = json.loads(self.store_path.read_text(encoding="utf-8"))
-            for item in raw.get("devices", []):
-                reg = DeviceRegistration(
-                    device_id=item["device_id"],
-                    device_name=item.get("device_name", "unknown"),
-                    device_token=None,
-                    token_hash=item.get("token_hash", ""),
-                    scopes=list(item.get("scopes", [])),
-                    is_revoked=bool(item.get("is_revoked", False)),
-                    paired_at=datetime.fromisoformat(item["paired_at"])
-                    if item.get("paired_at")
-                    else datetime.now(UTC),
-                    last_seen_at=datetime.fromisoformat(item["last_seen_at"])
-                    if item.get("last_seen_at")
-                    else datetime.now(UTC),
-                )
-                self._devices[reg.device_id] = reg
-                if reg.token_hash:
-                    self._hash_to_device[reg.token_hash] = reg.device_id
+            self.db_manager.save_device(
+                device_id=reg.device_id,
+                device_name=reg.device_name,
+                token_hash=reg.token_hash,
+                scopes=list(reg.scopes),
+                is_revoked=reg.is_revoked,
+                paired_at=reg.paired_at,
+                last_seen_at=reg.last_seen_at,
+            )
         except Exception:
-            # Um ficheiro corrompido não deve impedir o arranque; fica vazio.
-            self._devices = {}
-            self._hash_to_device = {}
+            pass
 
     def _save(self) -> None:
+        if self.db_manager:
+            for reg in self._devices.values():
+                self._save_device_to_db(reg)
+
         if not self.store_path:
             return
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
@@ -211,6 +278,11 @@ class DeviceAuthManager:
             raise PermissionError("Dispositivo revogado. Acesso permanentemente bloqueado.")
 
         device.last_seen_at = datetime.now(UTC)
+        if self.db_manager:
+            try:
+                self.db_manager.update_device_last_seen(device_id, device.last_seen_at)
+            except Exception:
+                pass
         return device
 
     def revoke_device(
@@ -222,6 +294,11 @@ class DeviceAuthManager:
         device = self._devices[device_id]
         device.is_revoked = True
         self._save()
+        if self.db_manager:
+            try:
+                self.db_manager.revoke_device(device_id)
+            except Exception:
+                pass
 
         if self.audit_trail:
             self.audit_trail.record_event(
@@ -251,7 +328,37 @@ class DeviceAuthManager:
         ]
 
     def get_device(self, device_id: str) -> DeviceRegistration | None:
-        return self._devices.get(device_id)
+        dev = self._devices.get(device_id)
+        if not dev and self.db_manager:
+            try:
+                row = self.db_manager.get_device(device_id)
+                if row:
+                    p_at = (
+                        datetime.fromisoformat(row["paired_at"])
+                        if isinstance(row.get("paired_at"), str)
+                        else (row.get("paired_at") or datetime.now(UTC))
+                    )
+                    ls_at = (
+                        datetime.fromisoformat(row["last_seen_at"])
+                        if isinstance(row.get("last_seen_at"), str)
+                        else (row.get("last_seen_at") or datetime.now(UTC))
+                    )
+                    dev = DeviceRegistration(
+                        device_id=row["device_id"],
+                        device_name=row.get("device_name", "unknown"),
+                        device_token=None,
+                        token_hash=row.get("token_hash", ""),
+                        scopes=list(row.get("scopes", [])),
+                        is_revoked=bool(row.get("is_revoked", False)),
+                        paired_at=p_at,
+                        last_seen_at=ls_at,
+                    )
+                    self._devices[dev.device_id] = dev
+                    if dev.token_hash:
+                        self._hash_to_device[dev.token_hash] = dev.device_id
+            except Exception:
+                pass
+        return dev
 
     def purge_revoked(self) -> int:
         revoked = [d for d in self._devices.values() if d.is_revoked]
@@ -260,4 +367,9 @@ class DeviceAuthManager:
             self._hash_to_device.pop(device.token_hash, None)
         if revoked:
             self._save()
+        if self.db_manager:
+            try:
+                self.db_manager.delete_revoked_devices()
+            except Exception:
+                pass
         return len(revoked)

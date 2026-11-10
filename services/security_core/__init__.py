@@ -30,11 +30,12 @@ class SecurityCore:
     Ponto de entrada obrigatório para validação de permissões, auditoria, aprovações e kill switch.
     """
 
-    def __init__(self, workspace_service=None, auth_dir=None):
-        self.audit = AuditTrail()
-        self.sessions = SessionManager()
+    def __init__(self, workspace_service=None, auth_dir=None, db_manager=None):
+        self.db_manager = db_manager
+        self.audit = AuditTrail(db_manager=db_manager)
+        self.sessions = SessionManager(db_manager=db_manager)
         self.kill_switch = KillSwitch(audit_trail=self.audit)
-        self.approval_engine = ApprovalEngine(audit_trail=self.audit)
+        self.approval_engine = ApprovalEngine(audit_trail=self.audit, db_manager=db_manager)
         self.permission_engine = PermissionEngine(audit_trail=self.audit)
         self.pipeline = QASecurityPipeline(audit_trail=self.audit)
         device_store = None
@@ -42,11 +43,25 @@ class SecurityCore:
             from pathlib import Path
 
             device_store = Path(auth_dir) / "devices.json"
-        self.device_auth = DeviceAuthManager(audit_trail=self.audit, store_path=device_store)
+        self.device_auth = DeviceAuthManager(
+            audit_trail=self.audit, store_path=device_store, db_manager=db_manager
+        )
         self.cyber_shield = cyber_shield
         self.cve_scanner = CVEScannerService()
         self.red_team = RedTeamSandboxService(workspace_service=workspace_service)
         self.policy_generator = SecurityPolicyGenerator(workspace_service=workspace_service)
+
+    def set_db_manager(self, db_manager) -> None:
+        """Vincula o gerenciador de banco de dados SQLite a todos os subsistemas do SecurityCore."""
+        self.db_manager = db_manager
+        if hasattr(self.audit, "set_db_manager"):
+            self.audit.set_db_manager(db_manager)
+        if hasattr(self.sessions, "set_db_manager"):
+            self.sessions.set_db_manager(db_manager)
+        if hasattr(self.approval_engine, "set_db_manager"):
+            self.approval_engine.set_db_manager(db_manager)
+        if hasattr(self.device_auth, "set_db_manager"):
+            self.device_auth.set_db_manager(db_manager)
 
 
 __all__ = [

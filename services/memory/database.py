@@ -166,6 +166,48 @@ class DatabaseManager:
             CREATE INDEX IF NOT EXISTS idx_kv_doc ON knowledge_vault(doc_name);
             CREATE INDEX IF NOT EXISTS idx_kv_cat ON knowledge_vault(category);
 
+            CREATE TABLE IF NOT EXISTS mobile_devices (
+                device_id TEXT PRIMARY KEY,
+                device_name TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                scopes_json TEXT NOT NULL,
+                is_revoked INTEGER NOT NULL DEFAULT 0,
+                paired_at TIMESTAMP NOT NULL,
+                last_seen_at TIMESTAMP NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_devices_hash ON mobile_devices(token_hash);
+            CREATE INDEX IF NOT EXISTS idx_devices_revoked ON mobile_devices(is_revoked);
+
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                scopes_json TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                last_seen_at TIMESTAMP NOT NULL,
+                is_revoked INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_sessions_revoked ON user_sessions(is_revoked);
+
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id TEXT PRIMARY KEY,
+                timestamp TIMESTAMP NOT NULL,
+                severity TEXT NOT NULL,
+                user_id TEXT,
+                agent_role TEXT,
+                project_id TEXT,
+                operation TEXT NOT NULL,
+                tool_name TEXT,
+                parameters_redacted_json TEXT,
+                status TEXT NOT NULL,
+                reason TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_events(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_operation ON audit_events(operation);
+
 
             -- Semeia modelos de alta velocidade para CPU (3B) por padrão
             INSERT OR IGNORE INTO agent_configs (role, preferred_model, updated_at) VALUES
@@ -176,6 +218,10 @@ class DatabaseManager:
             ('code_explanation', 'llama3.2:3b', datetime('now')),
             ('requirements_analyst', 'llama3.2:3b', datetime('now'));
             """)
+            try:
+                conn.execute("ALTER TABLE approvals ADD COLUMN reversible INTEGER DEFAULT 1;")
+            except Exception:
+                pass
             try:
                 conn.execute("ALTER TABLE agent_configs ADD COLUMN is_read_only INTEGER DEFAULT 1;")
             except Exception:
@@ -921,5 +967,463 @@ class DatabaseManager:
             """
             rows = conn.execute(sql, (*params, limit)).fetchall()
             return [dict(r) for r in rows]
+
+    # =========================================================================
+    # SecurityCore Persistence Methods (Approvals, Devices, Sessions, Audit)
+    # =========================================================================
+
+    def save_approval(
+        self,
+        id: str,
+        task_id: str,
+        agent_role: str,
+        operation: str,
+        impact_summary: str,
+        affected_resources: list[str] | None = None,
+        proposed_diff: str | None = None,
+        reversible: bool = True,
+        status: str = "pending",
+        requested_at: str | datetime | None = None,
+        decided_at: str | datetime | None = None,
+        decided_by: str | None = None,
+        decision_reason: str | None = None,
+    ) -> None:
+        req_at = (
+            requested_at.isoformat()
+            if isinstance(requested_at, datetime)
+            else (requested_at or datetime.now(UTC).isoformat())
+        )
+        dec_at = (
+            decided_at.isoformat()
+            if isinstance(decided_at, datetime)
+            else decided_at
+        )
+        resources_json = json.dumps(affected_resources or [])
+        rev_int = 1 if reversible else 0
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO approvals (
+                    id, task_id, agent_role, operation, impact_summary,
+                    affected_resources_json, proposed_diff, reversible, status,
+                    requested_at, decided_at, decided_by, decision_reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    task_id=excluded.task_id,
+                    agent_role=excluded.agent_role,
+                    operation=excluded.operation,
+                    impact_summary=excluded.impact_summary,
+                    affected_resources_json=excluded.affected_resources_json,
+                    proposed_diff=excluded.proposed_diff,
+                    reversible=excluded.reversible,
+                    status=excluded.status,
+                    decided_at=excluded.decided_at,
+                    decided_by=excluded.decided_by,
+                    decision_reason=excluded.decision_reason
+                """,
+                (
+                    id,
+                    task_id,
+                    agent_role,
+                    operation,
+                    impact_summary,
+                    resources_json,
+                    proposed_diff,
+                    rev_int,
+                    status,
+                    req_at,
+                    dec_at,
+                    decided_by,
+                    decision_reason,
+                ),
+            )
+
+    def get_approval(self, approval_id: str) -> dict[str, Any] | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            try:
+                res["affected_resources"] = json.loads(res.get("affected_resources_json") or "[]")
+            except Exception:
+                res["affected_resources"] = []
+            res["reversible"] = bool(res.get("reversible", 1))
+            return res
+
+    def list_approvals(self, status: str | None = None) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            if status:
+                cur = conn.execute(
+                    "SELECT * FROM approvals WHERE status = ? ORDER BY requested_at DESC",
+                    (status,),
+                )
+            else:
+                cur = conn.execute("SELECT * FROM approvals ORDER BY requested_at DESC")
+            rows = cur.fetchall()
+            result = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["affected_resources"] = json.loads(
+                        item.get("affected_resources_json") or "[]"
+                    )
+                except Exception:
+                    item["affected_resources"] = []
+                item["reversible"] = bool(item.get("reversible", 1))
+                result.append(item)
+            return result
+
+    def update_approval_decision(
+        self,
+        approval_id: str,
+        status: str,
+        decided_by: str,
+        decision_reason: str | None = None,
+        decided_at: str | datetime | None = None,
+    ) -> bool:
+        dec_at = (
+            decided_at.isoformat()
+            if isinstance(decided_at, datetime)
+            else (decided_at or datetime.now(UTC).isoformat())
+        )
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                """
+                UPDATE approvals
+                SET status = ?, decided_by = ?, decision_reason = ?, decided_at = ?
+                WHERE id = ?
+                """,
+                (status, decided_by, decision_reason, dec_at, approval_id),
+            )
+            return cur.rowcount > 0
+
+    def save_device(
+        self,
+        device_id: str,
+        device_name: str,
+        token_hash: str,
+        scopes: list[str] | None = None,
+        is_revoked: bool = False,
+        paired_at: str | datetime | None = None,
+        last_seen_at: str | datetime | None = None,
+    ) -> None:
+        p_at = (
+            paired_at.isoformat()
+            if isinstance(paired_at, datetime)
+            else (paired_at or datetime.now(UTC).isoformat())
+        )
+        ls_at = (
+            last_seen_at.isoformat()
+            if isinstance(last_seen_at, datetime)
+            else (last_seen_at or datetime.now(UTC).isoformat())
+        )
+        scopes_json = json.dumps(scopes or [])
+        rev_int = 1 if is_revoked else 0
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO mobile_devices (
+                    device_id, device_name, token_hash, scopes_json,
+                    is_revoked, paired_at, last_seen_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET
+                    device_name=excluded.device_name,
+                    token_hash=excluded.token_hash,
+                    scopes_json=excluded.scopes_json,
+                    is_revoked=excluded.is_revoked,
+                    last_seen_at=excluded.last_seen_at
+                """,
+                (device_id, device_name, token_hash, scopes_json, rev_int, p_at, ls_at),
+            )
+
+    def get_device(self, device_id: str) -> dict[str, Any] | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM mobile_devices WHERE device_id = ?", (device_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            try:
+                res["scopes"] = json.loads(res.get("scopes_json") or "[]")
+            except Exception:
+                res["scopes"] = []
+            res["is_revoked"] = bool(res.get("is_revoked", 0))
+            return res
+
+    def get_device_by_token_hash(self, token_hash: str) -> dict[str, Any] | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT * FROM mobile_devices WHERE token_hash = ?", (token_hash,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            try:
+                res["scopes"] = json.loads(res.get("scopes_json") or "[]")
+            except Exception:
+                res["scopes"] = []
+            res["is_revoked"] = bool(res.get("is_revoked", 0))
+            return res
+
+    def list_devices(self, include_revoked: bool = True) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            if include_revoked:
+                cur = conn.execute("SELECT * FROM mobile_devices ORDER BY paired_at DESC")
+            else:
+                cur = conn.execute(
+                    "SELECT * FROM mobile_devices WHERE is_revoked = 0 ORDER BY paired_at DESC"
+                )
+            rows = cur.fetchall()
+            result = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["scopes"] = json.loads(item.get("scopes_json") or "[]")
+                except Exception:
+                    item["scopes"] = []
+                item["is_revoked"] = bool(item.get("is_revoked", 0))
+                result.append(item)
+            return result
+
+    def revoke_device(self, device_id: str) -> bool:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE mobile_devices SET is_revoked = 1 WHERE device_id = ?",
+                (device_id,),
+            )
+            return cur.rowcount > 0
+
+    def update_device_last_seen(
+        self, device_id: str, last_seen_at: str | datetime | None = None
+    ) -> bool:
+        ls_at = (
+            last_seen_at.isoformat()
+            if isinstance(last_seen_at, datetime)
+            else (last_seen_at or datetime.now(UTC).isoformat())
+        )
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE mobile_devices SET last_seen_at = ? WHERE device_id = ?",
+                (ls_at, device_id),
+            )
+            return cur.rowcount > 0
+
+    def delete_revoked_devices(self) -> int:
+        with self._get_connection() as conn:
+            cur = conn.execute("DELETE FROM mobile_devices WHERE is_revoked = 1")
+            return cur.rowcount
+
+    def save_session(
+        self,
+        session_id: str,
+        user_id: str,
+        role: str,
+        scopes: list[str] | None = None,
+        created_at: str | datetime | None = None,
+        expires_at: str | datetime | None = None,
+        last_seen_at: str | datetime | None = None,
+        is_revoked: bool = False,
+    ) -> None:
+        c_at = (
+            created_at.isoformat()
+            if isinstance(created_at, datetime)
+            else (created_at or datetime.now(UTC).isoformat())
+        )
+        exp_at = (
+            expires_at.isoformat()
+            if isinstance(expires_at, datetime)
+            else (expires_at or (datetime.now(UTC) + timedelta(hours=24)).isoformat())
+        )
+        ls_at = (
+            last_seen_at.isoformat()
+            if isinstance(last_seen_at, datetime)
+            else (last_seen_at or c_at)
+        )
+        scopes_json = json.dumps(scopes or [])
+        rev_int = 1 if is_revoked else 0
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_sessions (
+                    session_id, user_id, role, scopes_json,
+                    created_at, expires_at, last_seen_at, is_revoked
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    user_id=excluded.user_id,
+                    role=excluded.role,
+                    scopes_json=excluded.scopes_json,
+                    expires_at=excluded.expires_at,
+                    last_seen_at=excluded.last_seen_at,
+                    is_revoked=excluded.is_revoked
+                """,
+                (session_id, user_id, role, scopes_json, c_at, exp_at, ls_at, rev_int),
+            )
+
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT * FROM user_sessions WHERE session_id = ?", (session_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            try:
+                res["scopes"] = json.loads(res.get("scopes_json") or "[]")
+            except Exception:
+                res["scopes"] = []
+            res["is_revoked"] = bool(res.get("is_revoked", 0))
+            return res
+
+    def list_sessions(self, include_revoked: bool = False) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            if include_revoked:
+                cur = conn.execute("SELECT * FROM user_sessions ORDER BY created_at DESC")
+            else:
+                cur = conn.execute(
+                    "SELECT * FROM user_sessions WHERE is_revoked = 0 ORDER BY created_at DESC"
+                )
+            rows = cur.fetchall()
+            result = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["scopes"] = json.loads(item.get("scopes_json") or "[]")
+                except Exception:
+                    item["scopes"] = []
+                item["is_revoked"] = bool(item.get("is_revoked", 0))
+                result.append(item)
+            return result
+
+    def revoke_session(self, session_id: str) -> bool:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE user_sessions SET is_revoked = 1 WHERE session_id = ?",
+                (session_id,),
+            )
+            return cur.rowcount > 0
+
+    def revoke_all_sessions_for_user(self, user_id: str) -> int:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE user_sessions SET is_revoked = 1 WHERE user_id = ? AND is_revoked = 0",
+                (user_id,),
+            )
+            return cur.rowcount
+
+    def update_session_last_seen(
+        self, session_id: str, last_seen_at: str | datetime | None = None
+    ) -> bool:
+        ls_at = (
+            last_seen_at.isoformat()
+            if isinstance(last_seen_at, datetime)
+            else (last_seen_at or datetime.now(UTC).isoformat())
+        )
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE user_sessions SET last_seen_at = ? WHERE session_id = ?",
+                (ls_at, session_id),
+            )
+            return cur.rowcount > 0
+
+    def purge_expired_sessions(self) -> int:
+        now = datetime.now(UTC).isoformat()
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM user_sessions WHERE expires_at <= ? OR is_revoked = 1",
+                (now,),
+            )
+            return cur.rowcount
+
+    def save_audit_event(
+        self,
+        id: str,
+        timestamp: str | datetime,
+        severity: str,
+        operation: str,
+        status: str,
+        user_id: str | None = None,
+        agent_role: str | None = None,
+        project_id: str | None = None,
+        tool_name: str | None = None,
+        parameters_redacted: dict[str, Any] | None = None,
+        reason: str | None = None,
+    ) -> None:
+        ts = (
+            timestamp.isoformat()
+            if isinstance(timestamp, datetime)
+            else str(timestamp)
+        )
+        params_json = json.dumps(parameters_redacted or {})
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO audit_events (
+                    id, timestamp, severity, user_id, agent_role,
+                    project_id, operation, tool_name, parameters_redacted_json,
+                    status, reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status=excluded.status,
+                    reason=excluded.reason
+                """,
+                (
+                    id,
+                    ts,
+                    severity,
+                    user_id,
+                    agent_role,
+                    project_id,
+                    operation,
+                    tool_name,
+                    params_json,
+                    status,
+                    reason,
+                ),
+            )
+
+    def list_audit_events(
+        self,
+        project_id: str | None = None,
+        agent_role: str | None = None,
+        severity: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        conditions: list[str] = []
+        params: list[Any] = []
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(project_id)
+        if agent_role:
+            conditions.append("agent_role = ?")
+            params.append(agent_role)
+        if severity:
+            conditions.append("severity = ?")
+            params.append(severity)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"SELECT * FROM audit_events {where_clause} ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        with self._get_connection() as conn:
+            cur = conn.execute(sql, tuple(params))
+            rows = cur.fetchall()
+            result = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["parameters_redacted"] = json.loads(
+                        item.get("parameters_redacted_json") or "{}"
+                    )
+                except Exception:
+                    item["parameters_redacted"] = {}
+                result.append(item)
+            return result
+
 
 

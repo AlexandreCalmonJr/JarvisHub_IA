@@ -11,10 +11,44 @@ class AuditTrail:
     """
     Registo auditável e protegido de todos os eventos do sistema.
     Aplica redação automática a parâmetros e previne ocultação de incidentes.
+    Suporta persistência relacional SQLite via DatabaseManager.
     """
 
-    def __init__(self):
+    def __init__(self, db_manager: Any | None = None):
         self._events: list[AuditEvent] = []
+        self.db_manager = db_manager
+
+    def set_db_manager(self, db_manager: Any) -> None:
+        """Vincula o gerenciador de persistência SQLite e sincroniza eventos em memória."""
+        self.db_manager = db_manager
+        if self.db_manager:
+            for ev in self._events:
+                self._save_event_to_db(ev)
+
+    def _save_event_to_db(self, event: AuditEvent) -> None:
+        if not self.db_manager:
+            return
+        try:
+            sev_val = (
+                event.severity.value
+                if hasattr(event.severity, "value")
+                else str(event.severity)
+            )
+            self.db_manager.save_audit_event(
+                id=event.id,
+                timestamp=event.timestamp,
+                severity=sev_val,
+                operation=event.operation,
+                status=event.status,
+                user_id=event.user_id,
+                agent_role=event.agent_role,
+                project_id=event.project_id,
+                tool_name=event.tool_name,
+                parameters_redacted=event.parameters_redacted,
+                reason=event.reason,
+            )
+        except Exception:
+            pass
 
     def record_event(
         self,
@@ -45,6 +79,7 @@ class AuditTrail:
             reason=reason,
         )
         self._events.append(event)
+        self._save_event_to_db(event)
         return event
 
     def log(
