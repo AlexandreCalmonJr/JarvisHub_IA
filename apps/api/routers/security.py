@@ -22,6 +22,7 @@ from apps.api.deps import (
 )
 from packages.contracts.agent import AgentRole
 from packages.contracts.approval import ApprovalStatus
+from packages.contracts.security import AuditEventSeverity
 from services.security_core import PermissionDeniedError
 from services.tool_gateway import ToolExecutionRequest
 
@@ -114,6 +115,15 @@ async def trigger_kill_switch(
 ):
     if payload.target == "global":
         security_core.kill_switch.trigger_global_kill(reason=payload.reason)
+        if security_core.audit:
+            security_core.audit.record_event(
+                operation="KILL_SWITCH_TRIGGERED",
+                status="TRIGGERED",
+                user_id=principal.display_id,
+                severity=AuditEventSeverity.CRITICAL,
+                reason=payload.reason,
+                parameters={"target": payload.target, "actor": principal.display_id},
+            )
         return {"status": "global_kill_activated"}
     elif payload.target == "task":
         if not payload.task_id:
@@ -121,6 +131,15 @@ async def trigger_kill_switch(
                 status_code=400, detail="task_id é obrigatório para cancelar tarefa."
             )
         security_core.kill_switch.cancel_task(payload.task_id, reason=payload.reason)
+        if security_core.audit:
+            security_core.audit.record_event(
+                operation="KILL_SWITCH_TASK_CANCELLED",
+                status="CANCELLED",
+                user_id=principal.display_id,
+                severity=AuditEventSeverity.WARNING,
+                reason=payload.reason,
+                parameters={"task_id": payload.task_id, "actor": principal.display_id},
+            )
         return {"status": "task_cancelled", "task_id": payload.task_id}
     else:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
@@ -164,7 +183,7 @@ async def pair_mobile_device(
 async def list_mobile_devices(
     principal: Principal = Depends(require_admin),
 ):
-    return security_core.device_auth.list_devices()
+    return [d.public_dict() for d in security_core.device_auth.list_devices()]
 
 
 @router.post("/api/v1/mobile/revoke")

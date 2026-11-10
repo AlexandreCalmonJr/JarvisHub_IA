@@ -19,6 +19,7 @@ ALLOWED_DEVICE_SCOPES: set[str] = {
     "approvals:read",
     "approvals:decide",
     "system:read",
+    "workspace:read",
     "coding:use",
     "security:kill",
 }
@@ -29,6 +30,9 @@ DEFAULT_DEVICE_SCOPES: list[str] = [
     "tasks:read",
     "approvals:read",
     "approvals:decide",
+    "system:read",
+    "workspace:read",
+    "security:kill",
 ]
 
 
@@ -151,14 +155,15 @@ class DeviceAuthManager:
         device_token = f"jrv_m_{secrets.token_urlsafe(32)}"
         token_digest = hash_token(device_token)
 
-        reg = DeviceRegistration(
+        # No repositório interno (memória e disco), NUNCA armazenamos o device_token em texto simples!
+        stored_reg = DeviceRegistration(
             device_id=device_id,
             device_name=device_name,
-            device_token=device_token,
+            device_token=None,
             token_hash=token_digest,
             scopes=requested,
         )
-        self._devices[device_id] = reg
+        self._devices[device_id] = stored_reg
         self._hash_to_device[token_digest] = device_id
         self._save()
 
@@ -175,7 +180,17 @@ class DeviceAuthManager:
                 severity=AuditEventSeverity.INFO,
                 reason=f"Dispositivo móvel '{device_name}' emparelhado com sucesso.",
             )
-        return reg
+
+        # Retorna o token em texto puro única e exclusivamente na resposta do emparelhamento
+        return DeviceRegistration(
+            device_id=device_id,
+            device_name=device_name,
+            device_token=device_token,
+            token_hash=token_digest,
+            scopes=requested,
+            paired_at=stored_reg.paired_at,
+            last_seen_at=stored_reg.last_seen_at,
+        )
 
     def validate_token(self, token: str) -> DeviceRegistration:
         token_digest = hash_token(token)
@@ -220,7 +235,20 @@ class DeviceAuthManager:
         return device
 
     def list_devices(self) -> list[DeviceRegistration]:
-        return list(self._devices.values())
+        # Garante que todos os registros retornados na listagem têm device_token=None e token_hash=""
+        return [
+            DeviceRegistration(
+                device_id=d.device_id,
+                device_name=d.device_name,
+                device_token=None,
+                token_hash="",
+                scopes=list(d.scopes),
+                is_revoked=d.is_revoked,
+                paired_at=d.paired_at,
+                last_seen_at=d.last_seen_at,
+            )
+            for d in self._devices.values()
+        ]
 
     def get_device(self, device_id: str) -> DeviceRegistration | None:
         return self._devices.get(device_id)
