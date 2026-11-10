@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -38,13 +39,120 @@ class JarvisMobileApp extends StatelessWidget {
 }
 
 // ==========================================
-// CONFIGURAÇÃO GLOBAL E ESTADO DE IDENTIDADE
+// CONFIGURAÇÃO DE AMBIENTES E REDE
 // ==========================================
+
+enum NetworkEnvironment {
+  emulator(
+    id: 'emulator',
+    label: 'Android Emulator',
+    defaultUrl: 'http://10.0.2.2:8000',
+    description: 'Emulador Android local na máquina de desenvolvimento',
+    requiresHttps: false,
+  ),
+  localDev(
+    id: 'local_dev',
+    label: 'Desktop / Loopback',
+    defaultUrl: 'http://127.0.0.1:8000',
+    description: 'Execução local desktop Windows ou Web no mesmo host',
+    requiresHttps: false,
+  ),
+  physicalLan(
+    id: 'physical_lan',
+    label: 'Android Físico (Wi-Fi Local)',
+    defaultUrl: 'http://192.168.1.100:8000',
+    description: 'Dispositivo físico conectado na mesma rede Wi-Fi local do servidor',
+    requiresHttps: false,
+  ),
+  tailscale(
+    id: 'tailscale',
+    label: 'Acesso Remoto Seguro (Tailscale)',
+    defaultUrl: 'https://jarvis.tailnet.ts.net',
+    description: 'VPN P2P criptografada com Tailscale Serve / MagicDNS',
+    requiresHttps: true,
+  ),
+  production(
+    id: 'production',
+    label: 'Produção (HTTPS Estrito)',
+    defaultUrl: 'https://api.jarvis-hub.com',
+    description: 'Ambiente de produção corporativo com terminação TLS/HTTPS obrigatória',
+    requiresHttps: true,
+  );
+
+  final String id;
+  final String label;
+  final String defaultUrl;
+  final String description;
+  final bool requiresHttps;
+
+  const NetworkEnvironment({
+    required this.id,
+    required this.label,
+    required this.defaultUrl,
+    required this.description,
+    required this.requiresHttps,
+  });
+
+  static NetworkEnvironment fromId(String id) {
+    return NetworkEnvironment.values.firstWhere(
+      (e) => e.id == id,
+      orElse: () => NetworkEnvironment.emulator,
+    );
+  }
+}
+
+// Parâmetros opcionais fornecidos em tempo de build via --dart-define
+const String _kBuildTimeBackendUrl = String.fromEnvironment('JARVIS_BACKEND_URL');
+const String _kBuildTimeEnv = String.fromEnvironment('JARVIS_ENV');
+
 class AppConfig {
-  static String baseUrl = 'http://10.0.2.2:8000'; // Padrão emulador Android / Tailscale
+  static NetworkEnvironment currentEnv = _detectInitialEnvironment();
+  static String baseUrl = _detectInitialBaseUrl();
   static String deviceToken = '';
-  static String deviceName = 'Android Pixel Client';
+  static String deviceName = 'Android Mobile Client';
   static bool isRevoked = false;
+
+  static NetworkEnvironment _detectInitialEnvironment() {
+    if (_kBuildTimeEnv.isNotEmpty) {
+      return NetworkEnvironment.fromId(_kBuildTimeEnv);
+    }
+    // Em compilação release estrita, adota Produção HTTPS por padrão
+    if (const bool.fromEnvironment('dart.vm.product')) {
+      return NetworkEnvironment.production;
+    }
+    try {
+      if (Platform.isAndroid) {
+        return NetworkEnvironment.emulator;
+      }
+    } catch (_) {}
+    return NetworkEnvironment.localDev;
+  }
+
+  static String _detectInitialBaseUrl() {
+    if (_kBuildTimeBackendUrl.isNotEmpty) {
+      return _kBuildTimeBackendUrl;
+    }
+    return currentEnv.defaultUrl;
+  }
+
+  static String? validateUrl(String url, NetworkEnvironment env) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      return 'O endereço do servidor não pode estar vazio.';
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority || uri.host.isEmpty) {
+      return 'Formato de URL inválido. Use ex: http://192.168.1.50:8000 ou https://...';
+    }
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') {
+      return 'Esquema de URL inválido ($scheme). Apenas "http" e "https" são suportados.';
+    }
+    if (env.requiresHttps && scheme != 'https') {
+      return 'O ambiente ${env.label} exige conexão segura via HTTPS para proteger dados em trânsito.';
+    }
+    return null;
+  }
 }
 
 // ==========================================
@@ -56,12 +164,14 @@ class SecureTokenStore {
 
   static Future<File> _getVaultFile() async {
     String basePath = '';
-    if (Platform.isAndroid) {
-      final dir = Directory('/data/user/0/com.example.jarvis_mobile/app_flutter');
-      if (await dir.exists()) {
-        basePath = dir.path;
+    try {
+      if (Platform.isAndroid) {
+        final dir = Directory('/data/user/0/com.jarvis.hub.jarvis_mobile/app_flutter');
+        if (await dir.exists()) {
+          basePath = dir.path;
+        }
       }
-    }
+    } catch (_) {}
     if (basePath.isEmpty) {
       basePath = Directory.current.path;
     }
@@ -87,12 +197,17 @@ class SecureTokenStore {
     return utf8.decode(result);
   }
 
-  static Future<void> saveCredentials(String token, {String? baseUrl}) async {
+  static Future<void> saveCredentials(
+    String token, {
+    String? baseUrl,
+    String? environmentId,
+  }) async {
     try {
       final file = await _getVaultFile();
       final data = {
         'token': token.trim(),
         'baseUrl': (baseUrl ?? AppConfig.baseUrl).trim(),
+        'environmentId': environmentId ?? AppConfig.currentEnv.id,
         'savedAt': DateTime.now().toIso8601String(),
       };
       final jsonStr = jsonEncode(data);
@@ -105,7 +220,11 @@ class SecureTokenStore {
     try {
       final file = await _getVaultFile();
       if (!await file.exists()) {
-        return {'token': '', 'baseUrl': AppConfig.baseUrl};
+        return {
+          'token': '',
+          'baseUrl': AppConfig.baseUrl,
+          'environmentId': AppConfig.currentEnv.id,
+        };
       }
       final bytes = await file.readAsBytes();
       final jsonStr = _decrypt(bytes);
@@ -113,9 +232,14 @@ class SecureTokenStore {
       return {
         'token': map['token'] as String? ?? '',
         'baseUrl': map['baseUrl'] as String? ?? AppConfig.baseUrl,
+        'environmentId': map['environmentId'] as String? ?? AppConfig.currentEnv.id,
       };
     } catch (_) {
-      return {'token': '', 'baseUrl': AppConfig.baseUrl};
+      return {
+        'token': '',
+        'baseUrl': AppConfig.baseUrl,
+        'environmentId': AppConfig.currentEnv.id,
+      };
     }
   }
 
@@ -131,55 +255,186 @@ class SecureTokenStore {
 }
 
 // ==========================================
-// CLIENTE HTTP AUTENTICADO CENTRALIZADO
+// RESPOSTA E CLIENTE HTTP AUTENTICADO
 // ==========================================
+
+class JarvisApiResponse {
+  final int statusCode;
+  final String body;
+  final dynamic json;
+  final bool isSuccess;
+  final String? errorMessage;
+
+  const JarvisApiResponse({
+    required this.statusCode,
+    required this.body,
+    this.json,
+    required this.isSuccess,
+    this.errorMessage,
+  });
+}
+
 class JarvisApiClient {
-  static Future<HttpClientResponse> request({
+  static const Duration connectionTimeout = Duration(seconds: 7);
+  static const Duration responseTimeout = Duration(seconds: 15);
+
+  static Future<JarvisApiResponse> request({
     required String method,
     required String path,
     Map<String, dynamic>? jsonBody,
+    String? customBaseUrl,
   }) async {
+    final effectiveBase = customBaseUrl ?? AppConfig.baseUrl;
+
+    // Validação de transporte seguro
+    final validationError = AppConfig.validateUrl(effectiveBase, AppConfig.currentEnv);
+    if (validationError != null && customBaseUrl == null) {
+      return JarvisApiResponse(
+        statusCode: 0,
+        body: '',
+        isSuccess: false,
+        errorMessage: validationError,
+      );
+    }
+
+    final fullUrl = '$effectiveBase$path';
+    final uri = Uri.parse(fullUrl);
+
     final client = HttpClient();
-    final url = '${AppConfig.baseUrl}$path';
-    final uri = Uri.parse(url);
+    client.connectionTimeout = connectionTimeout;
 
-    HttpClientRequest req;
-    switch (method.toUpperCase()) {
-      case 'POST':
-        req = await client.postUrl(uri);
-        break;
-      case 'GET':
-        req = await client.getUrl(uri);
-        break;
-      case 'DELETE':
-        req = await client.deleteUrl(uri);
-        break;
-      default:
-        req = await client.getUrl(uri);
+    try {
+      HttpClientRequest req;
+      switch (method.toUpperCase()) {
+        case 'POST':
+          req = await client.postUrl(uri).timeout(connectionTimeout);
+          break;
+        case 'GET':
+          req = await client.getUrl(uri).timeout(connectionTimeout);
+          break;
+        case 'DELETE':
+          req = await client.deleteUrl(uri).timeout(connectionTimeout);
+          break;
+        default:
+          req = await client.getUrl(uri).timeout(connectionTimeout);
+      }
+
+      req.headers.set('Accept', 'application/json');
+      if (jsonBody != null) {
+        req.headers.set('Content-Type', 'application/json');
+        req.add(utf8.encode(jsonEncode(jsonBody)));
+      }
+
+      // Injeta credenciais em todas as chamadas autenticadas
+      if (AppConfig.deviceToken.isNotEmpty) {
+        req.headers.set('X-Device-Token', AppConfig.deviceToken);
+        req.headers.set('Authorization', 'Bearer ${AppConfig.deviceToken}');
+      }
+
+      final resp = await req.close().timeout(responseTimeout);
+      final bodyStr = await resp.transform(utf8.decoder).join().timeout(responseTimeout);
+
+      dynamic decodedJson;
+      try {
+        decodedJson = jsonDecode(bodyStr);
+      } catch (_) {
+        decodedJson = null;
+      }
+
+      final statusCode = resp.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        AppConfig.isRevoked = true;
+        return JarvisApiResponse(
+          statusCode: statusCode,
+          body: bodyStr,
+          json: decodedJson,
+          isSuccess: false,
+          errorMessage: 'Acesso negado: Dispositivo móvel não autorizado, token expirado ou revogado pelo administrador.',
+        );
+      } else if (statusCode >= 200 && statusCode < 300) {
+        AppConfig.isRevoked = false;
+        return JarvisApiResponse(
+          statusCode: statusCode,
+          body: bodyStr,
+          json: decodedJson,
+          isSuccess: true,
+        );
+      } else if (statusCode >= 500) {
+        return JarvisApiResponse(
+          statusCode: statusCode,
+          body: bodyStr,
+          json: decodedJson,
+          isSuccess: false,
+          errorMessage: 'Falha interna no servidor JARVIS HUB (HTTP $statusCode). Tente novamente mais tarde.',
+        );
+      } else {
+        final detail = decodedJson is Map ? (decodedJson['detail'] ?? decodedJson['message']) : null;
+        return JarvisApiResponse(
+          statusCode: statusCode,
+          body: bodyStr,
+          json: decodedJson,
+          isSuccess: false,
+          errorMessage: detail != null ? '$detail (HTTP $statusCode)' : 'Requisição rejeitada pelo servidor (HTTP $statusCode).',
+        );
+      }
+    } on SocketException catch (e) {
+      return JarvisApiResponse(
+        statusCode: 0,
+        body: '',
+        isSuccess: false,
+        errorMessage: 'Servidor indisponível ou sem conexão de rede em $effectiveBase. '
+            'Verifique se o backend está em execução e o endereço IP/Wi-Fi/Tailscale está correto. (${e.message})',
+      );
+    } on TimeoutException {
+      return JarvisApiResponse(
+        statusCode: 0,
+        body: '',
+        isSuccess: false,
+        errorMessage: 'Tempo limite esgotado (timeout). O servidor $effectiveBase demorou mais de 15s para responder.',
+      );
+    } on HandshakeException catch (e) {
+      return JarvisApiResponse(
+        statusCode: 0,
+        body: '',
+        isSuccess: false,
+        errorMessage: 'Falha de segurança SSL/TLS. Não foi possível validar o certificado HTTPS do servidor. (${e.message})',
+      );
+    } on FormatException {
+      return JarvisApiResponse(
+        statusCode: 0,
+        body: '',
+        isSuccess: false,
+        errorMessage: 'Resposta do servidor em formato inválido (não é um JSON reconhecido).',
+      );
+    } catch (e) {
+      return JarvisApiResponse(
+        statusCode: 0,
+        body: '',
+        isSuccess: false,
+        errorMessage: 'Erro inesperado na comunicação com o servidor: $e',
+      );
+    } finally {
+      client.close();
     }
+  }
 
-    req.headers.set('Accept', 'application/json');
-    if (jsonBody != null) {
-      req.headers.set('Content-Type', 'application/json');
-      req.add(utf8.encode(jsonEncode(jsonBody)));
-    }
+  /// Realiza teste de conexão em tempo real para o endereço informado
+  static Future<Map<String, dynamic>> testConnection(String targetUrl) async {
+    final stopwatch = Stopwatch()..start();
+    final res = await request(
+      method: 'GET',
+      path: '/api/v1/system/health',
+      customBaseUrl: targetUrl,
+    );
+    stopwatch.stop();
 
-    // Injeta credenciais em todas as chamadas quando o token estiver configurado
-    if (AppConfig.deviceToken.isNotEmpty) {
-      req.headers.set('X-Device-Token', AppConfig.deviceToken);
-      req.headers.set('Authorization', 'Bearer ${AppConfig.deviceToken}');
-    }
-
-    final resp = await req.close();
-
-    // Detecção imediata de revogação ou não-autorização
-    if (resp.statusCode == 401 || resp.statusCode == 403) {
-      AppConfig.isRevoked = true;
-    } else if (resp.statusCode == 200) {
-      AppConfig.isRevoked = false;
-    }
-
-    return resp;
+    return {
+      'isSuccess': res.isSuccess,
+      'statusCode': res.statusCode,
+      'latencyMs': stopwatch.elapsedMilliseconds,
+      'errorMessage': res.errorMessage,
+      'status': res.json is Map ? res.json['status'] : null,
+    };
   }
 }
 
@@ -206,12 +461,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
-    // Restaura credenciais do cofre seguro
+    // Restaura credenciais e ambiente do cofre seguro
     SecureTokenStore.loadCredentials().then((creds) {
       if (mounted) {
         setState(() {
           AppConfig.deviceToken = creds['token'] ?? '';
           AppConfig.baseUrl = creds['baseUrl'] ?? AppConfig.baseUrl;
+          final envId = creds['environmentId'];
+          if (envId != null && envId.isNotEmpty) {
+            AppConfig.currentEnv = NetworkEnvironment.fromId(envId);
+          }
         });
       }
     });
@@ -242,7 +501,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => _openSettings(context),
-            tooltip: 'Configurações de Conexão',
+            tooltip: 'Configurações de Rede & Segurança',
           ),
         ],
       ),
@@ -260,7 +519,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Dispositivo Revogado! O acesso deste dispositivo foi cancelado pelo administrador.',
+                      'Dispositivo Revogado! O acesso deste dispositivo foi bloqueado pelo administrador.',
                       style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -331,97 +590,228 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void _openSettings(BuildContext context) {
     final urlController = TextEditingController(text: AppConfig.baseUrl);
     final tokenController = TextEditingController(text: AppConfig.deviceToken);
+    NetworkEnvironment selectedEnv = AppConfig.currentEnv;
+    String? testResultMsg;
+    bool isTesting = false;
+    bool? testSuccess;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Conexão Segura & Tailscale'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Endereço do Servidor JARVIS (IP Tailscale ou Localhost):',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: urlController,
-              decoration: const InputDecoration(
-                hintText: 'Ex: http://100.85.12.34:8000',
-                border: OutlineInputBorder(),
-                isDense: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            title: const Text('Configuração de Rede & Conexão'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Ambiente de Conexão:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white24),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<NetworkEnvironment>(
+                        isExpanded: true,
+                        value: selectedEnv,
+                        dropdownColor: const Color(0xFF1E293B),
+                        items: NetworkEnvironment.values.map((env) {
+                          return DropdownMenuItem(
+                            value: env,
+                            child: Text(env.label, style: const TextStyle(fontSize: 13)),
+                          );
+                        }).toList(),
+                        onChanged: (newEnv) {
+                          if (newEnv != null) {
+                            setDialogState(() {
+                              selectedEnv = newEnv;
+                              urlController.text = newEnv.defaultUrl;
+                              testResultMsg = null;
+                              testSuccess = null;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    selectedEnv.description,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Endereço Base do Servidor JARVIS:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: urlController,
+                    decoration: InputDecoration(
+                      hintText: selectedEnv.defaultUrl,
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      prefixIcon: Icon(
+                        selectedEnv.requiresHttps ? Icons.lock : Icons.lock_open,
+                        size: 18,
+                        color: selectedEnv.requiresHttps ? const Color(0xFF10B981) : Colors.grey,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Token de Dispositivo Autorizado:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: tokenController,
+                    decoration: const InputDecoration(
+                      hintText: 'Token seguro (jrv_m_...)',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      prefixIcon: Icon(Icons.key, size: 18, color: Color(0xFF38BDF8)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Botão para testar conexão com diagnóstico de latência
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF38BDF8),
+                        side: const BorderSide(color: Color(0xFF38BDF8)),
+                      ),
+                      onPressed: isTesting
+                          ? null
+                          : () async {
+                              final testUrl = urlController.text.trim();
+                              final valErr = AppConfig.validateUrl(testUrl, selectedEnv);
+                              if (valErr != null) {
+                                setDialogState(() {
+                                  testResultMsg = valErr;
+                                  testSuccess = false;
+                                });
+                                return;
+                              }
+                              setDialogState(() {
+                                isTesting = true;
+                                testResultMsg = 'A testar conexão com $testUrl...';
+                                testSuccess = null;
+                              });
+
+                              final diag = await JarvisApiClient.testConnection(testUrl);
+
+                              setDialogState(() {
+                                isTesting = false;
+                                testSuccess = diag['isSuccess'] == true;
+                                if (diag['isSuccess'] == true) {
+                                  testResultMsg = 'Conexão OK! Latência: ${diag['latencyMs']} ms • Servidor ativo.';
+                                } else {
+                                  testResultMsg = diag['errorMessage'] ?? 'Falha na conexão.';
+                                }
+                              });
+                            },
+                      icon: isTesting
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.network_check, size: 16),
+                      label: Text(isTesting ? 'Testando...' : 'Testar Conexão'),
+                    ),
+                  ),
+                  if (testResultMsg != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: testSuccess == true
+                            ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                            : (testSuccess == false
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                                : Colors.white10),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        testResultMsg!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: testSuccess == true
+                              ? const Color(0xFF10B981)
+                              : (testSuccess == false ? const Color(0xFFEF4444) : Colors.white70),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Token de Emparelhamento do Dispositivo:',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: tokenController,
-              decoration: const InputDecoration(
-                hintText: 'Token seguro (jrv_m_...)',
-                border: OutlineInputBorder(),
-                isDense: true,
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await SecureTokenStore.clear();
+                  setState(() {
+                    AppConfig.deviceToken = '';
+                    AppConfig.isRevoked = false;
+                  });
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Credenciais removidas do cofre seguro.')),
+                    );
+                  }
+                },
+                child: const Text('Desconectar', style: TextStyle(color: Color(0xFFEF4444))),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              AppConfig.isRevoked
-                  ? 'Status: DISPOSITIVO REVOGADO'
-                  : (AppConfig.deviceToken.isNotEmpty ? 'Status: Emparelhado' : 'Status: Não Emparelhado'),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: AppConfig.isRevoked ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await SecureTokenStore.clear();
-              setState(() {
-                AppConfig.deviceToken = '';
-                AppConfig.isRevoked = false;
-              });
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Credenciais removidas do cofre seguro.')),
-                );
-              }
-            },
-            child: const Text('Desconectar', style: TextStyle(color: Color(0xFFEF4444))),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
-            onPressed: () async {
-              final newUrl = urlController.text.trim();
-              final newToken = tokenController.text.trim();
-              AppConfig.baseUrl = newUrl;
-              AppConfig.deviceToken = newToken;
-              AppConfig.isRevoked = false;
-              await SecureTokenStore.saveCredentials(newToken, baseUrl: newUrl);
-              setState(() {});
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Configurações salvas no cofre seguro!')),
-                );
-              }
-            },
-            child: const Text('Guardar', style: TextStyle(color: Colors.black)),
-          ),
-        ],
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                onPressed: () async {
+                  final newUrl = urlController.text.trim();
+                  final newToken = tokenController.text.trim();
+
+                  final err = AppConfig.validateUrl(newUrl, selectedEnv);
+                  if (err != null) {
+                    setDialogState(() {
+                      testResultMsg = err;
+                      testSuccess = false;
+                    });
+                    return;
+                  }
+
+                  AppConfig.currentEnv = selectedEnv;
+                  AppConfig.baseUrl = newUrl;
+                  AppConfig.deviceToken = newToken;
+                  AppConfig.isRevoked = false;
+
+                  await SecureTokenStore.saveCredentials(
+                    newToken,
+                    baseUrl: newUrl,
+                    environmentId: selectedEnv.id,
+                  );
+
+                  setState(() {});
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Configurações salvas para o ambiente ${selectedEnv.label}!')),
+                    );
+                  }
+                },
+                child: const Text('Guardar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -457,43 +847,27 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _msgController.clear();
 
-    try {
-      final response = await JarvisApiClient.request(
-        method: 'POST',
-        path: '/api/v1/chat',
-        jsonBody: {'prompt': text},
-      );
-      final body = await response.transform(utf8.decoder).join();
-      final data = jsonDecode(body);
+    final response = await JarvisApiClient.request(
+      method: 'POST',
+      path: '/api/v1/chat',
+      jsonBody: {'prompt': text},
+    );
 
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        setState(() {
-          _messages.add({
-            'role': 'assistant',
-            'text': 'Acesso negado: dispositivo móvel não autorizado ou revogado pelo administrador.',
-          });
-        });
-        return;
-      }
-
+    if (response.isSuccess && response.json is Map) {
+      final reply = response.json['final_response'] ?? 'Tarefa concluída ou despachada com sucesso.';
       setState(() {
-        _messages.add({
-          'role': 'assistant',
-          'text': data['final_response'] ?? 'Tarefa concluída ou despachada com sucesso.',
-        });
+        _messages.add({'role': 'assistant', 'text': reply.toString()});
       });
-    } catch (e) {
+    } else {
+      final err = response.errorMessage ?? 'Erro na comunicação com o servidor.';
       setState(() {
-        _messages.add({
-          'role': 'assistant',
-          'text': 'Erro de comunicação: $e. Verifique o endereço IP ou a VPN Tailscale nas configurações.',
-        });
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
+        _messages.add({'role': 'assistant', 'text': err});
       });
     }
+
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   @override
@@ -582,6 +956,7 @@ class ApprovalsScreen extends StatefulWidget {
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
   List<dynamic> _pendingApprovals = [];
   bool _loading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -590,61 +965,58 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   }
 
   Future<void> _fetchApprovals() async {
-    setState(() => _loading = true);
-    try {
-      final response = await JarvisApiClient.request(
-        method: 'GET',
-        path: '/api/v1/approvals',
-      );
-      if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        setState(() {
-          _pendingApprovals = jsonDecode(body);
-        });
-      } else {
-        setState(() => _pendingApprovals = []);
-      }
-    } catch (_) {
-      // Offline fallback
-    } finally {
-      setState(() => _loading = false);
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+
+    final response = await JarvisApiClient.request(
+      method: 'GET',
+      path: '/api/v1/approvals',
+    );
+
+    if (response.isSuccess && response.json is List) {
+      setState(() {
+        _pendingApprovals = response.json;
+        _errorMessage = null;
+      });
+    } else {
+      setState(() {
+        _pendingApprovals = [];
+        _errorMessage = response.errorMessage;
+      });
     }
+
+    setState(() => _loading = false);
   }
 
   Future<void> _decide(String requestId, String action) async {
-    try {
-      final response = await JarvisApiClient.request(
-        method: 'POST',
-        path: '/api/v1/approvals/$requestId/decide',
-        jsonBody: {
-          'action': action,
-          'reason': 'Aprovado via App Android Móvel',
-        },
-      );
-      if (response.statusCode == 200) {
-        _fetchApprovals();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(action == 'approve' ? 'Operação Aprovada!' : 'Operação Rejeitada!'),
-              backgroundColor: action == 'approve' ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-            ),
-          );
-        }
-      } else if (response.statusCode == 401 || response.statusCode == 403) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Operação negada: dispositivo revogado ou sem autorização.'),
-              backgroundColor: Color(0xFFEF4444),
-            ),
-          );
-        }
-      }
-    } catch (e) {
+    final response = await JarvisApiClient.request(
+      method: 'POST',
+      path: '/api/v1/approvals/$requestId/decide',
+      jsonBody: {
+        'action': action,
+        'reason': 'Aprovado via App Android Móvel',
+      },
+    );
+
+    if (response.isSuccess) {
+      _fetchApprovals();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Falha ao decidir: $e')),
+          SnackBar(
+            content: Text(action == 'approve' ? 'Operação Aprovada com sucesso!' : 'Operação Rejeitada!'),
+            backgroundColor: action == 'approve' ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.errorMessage ?? 'Falha ao processar decisão.'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
         );
       }
     }
@@ -654,6 +1026,37 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.cloud_off, color: Color(0xFFEF4444), size: 56),
+              const SizedBox(height: 12),
+              const Text(
+                'Falha de Comunicação',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _fetchApprovals,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Tentar Novamente'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     if (_pendingApprovals.isEmpty) {
@@ -755,6 +1158,7 @@ class ProjectsScreen extends StatefulWidget {
 class _ProjectsScreenState extends State<ProjectsScreen> {
   List<dynamic> _projects = [];
   bool _loading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -763,31 +1167,63 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   Future<void> _fetchProjects() async {
-    setState(() => _loading = true);
-    try {
-      final response = await JarvisApiClient.request(
-        method: 'GET',
-        path: '/api/v1/workspace/projects',
-      );
-      if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        final data = jsonDecode(body);
-        if (data is List) {
-          setState(() {
-            _projects = data;
-          });
-        }
-      }
-    } catch (_) {
-    } finally {
-      setState(() => _loading = false);
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+
+    final response = await JarvisApiClient.request(
+      method: 'GET',
+      path: '/api/v1/workspace/projects',
+    );
+
+    if (response.isSuccess && response.json is List) {
+      setState(() {
+        _projects = response.json;
+        _errorMessage = null;
+      });
+    } else {
+      setState(() {
+        _projects = [];
+        _errorMessage = response.errorMessage;
+      });
     }
+
+    setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.folder_off, color: Color(0xFFEF4444), size: 56),
+              const SizedBox(height: 12),
+              const Text('Falha ao Carregar Projetos', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _fetchProjects,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Tentar Novamente'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     if (_projects.isEmpty) {
@@ -850,6 +1286,7 @@ class SystemStatusScreen extends StatefulWidget {
 class _SystemStatusScreenState extends State<SystemStatusScreen> {
   Map<String, dynamic>? _health;
   bool _loading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -858,58 +1295,58 @@ class _SystemStatusScreenState extends State<SystemStatusScreen> {
   }
 
   Future<void> _checkHealth() async {
-    setState(() => _loading = true);
-    try {
-      final response = await JarvisApiClient.request(
-        method: 'GET',
-        path: '/api/v1/system/health',
-      );
-      if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        setState(() {
-          _health = jsonDecode(body);
-        });
-      }
-    } catch (_) {
-      // Offline fallback
-    } finally {
-      setState(() => _loading = false);
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+
+    final response = await JarvisApiClient.request(
+      method: 'GET',
+      path: '/api/v1/system/health',
+    );
+
+    if (response.isSuccess && response.json is Map) {
+      setState(() {
+        _health = Map<String, dynamic>.from(response.json);
+        _errorMessage = null;
+      });
+    } else {
+      setState(() {
+        _errorMessage = response.errorMessage;
+      });
     }
+
+    setState(() => _loading = false);
   }
 
   Future<void> _triggerGlobalKill() async {
-    try {
-      final response = await JarvisApiClient.request(
-        method: 'POST',
-        path: '/api/v1/system/kill-switch',
-        jsonBody: {
-          'target': 'global',
-          'reason': 'Acionado de emergência pelo app móvel Android.',
-        },
-      );
-      if (response.statusCode == 200) {
-        _checkHealth();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('KILL SWITCH GLOBAL ACIONADO! Todos os agentes interrompidos.'),
-              backgroundColor: Color(0xFFEF4444),
-            ),
-          );
-        }
-      } else if (response.statusCode == 401 || response.statusCode == 403) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Kill Switch negado: dispositivo sem escopo security:kill ou revogado.'),
-              backgroundColor: Color(0xFFEF4444),
-            ),
-          );
-        }
-      }
-    } catch (e) {
+    final response = await JarvisApiClient.request(
+      method: 'POST',
+      path: '/api/v1/system/kill-switch',
+      jsonBody: {
+        'target': 'global',
+        'reason': 'Acionado de emergência pelo app móvel Android.',
+      },
+    );
+
+    if (response.isSuccess) {
+      _checkHealth();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('KILL SWITCH GLOBAL ACIONADO! Todos os agentes interrompidos.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.errorMessage ?? 'Falha ao acionar Kill Switch.'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
       }
     }
   }
@@ -923,6 +1360,32 @@ class _SystemStatusScreenState extends State<SystemStatusScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (_errorMessage != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFEF4444)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_off, color: Color(0xFFEF4444), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 18),
+                  onPressed: _checkHealth,
+                ),
+              ],
+            ),
+          ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -937,7 +1400,8 @@ class _SystemStatusScreenState extends State<SystemStatusScreen> {
                   ],
                 ),
                 const Divider(height: 24),
-                _statusRow('Estado Geral', _health?['status']?.toUpperCase() ?? 'DESCONHECIDO'),
+                _statusRow('Ambiente', AppConfig.currentEnv.label),
+                _statusRow('Estado Geral', _health?['status']?.toString().toUpperCase() ?? 'DESCONHECIDO'),
                 _statusRow('Security Core', _health?['components']?['security_core'] ?? 'OPERATIONAL'),
                 _statusRow('Model Runtime', _health?['components']?['model_runtime'] ?? 'OPERATIONAL'),
                 _statusRow('Kill Switch Global', _health?['components']?['kill_switch']?['global_killed'] == true ? 'ATIVADO' : 'NORMAL'),
