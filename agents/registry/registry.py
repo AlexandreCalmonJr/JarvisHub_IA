@@ -10,7 +10,9 @@ class AgentRegistry:
     """
 
     def __init__(self):
-        self._profiles: dict[AgentRole, AgentProfile] = dict(AGENT_PROFILES)
+        self._profiles: dict[AgentRole, AgentProfile] = {
+            role: profile.model_copy(deep=True) for role, profile in AGENT_PROFILES.items()
+        }
 
     def get_profile(self, role: AgentRole) -> AgentProfile | None:
         return self._profiles.get(role)

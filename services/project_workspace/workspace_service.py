@@ -1,12 +1,20 @@
 import difflib
 import logging
+import os
+import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+from typing import Any
 
 from packages.contracts.security import ProjectWorkMode
 from services.security_core import SecurityCore
 
 from .analyzer import ArchitectureReport, ProjectAnalyzer
 from .scanner import ProjectInventory, ProjectScanner
+from .scaffolder import ProjectScaffolder
+from .dockerizer import ProjectDockerizer
 
 logger = logging.getLogger("jarvis.workspace")
 
@@ -17,12 +25,31 @@ class ProjectWorkspaceService:
     Controla o registo seguro de pastas locais, inventário, análise e scaffolding/modificação física de arquivos.
     """
 
-    def __init__(self, security_core: SecurityCore):
+    def __init__(self, security_core: SecurityCore, base_dir: Path | str | None = None):
         self.security_core = security_core
         self.scanner = ProjectScanner()
         self.analyzer = ProjectAnalyzer()
+        self.scaffolder = ProjectScaffolder()
+        self.dockerizer = ProjectDockerizer(workspace=self)
         self._inventories: dict[str, ProjectInventory] = {}
         self._reports: dict[str, ArchitectureReport] = {}
+        self._sandbox = None
+        if base_dir:
+            self.base_dir = Path(base_dir).resolve()
+        else:
+            self.base_dir = (Path.cwd() / "workspace").resolve()
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_project_dir(self, project_id: str) -> Path:
+        """Retorna o caminho físico seguro do diretório do projeto no computador."""
+        # Se for um projeto externo registrado
+        if project_id in self._inventories:
+            inv = self._inventories[project_id]
+            if inv.root_path and Path(inv.root_path).exists():
+                return Path(inv.root_path).resolve()
+
+        p_dir = (self.base_dir / project_id).resolve()
+        return p_dir
 
     def register_and_scan(
         self,
@@ -55,6 +82,384 @@ class ProjectWorkspaceService:
     def get_report(self, project_id: str) -> ArchitectureReport | None:
         return self._reports.get(project_id)
 
+    def _find_vscode_executable(self) -> str | None:
+        """Localiza de forma resiliente o executável do VS Code no sistema operacional."""
+        # 1. Verifica primeiro executáveis nativos Code.exe nos locais padrão do Windows
+        if sys.platform == "win32":
+            local_app = os.environ.get("LOCALAPPDATA", "")
+            prog_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+            prog_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
+
+            candidates = [
+                Path(local_app) / "Programs" / "Microsoft VS Code" / "Code.exe",
+                Path(prog_files) / "Microsoft VS Code" / "Code.exe",
+                Path(prog_files_x86) / "Microsoft VS Code" / "Code.exe",
+                Path(local_app) / "Programs" / "Microsoft VS Code" / "bin" / "code.cmd",
+                Path(prog_files) / "Microsoft VS Code" / "bin" / "code.cmd",
+                Path(prog_files_x86) / "Microsoft VS Code" / "bin" / "code.cmd",
+            ]
+            for c in candidates:
+                if c.exists():
+                    return str(c.resolve())
+
+        # 2. Verifica PATH global
+        for cmd_name in ("Code.exe", "code.exe", "code", "code.cmd"):
+            found = shutil.which(cmd_name)
+            if found:
+                return found
+
+        return None
+
+    def open_project_folder(self, project_id: str) -> str:
+        """Abre o explorador de arquivos nativo do sistema operacional na pasta do projeto."""
+        project_dir = self.get_project_dir(project_id)
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        norm_path = os.path.normpath(str(project_dir.resolve()))
+        logger.info("Abrindo pasta no Explorer: %s", norm_path)
+        if sys.platform == "win32":
+            # No Windows, invoca explorer.exe com fallback seguro para os.startfile
+            opened = False
+            try:
+                subprocess.Popen(["explorer.exe", norm_path])
+                opened = True
+            except Exception as e1:
+                logger.warning("subprocess explorer.exe falhou: %s. Tentando os.startfile.", e1)
+
+            if not opened:
+                try:
+                    os.startfile(norm_path)
+                    opened = True
+                except Exception as e2:
+                    logger.error("os.startfile também falhou: %s", e2)
+                    raise RuntimeError(f"Não foi possível abrir o Explorer para {norm_path}: {e2}")
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", norm_path])
+        else:
+            subprocess.Popen(["xdg-open", norm_path])
+
+        return norm_path
+
+    def open_root_folder(self) -> str:
+        """Abre o diretório geral de workspace no Windows Explorer."""
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        norm_path = os.path.normpath(str(self.base_dir.resolve()))
+        logger.info("Abrindo pasta raiz de workspaces no Explorer: %s", norm_path)
+        if sys.platform == "win32":
+            try:
+                subprocess.Popen(["explorer.exe", norm_path])
+            except Exception:
+                try:
+                    os.startfile(norm_path)
+                except Exception:
+                    pass
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", norm_path])
+        else:
+            subprocess.Popen(["xdg-open", norm_path])
+        return norm_path
+
+    def open_project_in_editor(self, project_id: str) -> str:
+        """Abre a pasta do projeto no VS Code (se instalado)."""
+        project_dir = self.get_project_dir(project_id)
+        project_dir.mkdir(parents=True, exist_ok=True)
+        norm_path = os.path.normpath(str(project_dir.resolve()))
+
+        vscode_bin = self._find_vscode_executable()
+        if not vscode_bin:
+            raise RuntimeError(
+                "O comando do Visual Studio Code ('Code.exe' ou 'code') não foi localizado no seu computador. "
+                "Certifique-se de que o VS Code está instalado."
+            )
+
+        logger.info("Abrindo projeto no VS Code via executável '%s': %s", vscode_bin, norm_path)
+        if sys.platform == "win32":
+            if vscode_bin.lower().endswith(".exe"):
+                # Executa o executável .exe diretamente sem shell=True evitando erro de aspas do cmd.exe
+                subprocess.Popen([vscode_bin, norm_path])
+            else:
+                # Script .cmd executado via cmd.exe com passagem limpa de argumentos
+                subprocess.Popen(["cmd.exe", "/c", vscode_bin, norm_path])
+        else:
+            subprocess.Popen([vscode_bin, norm_path])
+        return norm_path
+
+    def delete_project(self, project_id: str) -> bool:
+        """Exclui fisicamente a pasta do projeto no disco e remove registros de inventário."""
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            return False
+
+        def _remove_readonly(func, path, _):
+            import os, stat
+            try:
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+            except Exception:
+                pass
+
+        shutil.rmtree(project_dir, onerror=_remove_readonly)
+        self._inventories.pop(project_id, None)
+        self._reports.pop(project_id, None)
+
+        if hasattr(self.security_core, "permission_engine") and hasattr(
+            self.security_core.permission_engine, "_projects"
+        ):
+            self.security_core.permission_engine._projects.pop(project_id, None)
+
+        if self.security_core.audit:
+            self.security_core.audit.record_event(
+                operation="PROJECT_DELETED",
+                status="SUCCESS",
+                project_id=project_id,
+                parameters={"path": str(project_dir)},
+            )
+        return True
+
+    def _run_git(self, project_dir: Path, args: list[str]) -> subprocess.CompletedProcess:
+        """Executa um comando Git estritamente isolado no repositório do projeto."""
+        norm_dir = project_dir.resolve()
+        git_dir = norm_dir / ".git"
+
+        # Proteção estrita: se não tem .git próprio, não executa para não vazar para repositórios pai
+        if not git_dir.exists():
+            return subprocess.CompletedProcess(
+                args=["git"] + args,
+                returncode=128,
+                stdout="",
+                stderr="fatal: not a git repository",
+            )
+
+        cmd = ["git", "--git-dir", str(git_dir), "--work-tree", str(norm_dir)] + args
+        return subprocess.run(
+            cmd,
+            cwd=str(norm_dir),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+    async def run_shell_command(
+        self,
+        command: str,
+        cwd: Path | None = None,
+        timeout_seconds: float | None = None,
+    ) -> tuple[int, str, str, float]:
+        """Executa um comando de shell confinado ao diretório do projeto.
+
+        Delega ao :class:`SubprocessSandbox`, que aplica ambiente sanitizado,
+        timeout rigoroso, encerramento de processos órfãos e redação de segredos.
+        """
+        from services.tool_gateway.sandbox import SubprocessSandbox
+
+        if self._sandbox is None:
+            self._sandbox = SubprocessSandbox()
+        target = cwd or self.base_dir
+        return await self._sandbox.run_shell_command(
+            command, Path(target), timeout_seconds
+        )
+
+    def ensure_git_repo(self, project_id: str) -> bool:
+        """Inicializa um repositório Git local isolado no projeto se ainda não existir."""
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            return False
+
+        git_dir = project_dir / ".git"
+        if not git_dir.exists() or not (git_dir / "HEAD").exists():
+            try:
+                # 1. Executa git init puro isolado no diretório da pasta
+                init_res = subprocess.run(
+                    ["git", "init"],
+                    cwd=str(project_dir.resolve()),
+                    capture_output=True,
+                    text=True,
+                )
+                if init_res.returncode != 0:
+                    logger.warning("Falha no git init em '%s': %s", project_dir, init_res.stderr)
+                    return False
+
+                # 2. Configura usuário local do repositório
+                self._run_git(project_dir, ["config", "user.name", "JARVIS AI Hub"])
+                self._run_git(project_dir, ["config", "user.email", "jarvis@local"])
+                self._run_git(project_dir, ["config", "commit.gpgsign", "false"])
+
+                # 3. Commit inicial se já houver arquivos
+                self._run_git(project_dir, ["add", "-A"])
+                st = self._run_git(project_dir, ["status", "--porcelain"])
+                if st.stdout.strip():
+                    self._run_git(project_dir, ["commit", "-m", "feat(scaffold): Inicializacao do repositorio pelo JARVIS"])
+                logger.info("Repositorio Git isolado inicializado em '%s'", project_dir)
+                return True
+            except Exception as e:
+                logger.warning("Falha ao inicializar Git para o projeto '%s': %s", project_id, e)
+                return False
+        return True
+
+    def commit_project_changes(self, project_id: str, message: str) -> str | None:
+        """Adiciona arquivos modificados e cria um commit Git semântico local."""
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            return None
+
+        self.ensure_git_repo(project_id)
+        try:
+            self._run_git(project_dir, ["add", "-A"])
+            status = self._run_git(project_dir, ["status", "--porcelain"])
+            if status.stdout.strip():
+                clean_msg = message.replace('"', "'")
+                self._run_git(project_dir, ["commit", "-m", clean_msg])
+                head = self._run_git(project_dir, ["rev-parse", "--short", "HEAD"])
+                commit_hash = head.stdout.strip()
+                logger.info("Commit Git '%s' gerado no projeto '%s': %s", commit_hash, project_id, clean_msg)
+                return commit_hash
+            head = self._run_git(project_dir, ["rev-parse", "--short", "HEAD"])
+            return head.stdout.strip() if head.returncode == 0 else None
+        except Exception as e:
+            logger.warning("Falha ao gerar commit Git no projeto '%s': %s", project_id, e)
+            return None
+
+    def rollback_last_change(self, project_id: str) -> dict:
+        """Desfaz a última alteração via Git rollback no projeto local."""
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            raise FileNotFoundError(f"Projeto '{project_id}' não encontrado no disco.")
+
+        self.ensure_git_repo(project_id)
+
+        # Verifica se há commit anterior (HEAD~1)
+        check_parent = self._run_git(project_dir, ["rev-parse", "--verify", "HEAD~1"])
+        if check_parent.returncode != 0:
+            return {
+                "status": "cannot_rollback",
+                "project_id": project_id,
+                "message": "O projeto está no commit inicial de criação. Não há alterações anteriores para reverter.",
+            }
+
+        last_commit_info = self._run_git(project_dir, ["log", "-1", "--pretty=format:%h - %s"])
+        undone_commit = last_commit_info.stdout.strip()
+
+        # Executa git reset --hard HEAD~1
+        reset_res = self._run_git(project_dir, ["reset", "--hard", "HEAD~1"])
+        if reset_res.returncode != 0:
+            raise RuntimeError(f"Erro ao executar rollback Git: {reset_res.stderr}")
+
+        new_head_res = self._run_git(project_dir, ["log", "-1", "--pretty=format:%h - %s"])
+        current_head = new_head_res.stdout.strip()
+
+        # Rescaneia inventário e atualiza arquitetura
+        inventory = self.scanner.scan(project_id=project_id, root_path=project_dir)
+        self._inventories[project_id] = inventory
+        self._reports[project_id] = self.analyzer.analyze(inventory)
+
+        if self.security_core.audit:
+            self.security_core.audit.record_event(
+                operation="PROJECT_ROLLBACK_EXECUTED",
+                status="SUCCESS",
+                project_id=project_id,
+                parameters={"undone_commit": undone_commit, "current_head": current_head},
+            )
+
+        return {
+            "status": "rolled_back",
+            "project_id": project_id,
+            "undone_commit": undone_commit,
+            "current_head": current_head,
+            "message": f"Alteração desfeita com sucesso! Repositório restaurado para: {current_head}",
+        }
+
+    def get_git_history(self, project_id: str, max_count: int = 15) -> list[dict]:
+        """Retorna histórico de commits semânticos locais do projeto."""
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            return []
+
+        self.ensure_git_repo(project_id)
+        log_res = self._run_git(
+            project_dir,
+            ["log", f"-n{max_count}", "--pretty=format:%h||%an||%ad||%s", "--date=short"],
+        )
+        if log_res.returncode != 0 or not log_res.stdout.strip():
+            return []
+
+        commits = []
+        for line in log_res.stdout.strip().split("\n"):
+            parts = line.split("||")
+            if len(parts) == 4:
+                commits.append({
+                    "hash": parts[0],
+                    "author": parts[1],
+                    "date": parts[2],
+                    "message": parts[3],
+                })
+        return commits
+
+    def export_clean_project_zip(self, project_id: str) -> tuple[bytes, str]:
+        """Gera um arquivo ZIP limpo do projeto, excluindo dependências pesadas e caches."""
+        import io
+        import zipfile
+
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            raise FileNotFoundError(f"Projeto '{project_id}' não existe no disco.")
+
+        EXCLUDED_DIRS = {
+            "node_modules", ".venv", "venv", "env", "__pycache__", ".git",
+            ".pytest_cache", ".mypy_cache", ".idea", ".vscode", "dist", "build",
+            "target", ".gradle", "bin", "obj",
+        }
+        EXCLUDED_EXTS = {".pyc", ".pyo", ".pyd", ".bak", ".tmp", ".log"}
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for item in project_dir.rglob("*"):
+                if item.is_file():
+                    rel = item.relative_to(project_dir)
+                    if any(part in EXCLUDED_DIRS for part in rel.parts):
+                        continue
+                    if item.suffix.lower() in EXCLUDED_EXTS:
+                        continue
+                    z.write(item, str(rel))
+        buf.seek(0)
+        return buf.getvalue(), f"{project_id}-clean.zip"
+
+    def dockerize_project(self, project_id: str) -> dict[str, Any]:
+        """Cria automaticamente Dockerfile, docker-compose.yml e .dockerignore para a stack do projeto."""
+        project_dir = self.get_project_dir(project_id)
+        return self.dockerizer.dockerize_project(project_id=project_id, project_dir=project_dir)
+
+    def import_external_project(self, folder_path: str, custom_name: str | None = None) -> dict:
+        """Importa e conecta uma pasta física existente no computador ao JARVIS AI HUB."""
+        path = Path(folder_path).resolve()
+        if not path.exists() or not path.is_dir():
+            raise FileNotFoundError(f"O diretório informado não foi encontrado: '{folder_path}'")
+
+        project_id = (custom_name or path.name).lower().replace(" ", "-").replace("_", "-")
+        # Registra permissões no SecurityCore
+        try:
+            self.security_core.permission_engine.register_project(
+                project_id=project_id,
+                root_path=str(path),
+                mode=ProjectWorkMode.EDIT_APPROVED,
+            )
+        except Exception as exc:
+            logger.debug("Registo de permissão para projeto importado: %s", exc)
+
+        inventory = self.scanner.scan(project_id=project_id, root_path=path)
+        self._inventories[project_id] = inventory
+        report = self.analyzer.analyze(inventory)
+        self._reports[project_id] = report
+
+        return {
+            "id": project_id,
+            "name": custom_name or path.name.replace("-", " ").title(),
+            "path": str(path),
+            "file_count": len(inventory.files) if inventory else 0,
+            "files": [f.relative_path for f in inventory.files[:8]] if inventory else [],
+            "report": report,
+        }
+
     def scaffold_project(
         self,
         project_id: str,
@@ -65,19 +470,24 @@ class ProjectWorkspaceService:
     ) -> dict:
         """
         Cria a pasta física no computador em workspace/<project_id>
-        e grava todos os arquivos do projeto (index.html, style.css, app.js, README.md).
+        e grava todos os arquivos físicos do projeto (Python, Java, C#, Go, Kotlin, Flutter ou Web).
         """
-        base_dir = Path("workspace").resolve()
-        base_dir.mkdir(parents=True, exist_ok=True)
-
-        project_dir = (base_dir / project_id).resolve()
-        if not str(project_dir).startswith(str(base_dir)):
-            raise ValueError(f"Identificador de projeto inválido: '{project_id}'")
-
+        project_dir = self.get_project_dir(project_id)
         project_dir.mkdir(parents=True, exist_ok=True)
 
         if not files:
-            if project_type in ("flutter", "mobile"):
+            p_type = (project_type or "web").lower()
+            if p_type in ("python", "py", "fastapi"):
+                files = self._generate_default_python_scaffold(project_id, name, description)
+            elif p_type in ("java", "spring", "maven"):
+                files = self._generate_default_java_scaffold(project_id, name, description)
+            elif p_type in ("csharp", "c#", "dotnet", "cs"):
+                files = self._generate_default_csharp_scaffold(project_id, name, description)
+            elif p_type in ("go", "golang"):
+                files = self._generate_default_go_scaffold(project_id, name, description)
+            elif p_type in ("kotlin", "kt"):
+                files = self._generate_default_kotlin_scaffold(project_id, name, description)
+            elif p_type in ("flutter", "mobile"):
                 files = self._generate_default_flutter_scaffold(project_id, name, description)
             else:
                 files = self._generate_default_web_scaffold(project_id, name, description)
@@ -106,28 +516,34 @@ class ProjectWorkspaceService:
         report = self.analyzer.analyze(inventory)
         self._reports[project_id] = report
 
+        # Inicializa repositório Git local com commit semântico de scaffold
+        try:
+            self.ensure_git_repo(project_id)
+        except Exception as e:
+            logger.debug("Aviso ao inicializar git no scaffold: %s", e)
+
         if self.security_core.audit:
             self.security_core.audit.record_event(
                 operation="PROJECT_SCAFFOLDED",
                 status="SUCCESS",
                 project_id=project_id,
-                parameters={"files_created": created_files, "path": str(project_dir)},
+                parameters={"files_created": created_files, "path": str(project_dir), "project_type": project_type},
             )
 
         return {
             "project_id": project_id,
             "name": name,
             "root_path": str(project_dir),
+            "project_type": project_type,
             "files_created": created_files,
             "report": report,
         }
 
     def read_project_file(self, project_id: str, rel_path: str) -> str:
         """Lê o arquivo físico do projeto no computador de forma segura."""
-        base_dir = Path("workspace").resolve()
-        project_dir = (base_dir / project_id).resolve()
-        if not str(project_dir).startswith(str(base_dir)) or not project_dir.exists():
-            raise FileNotFoundError(f"Projeto '{project_id}' não existe em workspace/.")
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            raise FileNotFoundError(f"Projeto '{project_id}' não existe no disco.")
 
         target = (project_dir / rel_path).resolve()
         if not str(target).startswith(str(project_dir)) or not target.exists():
@@ -145,10 +561,9 @@ class ProjectWorkspaceService:
         reason: str = "Modificação solicitada via chat",
     ) -> dict:
         """Modifica um arquivo no disco, gerando backup .bak e diff unificado."""
-        base_dir = Path("workspace").resolve()
-        project_dir = (base_dir / project_id).resolve()
-        if not str(project_dir).startswith(str(base_dir)) or not project_dir.exists():
-            raise FileNotFoundError(f"Projeto '{project_id}' não existe em workspace/.")
+        project_dir = self.get_project_dir(project_id)
+        if not project_dir.exists():
+            raise FileNotFoundError(f"Projeto '{project_id}' não existe no disco.")
 
         target = (project_dir / rel_path).resolve()
         if not str(target).startswith(str(project_dir)):
@@ -187,698 +602,121 @@ class ProjectWorkspaceService:
                 parameters={"file": rel_path, "diff_size": len(diff_str), "reason": reason},
             )
 
+        commit_hash = self.commit_project_changes(project_id, f"fix({rel_path}): {reason}")
+
         return {
             "project_id": project_id,
             "file": rel_path,
             "diff": diff_str,
+            "commit_hash": commit_hash,
             "status": "modified",
         }
 
     def list_available_projects(self) -> list[dict]:
-        """Lista todos os projetos na pasta workspace/."""
-        base_dir = Path("workspace").resolve()
-        if not base_dir.exists():
+        """Lista todos os projetos na pasta workspace/ e projetos registrados com caminhos absolutos e tipo."""
+        if not self.base_dir.exists():
             return []
         projects = []
-        for item in base_dir.iterdir():
+        seen_ids = set()
+
+        for item in self.base_dir.iterdir():
             if item.is_dir() and not item.name.startswith("."):
-                files = [
-                    p.name for p in item.rglob("*") if p.is_file() and not p.name.startswith(".")
+                all_file_paths = [
+                    p for p in item.rglob("*") if p.is_file() and not p.name.startswith(".")
                 ]
+                files = [p.name for p in all_file_paths]
+                total_bytes = sum(p.stat().st_size for p in all_file_paths if p.exists())
+                size_str = (
+                    f"{round(total_bytes / (1024 * 1024), 2)} MB"
+                    if total_bytes >= 1024 * 1024
+                    else f"{round(total_bytes / 1024, 1)} KB"
+                )
+                
+                # Detecta tipo de projeto
+                p_type = "web"
+                f_names = [f.lower() for f in files]
+                if any(f.endswith(".py") or f == "requirements.txt" for f in f_names):
+                    p_type = "python"
+                elif any(f == "pom.xml" or f.endswith(".java") for f in f_names):
+                    p_type = "java"
+                elif any(f.endswith(".csproj") or f.endswith(".cs") for f in f_names):
+                    p_type = "csharp"
+                elif any(f == "go.mod" or f.endswith(".go") for f in f_names):
+                    p_type = "go"
+                elif any(f.endswith(".kt") or f.endswith(".kts") for f in f_names):
+                    p_type = "kotlin"
+                elif any(f == "pubspec.yaml" or f.endswith(".dart") for f in f_names):
+                    p_type = "flutter"
+
+                has_web_preview = any(f == "index.html" for f in f_names)
+
+                seen_ids.add(item.name)
                 projects.append(
                     {
                         "id": item.name,
                         "name": item.name.replace("-", " ").replace("_", " ").title(),
                         "path": str(item),
+                        "project_type": p_type,
                         "file_count": len(files),
-                        "files": files[:8],
+                        "files": files[:16],
+                        "size_formatted": size_str,
+                        "has_web_preview": has_web_preview,
                     }
                 )
+
+        # Inclui projetos externos registrados
+        for pid, inv in self._inventories.items():
+            if pid not in seen_ids and inv.root_path and Path(inv.root_path).exists():
+                seen_ids.add(pid)
+                f_names = [f.name.lower() for f in inv.files]
+                p_type = "external"
+                if any(f.endswith(".py") for f in f_names):
+                    p_type = "python"
+                elif any(f.endswith(".java") for f in f_names):
+                    p_type = "java"
+                elif any(f.endswith(".cs") for f in f_names):
+                    p_type = "csharp"
+                elif any(f.endswith(".go") for f in f_names):
+                    p_type = "go"
+                elif any(f.endswith(".kt") for f in f_names):
+                    p_type = "kotlin"
+                elif any(f.endswith(".dart") for f in f_names):
+                    p_type = "flutter"
+
+                projects.append(
+                    {
+                        "id": pid,
+                        "name": pid.replace("-", " ").replace("_", " ").title(),
+                        "path": str(inv.root_path),
+                        "project_type": p_type,
+                        "file_count": len(inv.files),
+                        "files": [f.rel_path for f in inv.files[:12]],
+                    }
+                )
+
         return projects
 
-    def _generate_default_web_scaffold(
-        self, project_id: str, name: str, description: str
-    ) -> dict[str, str]:
-        title = name or project_id.replace("-", " ").title()
-        desc = description or f"Website moderno e responsivo gerado pelo JARVIS AI HUB para {title}."
+    # Delegação compatível para o módulo Scaffolder desacoplado
+    def _generate_english_practice_web_scaffold(self, project_dir: Path, project_name: str) -> list[str]:
+        return self.scaffolder._generate_english_practice_web_scaffold(project_dir, project_name)
 
-        index_html = f"""<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title}</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-</head>
-<body>
-    <header class="navbar">
-        <div class="container nav-container">
-            <div class="logo">✨ {title}</div>
-            <nav class="nav-links">
-                <a href="#inicio">Início</a>
-                <a href="#destaques">Destaques</a>
-                <a href="#sobre">Sobre</a>
-                <a href="#contato" class="btn-nav">Contato</a>
-            </nav>
-        </div>
-    </header>
+    def _generate_default_web_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
+        return self.scaffolder._generate_default_web_scaffold(project_dir, project_name, initial_prompt)
 
-    <main>
-        <section id="inicio" class="hero">
-            <div class="container hero-content">
-                <span class="badge">Projeto Criado com Sucesso</span>
-                <h1>Bem-vindo ao <span>{title}</span></h1>
-                <p>{desc}</p>
-                <div class="hero-actions">
-                    <button class="btn btn-primary" onclick="mostrarAlerta()">Explorar Agora</button>
-                    <a href="#destaques" class="btn btn-outline">Saber Mais</a>
-                </div>
-            </div>
-        </section>
+    def _generate_default_flutter_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
+        return self.scaffolder._generate_default_flutter_scaffold(project_dir, project_name, initial_prompt)
 
-        <section id="destaques" class="features">
-            <div class="container">
-                <h2 class="section-title">Nossos Diferenciais</h2>
-                <div class="grid-cards">
-                    <div class="card">
-                        <div class="card-icon">⚡</div>
-                        <h3>Alta Performance</h3>
-                        <p>Estrutura limpa, carregamento instantâneo e código otimizado sem dependências pesadas.</p>
-                    </div>
-                    <div class="card">
-                        <div class="card-icon">🎨</div>
-                        <h3>Design Responsivo</h3>
-                        <p>Interface adaptada para celulares, tablets e desktops com foco na melhor experiência de uso.</p>
-                    </div>
-                    <div class="card">
-                        <div class="card-icon">🔒</div>
-                        <h3>Seguro & Confiável</h3>
-                        <p>Construído seguindo as melhores práticas de acessibilidade e padrões modernos do ecossistema web.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
+    def _generate_default_python_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
+        return self.scaffolder._generate_default_python_scaffold(project_dir, project_name, initial_prompt)
 
-        <section id="sobre" class="about">
-            <div class="container about-container">
-                <div class="about-text">
-                    <h2>Sobre o Projeto</h2>
-                    <p>Este website foi gerado automaticamente pelo **JARVIS AI HUB** no diretório <code>workspace/{project_id}/</code>.</p>
-                    <p>Você pode editar os arquivos <code>index.html</code>, <code>style.css</code> e <code>app.js</code> diretamente pelo chat ou pelo seu editor de código favorito.</p>
-                </div>
-            </div>
-        </section>
+    def _generate_default_java_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
+        return self.scaffolder._generate_default_java_scaffold(project_dir, project_name, initial_prompt)
 
-        <section id="contato" class="contact">
-            <div class="container contact-container">
-                <h2>Fale Conosco</h2>
-                <form id="contact-form" onsubmit="enviarMensagem(event)">
-                    <div class="form-group">
-                        <input type="text" id="nome" placeholder="Seu Nome" required>
-                    </div>
-                    <div class="form-group">
-                        <input type="email" id="email" placeholder="Seu E-mail" required>
-                    </div>
-                    <div class="form-group">
-                        <textarea id="mensagem" placeholder="Sua Mensagem..." rows="4" required></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Enviar Mensagem</button>
-                </form>
-            </div>
-        </section>
-    </main>
+    def _generate_default_csharp_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
+        return self.scaffolder._generate_default_csharp_scaffold(project_dir, project_name, initial_prompt)
 
-    <footer class="footer">
-        <div class="container footer-content">
-            <p>&copy; 2026 {title} • Desenvolvido com JARVIS AI HUB</p>
-        </div>
-    </footer>
+    def _generate_default_go_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
+        return self.scaffolder._generate_default_go_scaffold(project_dir, project_name, initial_prompt)
 
-    <script src="app.js"></script>
-</body>
-</html>
-"""
-
-        style_css = """:root {
-    --primary: #6366f1;
-    --primary-hover: #4f46e5;
-    --bg-dark: #0f172a;
-    --bg-card: #1e293b;
-    --text-light: #f8fafc;
-    --text-muted: #94a3b8;
-    --border: #334155;
-    --radius: 12px;
-}
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-body {
-    background-color: var(--bg-dark);
-    color: var(--text-light);
-    line-height: 1.6;
-}
-
-.container {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 0 24px;
-}
-
-/* Navbar */
-.navbar {
-    background: rgba(15, 23, 42, 0.9);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-}
-
-.nav-container {
-    display: flex;
-    justifyContent: space-between;
-    align-items: center;
-    height: 70px;
-}
-
-.logo {
-    font-size: 1.3rem;
-    font-weight: 800;
-    color: var(--text-light);
-}
-
-.nav-links {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.nav-links a {
-    color: var(--text-muted);
-    text-decoration: none;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: color 0.2s;
-}
-
-.nav-links a:hover {
-    color: var(--text-light);
-}
-
-.btn-nav {
-    background: var(--primary);
-    color: #fff !important;
-    padding: 8px 16px;
-    border-radius: 6px;
-    transition: background 0.2s;
-}
-
-.btn-nav:hover {
-    background: var(--primary-hover);
-}
-
-/* Hero Section */
-.hero {
-    padding: 90px 0;
-    text-align: center;
-    background: radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.15), transparent 70%);
-}
-
-.badge {
-    display: inline-block;
-    padding: 6px 14px;
-    background: rgba(99, 102, 241, 0.2);
-    border: 1px solid var(--primary);
-    color: #a5b4fc;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-bottom: 20px;
-}
-
-.hero h1 {
-    font-size: 3rem;
-    font-weight: 800;
-    margin-bottom: 16px;
-}
-
-.hero h1 span {
-    color: var(--primary);
-}
-
-.hero p {
-    font-size: 1.15rem;
-    color: var(--text-muted);
-    max-width: 650px;
-    margin: 0 auto 32px;
-}
-
-.hero-actions {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-}
-
-.btn {
-    padding: 12px 28px;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 0.95rem;
-    cursor: pointer;
-    text-decoration: none;
-    transition: all 0.2s ease;
-    border: none;
-}
-
-.btn-primary {
-    background: var(--primary);
-    color: #fff;
-}
-
-.btn-primary:hover {
-    background: var(--primary-hover);
-    transform: translateY(-2px);
-}
-
-.btn-outline {
-    background: transparent;
-    color: var(--text-light);
-    border: 1px solid var(--border);
-}
-
-.btn-outline:hover {
-    background: var(--border);
-}
-
-/* Features */
-.features {
-    padding: 80px 0;
-}
-
-.section-title {
-    text-align: center;
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 48px;
-}
-
-.grid-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 24px;
-}
-
-.card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 32px 24px;
-    transition: transform 0.2s, border-color 0.2s;
-}
-
-.card:hover {
-    transform: translateY(-4px);
-    border-color: var(--primary);
-}
-
-.card-icon {
-    font-size: 2.2rem;
-    margin-bottom: 16px;
-}
-
-.card h3 {
-    font-size: 1.2rem;
-    margin-bottom: 10px;
-}
-
-.card p {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-}
-
-/* About */
-.about {
-    padding: 60px 0;
-    background: rgba(30, 41, 59, 0.5);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-}
-
-.about-text {
-    max-width: 800px;
-    margin: 0 auto;
-    text-align: center;
-}
-
-.about-text h2 {
-    font-size: 2rem;
-    margin-bottom: 16px;
-}
-
-.about-text p {
-    color: var(--text-muted);
-    margin-bottom: 12px;
-}
-
-code {
-    background: rgba(99, 102, 241, 0.2);
-    color: #c7d2fe;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: monospace;
-}
-
-/* Contact */
-.contact {
-    padding: 80px 0;
-}
-
-.contact-container {
-    max-width: 500px;
-    text-align: center;
-}
-
-.contact h2 {
-    font-size: 2rem;
-    margin-bottom: 24px;
-}
-
-.form-group {
-    margin-bottom: 16px;
-}
-
-.form-group input, .form-group textarea {
-    width: 100%;
-    padding: 12px 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: #fff;
-    font-size: 0.95rem;
-    outline: none;
-}
-
-.form-group input:focus, .form-group textarea:focus {
-    border-color: var(--primary);
-}
-
-/* Footer */
-.footer {
-    padding: 24px 0;
-    text-align: center;
-    border-top: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 0.85rem;
-}
-"""
-
-        app_js = f"""// Script interativo de {title}
-document.addEventListener('DOMContentLoaded', () => {{
-    console.log('Projeto {title} inicializado com sucesso via JARVIS AI HUB!');
-}});
-
-function mostrarAlerta() {{
-    alert('Parabéns! O seu website {title} está em execução local.');
-}}
-
-function enviarMensagem(event) {{
-    event.preventDefault();
-    const nome = document.getElementById('nome').value;
-    alert(`Obrigado pelo contato, ${{nome}}! Sua mensagem foi simulada com sucesso.`);
-    document.getElementById('contact-form').reset();
-}}
-"""
-
-        readme_md = f"""# {title}
-
-{desc}
-
----
-
-## 📁 Estrutura de Arquivos Criados
-
-- `index.html`: Estrutura HTML5 semântica e acessível.
-- `style.css`: Estilização moderna responsiva em Dark Theme.
-- `app.js`: Script cliente com interações e formulários.
-- `README.md`: Documentação do projeto.
-
-## 🚀 Como Visualizar no Navegador
-
-Basta abrir o arquivo `index.html` em qualquer navegador:
-- Caminho: `workspace/{project_id}/index.html`
-
-## 🛠️ Modificações via JARVIS AI HUB
-
-Você pode solicitar alterações diretamente pelo chat do JARVIS (ex: *"Mude o tema para claro"*, *"Adicione uma nova seção de preços"*).
-"""
-
-        return {
-            "index.html": index_html,
-            "style.css": style_css,
-            "app.js": app_js,
-            "README.md": readme_md,
-        }
-
-    def _generate_default_flutter_scaffold(
-        self, project_id: str, name: str, description: str
-    ) -> dict[str, str]:
-        title = name or project_id.replace("-", " ").title()
-        raw_desc = description or f"Aplicativo mobile Flutter gerado pelo JARVIS AI HUB para {title}."
-        desc = raw_desc.replace('"', ' ').replace("'", " ").replace("\n", " ").strip()
-        safe_package_name = project_id.lower().replace("-", "_")
-
-        pubspec_yaml = f"""name: {safe_package_name}
-description: "{desc}"
-publish_to: 'none'
-version: 1.0.0+1
-
-environment:
-  sdk: '>=3.0.0 <4.0.0'
-
-dependencies:
-  flutter:
-    sdk: flutter
-  cupertino_icons: ^1.0.8
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
-
-flutter:
-  uses-material-design: true
-"""
-
-        main_dart = f"""import 'package:flutter/material.dart';
-
-void main() {{
-  runApp(const JarvisMobileApp());
-}}
-
-class JarvisMobileApp extends StatelessWidget {{
-  const JarvisMobileApp({{super.key}});
-
-  @override
-  Widget build(BuildContext context) {{
-    return MaterialApp(
-      title: '{title}',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      home: const MainHomeScreen(),
-    );
-  }}
-}}
-
-class MainHomeScreen extends StatefulWidget {{
-  const MainHomeScreen({{super.key}});
-
-  @override
-  State<MainHomeScreen> createState() => _MainHomeScreenState();
-}}
-
-class _MainHomeScreenState extends State<MainHomeScreen> {{
-  int _currentIndex = 0;
-  int _counter = 0;
-
-  final List<Map<String, dynamic>> _catalog = const [
-    {{'title': 'Café Espresso Gourmet', 'price': '€ 2.50', 'icon': Icons.coffee}},
-    {{'title': 'Cappuccino Italiano', 'price': '€ 3.80', 'icon': Icons.local_cafe}},
-    {{'title': 'Croissant Artesanal', 'price': '€ 2.90', 'icon': Icons.bakery_dining}},
-    {{'title': 'Mocha com Chocolate Belga', 'price': '€ 4.20', 'icon': Icons.cake}},
-  ];
-
-  @override
-  Widget build(BuildContext context) {{
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('{title}'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {{
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Notificações atualizadas via JARVIS HUB.')),
-              );
-            }},
-          ),
-        ],
-      ),
-      body: _currentIndex == 0 ? _buildCatalogView() : _buildProfileView(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {{
-          setState(() => _counter++);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Item adicionado ao carrinho! Total: \\$$_counter')),
-          );
-        }},
-        icon: const Icon(Icons.shopping_bag_outlined),
-        label: Text('Carrinho (\\$$_counter)'),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Início'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Perfil'),
-        ],
-      ),
-    );
-  }}
-
-  Widget _buildCatalogView() {{
-    return ListView(
-      padding: const EdgeInsets.all(16.0),
-      children: [
-        Card(
-          elevation: 2,
-          color: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Bem-vindo ao {title}',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "{desc}",
-                  style: const TextStyle(color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        const Text('Cardápio em Destaque', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        ..._catalog.map((item) => Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          color: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFF6366F1).withOpacity(0.2),
-              child: Icon(item['icon'] as IconData, color: const Color(0xFF818CF8)),
-            ),
-            title: Text(item['title'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(item['price'] as String, style: const TextStyle(color: Color(0xFF10B981))),
-            trailing: IconButton(
-              icon: const Icon(Icons.add_circle_outline, color: Color(0xFF6366F1)),
-              onPressed: () {{
-                setState(() => _counter++);
-              }},
-            ),
-          ),
-        )),
-      ],
-    );
-  }}
-
-  Widget _buildProfileView() {{
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.mobile_friendly, size: 64, color: Color(0xFF6366F1)),
-          const SizedBox(height: 16),
-          Text('{title} Mobile App', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('Gerado com sucesso pelo JARVIS AI HUB', style: TextStyle(color: Colors.white60)),
-        ],
-      ),
-    );
-  }}
-}}
-"""
-
-        widget_test = f"""import 'package:flutter_test/flutter_test.dart';
-import 'package:{safe_package_name}/main.dart';
-
-void main() {{
-  testWidgets('Smoke test do aplicativo mobile {title}', (WidgetTester tester) async {{
-    await tester.pumpWidget(const JarvisMobileApp());
-    expect(find.text('{title}'), findsOneWidget);
-  }});
-}}
-"""
-
-        readme_md = f"""# {title} Mobile App (Flutter)
-
-{desc}
-
----
-
-## 📱 Tecnologias & Arquitetura
-
-- **Framework**: Flutter (Dart 3.x)
-- **Design System**: Material 3 (Dark Theme responsivo)
-- **Plataformas Suportadas**: Android, iOS, Web e Windows Desktop
-
-## 🚀 Como Executar o App no seu Computador
-
-A partir do terminal nesta pasta:
-
-```bash
-# Baixar dependências
-flutter pub get
-
-# Executar em emulador, celular conectado ou navegador Chrome
-flutter run -d chrome
-# ou para Windows:
-flutter run -d windows
-```
-
-## 📦 Gerar APK para Android
-
-```bash
-flutter build apk --release
-```
-O arquivo APK gerado ficará em `build/app/outputs/flutter-apk/app-release.apk`.
-"""
-
-        return {
-            "pubspec.yaml": pubspec_yaml,
-            "lib/main.dart": main_dart,
-            "test/widget_test.dart": widget_test,
-            "README.md": readme_md,
-        }
-
-
+    def _generate_default_kotlin_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
+        return self.scaffolder._generate_default_kotlin_scaffold(project_dir, project_name, initial_prompt)

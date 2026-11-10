@@ -1,404 +1,286 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { sendChatMessage } from '../api';
-import { TaskStateResponse } from '../types';
-import { Send, Bot, User, ShieldAlert, MessageSquarePlus, RefreshCw } from 'lucide-react';
+import { fetchWorkspaceProjects } from '../api';
+import { useChatStream } from '../hooks/useChatStream';
+import { ArtifactCanvas, CanvasArtifact } from './chat/ArtifactCanvas';
+import { MessageBubble } from './chat/MessageBubble';
+import { ChatHeader } from './chat/ChatHeader';
+import { ChatInput } from './chat/ChatInput';
+import { ChatProjectModal } from './chat/ChatProjectModal';
+import { getSessionMessagesLocally } from './chat/ChatHistoryDrawer';
 
-interface ChatMessage {
-  sender: 'user' | 'jarvis';
-  text: string;
-  taskData?: TaskStateResponse;
-  timestamp: string;
+interface ChatMasterProps {
+  attachedProjectId?: string | null;
+  onDetachProject?: () => void;
+  targetSessionId?: string | null;
 }
 
-const STORAGE_MESSAGES_KEY = 'jarvis_chat_messages_v1';
-const STORAGE_SESSION_KEY = 'jarvis_chat_session_id_v1';
+const GREETINGS = [
+  'Como posso ajudar hoje?',
+  'JARVIS 3.0',
+  'Engenharia & Desenvolvimento',
+];
 
-const INITIAL_GREETING: ChatMessage = {
-  sender: 'jarvis',
-  text: 'Olá! Sou o JARVIS Master. Posso analisar projetos existentes, criar planos de arquitetura, auditar segurança e propor alterações rastreadas.',
-  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-};
-
-function generateSessionId(): string {
-  return 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
-}
-
-export const ChatMaster: React.FC = () => {
+export const ChatMaster: React.FC<ChatMasterProps> = ({
+  attachedProjectId: propProjectId,
+  onDetachProject,
+  targetSessionId,
+}) => {
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [activeArtifact, setActiveArtifact] = useState<CanvasArtifact | null>(null);
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(propProjectId || null);
+  const [availableProjects, setAvailableProjects] = useState<any[]>([]);
+  const [greetingIndex, setGreetingIndex] = useState(0);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Carrega mensagens persistidas do localStorage ou inicia com a saudação padrão
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+  // Sincroniza propriedade de projeto externo
+  useEffect(() => {
+    if (propProjectId !== undefined) {
+      setActiveProjectId(propProjectId);
+    }
+  }, [propProjectId]);
+
+  const loadProjects = async () => {
     try {
-      const saved = localStorage.getItem(STORAGE_MESSAGES_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+      const data = await fetchWorkspaceProjects();
+      setAvailableProjects(data);
+    } catch (e) {
+      console.warn('Falha ao listar projetos no chat:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadProjects();
+  }, [showProjectModal]);
+
+  const activeProject = availableProjects.find((p) => p.id === activeProjectId);
+
+  // Hook desacoplado de streaming e estado da conversa
+  const {
+    messages,
+    setMessages,
+    sessionId,
+    setSessionId,
+    loading,
+    isListening,
+    handleToggleVoiceInput,
+    handleStopGeneration,
+    handleNewChat,
+    handleExportChat,
+    handleSubmit: submitStream,
+  } = useChatStream(
+    activeProjectId,
+    activeProject?.name || null,
+    (art) => setActiveArtifact(art),
+    () => loadProjects()
+  );
+
+  // Se o App ou Sidebar solicitar carregar uma sessão específica ou iniciar nova conversa
+  useEffect(() => {
+    if (targetSessionId) {
+      if (targetSessionId.startsWith('new_')) {
+        handleNewChat();
+        setActiveArtifact(null);
+      } else if (targetSessionId !== sessionId) {
+        setSessionId(targetSessionId);
+        const loaded = getSessionMessagesLocally(targetSessionId);
+        if (loaded && loaded.length > 0) {
+          setMessages(loaded);
+        } else {
+          setMessages([]);
         }
+        setActiveArtifact(null);
       }
-    } catch (e) {
-      console.warn('Falha ao ler mensagens do localStorage:', e);
     }
-    return [INITIAL_GREETING];
-  });
+  }, [targetSessionId]);
 
-  // Carrega ou inicializa session_id
-  const [sessionId, setSessionId] = useState<string>(() => {
-    try {
-      const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
-      if (savedSession) return savedSession;
-    } catch (e) {
-      console.warn('Falha ao ler sessionId do localStorage:', e);
-    }
-    const newId = generateSessionId();
-    try {
-      localStorage.setItem(STORAGE_SESSION_KEY, newId);
-    } catch {}
-    return newId;
-  });
-
-  // Salva no localStorage sempre que o histórico de mensagens mudar
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_MESSAGES_KEY, JSON.stringify(messages));
-    } catch (e) {
-      console.warn('Falha ao salvar mensagens no localStorage:', e);
-    }
-  }, [messages]);
-
-  // Salva sessionId no localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_SESSION_KEY, sessionId);
-    } catch (e) {
-      console.warn('Falha ao salvar sessionId no localStorage:', e);
-    }
-  }, [sessionId]);
-
-  // Auto-scroll para o final das mensagens
+  // Auto-scroll suave para a mensagem mais recente
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const handleNewChat = () => {
-    if (messages.length > 1) {
-      const confirmed = window.confirm('Deseja iniciar uma nova conversa? O histórico atual será limpo.');
-      if (!confirmed) return;
-    }
-    const newSession = generateSessionId();
-    setSessionId(newSession);
-    const resetGreeting: ChatMessage = {
-      sender: 'jarvis',
-      text: 'Olá! Sou o JARVIS Master. Posso analisar projetos existentes, criar planos de arquitetura, auditar segurança e propor alterações rastreadas.',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessages([resetGreeting]);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
-
-    const userMsg = input.trim();
-    setInput('');
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    setMessages((prev) => [...prev, { sender: 'user', text: userMsg, timestamp: timeStr }]);
-    setLoading(true);
-
-    try {
-      const response = await sendChatMessage(userMsg, undefined, sessionId);
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: 'jarvis',
-          text: response.final_summary || 'Tarefa concluída.',
-          taskData: response,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
-    } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: 'jarvis',
-          text: `[Erro]: ${err.message || 'Falha ao conectar com o backend'}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
-    } finally {
-      setLoading(false);
+  const handleDetachProject = () => {
+    setActiveProjectId(null);
+    if (onDetachProject) {
+      onDetachProject();
     }
   };
+
+  const handleFormSubmit = (overrideText?: string, modelOverride?: string) => {
+    const textToSend = overrideText || input;
+    if (!textToSend.trim() || loading) return;
+    if (!overrideText) {
+      setInput('');
+    }
+    submitStream(textToSend, modelOverride);
+  };
+
+  const hasUserMessages = messages.some((m) => m.sender === 'user');
 
   return (
     <div
       style={{
         display: 'flex',
-        flexDirection: 'column',
-        height: 'calc(100vh - 64px)',
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '12px',
+        height: '100%',
+        width: '100%',
         overflow: 'hidden',
+        backgroundColor: 'var(--bg-primary)',
       }}
     >
-      {/* Header do Chat */}
+      {/* Coluna Principal do Chat */}
       <div
         style={{
-          padding: '16px 20px',
-          borderBottom: '1px solid var(--border-color)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--accent-color)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Bot size={20} color="#fff" />
-          </div>
-          <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Conversa com JARVIS Master</h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Sessão persistente local: <code>{sessionId}</code> ({messages.length} mensagens)
-            </span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="badge badge-info">Fila CPU Ativa</span>
-          <button
-            className="btn btn-secondary"
-            onClick={handleNewChat}
-            style={{ fontSize: '0.75rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-            title="Iniciar uma nova sessão de conversa"
-          >
-            <MessageSquarePlus size={14} /> Nova Conversa
-          </button>
-        </div>
-      </div>
-
-      {/* Área de Mensagens com scroll automático */}
-      <div
-        style={{
-          flex: 1,
-          padding: '20px',
-          overflowY: 'auto',
+          flex: activeArtifact ? '0 0 50%' : '1',
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px',
+          height: '100%',
+          overflow: 'hidden',
+          transition: 'flex 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          borderRight: activeArtifact ? '1px solid var(--border-color)' : 'none',
         }}
       >
-        {messages.map((m, idx) => (
+        {/* Caso não haja mensagens de usuário, exibe a tela central de boas-vindas do Claude (Hero Greeting) */}
+        {!hasUserMessages ? (
           <div
-            key={idx}
             style={{
+              flex: 1,
               display: 'flex',
-              gap: '12px',
-              alignSelf: m.sender === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '85%',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px 20px',
+              animation: 'fadeIn 0.3s ease-out',
             }}
           >
-            {m.sender === 'jarvis' && (
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--accent-color)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Bot size={18} color="#fff" />
-              </div>
-            )}
-
+            {/* Título Minimalista Editorial */}
             <div
+              onClick={() => setGreetingIndex((prev) => (prev + 1) % GREETINGS.length)}
               style={{
-                backgroundColor: m.sender === 'user' ? 'var(--accent-color)' : 'var(--bg-tertiary)',
-                padding: '14px 18px',
-                borderRadius: '12px',
-                fontSize: '0.875rem',
-                lineHeight: 1.5,
-                border: m.sender === 'jarvis' ? '1px solid var(--border-color)' : 'none',
+                marginBottom: '32px',
+                cursor: 'pointer',
+                userSelect: 'none',
+                textAlign: 'center',
               }}
+              title="Clique para alternar saudação"
             >
-              <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
-
-              {m.taskData && (
-                <div
-                  style={{
-                    marginTop: '12px',
-                    paddingTop: '10px',
-                    borderTop: '1px solid var(--border-color)',
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                  }}
-                >
-                  {m.taskData.classified_intent && (
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Intenção:</span>
-                      <code>{m.taskData.classified_intent}</code>
-                    </div>
-                  )}
-
-                  {m.taskData.approval_required && (
-                    <div
-                      style={{
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                        border: '1px solid rgba(245, 158, 11, 0.3)',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        color: '#fbbf24',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        marginTop: '6px',
-                      }}
-                    >
-                      <ShieldAlert size={16} />
-                      <span>Operação pausada aguardando autorização no <b>Approval Center</b>.</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <span
+              <h1
+                className="claude-serif-title"
                 style={{
-                  display: 'block',
-                  fontSize: '0.7rem',
-                  color: m.sender === 'user' ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)',
-                  marginTop: '6px',
-                  textAlign: 'right',
+                  fontSize: '2.4rem',
+                  margin: 0,
+                  fontWeight: 400,
+                  letterSpacing: '-0.02em',
+                  color: 'var(--text-primary)',
                 }}
               >
-                {m.timestamp}
-              </span>
+                {GREETINGS[greetingIndex]}
+              </h1>
             </div>
 
-            {m.sender === 'user' && (
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <User size={18} color="var(--text-secondary)" />
-              </div>
-            )}
+            {/* Cápsula Flutuante Centralizada */}
+            <ChatInput
+              input={input}
+              onInputChange={(val) => setInput(val)}
+              onSubmit={handleFormSubmit}
+              loading={loading}
+              onStopGeneration={handleStopGeneration}
+              isListening={isListening}
+              onToggleVoiceInput={() =>
+                handleToggleVoiceInput((text) => setInput((prev) => (prev ? `${prev} ${text}` : text)))
+              }
+              activeProjectId={activeProjectId}
+              activeProjectName={activeProject?.name}
+              onDetachProject={handleDetachProject}
+              onOpenProjectModal={() => setShowProjectModal(true)}
+              isFloatingCenter={true}
+            />
           </div>
-        ))}
+        ) : (
+          /* Quando há mensagens na conversa */
+          <>
+            <ChatHeader
+              messagesCount={messages.length}
+              activeProjectId={activeProjectId}
+              activeProjectName={activeProject?.name}
+              onDetachProject={handleDetachProject}
+              onOpenProjectModal={() => setShowProjectModal(true)}
+              onExportChat={handleExportChat}
+              activeArtifact={activeArtifact}
+              onToggleCanvas={() => setActiveArtifact(null)}
+              onNewChat={() => {
+                handleNewChat();
+                setActiveArtifact(null);
+              }}
+            />
 
-        {loading && (
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {/* Área de Mensagens com auto-scroll */}
             <div
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--accent-color)',
+                flex: 1,
+                overflowY: 'auto',
+                padding: '24px 24px',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                flexDirection: 'column',
+                gap: '20px',
               }}
             >
-              <Bot size={18} color="#fff" />
+              {messages.map((m, idx) => (
+                <MessageBubble
+                  key={idx}
+                  message={m}
+                  onOpenArtifact={(art) => setActiveArtifact(art)}
+                />
+              ))}
+
+              <div ref={messagesEndRef} />
             </div>
+
+            {/* Cápsula de Entrada Fixada na Base */}
             <div
               style={{
-                padding: '12px 16px',
-                backgroundColor: 'var(--bg-tertiary)',
-                borderRadius: '12px',
-                fontSize: '0.85rem',
-                color: 'var(--text-secondary)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
+                padding: '16px 24px 20px 24px',
+                backgroundColor: 'transparent',
               }}
             >
-              <RefreshCw size={14} className="spin" />
-              JARVIS está a planear e consultar especialistas...
+              <ChatInput
+                input={input}
+                onInputChange={(val) => setInput(val)}
+                onSubmit={handleFormSubmit}
+                loading={loading}
+                onStopGeneration={handleStopGeneration}
+                isListening={isListening}
+                onToggleVoiceInput={() =>
+                  handleToggleVoiceInput((text) => setInput((prev) => (prev ? `${prev} ${text}` : text)))
+                }
+                activeProjectId={activeProjectId}
+                activeProjectName={activeProject?.name}
+                onDetachProject={handleDetachProject}
+                onOpenProjectModal={() => setShowProjectModal(true)}
+                isFloatingCenter={false}
+              />
             </div>
-          </div>
+          </>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input de Envio */}
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          padding: '16px 20px',
-          borderTop: '1px solid var(--border-color)',
-          display: 'flex',
-          gap: '12px',
-          backgroundColor: 'var(--bg-secondary)',
-        }}
-      >
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Peça uma análise, plano de arquitetura ou melhoria de código..."
-          disabled={loading}
-          style={{
-            flex: 1,
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-primary)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '8px',
-            color: 'var(--text-primary)',
-            fontSize: '0.875rem',
-            outline: 'none',
-          }}
+      {/* Coluna Direita: Live Artifact Canvas (Claude Design / Codex Dual-Panel) */}
+      {activeArtifact && (
+        <ArtifactCanvas
+          artifact={activeArtifact}
+          onClose={() => setActiveArtifact(null)}
         />
-        <button
-          type="submit"
-          disabled={loading || !input.trim()}
-          style={{
-            padding: '12px 20px',
-            backgroundColor: 'var(--accent-color)',
-            border: 'none',
-            borderRadius: '8px',
-            color: '#fff',
-            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontWeight: 600,
-            fontSize: '0.875rem',
-          }}
-        >
-          <Send size={16} />
-          <span>Enviar</span>
-        </button>
-      </form>
+      )}
+
+      {/* Modal para Anexar / Selecionar Projeto no Chat */}
+      <ChatProjectModal
+        isOpen={showProjectModal}
+        onClose={() => setShowProjectModal(false)}
+        availableProjects={availableProjects}
+        activeProjectId={activeProjectId}
+        onSelectProject={(pId) => setActiveProjectId(pId)}
+        onProjectsReload={loadProjects}
+      />
     </div>
   );
 };

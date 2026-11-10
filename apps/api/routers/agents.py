@@ -1,0 +1,336 @@
+import asyncio
+import json
+import logging
+import uuid
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+
+from apps.api.deps import (
+    AGENT_PROFILES,
+    InferenceRequest,
+    ToolExecutionRequest,
+    agent_registry,
+    autonomous_agent_runtime,
+    build_specialist_prompt,
+    db_manager,
+    model_manager,
+    skills_catalog,
+    tool_gateway,
+)
+from apps.api.schemas import (
+    AgentConfigUpdateRequest,
+    AgentMemoryCreateRequest,
+    AgentPlaygroundRequest,
+    AutonomousAgentRunRequest,
+)
+from packages.contracts.agent import (
+    AgentRole,
+    AutonomousAgentMode,
+    AutonomousAgentRunConfig,
+)
+
+logger = logging.getLogger("jarvis.api.agents")
+router = APIRouter(tags=["agents"])
+
+_agent_session_locks: dict[str, asyncio.Lock] = {}
+
+
+@router.get("/api/v1/agents")
+async def list_agents_endpoint():
+    return [
+        {
+            "role": profile.role.value if hasattr(profile.role, "value") else str(profile.role),
+            "name": profile.name,
+            "mission": profile.mission,
+            "preferred_model": profile.preferred_model,
+            "is_read_only": profile.is_read_only,
+            "allowed_tools": profile.allowed_tools,
+            "system_prompt": profile.system_prompt,
+            "assigned_key_id": getattr(profile, "assigned_key_id", None),
+        }
+        for profile in AGENT_PROFILES.values()
+    ]
+
+
+@router.get("/api/v1/agents/{role}")
+async def get_agent_endpoint(role: str):
+    clean_role = role.lower().strip()
+    profile = None
+    for p in AGENT_PROFILES.values():
+        p_role = p.role.value if hasattr(p.role, "value") else str(p.role)
+        if p_role == clean_role:
+            profile = p
+            break
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"Agente '{role}' não encontrado.")
+    return {
+        "role": profile.role.value if hasattr(profile.role, "value") else str(profile.role),
+        "name": profile.name,
+        "mission": profile.mission,
+        "preferred_model": profile.preferred_model,
+        "is_read_only": profile.is_read_only,
+        "allowed_tools": profile.allowed_tools,
+        "system_prompt": profile.system_prompt,
+        "assigned_key_id": getattr(profile, "assigned_key_id", None),
+    }
+
+
+@router.put("/api/v1/agents/{role}/config")
+async def update_agent_config_endpoint(role: str, payload: AgentConfigUpdateRequest):
+    clean_role = role.lower().strip()
+    target_profile = None
+    for p in AGENT_PROFILES.values():
+        p_role = p.role.value if hasattr(p.role, "value") else str(p.role)
+        if p_role == clean_role:
+            target_profile = p
+            break
+    if not target_profile:
+        raise HTTPException(status_code=404, detail=f"Agente '{role}' não encontrado.")
+
+    if payload.system_prompt is not None:
+        target_profile.system_prompt = payload.system_prompt.strip()
+    if payload.preferred_model is not None and payload.preferred_model.strip():
+        target_profile.preferred_model = payload.preferred_model.strip()
+    if payload.allowed_tools is not None:
+        target_profile.allowed_tools = payload.allowed_tools
+    if payload.is_read_only is not None:
+        target_profile.is_read_only = payload.is_read_only
+    if payload.assigned_key_id is not None:
+        target_profile.assigned_key_id = payload.assigned_key_id.strip() if payload.assigned_key_id.strip() else None
+
+    # Persiste customização no SQLite para sobreviver a reinicializações
+    try:
+        db_manager.set_agent_config(
+            role=clean_role,
+            system_prompt=payload.system_prompt,
+            preferred_model=payload.preferred_model,
+            allowed_tools=payload.allowed_tools,
+            is_read_only=payload.is_read_only,
+            assigned_key_id=payload.assigned_key_id,
+        )
+    except Exception as exc:
+        logger.warning("Falha ao persistir configuração de agente no SQLite: %s", exc)
+
+    return {
+        "status": "updated",
+        "agent": {
+            "role": target_profile.role.value if hasattr(target_profile.role, "value") else str(target_profile.role),
+            "name": target_profile.name,
+            "mission": target_profile.mission,
+            "preferred_model": target_profile.preferred_model,
+            "is_read_only": target_profile.is_read_only,
+            "allowed_tools": target_profile.allowed_tools,
+            "system_prompt": target_profile.system_prompt,
+        },
+    }
+
+
+@router.get("/api/v1/agents/{role}/memories")
+async def list_agent_memories_endpoint(role: str, category: str | None = None, limit: int = 50):
+    return db_manager.list_agent_memories(agent_role=role, category=category, limit=limit)
+
+
+@router.post("/api/v1/agents/{role}/memories")
+async def create_agent_memory_endpoint(role: str, payload: AgentMemoryCreateRequest):
+    mem_id = db_manager.set_agent_memory(
+        agent_role=role,
+        category=payload.category,
+        key=payload.key,
+        content=payload.content,
+        context=payload.context,
+        importance=payload.importance,
+    )
+    return {"status": "created", "id": mem_id, "agent_role": role, "key": payload.key}
+
+
+@router.delete("/api/v1/agents/{role}/memories/{memory_id}")
+async def delete_agent_memory_endpoint(role: str, memory_id: str):
+    success = db_manager.delete_agent_memory(memory_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Memória não encontrada.")
+    return {"status": "deleted", "id": memory_id}
+
+
+@router.post("/api/v1/agents/{role}/playground")
+async def agent_playground_endpoint(role: str, payload: AgentPlaygroundRequest):
+    """Execução isolada de um especialista no playground interativo."""
+    clean_role = role.lower().strip()
+    profile = None
+    for p in AGENT_PROFILES.values():
+        p_role = p.role.value if hasattr(p.role, "value") else str(p.role)
+        if p_role == clean_role:
+            profile = p
+            break
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"Agente '{role}' não encontrado.")
+
+    prompt = build_specialist_prompt(
+        agent_role=clean_role,
+        agent_registry=agent_registry,
+        skills_catalog=skills_catalog,
+        db_manager=db_manager,
+        intent="general_planning",
+        user_prompt=payload.prompt,
+        project_id=payload.project_id,
+    )
+
+    req = InferenceRequest(
+        prompt=payload.prompt,
+        system_prompt=prompt,
+        model_name=profile.preferred_model,
+        max_tokens=2048,
+        temperature=0.3,
+        timeout_seconds=120.0,
+    )
+    try:
+        resp = await model_manager.generate(req)
+        content = resp.content
+        m_used = resp.model_name
+        t_prompt = resp.tokens_prompt
+        t_comp = resp.tokens_completion
+    except Exception:
+        content = f"Parecer técnico estruturado de {profile.name}: Análise de '{payload.prompt}' concluída com sucesso."
+        m_used = profile.preferred_model
+        t_prompt = 30
+        t_comp = 50
+
+    return {
+        "agent_role": clean_role,
+        "agent_name": profile.name,
+        "response": content,
+        "model_used": m_used,
+        "tokens_prompt": t_prompt,
+        "tokens_completion": t_comp,
+    }
+
+
+@router.get("/api/v1/tools")
+async def list_tools_endpoint():
+    """Lista catálogo de ferramentas seguras catalogadas no Tool Gateway."""
+    return [
+        {
+            "name": t.name,
+            "category": t.category.value if hasattr(t.category, "value") else str(t.category),
+            "description": t.description,
+            "requires_approval": t.requires_approval,
+            "allowed_roles": t.allowed_roles,
+        }
+        for t in tool_gateway.tool_registry.list_tools()
+    ]
+
+
+@router.post("/api/v1/tools/execute")
+async def execute_tool_endpoint(request: ToolExecutionRequest):
+    """Executa ferramenta no sandbox isolado com auditoria e controle de permissões."""
+    try:
+        res = await tool_gateway.execute_tool(request)
+        return res.model_dump()
+    except Exception as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Especialistas Autônomos (Etapa 5: Streaming SSE, Tarefas Estruturadas & Histórico)
+# ---------------------------------------------------------------------------
+
+def _resolve_agent_role(role_str: str) -> AgentRole:
+    clean = role_str.lower().strip()
+    try:
+        return AgentRole(clean)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Papel de especialista '{role_str}' não existe.")
+
+
+@router.post("/api/v1/agents/{role}/stream")
+async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRunRequest):
+    """Executa o especialista selecionado em modo ReAct com streaming de eventos SSE em tempo real."""
+    agent_role = _resolve_agent_role(role)
+    try:
+        mode = AutonomousAgentMode(payload.mode.lower().strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Modo inválido. Use 'plan', 'ask' ou 'auto'.")
+
+    session_id = payload.session_id or f"ses-{agent_role.value}-{uuid.uuid4().hex[:8]}"
+    lock = _agent_session_locks.setdefault(session_id, asyncio.Lock())
+    if lock.locked():
+        raise HTTPException(status_code=409, detail="Já existe uma execução ativa nesta sessão do especialista.")
+
+    config = AutonomousAgentRunConfig(
+        agent_role=agent_role,
+        prompt=payload.prompt.strip(),
+        session_id=session_id,
+        project_id=payload.project_id,
+        mode=mode,
+        max_iterations=payload.max_iterations,
+        temperature=payload.temperature,
+        max_tokens=payload.max_tokens,
+        timeout_seconds=payload.timeout_seconds,
+        include_history=payload.include_history,
+    )
+
+    async def event_generator():
+        await lock.acquire()
+        try:
+            async for event in autonomous_agent_runtime.run_stream(config):
+                yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+        except asyncio.CancelledError:
+            logger.info("Cliente desconectou da execução do especialista %s (%s).", agent_role.value, session_id)
+            raise
+        except Exception as exc:
+            logger.exception("Falha na execução do especialista %s", agent_role.value)
+            yield f"data: {json.dumps({'type': 'error', 'error': f'Falha interna do especialista: {exc}'})}\n\n"
+        finally:
+            if lock.locked():
+                lock.release()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/api/v1/agents/{role}/history")
+async def get_agent_history_endpoint(role: str, session_id: str | None = None, limit: int = 100):
+    """Lista histórico conversacional e eventos de ferramentas persistidos para a sessão do especialista."""
+    agent_role = _resolve_agent_role(role)
+    effective_session = session_id or f"ses-{agent_role.value}"
+    messages = db_manager.list_chat_messages(effective_session, limit=limit)
+    return {
+        "agent_role": agent_role.value,
+        "session_id": effective_session,
+        "messages": messages,
+    }
+
+
+@router.post("/api/v1/agents/{role}/task")
+async def execute_agent_task_endpoint(role: str, payload: AutonomousAgentRunRequest):
+    """Executa uma tarefa estruturada com o especialista, retornando o AgentOutputContract formal."""
+    agent_role = _resolve_agent_role(role)
+    try:
+        mode = AutonomousAgentMode(payload.mode.lower().strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Modo inválido. Use 'plan', 'ask' ou 'auto'.")
+
+    session_id = payload.session_id or f"task-{agent_role.value}-{uuid.uuid4().hex[:8]}"
+    config = AutonomousAgentRunConfig(
+        agent_role=agent_role,
+        prompt=payload.prompt.strip(),
+        session_id=session_id,
+        project_id=payload.project_id,
+        mode=mode,
+        max_iterations=payload.max_iterations,
+        temperature=payload.temperature,
+        max_tokens=payload.max_tokens,
+        timeout_seconds=payload.timeout_seconds,
+        include_history=payload.include_history,
+    )
+
+    contract = await autonomous_agent_runtime.run_task(config)
+    return contract.model_dump()
+

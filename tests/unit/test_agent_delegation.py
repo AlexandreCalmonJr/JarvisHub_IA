@@ -1,3 +1,4 @@
+import pytest
 from agents.registry import AgentRegistry
 from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
 
@@ -7,7 +8,7 @@ def test_agent_registry_lookup_and_tools():
     cyber = registry.get_profile(AgentRole.CYBERSECURITY_ENGINEER)
     assert cyber is not None
     assert "scan_secrets" in cyber.allowed_tools
-    assert cyber.is_read_only is True
+    assert cyber.is_read_only is False
 
 
 def test_multi_agent_structured_deliberation():
@@ -51,3 +52,107 @@ def test_multi_agent_structured_deliberation():
     assert len(security_output.evidence) >= 1
     assert architect_output.resource_usage.model_name == "llama3.2:3b"
     assert security_output.resource_usage.model_name == "qwen2.5:7b"
+
+
+def test_build_specialist_prompt_injects_ecc_skills_and_memory(tmp_path):
+    from services.memory.database import DatabaseManager
+    from services.orchestration.graph import build_specialist_prompt
+    from services.skills_manager import SkillMetadata, SkillsCatalog
+    from services.skills_manager.validator import SkillValidator
+
+    registry = AgentRegistry()
+    catalog = SkillsCatalog()
+    inst = "Escreva testes que falham antes do código e cubra casos de borda."
+    h = SkillValidator.compute_hash(instructions=inst, templates={})
+    catalog.register_skill(
+        SkillMetadata(
+            id="ecc_tdd_workflows",
+            name="ECC Test-Driven Development",
+            version="1.0.0",
+            origin="internal",
+            license="MIT",
+            description="Fluxos TDD com testes unitários e de integração prioritários.",
+            domain="qa",
+            assigned_agents=["qa_engineer"],
+            content_hash=h,
+            is_approved=True,
+            instructions=inst,
+        ),
+        auto_approve=True,
+    )
+    db = DatabaseManager(db_path=str(tmp_path / "test.db"))
+    db.set_project_memory(
+        project_id="test-prj",
+        category="coding_standard",
+        key="naming_convention",
+        content="Use sempre snake_case em Python e tipagem estrita Pydantic.",
+    )
+
+    prompt = build_specialist_prompt(
+        agent_role="qa_engineer",
+        agent_registry=registry,
+        skills_catalog=catalog,
+        db_manager=db,
+        intent="qa_testing",
+        user_prompt="Validar suíte de testes do checkout",
+        project_id="test-prj",
+        domain="qa",
+        previous_outputs=[
+            {
+                "agent_role": "backend_developer",
+                "summary": "Implementado endpoint de checkout com validação de payload.",
+            }
+        ],
+    )
+
+    # Verifica injeção do perfil
+    assert "QA Engineer" in prompt or "qa_engineer" in prompt
+    # Verifica injeção da memória do projeto
+    assert "REGRAS E MEMÓRIAS DO PROJETO" in prompt
+    assert "snake_case" in prompt
+    # Verifica injeção da skill ECC
+    assert "ECC Test-Driven Development" in prompt
+    assert "Escreva testes que falham" in prompt
+    # Verifica injeção da colaboração prévia
+    assert "backend_developer" in prompt
+
+
+@pytest.mark.asyncio
+async def test_multi_agent_sequential_execution_in_jarvis_master():
+    from services.model_runtime import MockAdapter, ModelManager
+    from services.orchestration import JarvisMaster
+    from services.project_workspace import ProjectWorkspaceService
+    from services.security_core import SecurityCore
+
+    security = SecurityCore()
+    model_mgr = ModelManager(adapter=MockAdapter(), audit_trail=security.audit)
+    workspace = ProjectWorkspaceService(security_core=security)
+
+    master = JarvisMaster(
+        security_core=security,
+        model_manager=model_mgr,
+        workspace_service=workspace,
+    )
+
+    # Executa criação de website (aciona FRONTEND_MOBILE_DEVELOPER + SOFTWARE_ARCHITECT)
+    res = await master.execute_task(
+        user_prompt="cria um site simples de cafeteria com index.html e style.css"
+    )
+
+    assert res["is_completed"] is True
+    assert res["classified_intent"] == "project_creation"
+    assert len(res["selected_agents"]) >= 2
+    assert AgentRole.FRONTEND_MOBILE_DEVELOPER.value in res["selected_agents"]
+    assert AgentRole.SOFTWARE_ARCHITECT.value in res["selected_agents"]
+
+    # Deve conter os contratos de ambos os agentes na saída sequencial
+    outputs = res["agent_outputs"]
+    assert len(outputs) >= 2
+    roles = [o["agent_role"] for o in outputs]
+    assert AgentRole.FRONTEND_MOBILE_DEVELOPER.value in roles
+    assert AgentRole.SOFTWARE_ARCHITECT.value in roles
+
+    # Verifica consolidação no sumário final limpo e conversacional
+    summary = res["final_summary"]
+    assert "Website criado com sucesso" in summary
+    assert outputs[1]["agent_role"] == AgentRole.SOFTWARE_ARCHITECT.value

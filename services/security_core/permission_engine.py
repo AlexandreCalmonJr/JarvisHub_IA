@@ -28,8 +28,6 @@ CRITICAL_OPERATIONS: set[str] = {
 # Papéis estritamente analíticos / somente-leitura
 READ_ONLY_ROLES: set[AgentRole] = {
     AgentRole.RESEARCH_ANALYST,
-    AgentRole.PROJECT_DESIGNER_PLANNER,
-    AgentRole.UX_UI_DESIGNER,
     AgentRole.CODE_REVIEWER,
     AgentRole.THREAT_MODELING_SECURITY_ARCHITECT,
     AgentRole.PRIVACY_DATA_PROTECTION,
@@ -171,4 +169,26 @@ class PermissionEngine:
                 f"A operação crítica '{operation}' exige aprovação humana explícita."
             )
 
+        return True
+
+    def requires_approval(self, agent_role: AgentRole, operation: str) -> bool:
+        """Indica se a operação é crítica e requer aprovação humana explícita."""
+        return operation in CRITICAL_OPERATIONS
+
+    def can_propose_operation(
+        self, agent_role: AgentRole, project_id: str, operation: str
+    ) -> bool:
+        """
+        Verifica se o especialista pode propor a execução da operação para aprovação.
+        Agentes estritamente analíticos (READ_ONLY_ROLES) não podem propor modificações
+        de código ou comandos de sistema, mas especialistas autônomos podem propor
+        alterações críticas para serem aprovadas pelo operador humano no ApprovalCenter.
+        """
+        if agent_role in READ_ONLY_ROLES:
+            if operation in {"file_write", "file_delete", "shell_exec", "git_commit"}:
+                return False
+        mode = self._project_modes.get(project_id, ProjectWorkMode.READ_ONLY)
+        if mode in {ProjectWorkMode.READ_ONLY, ProjectWorkMode.PLAN_ONLY}:
+            if operation in {"file_write", "file_delete", "git_commit", "dependency_install"}:
+                return False
         return True

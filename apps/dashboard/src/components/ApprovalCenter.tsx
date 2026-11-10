@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { ApprovalRequestItem } from '../types';
+import { ApprovalRequestItem, getAgentLabel, getToolLabel } from '../types';
 import { decideApproval } from '../api';
-import { ShieldAlert, Check, X, FileDiff, UserCheck } from 'lucide-react';
+import { ShieldAlert, Check, X, FileDiff } from 'lucide-react';
 
 interface ApprovalCenterProps {
   approvals: ApprovalRequestItem[];
@@ -33,29 +33,44 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Approval Center</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
-          Autorização humana obrigatória. Agentes de IA são estritamente impedidos de autoaprovar ações.
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1280px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h2 className="claude-serif-title" style={{ fontSize: '1.6rem', fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>
+            Approval Center
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginTop: '3px' }}>
+            Autorização humana obrigatória. Agentes de IA são estritamente impedidos de autoaprovar ações.
+          </p>
+        </div>
+
+        <div className="claude-pill-badge">
+          <span>Human-in-the-Loop</span>
+          <span style={{ color: 'var(--text-muted)' }}>·</span>
+          <span style={{ color: pendingList.length > 0 ? 'var(--warning-color)' : 'var(--success-color)', fontWeight: 600 }}>
+            {pendingList.length} Pendente{pendingList.length === 1 ? '' : 's'}
+          </span>
+        </div>
       </div>
 
       {/* Identidade do Utilizador */}
-      <div style={{
-        padding: '16px 20px',
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '10px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <UserCheck size={18} color="var(--accent-color)" />
-          <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>Identidade do Autorizador Humano:</span>
+      <div
+        className="glass-card"
+        style={{
+          padding: '14px 18px',
+          borderRadius: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
+        <div>
+          <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Identidade do Autorizador Humano:
+          </span>
         </div>
         <input
           type="text"
@@ -63,117 +78,126 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
           onChange={(e) => setUserName(e.target.value)}
           placeholder="Ex: alexandre_lead"
           style={{
-            padding: '8px 12px',
+            padding: '8px 14px',
             backgroundColor: 'var(--bg-primary)',
             border: '1px solid var(--border-color)',
-            borderRadius: '6px',
+            borderRadius: '8px',
             color: 'var(--text-primary)',
             fontSize: '0.85rem',
-            width: '240px',
+            width: '260px',
+            outline: 'none',
           }}
         />
       </div>
 
       {errorMessage && (
-        <div style={{
-          padding: '12px 16px',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
-          borderRadius: '8px',
-          color: '#f87171',
-          fontSize: '0.875rem',
-        }}>
+        <div
+          style={{
+            padding: '12px 16px',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '10px',
+            color: '#f87171',
+            fontSize: '0.85rem',
+          }}
+        >
           {errorMessage}
         </div>
       )}
 
       {/* Lista de Pedidos */}
       {pendingList.length === 0 ? (
-        <div style={{
-          padding: '48px 24px',
-          textAlign: 'center',
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          color: 'var(--text-secondary)',
-        }}>
-          <ShieldAlert size={36} color="var(--text-secondary)" style={{ margin: '0 auto 12px' }} />
-          <h4 style={{ color: 'var(--text-primary)', marginBottom: '4px' }}>Nenhum pedido pendente</h4>
-          <p style={{ fontSize: '0.85rem' }}>Todas as operações foram avaliadas ou não há pedidos de escrita no momento.</p>
+        <div
+          className="glass-panel"
+          style={{
+            padding: '56px 24px',
+            textAlign: 'center',
+            borderRadius: '16px',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <ShieldAlert size={26} />
+          </div>
+          <h4 className="claude-serif-title" style={{ color: 'var(--text-primary)', fontSize: '1.25rem', marginBottom: '6px' }}>
+            Nenhum pedido pendente
+          </h4>
+          <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: '440px', margin: '0 auto' }}>
+            Todas as operações foram avaliadas ou não há pedidos de escrita no disco aguardando autorização no momento.
+          </p>
         </div>
       ) : (
         pendingList.map((appr) => (
           <div
             key={appr.id}
+            className="glass-card"
             style={{
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '12px',
+              borderRadius: '16px',
               padding: '24px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px',
+              gap: '18px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px' }}>
               <div>
                 <span className="badge badge-warning" style={{ marginBottom: '8px' }}>Pendente de Aprovação</span>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{appr.impact_summary}</h3>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  ID: {appr.id} • Agente Solicitante: <code>{appr.agent_role}</code> • Operação: <code>{appr.operation}</code>
+                <h3 className="claude-serif-title" style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', margin: '4px 0' }}>
+                  {appr.impact_summary}
+                </h3>
+                <span style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>
+                  ID: #{appr.id.slice(0, 8)} • Agente: <strong style={{ color: 'var(--accent-color)' }}>{getAgentLabel(appr.agent_role)}</strong> • Ação: <strong style={{ color: 'var(--text-primary)' }}>{getToolLabel(appr.operation)}</strong>
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   onClick={() => handleDecision(appr.id, 'reject')}
                   disabled={actionLoading === appr.id}
+                  className="btn btn-secondary"
                   style={{
                     padding: '8px 16px',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
                     color: '#f87171',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
                     gap: '6px',
                   }}
                 >
-                  <X size={16} />
+                  <X size={15} />
                   <span>Recusar</span>
                 </button>
                 <button
                   onClick={() => handleDecision(appr.id, 'approve')}
                   disabled={actionLoading === appr.id}
+                  className="btn btn-primary"
                   style={{
-                    padding: '8px 16px',
-                    backgroundColor: 'var(--success-color)',
-                    border: 'none',
-                    color: '#fff',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
+                    padding: '8px 18px',
                     gap: '6px',
                   }}
                 >
-                  <Check size={16} />
+                  <Check size={15} />
                   <span>Aprovar Operação</span>
                 </button>
               </div>
             </div>
 
             <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '8px', fontWeight: 500 }}>
                 Recursos Afetados:
               </span>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {appr.affected_resources.map((res, i) => (
-                  <code key={i} style={{ padding: '4px 8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '0.8rem' }}>
+                  <code key={i} style={{ padding: '4px 10px', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', fontSize: '0.78rem', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     {res}
                   </code>
                 ))}
@@ -182,18 +206,20 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
 
             {appr.proposed_diff && (
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <FileDiff size={16} color="var(--accent-color)" />
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Diff Unificado Proposto:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <FileDiff size={15} color="var(--accent-color)" />
+                  <span style={{ fontSize: '0.80rem', fontWeight: 600, color: 'var(--text-primary)' }}>Diff Unificado Proposto:</span>
                 </div>
                 <pre style={{
-                  padding: '12px',
-                  backgroundColor: 'var(--bg-primary)',
-                  borderRadius: '8px',
-                  fontSize: '0.8rem',
+                  padding: '14px 16px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: '10px',
+                  fontSize: '0.80rem',
                   overflowX: 'auto',
                   border: '1px solid var(--border-color)',
-                  color: '#93c5fd',
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono)',
+                  lineHeight: '1.6',
                 }}>
                   {appr.proposed_diff}
                 </pre>

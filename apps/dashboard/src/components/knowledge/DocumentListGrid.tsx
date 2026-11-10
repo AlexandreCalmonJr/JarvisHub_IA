@@ -1,0 +1,180 @@
+import React from 'react';
+import { FileText, Trash2, BookOpen, Upload, RefreshCw } from 'lucide-react';
+
+interface DocumentListGridProps {
+  documents: any[];
+  loading: boolean;
+  onDelete: (docName: string) => void;
+  onSelectFileClick: () => void;
+}
+
+export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
+  documents,
+  loading,
+  onDelete,
+  onSelectFileClick,
+}) => {
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '14px',
+        }}
+      >
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+          Documentos e Manuais no Vault
+        </h3>
+        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+          Privacidade total: arquivos processados localmente sem envio a servidores externos
+        </span>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
+          <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px' }} />
+          Carregando inventário de documentos...
+        </div>
+      ) : documents.length === 0 ? (
+        <div
+          className="glass-card"
+          style={{
+            padding: '48px 24px',
+            textAlign: 'center',
+            borderRadius: '16px',
+            border: '1px dashed rgba(255, 255, 255, 0.15)',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <BookOpen size={40} color="#38bdf8" style={{ margin: '0 auto 14px', opacity: 0.8 }} />
+          <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 6px 0' }}>
+            Nenhum documento indexado na Base de Conhecimento
+          </h4>
+          <p
+            style={{
+              fontSize: '0.84rem',
+              maxWidth: '480px',
+              margin: '0 auto 16px auto',
+              lineHeight: 1.5,
+            }}
+          >
+            Faça upload de manuais em PDF, arquivos de regras em Markdown ou aponte uma pasta local.
+            O JARVIS dividirá o conteúdo em blocos semânticos para alimentar os 26 agentes especialistas.
+          </p>
+          <button
+            onClick={onSelectFileClick}
+            className="btn btn-primary"
+            style={{ fontSize: '0.82rem', padding: '8px 18px' }}
+          >
+            <Upload size={14} /> Selecionar Primeiro Arquivo
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+            gap: '14px',
+          }}
+        >
+          {documents.map((doc) => (
+            <div
+              key={doc.doc_name}
+              className="glass-card"
+              style={{
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={18} color="#38bdf8" />
+                    <span
+                      style={{
+                        fontSize: '0.92rem',
+                        fontWeight: 700,
+                        color: '#f8fafc',
+                        wordBreak: 'break-all',
+                      }}
+                    >
+                      {doc.doc_name}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(doc.doc_name)}
+                    className="btn btn-ghost"
+                    style={{ padding: '3px', color: '#f87171' }}
+                    title="Excluir do Vault"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+                  <span className="badge badge-info" style={{ fontSize: '0.68rem' }}>
+                    {doc.file_type || 'TXT'}
+                  </span>
+                  <span className="badge badge-purple" style={{ fontSize: '0.68rem' }}>
+                    {doc.category || 'geral'}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {doc.total_chunks} blocos semânticos
+                  </span>
+                  {doc.file_size_formatted && (
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      {doc.file_size_formatted}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  fontSize: '0.72rem',
+                  color: 'var(--text-muted)',
+                  paddingTop: '8px',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                }}
+              >
+                Indexado em: {new Date(doc.created_at).toLocaleString('pt-BR')}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};

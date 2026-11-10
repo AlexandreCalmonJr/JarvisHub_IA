@@ -74,3 +74,53 @@ class SubprocessSandbox:
         sanitized_stderr = redact_string(stderr)
 
         return proc.returncode or 0, sanitized_stdout, sanitized_stderr, duration_ms
+
+    async def run_shell_command(
+        self,
+        command: str,
+        cwd: Path,
+        timeout_seconds: float | None = None,
+    ) -> tuple[int, str, str, float]:
+        """Executa um comando de shell completo, confinado ao diretório de trabalho.
+
+        Usado pelo agente de código para testes, build e comandos git. A política
+        de bloqueio de comandos destrutivos é aplicada antes, na camada de
+        ferramentas; aqui garantimos ambiente sanitizado, timeout e redação.
+        """
+        timeout = timeout_seconds or self.default_timeout_seconds
+        start_time = time.perf_counter()
+
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            cwd=str(cwd),
+            env=self._sanitize_env(),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(),
+                timeout=timeout,
+            )
+        except TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except ProcessLookupError:
+                pass
+            duration_ms = (time.perf_counter() - start_time) * 1000.0
+            raise SandboxTimeoutError(
+                f"Comando excedeu o tempo limite ({timeout}s)."
+            )
+
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+        stdout = stdout_bytes.decode("utf-8", errors="replace")[: self.max_output_chars]
+        stderr = stderr_bytes.decode("utf-8", errors="replace")[: self.max_output_chars]
+        return (
+            proc.returncode or 0,
+            redact_string(stdout),
+            redact_string(stderr),
+            duration_ms,
+        )
+

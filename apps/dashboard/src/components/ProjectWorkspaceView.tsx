@@ -1,10 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import { FolderGit2, Shield, FileCode, RefreshCw, CheckCircle } from 'lucide-react';
-import { fetchWorkspaceProjects } from '../api';
+import {
+  FolderGit2,
+  RefreshCw,
+  Search,
+} from 'lucide-react';
+import { WebhooksModal } from './workspace/WebhooksModal';
+import {
+  fetchWorkspaceProjects,
+  fetchProjectFile,
+  deleteWorkspaceProject,
+  openWorkspaceRoot,
+} from '../api';
+import { ProjectCard } from './workspace/ProjectCard';
+import { FileViewerModal } from './workspace/FileViewerModal';
+import { ProjectMemoryModal } from './workspace/ProjectMemoryModal';
+import { ImportFolderModal } from './workspace/ImportFolderModal';
+import { notify } from './common/Toast';
 
-export const ProjectWorkspaceView: React.FC = () => {
+interface ProjectWorkspaceViewProps {
+  onSelectForChat?: (projectId: string) => void;
+}
+
+export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSelectForChat }) => {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
+  const [techFilter, setTechFilter] = useState('ALL');
+  const [openingRoot, setOpeningRoot] = useState(false);
+
+  // Modais de arquivo e memória
+  const [fileModal, setFileModal] = useState<{
+    projectId: string;
+    filePath: string;
+    content: string;
+  } | null>(null);
+
+  const [memoryProjectId, setMemoryProjectId] = useState<string | null>(null);
+
+  // Modais auxiliares
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showWebhooksModal, setShowWebhooksModal] = useState(false);
+
+  const handleOpenRootFolder = async () => {
+    setOpeningRoot(true);
+    notify('Abrindo diretório geral de workspace no Windows Explorer...', 'info');
+    try {
+      const res = await openWorkspaceRoot();
+      notify(`Pasta geral aberta no Explorer: ${res?.path || 'workspace/'}`, 'success');
+    } catch (e: any) {
+      notify(`Erro ao abrir pasta de workspaces no Explorer: ${e.message}`, 'error');
+    } finally {
+      setTimeout(() => setOpeningRoot(false), 800);
+    }
+  };
 
   const loadProjects = async () => {
     setLoading(true);
@@ -22,154 +70,233 @@ export const ProjectWorkspaceView: React.FC = () => {
     loadProjects();
   }, []);
 
+  const handleOpenFile = async (projectId: string, filePath: string) => {
+    try {
+      const content = await fetchProjectFile(projectId, filePath);
+      setFileModal({ projectId, filePath, content });
+    } catch (e: any) {
+      alert(`Erro ao ler arquivo: ${e.message}`);
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      await deleteWorkspaceProject(projectId);
+      await loadProjects();
+    } catch (e: any) {
+      alert(`Erro ao excluir workspace: ${e.message}`);
+    }
+  };
+
+  const filteredProjects = projects.filter((p) => {
+    const q = searchFilter.toLowerCase();
+    const matchesSearch =
+      p.id.toLowerCase().includes(q) ||
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.description && p.description.toLowerCase().includes(q)) ||
+      (p.project_type && p.project_type.toLowerCase().includes(q));
+
+    if (!matchesSearch) return false;
+    if (techFilter !== 'ALL') {
+      const pType = (p.project_type || '').toLowerCase();
+      if (techFilter === 'PYTHON' && pType !== 'python') return false;
+      if (techFilter === 'WEB' && pType !== 'web') return false;
+      if (techFilter === 'JAVA' && pType !== 'java') return false;
+      if (techFilter === 'GO' && pType !== 'go') return false;
+      if (techFilter === 'FLUTTER' && pType !== 'flutter') return false;
+      if (techFilter === 'CSHARP' && pType !== 'csharp') return false;
+    }
+    return true;
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '26px', maxWidth: '1360px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Project Workspace</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
-            Projetos e websites físicos criados no computador dentro de <code>workspace/</code> com controle de arquivos e modificações.
+          <h2 className="claude-serif-title" style={{ fontSize: '1.6rem', fontWeight: 500, letterSpacing: '-0.02em', margin: 0 }}>
+            Project Workspace
+          </h2>
+          <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
+            Diretórios físicos no computador: Python, Java, C#, Go, Kotlin, Flutter e Web com controle local
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={loadProjects} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Atualizar Workspace
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleOpenRootFolder}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.78rem', padding: '7px 12px' }}
+            title="Abrir o diretório geral 'workspace/' no Windows Explorer do computador"
+            disabled={openingRoot}
+          >
+            <span>{openingRoot ? 'Abrindo Explorer...' : 'Abrir Pasta Geral no Explorer'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.78rem', padding: '7px 12px' }}
+            title="Importar qualquer pasta de projeto existente no seu computador para o JARVIS"
+          >
+            <span>Anexar Pasta Local</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowWebhooksModal(true)}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.78rem', padding: '7px 12px' }}
+            title="Configurar notificações em tempo real para Discord e Telegram"
+          >
+            <span>Webhooks</span>
+          </button>
+
+          <button onClick={loadProjects} className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '7px 12px' }}>
+            <span>{loading ? 'Atualizando...' : 'Atualizar'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Lista Dinâmica de Projetos */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {projects.length === 0 && !loading && (
-          <div className="card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            Nenhum projeto encontrado em <code>workspace/</code>. Peça no chat: <i>"Cria um site para mim..."</i>
-          </div>
-        )}
+      {/* Barra de Busca e Filtros Rápidos por Stack */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div
+          className="glass-panel"
+          style={{
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          <Search size={18} color="var(--text-secondary)" />
+          <input
+            type="text"
+            placeholder="Filtrar por nome de projeto, id, tecnologia (Python, Java, Go, etc.)..."
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+            style={{
+              flex: 1,
+              backgroundColor: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: 'var(--text-primary)',
+              fontSize: '0.88rem',
+            }}
+          />
+          {searchFilter && (
+            <button
+              onClick={() => setSearchFilter('')}
+              className="btn btn-ghost"
+              style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+            >
+              Limpar
+            </button>
+          )}
+        </div>
 
-        {projects.map((proj) => {
-          const isWeb = proj.files?.some((f: string) => f.endsWith('.html'));
-          const isFlutter = proj.files?.some((f: string) => f.endsWith('.yaml') || f.endsWith('.dart'));
-
-          return (
-            <div
-              key={proj.id}
+        {/* Chips de Filtro por Stack */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'ALL', label: 'Todos' },
+            { id: 'PYTHON', label: 'Python (FastAPI)' },
+            { id: 'WEB', label: 'Web (HTML/JS)' },
+            { id: 'JAVA', label: 'Java (Maven)' },
+            { id: 'GO', label: 'Go (Golang)' },
+            { id: 'FLUTTER', label: 'Flutter Mobile' },
+            { id: 'CSHARP', label: '.NET / C#' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setTechFilter(item.id)}
               style={{
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '12px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px',
+                fontSize: '0.74rem',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                border: '1px solid',
+                borderColor: techFilter === item.id ? 'var(--accent-color)' : 'var(--border-color)',
+                backgroundColor: techFilter === item.id ? 'rgba(217, 119, 87, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                color: techFilter === item.id ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: techFilter === item.id ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div
-                    style={{
-                      width: '42px',
-                      height: '42px',
-                      borderRadius: '8px',
-                      backgroundColor: 'rgba(99, 102, 241, 0.15)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <FolderGit2 size={24} color="var(--accent-color)" />
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>{proj.name}</h3>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                      workspace/{proj.id}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span className={`badge ${isWeb ? 'badge-primary' : 'badge-success'}`}>
-                    {isWeb ? 'Web / HTML5 & CSS' : isFlutter ? 'Flutter / Dart' : 'Projeto Ativo'}
-                  </span>
-                  <span className="badge badge-secondary">{proj.file_count} arquivos</span>
-                </div>
-              </div>
-
-              {/* Detalhes de Arquivos Físicos no Computador */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '12px',
-                  padding: '16px',
-                  backgroundColor: 'var(--bg-tertiary)',
-                  borderRadius: '8px',
-                }}
-              >
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tipo de Stack</span>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: '2px' }}>
-                    {isWeb ? 'HTML5 • CSS3 Moderno • Vanilla JS' : isFlutter ? 'Flutter / Dart' : 'Módulos de Código'}
-                  </div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Localização Física</span>
-                  <div style={{ fontWeight: 500, fontSize: '0.8rem', marginTop: '2px', color: 'var(--accent-color)', wordBreak: 'break-all' }}>
-                    {proj.path}
-                  </div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status no Sistema</span>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: '2px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <CheckCircle size={14} /> Pronto para Edição no Chat
-                  </div>
-                </div>
-              </div>
-
-              {/* Lista de Arquivos Gerados */}
-              <div>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FileCode size={16} /> Arquivos no Diretório:
-                </h4>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {(proj.files || []).map((file: string) => (
-                    <span
-                      key={file}
-                      style={{
-                        padding: '4px 10px',
-                        backgroundColor: 'var(--bg-primary)',
-                        borderRadius: '6px',
-                        fontSize: '0.78rem',
-                        border: '1px solid var(--border-color)',
-                        fontFamily: 'monospace',
-                        color: file.endsWith('.bak') ? 'var(--text-secondary)' : 'var(--text-primary)',
-                      }}
-                    >
-                      {file} {file.endsWith('.bak') && '(backup)'}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Alerta de Proteção e Instruções */}
-              <div
-                style={{
-                  padding: '12px 16px',
-                  backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                  border: '1px solid rgba(16, 185, 129, 0.2)',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  fontSize: '0.85rem',
-                }}
-              >
-                <Shield size={20} color="var(--success-color)" />
-                <span>
-                  <b>Modificação Rápida via Chat Ativa:</b> Para editar qualquer arquivo deste projeto, basta pedir no chat (ex: <i>"No {proj.id}, mude a cor para azul"</i> ou <i>"Altere o título para Meu Novo Site"</i>).
-                </span>
-              </div>
-            </div>
-          );
-        })}
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Grid de Projetos Responsivo */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
+          <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px' }} />
+          Escaneando workspace local do computador...
+        </div>
+      ) : filteredProjects.length === 0 ? (
+        <div
+          className="glass-panel"
+          style={{
+            textAlign: 'center',
+            padding: '48px 24px',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <FolderGit2 size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            Nenhum projeto encontrado
+          </h3>
+          <p style={{ fontSize: '0.84rem', marginTop: '6px' }}>
+            Peça no chat ao <b>JARVIS Master</b>: <i>"Crie um projeto em Python com FastAPI"</i>, <i>"Crie um projeto Java"</i>, <i>"Crie um projeto em Go"</i> ou clique em <b>Anexar Pasta Local</b> acima.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 360px), 1fr))', gap: '20px' }}>
+          {filteredProjects.map((proj) => (
+            <ProjectCard
+              key={proj.id}
+              project={proj}
+              onOpenFile={handleOpenFile}
+              onDeleteProject={handleDeleteProject}
+              onSelectForChat={onSelectForChat}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Modal de Importar / Anexar Pasta Local do PC */}
+      <ImportFolderModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={loadProjects}
+      />
+
+      {/* Modal de Arquivo */}
+      {fileModal && (
+        <FileViewerModal
+          isOpen={true}
+          onClose={() => setFileModal(null)}
+          projectId={fileModal.projectId}
+          filePath={fileModal.filePath}
+          content={fileModal.content}
+        />
+      )}
+
+      {/* Modal de Memórias & Regras */}
+      {memoryProjectId && (
+        <ProjectMemoryModal
+          isOpen={true}
+          onClose={() => setMemoryProjectId(null)}
+          projectId={memoryProjectId}
+        />
+      )}
+
+      {/* Modal de Webhooks */}
+      <WebhooksModal
+        isOpen={showWebhooksModal}
+        onClose={() => setShowWebhooksModal(false)}
+      />
     </div>
   );
 };

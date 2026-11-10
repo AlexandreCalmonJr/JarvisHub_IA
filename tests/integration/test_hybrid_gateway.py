@@ -7,6 +7,7 @@ from services.model_runtime import (
     InferenceResponse,
     MockAdapter,
     OnlineProviderConfig,
+    UniversalOnlineAdapter,
 )
 from services.security_core import AuditTrail
 
@@ -134,3 +135,73 @@ async def test_hybrid_router_resilient_fallback_on_network_outage():
     outage_events = [e for e in events if e.operation == "ONLINE_GATEWAY_OUTAGE_FALLBACK"]
     assert len(outage_events) == 1
     assert outage_events[0].severity == AuditEventSeverity.WARNING
+
+
+@pytest.mark.asyncio
+async def test_universal_online_adapter_masking_and_config():
+    cfg = OnlineProviderConfig(
+        provider_name="gemini",
+        enabled=True,
+        api_key="AIzaSy1234567890abcdefghijklmnopqrst",
+        max_budget_usd=3.0,
+    )
+    assert cfg.masked_api_key() == "AIza...qrst"
+
+    adapter = UniversalOnlineAdapter(
+        api_key=cfg.api_key,
+        provider_name="gemini",
+    )
+    assert "generativelanguage.googleapis.com" in adapter.base_url
+    assert adapter.default_model == "gemini-2.5-flash"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_api_endpoints():
+    from httpx import ASGITransport, AsyncClient
+    from apps.api.main import app
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Obter config inicial
+        res = await client.get("/api/v1/models/hybrid-config")
+        assert res.status_code == 200
+        data = res.json()
+        assert "presets" in data
+        assert any(p["id"] == "gemini" for p in data["presets"])
+        assert any(p["id"] == "groq" for p in data["presets"])
+        assert any(p["id"] == "deepseek" for p in data["presets"])
+
+        # 2. Atualizar config
+        update_payload = {
+            "provider_name": "groq",
+            "enabled": True,
+            "api_key": "gsk-mockkey123456789",
+            "default_model": "llama-3.3-70b-versatile",
+            "base_url": "https://api.groq.com/openai/v1",
+            "max_budget_usd": 10.0,
+        }
+        post_res = await client.post("/api/v1/models/hybrid-config", json=update_payload)
+        assert post_res.status_code == 200
+        cfg_data = post_res.json()["config"]
+        assert cfg_data["provider_name"] == "groq"
+        assert cfg_data["enabled"] is True
+        assert cfg_data["masked_api_key"] == "gsk-...6789"
+        assert cfg_data["max_budget_usd"] == 10.0
+
+        # 3. Modelos no inventário mostram o status do hybrid_gateway atualizado
+        models_res = await client.get("/api/v1/models")
+        assert models_res.status_code == 200
+        gateway_status = models_res.json()["hybrid_gateway"]
+        assert gateway_status["enabled"] is True
+        assert gateway_status["provider"] == "groq"
+        assert gateway_status["has_api_key"] is True
+
+        # 4. Teste de conexão com chave mock retorna erro amigável sem quebrar o servidor
+        test_res = await client.post(
+            "/api/v1/models/hybrid-config/test",
+            json={"provider_name": "groq", "api_key": "invalid_test_key"},
+        )
+        assert test_res.status_code == 200
+        test_data = test_res.json()
+        assert test_data["success"] is False
+        assert "error" in test_data

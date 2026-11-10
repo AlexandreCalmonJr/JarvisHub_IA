@@ -32,7 +32,7 @@ class InferenceQueue:
         self,
         coro_func: Callable[[], Awaitable[Any]],
         task_id: str | None = None,
-        timeout_seconds: float = 90.0,
+        timeout_seconds: float = 240.0,
     ) -> Any:
         self._waiting_count += 1
         try:

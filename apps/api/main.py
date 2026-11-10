@@ -1,58 +1,53 @@
-import json
 import logging
 from pathlib import Path
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 
-from agents.profiles.catalog import AGENT_PROFILES
-from services.memory import DatabaseManager
-from services.model_runtime import ModelManager, OllamaAdapter
-from services.orchestration import JarvisMaster, TaskState
-from services.project_workspace import ProjectWorkspaceService
-from services.resource_manager import ResourceManager
-from services.security_core import SecurityCore, UnauthorizedApprovalError
-from services.skills_manager import SkillMetadata, SkillsCatalog
+from services.observability import attach_server_logging
 
-logger = logging.getLogger("jarvis.api")
-
-# Inicialização dos serviços centrais do monólito modular
-security_core = SecurityCore()
-workspace_service = ProjectWorkspaceService(security_core=security_core)
-model_manager = ModelManager(
-    adapter=OllamaAdapter(),
-    kill_switch=security_core.kill_switch,
-    audit_trail=security_core.audit,
+# Importa singletons e serviços centrais de apps.api.deps
+from apps.api.deps import (
+    db_manager,
+    model_manager,
+    security_core,
+    skills_catalog,
+    workspace_service,
+    knowledge_vault_service,
+    webhook_service,
+    resolve_frontend_dist,
+    logger,
 )
-jarvis_master = JarvisMaster(
-    security_core=security_core,
-    model_manager=model_manager,
-    workspace_service=workspace_service,
+
+# Importa schemas comuns para re-exportação
+from apps.api.schemas import ChatRequest
+
+# Importa roteadores modulares (Clean Architecture)
+from apps.api.routers import (
+    chat,
+    workspace,
+    models,
+    hardware,
+    agents,
+    skills,
+    knowledge,
+    security,
+    studios,
+    system,
+    coding,
+    mcp,
+    voice,
 )
-db_manager = DatabaseManager()
-resource_manager = ResourceManager(audit_trail=security_core.audit)
-skills_catalog = SkillsCatalog()
 
-# Popula catálogo com skills internas e importadas (ECC)
-for s_dir in [Path("skills/internal"), Path("skills/imported")]:
-    if s_dir.exists():
-        for f in s_dir.glob("*.json"):
-            try:
-                skill_dict = json.loads(f.read_text(encoding="utf-8"))
-                meta = SkillMetadata(**skill_dict)
-                skills_catalog.register_skill(meta, auto_approve=True)
-            except Exception as exc:
-                logger.warning("Falha ao carregar skill %s: %s", f.name, exc)
-
+# Inicialização central do FastAPI
 app = FastAPI(
-    title="JARVIS AI HUB API",
-    version="0.1.0",
-    description="Backend central REST e WebSocket para orquestração de agentes especializados local-first",
+    title="JARVIS AI HUB 3.0",
+    version="3.0.0",
+    description="Backend central REST e WebSocket para orquestração de 26 agentes especializados local-first",
 )
 
+# Configuração de CORS permissivo para desenvolvimento e produção local
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -61,272 +56,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Conecta buffer circular de observabilidade e logs em tempo real
+attach_server_logging()
 
-# Schemas para API
-class ChatRequest(BaseModel):
-    prompt: str = Field(..., description="Instrução ou pedido do utilizador")
-    session_id: str | None = None
-    project_id: str | None = None
-
-
-class ApprovalDecisionRequest(BaseModel):
-    action: str = Field(..., description="'approve' ou 'reject'")
-    decided_by: str = Field(..., description="Identificador do utilizador humano autorizador")
-    reason: str | None = None
-
-
-class KillSwitchRequest(BaseModel):
-    target: str = Field(..., description="'global' ou 'task'")
-    task_id: str | None = None
-    reason: str = "Ação acionada pelo utilizador"
-
-
-class DevicePairRequest(BaseModel):
-    device_name: str = Field(..., description="Nome de identificação do dispositivo móvel")
-
-
-class DeviceRevokeRequest(BaseModel):
-    device_id: str = Field(..., description="Identificador do dispositivo a revogar")
-    reason: str = "Revogação pelo utilizador"
-
-
-class AssignAgentsRequest(BaseModel):
-    agent_roles: list[str] = Field(..., description="Lista de papéis de agentes associados à skill")
-
-
-@app.get("/api")
-async def root():
-    return {
-        "name": "JARVIS AI HUB API",
-        "version": "0.1.0",
-        "mode": "local-first",
-        "status": "operational",
-    }
-
-
-@app.get("/api/v1/system/health")
-async def health_check():
-    ollama_ok = await model_manager.check_health()
-    return {
-        "status": "healthy" if ollama_ok else "degraded",
-        "components": {
-            "security_core": "operational",
-            "approval_engine": "operational",
-            "model_runtime": "operational" if ollama_ok else "offline",
-            "inference_queue": {
-                "active": model_manager.queue.active_count,
-                "waiting": model_manager.queue.waiting_count,
-            },
-            "kill_switch": {"global_killed": security_core.kill_switch.is_global_killed()},
-        },
-    }
-
-
-@app.post("/api/v1/chat")
-async def chat_endpoint(request: ChatRequest):
-    try:
-        result: TaskState = await jarvis_master.execute_task(
-            user_prompt=request.prompt,
-            session_id=request.session_id,
-            project_id=request.project_id,
-        )
-        try:
-            if request.project_id:
-                db_manager.register_project(
-                    project_id=request.project_id,
-                    name=request.project_id,
-                    root_path=f"workspace/{request.project_id}",
-                )
-            db_manager.save_task(
-                task_id=result.task_id,
-                session_id=result.session_id,
-                prompt=request.prompt,
-                state_dict=result.model_dump(),
-                project_id=request.project_id,
-            )
-        except Exception as exc:
-            logger.warning("Falha ao salvar tarefa no banco de dados: %s", exc)
-        return result
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-@app.get("/api/v1/system/resources")
-async def system_resources():
-    return resource_manager.collect_metrics(
-        queue_active=model_manager.queue.active_count,
-        queue_waiting=model_manager.queue.waiting_count,
-    )
-
-
-@app.get("/api/v1/tasks")
-async def list_tasks_endpoint(limit: int = 50):
-    return db_manager.list_tasks(limit=limit)
-
-
-@app.get("/api/v1/models")
-async def list_models_endpoint():
-    return {
-        "models": [
-            {
-                "name": "llama3.2:3b",
-                "role": "Master, Orquestração e JSON",
-                "speed": "10.29 t/s",
-                "context": 131072,
-                "status": "ready",
-            },
-            {
-                "name": "qwen2.5-coder:7b",
-                "role": "Fullstack Coding, Refatoração e Diffs",
-                "speed": "4.80 t/s",
-                "context": 32768,
-                "status": "ready",
-            },
-            {
-                "name": "qwen2.5:7b",
-                "role": "Arquitetura, Raciocínio Complexo e QA",
-                "speed": "4.50 t/s",
-                "context": 32768,
-                "status": "ready",
-            },
-        ],
-        "concurrency_limit": 1,
-        "queue_status": {
-            "active": model_manager.queue.active_count,
-            "waiting": model_manager.queue.waiting_count,
-        },
-        "hybrid_gateway": {
-            "enabled": False,
-            "max_budget_usd": 5.0,
-            "current_spend_usd": 0.0,
-            "fallback_route": "ollama_local",
-        },
-    }
-
-
-@app.get("/api/v1/skills")
-async def list_skills_endpoint():
-    return skills_catalog.list_all_skills()
-
-
-@app.post("/api/v1/skills/{skill_id}/toggle")
-async def toggle_skill_endpoint(skill_id: str):
-    skill = skills_catalog.get_skill(skill_id)
-    if skill:
-        revoked = skills_catalog.revoke_skill(skill_id, reason="Desativado via dashboard")
-        return {"status": "revoked", "skill": revoked}
-    else:
-        try:
-            approved = skills_catalog.approve_skill(skill_id)
-            return {"status": "approved", "skill": approved}
-        except ValueError as ve:
-            raise HTTPException(status_code=404, detail=str(ve))
-
-
-@app.post("/api/v1/skills/{skill_id}/assign-agents")
-async def assign_agents_endpoint(skill_id: str, payload: AssignAgentsRequest):
-    try:
-        updated = skills_catalog.assign_agents(skill_id, payload.agent_roles)
-        return {"status": "updated", "skill": updated}
-    except ValueError as ve:
-        raise HTTPException(status_code=404, detail=str(ve))
-
-
-@app.get("/api/v1/agents")
-async def list_agents_endpoint():
-    return [
-        {
-            "role": profile.role.value if hasattr(profile.role, "value") else str(profile.role),
-            "name": profile.name,
-            "mission": profile.mission,
-            "preferred_model": profile.preferred_model,
-            "is_read_only": profile.is_read_only,
-            "allowed_tools": profile.allowed_tools,
-        }
-        for profile in AGENT_PROFILES.values()
-    ]
-
-
-@app.get("/api/v1/workspace/projects")
-async def list_workspace_projects_endpoint():
-    return workspace_service.list_available_projects()
-
-
-@app.get("/api/v1/approvals")
-async def list_approvals():
-    return security_core.approval_engine.list_pending_requests()
-
-
-@app.post("/api/v1/approvals/{request_id}/decide")
-async def decide_approval(request_id: str, payload: ApprovalDecisionRequest):
-    try:
-        if payload.action == "approve":
-            decided = security_core.approval_engine.approve_request(
-                request_id=request_id,
-                decided_by=payload.decided_by,
-                decision_reason=payload.reason,
-            )
-            # Retoma tarefa associada
-            await jarvis_master.resume_after_approval(
-                task_id=decided.task_id,
-                approved_by=payload.decided_by,
-            )
-            return {"status": "approved", "request": decided}
-        elif payload.action == "reject":
-            decided = security_core.approval_engine.reject_request(
-                request_id=request_id,
-                decided_by=payload.decided_by,
-                reason=payload.reason or "Rejeitado pelo utilizador",
-            )
-            return {"status": "rejected", "request": decided}
-        else:
-            raise HTTPException(status_code=400, detail="Ação inválida. Use 'approve' ou 'reject'.")
-    except UnauthorizedApprovalError as uae:
-        raise HTTPException(status_code=403, detail=str(uae))
-    except ValueError as ve:
-        raise HTTPException(status_code=404, detail=str(ve))
-
-
-@app.post("/api/v1/system/kill-switch")
-async def trigger_kill_switch(payload: KillSwitchRequest):
-    if payload.target == "global":
-        security_core.kill_switch.trigger_global_kill(reason=payload.reason)
-        return {"status": "global_kill_activated"}
-    elif payload.target == "task":
-        if not payload.task_id:
-            raise HTTPException(
-                status_code=400, detail="task_id é obrigatório para cancelar tarefa."
-            )
-        security_core.kill_switch.cancel_task(payload.task_id, reason=payload.reason)
-        return {"status": "task_cancelled", "task_id": payload.task_id}
-    else:
-        raise HTTPException(status_code=400, detail="Alvo inválido.")
-
-
-@app.post("/api/v1/mobile/pair")
-async def pair_mobile_device(payload: DevicePairRequest):
-    reg = security_core.device_auth.pair_device(payload.device_name)
-    return {
-        "status": "paired",
-        "device_id": reg.device_id,
-        "device_name": reg.device_name,
-        "device_token": reg.device_token,
-    }
-
-
-@app.get("/api/v1/mobile/devices")
-async def list_mobile_devices():
-    return security_core.device_auth.list_devices()
-
-
-@app.post("/api/v1/mobile/revoke")
-async def revoke_mobile_device(payload: DeviceRevokeRequest):
-    try:
-        revoked = security_core.device_auth.revoke_device(payload.device_id, reason=payload.reason)
-        return {"status": "revoked", "device_id": revoked.device_id}
-    except ValueError as ve:
-        raise HTTPException(status_code=404, detail=str(ve))
-
+# Inclusão dos roteadores de domínio desacoplados
+app.include_router(system.router)
+app.include_router(chat.router)
+app.include_router(workspace.router)
+app.include_router(models.router)
+app.include_router(hardware.router)
+app.include_router(agents.router)
+app.include_router(skills.router)
+app.include_router(knowledge.router)
+app.include_router(security.router)
+app.include_router(studios.router)
+app.include_router(coding.router)
+app.include_router(mcp.router)
+app.include_router(voice.router)
 
 # Monta aplicativo mobile Flutter (PWA) se compilado
 mobile_dist = Path("apps/mobile/build/web")
@@ -337,7 +83,97 @@ if mobile_dist.exists():
 
     app.mount("/mobile", StaticFiles(directory=str(mobile_dist), html=True), name="mobile_app")
 
-# Monta dashboard web estático se compilado
-dist_path = Path("apps/dashboard/dist")
-if dist_path.exists():
-    app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="dashboard")
+# Monta dashboard web React estático com suporte total a rotas SPA (Single Page Application)
+react_dist = resolve_frontend_dist()
+if react_dist and (react_dist / "index.html").exists():
+    index_file = react_dist / "index.html"
+
+    # Rotas declarativas do painel para navegação direta e bookmarks sem erro 404
+    spa_routes = [
+        "/studio",
+        "/chat",
+        "/office",
+        "/workspace",
+        "/tasks",
+        "/agents",
+        "/skills",
+        "/models",
+        "/advisor",
+        "/server_logs",
+        "/approvals",
+        "/security",
+        "/overview",
+        "/backend_studio",
+        "/quality",
+        "/design",
+        "/intelligence",
+        "/coding",
+    ]
+
+    no_cache_headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+
+    for route_path in spa_routes:
+        @app.get(route_path, include_in_schema=False)
+        async def serve_spa_route():
+            return FileResponse(index_file, headers=no_cache_headers)
+
+    class SPAStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope):
+            response = await super().get_response(path, scope)
+            if response.status_code == 404 and not path.startswith("api/") and not path.startswith("mobile/"):
+                fallback_resp = await super().get_response("index.html", scope)
+                for k, v in no_cache_headers.items():
+                    fallback_resp.headers[k] = v
+                return fallback_resp
+            if path in ("", "index.html"):
+                for k, v in no_cache_headers.items():
+                    response.headers[k] = v
+            return response
+
+    logger.info("Painel React/Vite montado com SPA fallback na rota raiz / a partir de %s", react_dist)
+    app.mount("/", SPAStaticFiles(directory=str(react_dist), html=True), name="dashboard")
+elif react_dist:
+    logger.info("Painel React/Vite montado na rota raiz / a partir de %s", react_dist)
+    app.mount("/", StaticFiles(directory=str(react_dist), html=True), name="dashboard")
+else:
+    logger.warning("Bundle do React não localizado. Verifique se o comando 'npm run build' foi executado.")
+
+    @app.get("/", response_class=HTMLResponse)
+    async def fallback_home():
+        return HTMLResponse(
+            """<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>JARVIS AI Hub — Conectado</title>
+            <style>
+            body { background: #070a12; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 16px; box-sizing: border-box; }
+            .card { background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(255, 255, 255, 0.1); padding: 40px; border-radius: 16px; text-align: center; max-width: 520px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+            .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; margin-bottom: 16px; }
+            h1 { color: #818cf8; font-size: 1.6rem; margin: 0 0 12px 0; font-weight: 700; letter-spacing: -0.02em; }
+            p { color: #94a3b8; line-height: 1.6; font-size: 0.92rem; margin: 0 0 24px 0; }
+            .btn { background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #fff; border: none; padding: 12px 28px; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 0.9rem; transition: opacity 0.2s; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4); }
+            .btn:hover { opacity: 0.9; }
+            </style></head><body>
+            <div class="card">
+            <div class="badge">● Backend Operacional</div>
+            <h1>JARVIS AI HUB — Conectado</h1>
+            <p>O monólito modular está 100% ativo e sincronizado. Clique abaixo para recarregar o estúdio interativo.</p>
+            <button class="btn" onclick="window.location.reload()">Carregar Painel do Usuário</button>
+            </div></body></html>"""
+        )
+
+# Re-exportações para retrocompatibilidade com scripts de automação e testes
+__all__ = [
+    "app",
+    "db_manager",
+    "model_manager",
+    "security_core",
+    "skills_catalog",
+    "workspace_service",
+    "knowledge_vault_service",
+    "webhook_service",
+    "ChatRequest",
+]

@@ -1,6 +1,5 @@
 import React from 'react';
 import { SystemHealth, ApprovalRequestItem } from '../types';
-import { ShieldCheck, Cpu, HardDrive, Clock } from 'lucide-react';
 
 interface OverviewProps {
   health: SystemHealth | null;
@@ -8,162 +7,163 @@ interface OverviewProps {
 }
 
 export const Overview: React.FC<OverviewProps> = ({ health, approvals }) => {
-  const pendingCount = approvals.filter(a => a.status === 'pending').length;
+  const pendingCount = approvals.filter((a) => a.status === 'pending').length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Visão Geral do Hub</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
-          Estado do notebook, runtime de IA local e integridade de políticas em tempo real.
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', maxWidth: '1280px', margin: '0 auto' }}>
+      {/* Editorial Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h2 className="claude-serif-title" style={{ fontSize: '1.6rem', fontWeight: 500, letterSpacing: '-0.02em', margin: 0 }}>
+            Visão Geral
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginTop: '3px' }}>
+            Telemetria de hardware local e status do sistema em tempo real
+          </p>
+        </div>
+
+        <div className="claude-pill-badge">
+          <span>Sistema Confinado · 127.0.0.1</span>
+        </div>
       </div>
 
-      {/* Cards de Métricas */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-        <div style={{
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          padding: '20px',
-        }}>
+      {/* Grid de Cards de Métricas Principais */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
+          gap: '16px',
+        }}
+      >
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Estado Global</span>
-            <ShieldCheck size={20} color="var(--success-color)" />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.80rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Estado Global</span>
           </div>
-          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-primary)' }}>
               {health?.status === 'healthy' ? 'Operacional' : 'Degradado'}
             </span>
-            <span className="badge badge-success">Local-First</span>
+            <span className="badge" style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-secondary)' }}>Local-First</span>
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', display: 'block' }}>
-            Windows 10 • Intel i5 8th Gen • 32GB RAM
+          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '8px', display: 'block' }}>
+            Windows 10 • Intel i5 • 32GB RAM
           </span>
         </div>
 
-        <div style={{
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          padding: '20px',
-        }}>
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Fila de Inferência</span>
-            <Cpu size={20} color="var(--accent-color)" />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.80rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Fila de Inferência</span>
           </div>
           <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+            <span style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-primary)' }}>
               {health?.components.inference_queue.active || 0} Ativa
             </span>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.80rem' }}>
               ({health?.components.inference_queue.waiting || 0} em espera)
             </span>
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', display: 'block' }}>
-            Limite estrito: 1 concorrência (proteção de CPU)
+          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '8px', display: 'block' }}>
+            Controle de saturação de CPU local
           </span>
         </div>
 
-        <div style={{
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          padding: '20px',
-        }}>
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Aprovações Pendentes</span>
-            <Clock size={20} color={pendingCount > 0 ? 'var(--warning-color)' : 'var(--text-secondary)'} />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.80rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Aprovações Pendentes</span>
           </div>
-          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{pendingCount}</span>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-primary)' }}>{pendingCount}</span>
             {pendingCount > 0 && <span className="badge badge-warning">Ação Necessária</span>}
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', display: 'block' }}>
+          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '8px', display: 'block' }}>
             Operações críticas pausadas aguardando humano
           </span>
         </div>
 
-        <div style={{
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          padding: '20px',
-        }}>
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Segurança & Políticas</span>
-            <HardDrive size={20} color="var(--success-color)" />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.80rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Segurança & Políticas</span>
           </div>
-          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>Ativo</span>
-            <span className="badge badge-info">Zero Bypass</span>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-primary)' }}>Ativo</span>
+            <span className="badge" style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-secondary)' }}>Zero Bypass</span>
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', display: 'block' }}>
-            Path Traversal Guard • Redaction • Kill Switch
+          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '8px', display: 'block' }}>
+            Auditoria HMAC e Sandbox habilitados
           </span>
         </div>
       </div>
 
-      {/* Modelos Disponíveis */}
-      <div style={{
-        backgroundColor: 'var(--bg-secondary)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '12px',
-        padding: '24px',
-      }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '16px' }}>
-          Runtime de IA Local (Ollama)
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-tertiary)',
-            borderRadius: '8px',
-          }}>
-            <div>
-              <span style={{ fontWeight: 600 }}>llama3.2:3b</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: '12px' }}>
-                2.0 GB • Q4_K_M • Benchmark medido: 10.3 t/s na CPU
-              </span>
+      {/* Painel Informativo sobre o Monólito e Agentes */}
+      <div
+        className="glass-panel"
+        style={{
+          padding: '24px',
+          borderRadius: '14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+        }}
+      >
+        <div>
+          <h3 className="claude-serif-title" style={{ fontSize: '1.15rem', fontWeight: 500, margin: 0 }}>
+            Capacidades do JARVIS Agent Studio
+          </h3>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+            gap: '16px',
+          }}
+        >
+          <div
+            style={{
+              padding: '16px 18px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            <div style={{ marginBottom: '6px' }}>
+              <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>26 Especialistas em Cadeia</strong>
             </div>
-            <span className="badge badge-success">Padrão Master & Triagem</span>
+            <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', lineHeight: '1.5', margin: 0 }}>
+              Delegação multi-agente automática (Dev + Arquiteto + QA + Segurança) com geração de pareceres e contratos formais.
+            </p>
           </div>
 
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-tertiary)',
-            borderRadius: '8px',
-          }}>
-            <div>
-              <span style={{ fontWeight: 600 }}>qwen2.5-coder:7b</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: '12px' }}>
-                4.7 GB • Q4_K_M • Coder & Code Reviewer
-              </span>
+          <div
+            style={{
+              padding: '16px 18px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            <div style={{ marginBottom: '6px' }}>
+              <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>Live Artifact Canvas</strong>
             </div>
-            <span className="badge badge-info">Sob Demanda (Código)</span>
+            <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', lineHeight: '1.5', margin: 0 }}>
+              Preview web em tempo real (HTML/CSS), inspeção de diff com realce de sintaxe e alternância Wireframe vs High-Fidelity.
+            </p>
           </div>
 
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            backgroundColor: 'var(--bg-tertiary)',
-            borderRadius: '8px',
-          }}>
-            <div>
-              <span style={{ fontWeight: 600 }}>qwen2.5:7b</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: '12px' }}>
-                4.7 GB • Q4_K_M • Raciocínio & Modelagem de Ameaças
-              </span>
+          <div
+            style={{
+              padding: '16px 18px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            <div style={{ marginBottom: '6px' }}>
+              <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>Memória Persistente & Skills</strong>
             </div>
-            <span className="badge badge-info">Sob Demanda (Segurança/BI)</span>
+            <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', lineHeight: '1.5', margin: 0 }}>
+              Regras do usuário e decisões de arquitetura persistidas em SQLite e injetadas ativamente em cada prompt.
+            </p>
           </div>
         </div>
       </div>

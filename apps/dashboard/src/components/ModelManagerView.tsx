@@ -1,18 +1,75 @@
 import React, { useState, useEffect } from 'react';
-import { Server, Cpu, CloudOff, Zap, ShieldCheck, RefreshCw } from 'lucide-react';
-import { fetchModels } from '../api';
+import {
+  fetchModels,
+  fetchHybridConfig,
+  saveHybridConfig,
+  testHybridConnection,
+  fetchCuratedHuggingFaceModels,
+  searchHuggingFaceModels,
+  fetchAgentModelRecommendations,
+  API_BASE,
+} from '../api';
+import { SetupWizardModal } from './common/SetupWizardModal';
+import { notify } from './common/Toast';
+import { ModelStatusHero } from './models/ModelStatusHero';
+import { HybridGatewayConfig, ProviderCard } from './models/HybridGatewayConfig';
+import { HuggingFaceHubSection } from './models/HuggingFaceHubSection';
+import { LocalModelsGrid } from './models/LocalModelsGrid';
+import { KeyVaultManager } from './models/KeyVaultManager';
 
 export const ModelManagerView: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub'>('vault');
+
+  // Form State para Gateway Híbrido
+  const [provider, setProvider] = useState<string>('gemini');
+  const [apiKey, setApiKey] = useState<string>('');
+  const [showKey, setShowKey] = useState<boolean>(false);
+  const [defaultModel, setDefaultModel] = useState<string>('gemini-1.5-flash');
+  const [baseUrl, setBaseUrl] = useState<string>('https://generativelanguage.googleapis.com/v1beta/openai');
+  const [maxBudget, setMaxBudget] = useState<number>(5.0);
+  const [enabled, setEnabled] = useState<boolean>(false);
+
+  // Estado dos testes e salvamento
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // Estados Hugging Face Hub & Instalação 1-Clique
+  const [hfCurated, setHfCurated] = useState<any[]>([]);
+  const [hfSearchQuery, setHfSearchQuery] = useState('');
+  const [hfSearchResults, setHfSearchResults] = useState<any[]>([]);
+  const [isHfSearching, setIsHfSearching] = useState(false);
+  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [downloadStatusText, setDownloadStatusText] = useState<string>('');
+  const [agentRecommendations, setAgentRecommendations] = useState<Record<string, { model: string; reason: string }>>({});
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetchModels();
-      setData(res);
+      const [modelsRes, hybridRes, hfRes, recsRes] = await Promise.all([
+        fetchModels().catch(() => null),
+        fetchHybridConfig().catch(() => null),
+        fetchCuratedHuggingFaceModels().catch(() => []),
+        fetchAgentModelRecommendations().catch(() => ({})),
+      ]);
+      if (modelsRes) setData(modelsRes);
+      if (hfRes && Array.isArray(hfRes)) setHfCurated(hfRes);
+      if (recsRes) setAgentRecommendations(recsRes);
+
+      if (hybridRes) {
+        setProvider(hybridRes.provider_name || 'gemini');
+        setEnabled(Boolean(hybridRes.enabled));
+        setDefaultModel(hybridRes.default_model || 'gemini-1.5-flash');
+        setBaseUrl(hybridRes.base_url || '');
+        setMaxBudget(hybridRes.max_budget_usd || 5.0);
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Falha ao carregar modelos e configurações:', e);
     } finally {
       setLoading(false);
     }
@@ -22,84 +79,376 @@ export const ModelManagerView: React.FC = () => {
     loadData();
   }, []);
 
+  const handleProviderSelect = (card: ProviderCard) => {
+    setProvider(card.id);
+    setDefaultModel(card.defaultModel);
+    setBaseUrl(card.baseUrl);
+    setTestResult(null);
+  };
+
+  const handleTestConnection = async () => {
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const payload: any = {
+        provider_name: provider,
+        default_model: defaultModel,
+        base_url: baseUrl || undefined,
+      };
+      if (apiKey && apiKey.trim()) {
+        payload.api_key = apiKey.trim();
+      }
+      const res = await testHybridConnection(payload);
+      if (res.success) {
+        setTestResult({
+          success: true,
+          message: `${res.message} (Latência: ${res.latency_ms}ms)`,
+        });
+      } else {
+        setTestResult({
+          success: false,
+          error: res.error || 'Falha ao conectar ao provedor especificado.',
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        error: err.message || 'Erro inesperado ao testar conexão.',
+      });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaveLoading(true);
+    setSaveMessage(null);
+    try {
+      const payload: any = {
+        provider_name: provider,
+        enabled: enabled,
+        default_model: defaultModel,
+        base_url: baseUrl || undefined,
+        max_budget_usd: Number(maxBudget),
+      };
+      if (apiKey && apiKey.trim()) {
+        payload.api_key = apiKey.trim();
+      }
+      await saveHybridConfig(payload);
+      setSaveMessage('Configurações salvas e aplicadas com sucesso!');
+      setApiKey(''); // Limpa por segurança
+      await loadData();
+      setTimeout(() => setSaveMessage(null), 4000);
+    } catch (err: any) {
+      alert(`Erro ao salvar: ${err.message}`);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleSearchHf = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!hfSearchQuery.trim()) {
+      setHfSearchResults([]);
+      return;
+    }
+    setIsHfSearching(true);
+    try {
+      const results = await searchHuggingFaceModels(hfSearchQuery.trim(), 8);
+      setHfSearchResults(results);
+      if (results.length === 0) {
+        notify('Nenhum modelo compatível encontrado no Hugging Face', 'info');
+      }
+    } catch (err: any) {
+      notify(`Erro ao buscar no Hugging Face: ${err.message}`, 'error');
+    } finally {
+      setIsHfSearching(false);
+    }
+  };
+
+  const isModelInstalled = (tag: string) => {
+    if (!data?.models || !Array.isArray(data.models)) return false;
+    const cleanTag = tag.toLowerCase().replace(/^hf\.co\//, '');
+    return data.models.some((m: any) => {
+      const mName = (m.name || '').toLowerCase();
+      return mName.includes(cleanTag) || cleanTag.includes(mName);
+    });
+  };
+
+  const handleInstallModel = async (modelTag: string, displayName: string) => {
+    if (downloadingModelId) {
+      notify('Já existe uma instalação em andamento', 'warning');
+      return;
+    }
+    setDownloadingModelId(modelTag);
+    setDownloadProgress(5);
+    setDownloadStatusText('Conectando ao Hugging Face & Ollama Engine...');
+    notify(`Iniciando download de ${displayName}...`, 'info');
+
+    try {
+      const response = await fetch(`${API_BASE}/models/huggingface/install`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_tag: modelTag, display_name: displayName }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Falha ao iniciar stream de instalação');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(trimmed.slice(6));
+              if (eventData.status === 'downloading') {
+                if (eventData.total && eventData.completed) {
+                  const pct = Math.min(99, Math.round((eventData.completed / eventData.total) * 100));
+                  setDownloadProgress(pct);
+                  setDownloadStatusText(`Baixando camadas: ${pct}% concluído`);
+                } else if (eventData.percent) {
+                  setDownloadProgress(eventData.percent);
+                  setDownloadStatusText(`Baixando: ${eventData.percent}%`);
+                }
+              } else if (eventData.status === 'success') {
+                setDownloadProgress(100);
+                setDownloadStatusText('Modelo pronto e instalado com sucesso!');
+                notify(`Modelo ${displayName} instalado com sucesso!`, 'success');
+                await loadData();
+              } else if (eventData.status === 'error') {
+                notify(eventData.message || 'Erro durante download do modelo', 'error');
+              }
+            } catch {
+              // Ignora parse de heartbeats
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      notify(`Falha ao instalar modelo: ${err.message}`, 'error');
+    } finally {
+      setTimeout(() => {
+        setDownloadingModelId(null);
+        setDownloadProgress(0);
+        setDownloadStatusText('');
+      }, 3500);
+    }
+  };
+
+  const isOnlineActive = data?.hybrid_gateway?.enabled;
+  const currentSpend = data?.hybrid_gateway?.current_spend_usd || 0;
+  const budgetMax = data?.hybrid_gateway?.max_budget_usd || maxBudget || 5.0;
+  const budgetPercent = Math.min(100, Math.round((currentSpend / budgetMax) * 100));
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Model Manager</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            Inventário de modelos de IA locais (Ollama CPU) e Gateway Híbrido com failover.
-          </p>
-        </div>
-        <button className="btn btn-secondary" onClick={loadData} disabled={loading}>
-          <RefreshCw size={16} /> Atualizar
-        </button>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1280px', margin: '0 auto' }}>
+      {/* Barra de Navegação por Abas Limpas */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          padding: '12px 16px',
+          backgroundColor: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('vault')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.84rem',
+              fontWeight: 500,
+              backgroundColor: activeTab === 'vault' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: activeTab === 'vault' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'vault' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Cofre de Chaves (KeyVault)
+          </button>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <Cpu size={20} color="var(--accent-color)" />
-            <span style={{ fontWeight: 600 }}>Runtime Primário</span>
-          </div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>Ollama Local-First</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '4px' }}>
-            Inferência executada 100% na CPU (Intel i5-8265U). Zero dependência de cloud.
-          </p>
-        </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('local')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.84rem',
+              fontWeight: 500,
+              backgroundColor: activeTab === 'local' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: activeTab === 'local' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'local' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Modelos Locais ({data?.models?.length || 0})
+          </button>
 
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <Zap size={20} color="var(--warning-color)" />
-            <span style={{ fontWeight: 600 }}>Limite de Concorrência</span>
-          </div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>1 Inferência por vez</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '4px' }}>
-            Protege o notebook contra superaquecimento e saturação de memória RAM.
-          </p>
-        </div>
-
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <CloudOff size={20} color="var(--success-color)" />
-            <span style={{ fontWeight: 600 }}>Gateway Online Opcional</span>
-          </div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>Desativado (Offline Seguro)</div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '4px' }}>
-            Teto de custo: $5.00 USD • Gasto atual: $0.00 USD
-          </p>
-        </div>
-      </div>
-
-      <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Modelos Locais Registados</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {data?.models?.map((m: any) => (
-          <div key={m.name} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                padding: '10px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                color: 'var(--accent-color)',
-              }}>
-                <Server size={22} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '1rem' }}>{m.name}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Missão: {m.role} • Contexto: {m.context.toLocaleString()} tokens
-                </div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span className="badge badge-info">{m.speed}</span>
-              <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <ShieldCheck size={12} /> Local Ready
+          <button
+            type="button"
+            onClick={() => setActiveTab('hybrid')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.84rem',
+              fontWeight: 500,
+              backgroundColor: activeTab === 'hybrid' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: activeTab === 'hybrid' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'hybrid' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Gateway Híbrido & Nuvem
+            {isOnlineActive && (
+              <span style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-primary)', marginLeft: '6px' }}>
+                ONLINE
               </span>
-            </div>
-          </div>
-        ))}
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('hub')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.84rem',
+              fontWeight: 500,
+              backgroundColor: activeTab === 'hub' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: activeTab === 'hub' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'hub' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Hugging Face Hub
+          </button>
+        </div>
+
+        {/* Botões de Ação Global */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => setShowWizard(true)}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+          >
+            Assistente Rápido
+          </button>
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={loading}
+            className="btn btn-ghost"
+            style={{ fontSize: '0.8rem', padding: '6px 10px', color: 'var(--text-muted)' }}
+            title="Recarregar status de modelos"
+          >
+            {loading ? '...' : 'Atualizar'}
+          </button>
+        </div>
       </div>
+
+      {/* Conteúdo Aba 0: Cofre de Chaves de API (KeyVault) */}
+      {activeTab === 'vault' && <KeyVaultManager />}
+
+      {/* Conteúdo Aba 1: Modelos Locais & Status do Sistema */}
+      {activeTab === 'local' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <ModelStatusHero
+            isOnlineActive={Boolean(isOnlineActive)}
+            loading={loading}
+            currentSpend={currentSpend}
+            budgetMax={budgetMax}
+            budgetPercent={budgetPercent}
+            providerName={data?.hybrid_gateway?.provider}
+            onOpenWizard={() => setShowWizard(true)}
+            onRefresh={loadData}
+          />
+          <LocalModelsGrid models={data?.models} />
+        </div>
+      )}
+
+      {/* Conteúdo Aba 2: Gateway Híbrido & Conexão em Nuvem */}
+      {activeTab === 'hybrid' && (
+        <HybridGatewayConfig
+          provider={provider}
+          enabled={enabled}
+          apiKey={apiKey}
+          showKey={showKey}
+          defaultModel={defaultModel}
+          baseUrl={baseUrl}
+          maxBudget={maxBudget}
+          testLoading={testLoading}
+          testResult={testResult}
+          saveLoading={saveLoading}
+          saveMessage={saveMessage}
+          onProviderSelect={handleProviderSelect}
+          onToggleEnabled={(val) => setEnabled(val)}
+          onApiKeyChange={(val) => setApiKey(val)}
+          onToggleShowKey={() => setShowKey(!showKey)}
+          onDefaultModelChange={(val) => setDefaultModel(val)}
+          onBaseUrlChange={(val) => setBaseUrl(val)}
+          onMaxBudgetChange={(val) => setMaxBudget(val)}
+          onTestConnection={handleTestConnection}
+          onSaveConfig={handleSaveConfig}
+        />
+      )}
+
+      {/* Conteúdo Aba 3: Hugging Face Hub (App Store de Modelos) */}
+      {activeTab === 'hub' && (
+        <HuggingFaceHubSection
+          curatedModels={hfCurated}
+          searchResults={hfSearchResults}
+          searchQuery={hfSearchQuery}
+          isSearching={isHfSearching}
+          downloadingModelId={downloadingModelId}
+          downloadProgress={downloadProgress}
+          downloadStatusText={downloadStatusText}
+          agentRecommendations={agentRecommendations}
+          isModelInstalled={isModelInstalled}
+          onSearchChange={(q) => setHfSearchQuery(q)}
+          onSearchSubmit={handleSearchHf}
+          onClearSearch={() => {
+            setHfSearchResults([]);
+            setHfSearchQuery('');
+          }}
+          onInstallModel={handleInstallModel}
+        />
+      )}
+
+      {/* Modal do Assistente de Configuração */}
+      <SetupWizardModal
+        isOpen={showWizard}
+        onClose={() => setShowWizard(false)}
+        onCompleted={loadData}
+      />
     </div>
   );
 };

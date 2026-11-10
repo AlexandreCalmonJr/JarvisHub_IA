@@ -1,160 +1,763 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Activity,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  Trash2,
+  Search,
   MessageSquare,
-  ShieldAlert,
   FolderGit2,
-  Users,
-  Lock,
-  Cpu,
+  Building2,
+  Bot,
+  Terminal,
   ListTodo,
+  Cpu,
   Server,
-  BookOpen,
-  Smartphone,
-  ExternalLink,
+  CheckCircle2,
+  Database,
+  Activity,
+  Settings,
+  Key,
+  Sparkles,
+  ShieldAlert,
+  AlertTriangle,
+  FileText,
 } from 'lucide-react';
+import { getLocalSessionsCatalog, removeSessionLocally, LocalSessionMeta } from './chat/ChatHistoryDrawer';
+import { getUserProfile } from './common/UserProfileModal';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   pendingApprovalsCount: number;
+  mobileOpen: boolean;
+  setMobileOpen: (open: boolean) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  onOpenCommandPalette?: () => void;
+  onOpenProfile?: () => void;
+  onSelectSession?: (sessionId: string) => void;
+  onNewChat?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   pendingApprovalsCount,
+  mobileOpen,
+  setMobileOpen,
+  isCollapsed = false,
+  onToggleCollapse,
+  onOpenCommandPalette,
+  onOpenProfile,
+  onSelectSession,
+  onNewChat,
 }) => {
-  const menuItems = [
-    { id: 'overview', label: 'Visão Geral', icon: Activity },
-    { id: 'chat', label: 'JARVIS Master', icon: MessageSquare },
-    {
-      id: 'approvals',
-      label: 'Approval Center',
-      icon: ShieldAlert,
-      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
-    },
-    { id: 'workspace', label: 'Project Workspace', icon: FolderGit2 },
-    { id: 'agents', label: 'Agent Center (26)', icon: Users },
-    { id: 'tasks', label: 'Task Manager', icon: ListTodo },
-    { id: 'models', label: 'Model Manager', icon: Server },
-    { id: 'skills', label: 'Skills Manager', icon: BookOpen },
-    { id: 'security', label: 'Security & Kill Switch', icon: Lock },
+  const [conversationsOpen, setConversationsOpen] = useState(true);
+  const [agentsOpen, setAgentsOpen] = useState(false);
+  const [engineeringOpen, setEngineeringOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sessions, setSessions] = useState<LocalSessionMeta[]>([]);
+  const userProfile = getUserProfile();
+
+  const loadSessions = () => {
+    const list = getLocalSessionsCatalog();
+    setSessions(list);
+  };
+
+  useEffect(() => {
+    loadSessions();
+    const interval = setInterval(loadSessions, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleDeleteSession = (e: React.MouseEvent, sid: string) => {
+    e.stopPropagation();
+    removeSessionLocally(sid);
+    loadSessions();
+  };
+
+  const handleSelectSession = (sid: string) => {
+    if (onSelectSession) {
+      onSelectSession(sid);
+    }
+    setActiveTab('chat');
+    setMobileOpen(false);
+  };
+
+  const handleSelectTab = (tabId: string) => {
+    setActiveTab(tabId);
+    setMobileOpen(false);
+  };
+
+  const agentItems = [
+    { id: 'agents', label: 'Centro de Agentes (26)', icon: <Bot size={13} color="#c084fc" /> },
+    { id: 'coding', label: 'Coding Agent (Terminal)', icon: <Terminal size={13} color="#38bdf8" /> },
+    { id: 'tasks', label: 'Fila de Tarefas (Tasks)', icon: <ListTodo size={13} color="#fbbf24" /> },
+  ];
+
+  const engineeringItems = [
+    { id: 'backend_studio', label: 'Backend & APIs (Mock)', icon: <Server size={13} color="#60a5fa" /> },
+    { id: 'quality', label: 'Qualidade & QA (Testes)', icon: <CheckCircle2 size={13} color="#34d399" /> },
+    { id: 'knowledge', label: 'Base de Conhecimento (RAG)', icon: <Database size={13} color="#a78bfa" /> },
+    { id: 'overview', label: 'Métricas do Sistema', icon: <Activity size={13} color="#f43f5e" /> },
+  ];
+
+  const settingsItems = [
+    { id: 'models', label: 'Modelos & Chaves (KeyVault)', icon: <Key size={13} color="#fbbf24" /> },
+    { id: 'skills', label: 'Habilidades (Skills ECC)', icon: <Sparkles size={13} color="#a855f7" /> },
+    { id: 'security', label: 'Segurança & Kill Switch', icon: <ShieldAlert size={13} color="#ef4444" /> },
+    { id: 'approvals', label: 'Central de Aprovações', icon: <AlertTriangle size={13} color="#f97316" />, badge: pendingApprovalsCount },
+    { id: 'server_logs', label: 'Logs & Diagnóstico', icon: <FileText size={13} color="#94a3b8" /> },
   ];
 
   return (
-    <aside style={{
-      width: '260px',
-      backgroundColor: 'var(--bg-secondary)',
-      borderRight: '1px solid var(--border-color)',
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-      flexShrink: 0,
-    }}>
-      <div style={{
-        padding: '24px 20px',
-        borderBottom: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-      }}>
-        <div style={{
-          width: '36px',
-          height: '36px',
-          borderRadius: '8px',
-          backgroundColor: 'var(--accent-color)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-        }}>
-          <Cpu size={22} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em' }}>JARVIS AI HUB</h1>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Local-First v1.0</span>
-        </div>
-      </div>
+    <>
+      {/* Backdrop para telas móveis */}
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 998,
+          }}
+        />
+      )}
 
-      <nav style={{ padding: '16px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
+      <aside
+        style={{
+          width: isCollapsed ? '64px' : '260px',
+          backgroundColor: 'var(--bg-secondary)',
+          borderRight: '1px solid var(--border-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          flexShrink: 0,
+          zIndex: 999,
+          position: mobileOpen ? 'fixed' : 'relative',
+          left: 0,
+          top: 0,
+          transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+          boxShadow: mobileOpen ? '8px 0 32px rgba(0,0,0,0.85)' : 'none',
+          userSelect: 'none',
+        }}
+      >
+        {/* Topo da Sidebar: Ações Principais (Procurar, Projetos, Artefatos, Personalização) */}
+        <div
+          style={{
+            padding: isCollapsed ? '12px 6px' : '12px 14px',
+            borderBottom: '1px solid var(--border-color)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+          }}
+        >
+          {/* Botão de Busca / Procurar (Ctrl + K) */}
+          <button
+            type="button"
+            onClick={onOpenCommandPalette}
+            className="btn btn-ghost"
+            title="Procurar comandos, arquivos e telas (Ctrl+K)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'space-between',
+              padding: isCollapsed ? '9px 0' : '8px 10px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              fontSize: '0.82rem',
+              width: '100%',
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Search size={15} color="var(--text-secondary)" />
+              {!isCollapsed && <span>Procurar</span>}
+            </div>
+            {!isCollapsed && (
+              <kbd
+                style={{
+                  fontSize: '0.65rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Ctrl K
+              </kbd>
+            )}
+          </button>
+
+          {/* 1. Chat JARVIS */}
+          <button
+            type="button"
+            onClick={() => handleSelectTab('chat')}
+            className="btn btn-ghost"
+            title="Chat JARVIS"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'flex-start',
+              padding: isCollapsed ? '9px 0' : '7px 10px',
+              borderRadius: '8px',
+              color: activeTab === 'chat' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              backgroundColor: activeTab === 'chat' ? 'rgba(217, 119, 87, 0.12)' : 'transparent',
+              fontSize: '0.84rem',
+              fontWeight: activeTab === 'chat' ? 600 : 400,
+              width: '100%',
+              gap: '9px',
+            }}
+          >
+            <MessageSquare size={16} color="var(--accent-color)" />
+            {!isCollapsed && <span>Chat JARVIS</span>}
+          </button>
+
+          {/* 2. Projetos */}
+          <button
+            type="button"
+            onClick={() => handleSelectTab('workspace')}
+            className="btn btn-ghost"
+            title="Projetos"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'flex-start',
+              padding: isCollapsed ? '9px 0' : '7px 10px',
+              borderRadius: '8px',
+              color: activeTab === 'workspace' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              backgroundColor: activeTab === 'workspace' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+              fontSize: '0.84rem',
+              fontWeight: activeTab === 'workspace' ? 600 : 400,
+              width: '100%',
+              gap: '9px',
+            }}
+          >
+            <FolderGit2 size={16} color="#38bdf8" />
+            {!isCollapsed && <span>Projetos</span>}
+          </button>
+
+          {/* 3. Escritório Virtual */}
+          <button
+            type="button"
+            onClick={() => handleSelectTab('office')}
+            className="btn btn-ghost"
+            title="Escritório Virtual"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'space-between',
+              padding: isCollapsed ? '9px 0' : '7px 10px',
+              borderRadius: '8px',
+              color: activeTab === 'office' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              backgroundColor: activeTab === 'office' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+              fontSize: '0.84rem',
+              fontWeight: activeTab === 'office' ? 600 : 400,
+              width: '100%',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <Building2 size={16} color="#34d399" />
+              {!isCollapsed && <span>Escritório Virtual</span>}
+            </div>
+            {!isCollapsed && (
+              <span
+                style={{
+                  fontSize: '0.65rem',
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                26
+              </span>
+            )}
+          </button>
+
+          {/* Submenu 1: Especialistas & IA */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isCollapsed && onToggleCollapse) onToggleCollapse();
+              setAgentsOpen((prev) => !prev);
+            }}
+            className="btn btn-ghost"
+            title="Especialistas & IA"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'space-between',
+              padding: isCollapsed ? '9px 0' : '7px 10px',
+              borderRadius: '8px',
+              color: agentsOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
+              backgroundColor: agentsOpen ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              fontSize: '0.82rem',
+              width: '100%',
+              marginTop: '4px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <Bot size={16} color="#c084fc" />
+              {!isCollapsed && <span>Especialistas & IA</span>}
+            </div>
+            {!isCollapsed && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                {agentsOpen ? '−' : '+'}
+              </span>
+            )}
+          </button>
+
+          {!isCollapsed && agentsOpen && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+                paddingLeft: '12px',
+                paddingTop: '2px',
+                borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                marginLeft: '8px',
+              }}
+            >
+              {agentItems.map((st) => {
+                const isSelected = activeTab === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => handleSelectTab(st.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '5px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontSize: '0.76rem',
+                      fontWeight: isSelected ? 600 : 400,
+                      border: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      {st.icon}
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {st.label}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Submenu 2: Engenharia & Dados */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isCollapsed && onToggleCollapse) onToggleCollapse();
+              setEngineeringOpen((prev) => !prev);
+            }}
+            className="btn btn-ghost"
+            title="Engenharia & Dados"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'space-between',
+              padding: isCollapsed ? '9px 0' : '7px 10px',
+              borderRadius: '8px',
+              color: engineeringOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
+              backgroundColor: engineeringOpen ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              fontSize: '0.82rem',
+              width: '100%',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <Cpu size={16} color="#fbbf24" />
+              {!isCollapsed && <span>Engenharia & Dados</span>}
+            </div>
+            {!isCollapsed && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                {engineeringOpen ? '−' : '+'}
+              </span>
+            )}
+          </button>
+
+          {!isCollapsed && engineeringOpen && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+                paddingLeft: '12px',
+                paddingTop: '2px',
+                borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                marginLeft: '8px',
+              }}
+            >
+              {engineeringItems.map((st) => {
+                const isSelected = activeTab === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => handleSelectTab(st.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '5px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontSize: '0.76rem',
+                      fontWeight: isSelected ? 600 : 400,
+                      border: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      {st.icon}
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {st.label}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Submenu 3: Configurações & Governança */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isCollapsed && onToggleCollapse) onToggleCollapse();
+              setSettingsOpen((prev) => !prev);
+            }}
+            className="btn btn-ghost"
+            title="Configurações"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'space-between',
+              padding: isCollapsed ? '9px 0' : '7px 10px',
+              borderRadius: '8px',
+              color: settingsOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
+              backgroundColor: settingsOpen ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+              fontSize: '0.82rem',
+              width: '100%',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <Settings size={16} color="#94a3b8" />
+              {!isCollapsed && <span>Configurações</span>}
+            </div>
+            {!isCollapsed && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                {settingsOpen ? '−' : '+'}
+              </span>
+            )}
+          </button>
+
+          {!isCollapsed && settingsOpen && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+                paddingLeft: '12px',
+                paddingTop: '2px',
+                borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                marginLeft: '8px',
+              }}
+            >
+              {settingsItems.map((st) => {
+                const isSelected = activeTab === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => handleSelectTab(st.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '5px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontSize: '0.76rem',
+                      fontWeight: isSelected ? 600 : 400,
+                      border: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      {st.icon}
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {st.label}
+                      </span>
+                    </div>
+                    {Boolean(st.badge) && (
+                      <span
+                        className="badge"
+                        style={{ fontSize: '0.62rem', padding: '0 5px', backgroundColor: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-primary)' }}
+                      >
+                        {st.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Seção Conversas Recentes (Claude Style) */}
+        {!isCollapsed && (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              paddingTop: '12px',
+            }}
+          >
+            {/* Cabeçalho da seção com toggle */}
+            <div
+              onClick={() => setConversationsOpen((prev) => !prev)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '10px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: isActive ? 'var(--bg-tertiary)' : 'transparent',
-                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                padding: '4px 16px',
                 cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: isActive ? 600 : 500,
-                transition: 'all 0.15s ease',
-                width: '100%',
-                textAlign: 'left',
+                color: 'var(--text-muted)',
+                fontSize: '0.74rem',
+                fontWeight: 600,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Icon size={18} color={isActive ? 'var(--accent-color)' : 'currentColor'} />
-                <span>{item.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>Conversas</span>
+                {conversationsOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
               </div>
-              {item.badge !== undefined && (
-                <span className="badge badge-warning">{item.badge}</span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onNewChat) {
+                    onNewChat();
+                  } else if (onSelectSession) {
+                    onSelectSession('new_' + Date.now());
+                  }
+                  setActiveTab('chat');
+                  setMobileOpen(false);
+                }}
+                className="btn btn-ghost"
+                style={{ padding: '2px 6px', fontSize: '0.72rem', color: 'var(--accent-color)', fontWeight: 600 }}
+                title="Iniciar Nova Conversa Limpa"
+              >
+                + Nova
+              </button>
+            </div>
 
-      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-color)' }}>
-        <a
-          href="/mobile/"
-          target="_blank"
-          rel="noreferrer"
-          className="btn btn-secondary"
+            {/* Lista fluida de conversas */}
+            {conversationsOpen && (
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '6px 8px 12px 10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1px',
+                }}
+              >
+                {sessions.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '16px 12px',
+                      fontSize: '0.76rem',
+                      color: 'var(--text-muted)',
+                      textAlign: 'center',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    Nenhuma conversa iniciada ainda
+                  </div>
+                ) : (
+                  sessions.map((sess) => (
+                    <div
+                      key={sess.id}
+                      onClick={() => handleSelectSession(sess.id)}
+                      className="chat-session-row"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.80rem',
+                        color: 'var(--text-secondary)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        e.currentTarget.style.color = 'var(--text-primary)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.color = 'var(--text-secondary)';
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          overflow: 'hidden',
+                          flex: 1,
+                        }}
+                      >
+                        {/* Marcador sutil de bullet idêntico ao Claude Desktop */}
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1 }}>○</span>
+                        <span
+                          style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {sess.title || 'Conversa sem título'}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteSession(e, sess.id)}
+                        className="btn btn-ghost"
+                        style={{
+                          padding: '2px 4px',
+                          opacity: 0.6,
+                          borderRadius: '4px',
+                          color: 'var(--text-muted)',
+                        }}
+                        title="Excluir conversa"
+                        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Rodapé da Sidebar: Avatar do Usuário e Status Local */}
+        <div
           style={{
+            padding: isCollapsed ? '12px 6px' : '10px 14px',
+            borderTop: '1px solid var(--border-color)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            width: '100%',
-            fontSize: '0.8rem',
-            padding: '8px 12px',
-            textDecoration: 'none',
-            color: 'var(--text-primary)',
+            justifyContent: isCollapsed ? 'center' : 'space-between',
+            backgroundColor: 'rgba(0, 0, 0, 0.15)',
           }}
         >
-          <Smartphone size={16} color="var(--accent-color)" />
-          <span>Abrir App Mobile</span>
-          <ExternalLink size={12} color="var(--text-secondary)" />
-        </a>
-      </div>
+          {!isCollapsed ? (
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              className="btn btn-ghost"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '4px 6px',
+                borderRadius: '8px',
+                color: 'var(--text-primary)',
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+              }}
+              title="Abrir perfil e configurações do assistente"
+            >
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 600,
+                  fontSize: '0.72rem',
+                }}
+              >
+                {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
+              </div>
+              <span style={{ fontWeight: 500 }}>
+                {userProfile.displayName || 'Alexandre'}
+              </span>
+              <span style={{ fontSize: '0.70rem', color: 'var(--text-muted)' }}>· v3.0.0</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              className="btn btn-ghost"
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+              }}
+              title="Perfil e Configurações"
+            >
+              {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
+            </button>
+          )}
 
-      <div style={{
-        padding: '16px 20px',
-        borderTop: '1px solid var(--border-color)',
-        fontSize: '0.75rem',
-        color: 'var(--text-secondary)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            backgroundColor: 'var(--success-color)',
-            display: 'inline-block',
-          }} />
-          <span>Local CPU Inference</span>
+          {/* Botão de retração da sidebar no canto inferior */}
+          {!isCollapsed && onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="btn btn-ghost"
+              style={{ padding: '6px', borderRadius: '6px', color: 'var(--text-muted)' }}
+              title="Ocultar barra lateral (Ctrl+B)"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 };

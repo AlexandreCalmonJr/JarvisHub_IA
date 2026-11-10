@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -25,7 +26,12 @@ class InferenceRequest(BaseModel):
     format_json: bool = False
     contains_sensitive_data: bool = False
     task_id: str | None = None
-    timeout_seconds: float = 60.0
+    timeout_seconds: float = 180.0
+    # Schema de ferramentas no formato OpenAI ({"type": "function", ...}) ou Anthropic.
+    # O adaptador converte quando necessário; vazio desativa tool calling.
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    tool_choice: str | None = None
+    key_id: str | None = None
 
 
 class InferenceResponse(BaseModel):
@@ -35,6 +41,8 @@ class InferenceResponse(BaseModel):
     completion_tokens: int = 0
     duration_ms: float = 0.0
     tokens_per_second: float = 0.0
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    finish_reason: str = "stop"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

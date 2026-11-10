@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-ai-hub"
-version = "0.1.0"
+version = "3.0.0"
 description = "Plataforma local-first de agentes especializados para desenvolvimento, segurança e gestão de projetos"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,7 +24,9 @@ dependencies = [
     "sqlalchemy>=2.0.35",
     "psutil>=6.0.0",
     "python-multipart>=0.0.12",
-    "cryptography>=43.0.0"
+    "cryptography>=43.0.0",
+    "duckdb>=1.0.0",
+    "lancedb>=0.40.0"
 ]
 
 [project.optional-dependencies]

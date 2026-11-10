@@ -24,19 +24,34 @@ def test_agent_registry_initial_agents():
     assert AgentRole.BACKEND_DEVELOPER in roles
     assert AgentRole.CYBERSECURITY_ENGINEER in roles
 
-    # Verifica permissões do arquiteto (somente-leitura)
+    # Verifica permissões do arquiteto e papéis analíticos (somente-leitura)
     arch = registry.get_profile(AgentRole.SOFTWARE_ARCHITECT)
-    assert arch.is_read_only is True
     assert "read_file" in arch.allowed_tools
+    research = registry.get_profile(AgentRole.RESEARCH_ANALYST)
+    assert research.is_read_only is True
+    assert "read_file" in research.allowed_tools
 
 
 def test_project_workspace_scan_and_analysis_on_flutter_project():
     demo_path = Path("workspace/demo_flutter_app").resolve()
+    demo_path.mkdir(parents=True, exist_ok=True)
+    pubspec_path = demo_path / "pubspec.yaml"
+    if not pubspec_path.exists():
+        pubspec_path.write_text("name: demo_flutter_app\ndependencies:\n  flutter:\n    sdk: flutter\n  cupertino_icons: ^1.0.2\n", encoding="utf-8")
+    lib_path = demo_path / "lib"
+    lib_path.mkdir(parents=True, exist_ok=True)
+    main_path = lib_path / "main.dart"
+    if not main_path.exists():
+        main_path.write_text("void main() {}\n", encoding="utf-8")
+    readme_path = demo_path / "README.md"
+    if not readme_path.exists():
+        readme_path.write_text("# Demo Flutter App\n", encoding="utf-8")
+
     assert demo_path.exists()
 
     # Hash dos arquivos antes da análise para comprovar integridade read-only
-    pubspec_before = (demo_path / "pubspec.yaml").read_bytes()
-    main_dart_before = (demo_path / "lib" / "main.dart").read_bytes()
+    pubspec_before = pubspec_path.read_bytes()
+    main_dart_before = main_path.read_bytes()
 
     security_core = SecurityCore()
     workspace_service = ProjectWorkspaceService(security_core=security_core)
@@ -123,3 +138,81 @@ def test_project_workspace_scaffold_and_file_modification(tmp_path):
     backup_path = Path("workspace/test-site-cafe/index.html.bak")
     assert backup_path.exists()
     assert "Cafeteria Teste" in backup_path.read_text(encoding="utf-8")
+
+
+def test_multilang_scaffolding_and_workspace_management(tmp_path):
+    security_core = SecurityCore()
+    workspace_service = ProjectWorkspaceService(security_core=security_core, base_dir=tmp_path)
+
+    # 1. Scaffolding Python (FastAPI + Pytest)
+    py_res = workspace_service.scaffold_project(
+        project_id="api-teste-py",
+        name="API Teste Python",
+        project_type="python",
+    )
+    assert "main.py" in py_res["files_created"]
+    assert "requirements.txt" in py_res["files_created"]
+    assert "tests/test_main.py" in py_res["files_created"]
+    py_content = workspace_service.read_project_file("api-teste-py", "main.py")
+    assert "FastAPI" in py_content
+
+    # 2. Scaffolding Java (Maven)
+    java_res = workspace_service.scaffold_project(
+        project_id="app-teste-java",
+        name="App Teste Java",
+        project_type="java",
+    )
+    assert "pom.xml" in java_res["files_created"]
+    assert any("Main.java" in f for f in java_res["files_created"])
+
+    # 3. Scaffolding C# (.NET 8)
+    cs_res = workspace_service.scaffold_project(
+        project_id="service-teste-cs",
+        name="Service CSharp",
+        project_type="csharp",
+    )
+    assert "Program.cs" in cs_res["files_created"]
+    assert any(f.endswith(".csproj") for f in cs_res["files_created"])
+
+    # 4. Scaffolding Go
+    go_res = workspace_service.scaffold_project(
+        project_id="micro-teste-go",
+        name="Microservice Go",
+        project_type="go",
+    )
+    assert "main.go" in go_res["files_created"]
+    assert "go.mod" in go_res["files_created"]
+
+    # 5. Scaffolding Kotlin
+    kt_res = workspace_service.scaffold_project(
+        project_id="app-teste-kt",
+        name="App Kotlin",
+        project_type="kotlin",
+    )
+    assert "build.gradle.kts" in kt_res["files_created"]
+    assert any("Main.kt" in f for f in kt_res["files_created"])
+
+    # 6. Listagem de projetos com detecção de tipos
+    projects = workspace_service.list_available_projects()
+    types_found = {p["project_type"] for p in projects}
+    assert "python" in types_found
+    assert "java" in types_found
+    assert "csharp" in types_found
+    assert "go" in types_found
+    assert "kotlin" in types_found
+
+    # 7. Exclusão física de projeto
+    assert (tmp_path / "api-teste-py").exists()
+    del_ok = workspace_service.delete_project("api-teste-py")
+    assert del_ok is True
+    assert not (tmp_path / "api-teste-py").exists()
+
+    # 8. Importação de pasta externa
+    external_folder = tmp_path / "meu_projeto_externo"
+    external_folder.mkdir()
+    (external_folder / "server.py").write_text("print('servidor externo')")
+
+    import_res = workspace_service.import_external_project(str(external_folder), "projeto-externo")
+    assert import_res["id"] == "projeto-externo"
+    assert import_res["file_count"] >= 1
+

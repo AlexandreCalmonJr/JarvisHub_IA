@@ -22,16 +22,28 @@ class JarvisMaster:
         model_manager: ModelManager,
         checkpointer: MemorySaver | None = None,
         workspace_service: Any = None,
+        agent_registry: Any = None,
+        skills_catalog: Any = None,
+        db_manager: Any = None,
+        tool_gateway: Any = None,
     ):
         self.security_core = security_core
         self.model_manager = model_manager
         self.checkpointer = checkpointer or MemorySaver()
         self.workspace_service = workspace_service
+        self.agent_registry = agent_registry
+        self.skills_catalog = skills_catalog
+        self.db_manager = db_manager
+        self.tool_gateway = tool_gateway
         self.graph = create_master_graph(
             security_core=self.security_core,
             model_manager=self.model_manager,
             checkpointer=self.checkpointer,
             workspace_service=self.workspace_service,
+            agent_registry=self.agent_registry,
+            skills_catalog=self.skills_catalog,
+            db_manager=self.db_manager,
+            tool_gateway=self.tool_gateway,
         )
 
     async def execute_task(

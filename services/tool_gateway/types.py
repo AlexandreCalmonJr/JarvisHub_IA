@@ -12,6 +12,8 @@ class ToolCategory(str, Enum):
     TEST_RUNNER = "test_runner"
     LINTER = "linter"
     MUTATION = "mutation"
+    ANALYTICS = "analytics"
+    SECURITY_SCAN = "security_scan"
 
 
 class ToolDefinition(BaseModel):

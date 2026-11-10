@@ -1,3 +1,5 @@
+from typing import Any
+
 from packages.contracts.security import AuditEventSeverity
 from services.security_core import AuditTrail, KillSwitch
 
@@ -18,17 +20,44 @@ class ModelManager:
         max_concurrent_inferences: int = 1,
         kill_switch: KillSwitch | None = None,
         audit_trail: AuditTrail | None = None,
+        hybrid_router: Any = None,
     ):
         self.adapter = adapter or OllamaAdapter()
         self.queue = InferenceQueue(max_concurrent=max_concurrent_inferences)
         self.kill_switch = kill_switch
         self.audit_trail = audit_trail
+        self.hybrid_router = hybrid_router
+
+    def set_cpu_threads(self, threads: int | None) -> None:
+        """Configura dinamicamente o número de threads do Ollama no adaptador ativo."""
+        if hasattr(self.adapter, "set_cpu_threads"):
+            self.adapter.set_cpu_threads(threads)
 
     async def check_health(self) -> bool:
         return await self.adapter.health_check()
 
+    async def get_loaded_models(self) -> list[str]:
+        """Retorna modelos carregados no runtime ativo."""
+        if hasattr(self.adapter, "get_loaded_models"):
+            return await self.adapter.get_loaded_models()
+        return []
+
+    async def evict_model(self, model_name: str) -> bool:
+        """Descarrega modelo do runtime ativo para liberar RAM/VRAM."""
+        if hasattr(self.adapter, "evict_model"):
+            return await self.adapter.evict_model(model_name)
+        return False
+
+
     async def list_available_models(self) -> list[ModelMetadata]:
-        return await self.adapter.list_models()
+        local_models = await self.adapter.list_models()
+        if self.hybrid_router and self.hybrid_router.online_config.enabled and self.hybrid_router.online_adapter:
+            try:
+                online_models = await self.hybrid_router.online_adapter.list_models()
+                return local_models + online_models
+            except Exception:
+                pass
+        return local_models
 
     def select_model_for_role(self, role_str: str) -> str:
         """Seleciona o modelo mais adequado conforme a especialização do agente."""
@@ -38,7 +67,11 @@ class ModelManager:
             return ModelRoleMapping.DEFAULT_REASONING.value
         return ModelRoleMapping.DEFAULT_MASTER.value
 
-    async def generate(self, request: InferenceRequest) -> InferenceResponse:
+    async def generate(
+        self,
+        request: InferenceRequest,
+        has_external_data_approval: bool = False,
+    ) -> InferenceResponse:
         # 1. Verificação do Kill Switch
         if self.kill_switch:
             if self.kill_switch.is_global_killed():
@@ -46,8 +79,13 @@ class ModelManager:
             if request.task_id and self.kill_switch.is_task_cancelled(request.task_id):
                 raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
 
-        # 2. Execução protegida pela fila de concorrência
+        # 2. Execução protegida pela fila de concorrência com suporte a Hybrid Gateway
         async def _run_inference():
+            if self.hybrid_router and self.hybrid_router.online_config.enabled:
+                res, _ = await self.hybrid_router.route_inference(
+                    request, has_external_data_approval=has_external_data_approval
+                )
+                return res
             return await self.adapter.generate(request)
 
         response = await self.queue.execute(
@@ -72,3 +110,25 @@ class ModelManager:
             )
 
         return response
+
+    async def generate_stream(
+        self,
+        request: InferenceRequest,
+        has_external_data_approval: bool = False,
+    ):
+        # 1. Verificação do Kill Switch
+        if self.kill_switch:
+            if self.kill_switch.is_global_killed():
+                raise RuntimeError("Operações suspensas pelo Kill Switch Global.")
+            if request.task_id and self.kill_switch.is_task_cancelled(request.task_id):
+                raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
+
+        # 2. Streaming via Hybrid Router ou Adapter Local
+        if self.hybrid_router and self.hybrid_router.online_config.enabled:
+            async for chunk in self.hybrid_router.route_inference_stream(
+                request, has_external_data_approval=has_external_data_approval
+            ):
+                yield chunk
+        else:
+            async for chunk in self.adapter.generate_stream(request):
+                yield chunk

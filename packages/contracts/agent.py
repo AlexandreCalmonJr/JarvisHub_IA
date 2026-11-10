@@ -102,3 +102,53 @@ class InterAgentMessage(BaseModel):
     expected_output: str
     cycle: int = 1
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class AutonomousAgentMode(str, Enum):
+    """Modos de operação do especialista autônomo."""
+
+    PLAN = "plan"
+    ASK = "ask"
+    AUTO = "auto"
+
+
+class AgentEventType(str, Enum):
+    """Tipos de eventos emitidos durante a execução de um especialista autônomo."""
+
+    THOUGHT = "thought"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    TOKEN = "token"
+    APPROVAL_REQUIRED = "approval_required"
+    FINAL_RESPONSE = "final_response"
+    ERROR = "error"
+
+
+class AgentEvent(BaseModel):
+    """Evento emitido no streaming de execução do especialista."""
+
+    event_type: AgentEventType
+    agent_role: AgentRole
+    content: str = ""
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    approval_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class AutonomousAgentRunConfig(BaseModel):
+    """Configuração de execução para qualquer especialista autônomo."""
+
+    agent_role: AgentRole
+    prompt: str
+    session_id: str = Field(default_factory=lambda: f"session-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}")
+    project_id: str | None = None
+    mode: AutonomousAgentMode = AutonomousAgentMode.ASK
+    max_iterations: int = 15
+    temperature: float = 0.3
+    max_tokens: int = 2048
+    timeout_seconds: float = 180.0
+    include_history: bool = True
+
