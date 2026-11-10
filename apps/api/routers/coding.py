@@ -8,9 +8,10 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from apps.api.auth import Principal, get_principal
 from apps.api.deps import coding_broker, coding_runtime, coding_tools, security_core
 from apps.api.schemas import CodingApprovalDecision, CodingRunRequest
 from services.coding_agent import AgentMode, AgentRunConfig
@@ -163,17 +164,39 @@ async def list_coding_approvals():
 
 
 @router.post("/api/v1/coding/approvals/{approval_id}/decide")
-async def decide_coding_approval(approval_id: str, payload: CodingApprovalDecision):
+async def decide_coding_approval(
+    approval_id: str,
+    payload: CodingApprovalDecision,
+    principal: Principal = Depends(get_principal),
+):
     """Aprova ou rejeita uma operação e liberta imediatamente o runtime."""
     action = payload.action.strip().lower()
     if action not in {"approve", "reject"}:
         raise HTTPException(status_code=400, detail="Ação inválida. Use 'approve' ou 'reject'.")
 
+    # Rejeita imediatamente tentativa de aprovação por agentes de IA
+    from packages.contracts.agent import AgentRole
+    known_agents = {r.value for r in AgentRole}
+    candidate = (payload.decided_by or "").lower().strip()
+    if candidate and (candidate in known_agents or candidate.startswith("agent_") or candidate.startswith("agent")):
+        raise HTTPException(
+            status_code=403,
+            detail="Agentes de IA não possuem permissão para aprovar operações.",
+        )
+    if principal.subject_id in known_agents or principal.subject_id.lower().startswith("agent"):
+        raise HTTPException(
+            status_code=403,
+            detail="Agentes de IA não possuem permissão para aprovar operações.",
+        )
+
+    # Identidade validada pelo servidor, ignorando campos de payload forjados
+    actor = principal.display_id
+
     try:
         decided = coding_broker.decide(
             approval_id,
             approved=action == "approve",
-            decided_by=payload.decided_by,
+            decided_by=actor,
             reason=payload.reason,
         )
     except UnauthorizedApprovalError as exc:
@@ -185,7 +208,7 @@ async def decide_coding_approval(approval_id: str, payload: CodingApprovalDecisi
     try:
         security_core.audit.log(
             operation="CODING_APPROVAL_DECIDED",
-            user_id=payload.decided_by,
+            user_id=actor,
             target_resource=approval_id,
             status="APPROVED" if action == "approve" else "REJECTED",
             parameters={"task_id": decided.task_id, "operation": decided.operation},

@@ -40,8 +40,8 @@ class CodingApprovalDecision(BaseModel):
     """Decisão humana sobre uma operação do Coding Agent."""
 
     action: str = Field(..., description="'approve' ou 'reject'")
-    decided_by: str = Field(
-        "local_developer", description="Identificador do humano autorizador"
+    decided_by: str | None = Field(
+        None, description="Obsoleto: ignorado. A identidade vem da autenticação."
     )
     reason: str | None = None
 
@@ -69,7 +69,11 @@ class HFInstallPayload(BaseModel):
 
 class ApprovalDecisionRequest(BaseModel):
     action: str = Field(..., description="'approve' ou 'reject'")
-    decided_by: str = Field(..., description="Identificador do utilizador humano autorizador")
+    # Campo mantido por compatibilidade com clientes antigos.
+    # O servidor ignora-o e usa sempre a identidade autenticada.
+    decided_by: str | None = Field(
+        None, description="Obsoleto: ignorado. A identidade vem da autenticação."
+    )
     reason: str | None = None
 
 
@@ -81,6 +85,9 @@ class KillSwitchRequest(BaseModel):
 
 class DevicePairRequest(BaseModel):
     device_name: str = Field(..., description="Nome de identificação do dispositivo móvel")
+    scopes: list[str] | None = Field(
+        None, description="Scopes autorizados; se ausente usa o conjunto padrão seguro"
+    )
 
 
 class DeviceRevokeRequest(BaseModel):
@@ -217,6 +224,7 @@ class SQLAuditPayload(BaseModel):
 
 
 class ApplySecurityPolicyPayload(BaseModel):
+    approval_id: str | None = Field(default=None, description="ID da aprovacao humana")
     project_id: str = Field(..., description="ID do projeto onde o arquivo de segurança será salvo")
     template_id: str = Field(..., description="ID do template de política")
 

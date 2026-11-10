@@ -72,6 +72,11 @@ def get_base_dir() -> Path:
 
 
 def resolve_data_dir() -> Path:
+    override = os.environ.get("JARVIS_DATA_DIR")
+    if override:
+        d = Path(override).expanduser().resolve()
+        d.mkdir(parents=True, exist_ok=True)
+        return d
     if getattr(sys, "frozen", False):
         local_app_data = os.environ.get("LOCALAPPDATA")
         if local_app_data:
@@ -142,7 +147,9 @@ def build_online_adapter(cfg: OnlineProviderConfig) -> UniversalOnlineAdapter | 
 online_adapter = build_online_adapter(hybrid_config)
 
 # Inicialização dos serviços centrais
-security_core = SecurityCore()
+auth_dir = data_dir / "auth"
+auth_dir.mkdir(parents=True, exist_ok=True)
+security_core = SecurityCore(auth_dir=auth_dir)
 workspace_root = resolve_workspace_dir()
 workspace_service = ProjectWorkspaceService(security_core=security_core, base_dir=workspace_root)
 tool_gateway = ToolGateway(security_core=security_core)

@@ -108,7 +108,9 @@ class GitWorkspaceManager:
             )
 
         target_file = (repo_path / rel_file_path).resolve()
-        if not str(target_file).startswith(str(repo_path.resolve())):
+        try:
+            target_file.relative_to(repo_path.resolve())
+        except ValueError:
             raise PermissionDeniedError("Escrita fora do repositório bloqueada.")
 
         # Impede escrita em arquivos críticos ou segredos

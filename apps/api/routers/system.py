@@ -1,9 +1,10 @@
 import asyncio
 import json
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from apps.api.auth import Principal, require_permission
 from apps.api.schemas import (
     UserProfilePayload,
     WebhookConfigPayload,
@@ -35,7 +36,33 @@ async def root():
 
 
 @router.get("/api/v1/system/health")
-async def health_check():
+async def health_check(request: Request):
+    """Disponibilidade básica para anônimos; estado detalhado com componentes quando autenticado."""
+    ollama_ok = await model_manager.check_health()
+    status_str = "healthy" if ollama_ok else "degraded"
+    principal = getattr(request.state, "principal", None)
+    if principal is not None:
+        return {
+            "status": status_str,
+            "components": {
+                "security_core": "operational",
+                "approval_engine": "operational",
+                "model_runtime": "operational" if ollama_ok else "offline",
+                "inference_queue": {
+                    "active": model_manager.queue.active_count,
+                    "waiting": model_manager.queue.waiting_count,
+                },
+                "kill_switch": {"global_killed": security_core.kill_switch.is_global_killed()},
+            },
+        }
+    return {"status": status_str}
+
+
+@router.get("/api/v1/system/health/details")
+async def health_details(
+    principal: Principal = Depends(require_permission("system:read")),
+):
+    """Estado detalhado dos componentes, apenas para utilizadores autenticados."""
     ollama_ok = await model_manager.check_health()
     return {
         "status": "healthy" if ollama_ok else "degraded",

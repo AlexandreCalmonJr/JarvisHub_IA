@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from packages.contracts.security import ProjectWorkMode
-from services.security_core import SecurityCore
+from services.security_core import PermissionDeniedError, SecurityCore
 
 from .analyzer import ArchitectureReport, ProjectAnalyzer
 from .scanner import ProjectInventory, ProjectScanner
@@ -48,7 +48,18 @@ class ProjectWorkspaceService:
             if inv.root_path and Path(inv.root_path).exists():
                 return Path(inv.root_path).resolve()
 
+        if hasattr(self.security_core, "permission_engine") and hasattr(self.security_core.permission_engine, "_project_allowlists"):
+            if project_id in self.security_core.permission_engine._project_allowlists:
+                return self.security_core.permission_engine._project_allowlists[project_id]
+
         p_dir = (self.base_dir / project_id).resolve()
+        base_resolved = self.base_dir.resolve()
+        try:
+            p_dir.relative_to(base_resolved)
+        except ValueError:
+            raise PermissionDeniedError(f"Caminho do projeto fora do workspace autorizado: '{project_id}'")
+        if p_dir == base_resolved:
+            raise PermissionDeniedError(f"Identificador de projeto inválido: '{project_id}'")
         return p_dir
 
     def register_and_scan(
@@ -186,9 +197,16 @@ class ProjectWorkspaceService:
 
     def delete_project(self, project_id: str) -> bool:
         """Exclui fisicamente a pasta do projeto no disco e remove registros de inventário."""
+        if hasattr(self.security_core, "kill_switch") and self.security_core.kill_switch.is_global_killed():
+            raise PermissionDeniedError("Operação de exclusão suspensa pelo Kill Switch Global.")
+
         project_dir = self.get_project_dir(project_id)
         if not project_dir.exists():
             return False
+
+        base_resolved = self.base_dir.resolve()
+        if project_dir == base_resolved:
+            raise PermissionDeniedError("Tentativa de exclusão da raiz de workspaces bloqueada.")
 
         def _remove_readonly(func, path, _):
             import os, stat
@@ -202,10 +220,11 @@ class ProjectWorkspaceService:
         self._inventories.pop(project_id, None)
         self._reports.pop(project_id, None)
 
-        if hasattr(self.security_core, "permission_engine") and hasattr(
-            self.security_core.permission_engine, "_projects"
-        ):
-            self.security_core.permission_engine._projects.pop(project_id, None)
+        if hasattr(self.security_core, "permission_engine"):
+            if hasattr(self.security_core.permission_engine, "_project_allowlists"):
+                self.security_core.permission_engine._project_allowlists.pop(project_id, None)
+            if hasattr(self.security_core.permission_engine, "_project_modes"):
+                self.security_core.permission_engine._project_modes.pop(project_id, None)
 
         if self.security_core.audit:
             self.security_core.audit.record_event(
@@ -495,7 +514,9 @@ class ProjectWorkspaceService:
         created_files: list[str] = []
         for rel_path, content in files.items():
             target_file = (project_dir / rel_path).resolve()
-            if not str(target_file).startswith(str(project_dir)):
+            try:
+                target_file.relative_to(project_dir)
+            except ValueError:
                 continue
             target_file.parent.mkdir(parents=True, exist_ok=True)
             target_file.write_text(content, encoding="utf-8")
@@ -545,8 +566,23 @@ class ProjectWorkspaceService:
         if not project_dir.exists():
             raise FileNotFoundError(f"Projeto '{project_id}' não existe no disco.")
 
-        target = (project_dir / rel_path).resolve()
-        if not str(target).startswith(str(project_dir)) or not target.exists():
+        if hasattr(self.security_core, "permission_engine"):
+            if hasattr(self.security_core.permission_engine, "_project_allowlists"):
+                if project_id not in self.security_core.permission_engine._project_allowlists:
+                    self.security_core.permission_engine.register_project(
+                        project_id=project_id,
+                        root_path=str(project_dir),
+                        mode=ProjectWorkMode.EDIT_APPROVED,
+                    )
+            target = self.security_core.permission_engine.validate_path_access(project_id, rel_path)
+        else:
+            target = (project_dir / rel_path).resolve()
+            try:
+                target.relative_to(project_dir)
+            except ValueError:
+                raise PermissionDeniedError(f"Caminho fora do projeto: '{rel_path}'")
+
+        if not target.is_file():
             raise FileNotFoundError(
                 f"Arquivo '{rel_path}' não foi encontrado no projeto '{project_id}'."
             )
@@ -560,19 +596,44 @@ class ProjectWorkspaceService:
         new_content: str,
         reason: str = "Modificação solicitada via chat",
     ) -> dict:
-        """Modifica um arquivo no disco, gerando backup .bak e diff unificado."""
+        """Modifica um arquivo no disco, gerando backup .bak e diff unificado com validações de segurança."""
+        if hasattr(self.security_core, "kill_switch") and self.security_core.kill_switch.is_global_killed():
+            raise PermissionDeniedError("Operação de escrita suspensa pelo Kill Switch Global.")
+
         project_dir = self.get_project_dir(project_id)
         if not project_dir.exists():
             raise FileNotFoundError(f"Projeto '{project_id}' não existe no disco.")
 
-        target = (project_dir / rel_path).resolve()
-        if not str(target).startswith(str(project_dir)):
-            raise ValueError(f"Caminho inválido: '{rel_path}'")
+        # Validação estrita via PermissionEngine (path traversal, symlinks e limites de raiz)
+        if hasattr(self.security_core, "permission_engine"):
+            if hasattr(self.security_core.permission_engine, "_project_allowlists"):
+                if project_id not in self.security_core.permission_engine._project_allowlists:
+                    self.security_core.permission_engine.register_project(
+                        project_id=project_id,
+                        root_path=str(project_dir),
+                        mode=ProjectWorkMode.EDIT_APPROVED,
+                    )
+            target = self.security_core.permission_engine.validate_path_access(project_id, rel_path)
+        else:
+            target = (project_dir / rel_path).resolve()
+            try:
+                target.relative_to(project_dir)
+            except ValueError:
+                raise PermissionDeniedError(f"Caminho fora do projeto: '{rel_path}'")
 
-        old_content = target.read_text(encoding="utf-8") if target.exists() else ""
+        # Bloqueio de modificação em arquivos sensíveis e internos (.env, .pem, .key e .git)
+        if target.name.startswith(".env") or target.suffix in (".key", ".pem"):
+            raise PermissionDeniedError(f"Modificação proibida no arquivo protegido '{target.name}'.")
+        try:
+            target.relative_to(project_dir / ".git")
+            raise PermissionDeniedError("Modificação direta de arquivos internos do repositório Git bloqueada.")
+        except ValueError:
+            pass
+
+        old_content = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
 
         # Gera backup se o arquivo já existia
-        if target.exists():
+        if target.is_file():
             backup_path = target.with_suffix(target.suffix + ".bak")
             backup_path.write_text(old_content, encoding="utf-8")
 

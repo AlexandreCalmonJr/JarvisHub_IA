@@ -47,6 +47,35 @@ class AuditTrail:
         self._events.append(event)
         return event
 
+    def log(
+        self,
+        operation: str,
+        user_id: str | None = "system",
+        target_resource: str | None = None,
+        status: str = "INFO",
+        parameters: dict[str, Any] | None = None,
+        agent_role: str | None = None,
+        project_id: str | None = None,
+        tool_name: str | None = None,
+        severity: AuditEventSeverity = AuditEventSeverity.INFO,
+        reason: str | None = None,
+        **kwargs: Any,
+    ) -> AuditEvent:
+        params = dict(parameters or {})
+        if target_resource:
+            params["target_resource"] = target_resource
+        return self.record_event(
+            operation=operation,
+            status=status,
+            user_id=user_id,
+            agent_role=agent_role,
+            project_id=project_id,
+            tool_name=tool_name,
+            parameters=params,
+            severity=severity,
+            reason=reason,
+        )
+
     def list_events(
         self,
         project_id: str | None = None,

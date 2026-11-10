@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,6 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from services.observability import attach_server_logging
+from apps.api.auth import AuthMiddleware, auth_service
 
 # Importa singletons e serviços centrais de apps.api.deps
 from apps.api.deps import (
@@ -25,6 +27,7 @@ from apps.api.schemas import ChatRequest
 
 # Importa roteadores modulares (Clean Architecture)
 from apps.api.routers import (
+    auth,
     chat,
     workspace,
     models,
@@ -47,19 +50,38 @@ app = FastAPI(
     description="Backend central REST e WebSocket para orquestração de 26 agentes especializados local-first",
 )
 
-# Configuração de CORS permissivo para desenvolvimento e produção local
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+]
+
+
+def _resolve_allowed_origins() -> list[str]:
+    raw = os.environ.get("JARVIS_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return DEFAULT_ALLOWED_ORIGINS
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    return origins or DEFAULT_ALLOWED_ORIGINS
+
+
+# Autenticação central: tudo em /api exige credencial, exceto a allowlist pública.
+# O CORS é adicionado depois para ficar na camada mais externa e tratar o preflight.
+app.add_middleware(AuthMiddleware, service=auth_service)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_resolve_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Device-Token", "X-CSRF-Token"],
 )
 
 # Conecta buffer circular de observabilidade e logs em tempo real
 attach_server_logging()
 
 # Inclusão dos roteadores de domínio desacoplados
+app.include_router(auth.router)
 app.include_router(system.router)
 app.include_router(chat.router)
 app.include_router(workspace.router)

@@ -1,6 +1,8 @@
+import difflib
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from apps.api.auth import Principal, get_principal, require_admin, require_permission
 from apps.api.schemas import (
     ApprovalDecisionRequest,
     KillSwitchRequest,
@@ -16,7 +18,12 @@ from apps.api.deps import (
     cyber_shield,
     UnauthorizedApprovalError,
     coding_broker,
+    tool_gateway,
 )
+from packages.contracts.agent import AgentRole
+from packages.contracts.approval import ApprovalStatus
+from services.security_core import PermissionDeniedError
+from services.tool_gateway import ToolExecutionRequest
 
 logger = logging.getLogger("jarvis.api.security")
 router = APIRouter(tags=["security"])
@@ -28,8 +35,27 @@ async def list_approvals():
 
 
 @router.post("/api/v1/approvals/{request_id}/decide")
-async def decide_approval(request_id: str, payload: ApprovalDecisionRequest):
+async def decide_approval(
+    request_id: str,
+    payload: ApprovalDecisionRequest,
+    principal: Principal = Depends(get_principal),
+):
     try:
+        # Rejeita imediatamente qualquer tentativa de autoaprovação por agentes
+        known_agents = {r.value for r in AgentRole}
+        candidate = (payload.decided_by or "").lower().strip()
+        if candidate and (candidate in known_agents or candidate.startswith("agent_") or candidate.startswith("agent")):
+            raise UnauthorizedApprovalError(
+                "Agentes de IA não possuem permissão para autoaprovar pedidos!"
+            )
+        if principal.subject_id in known_agents or principal.subject_id.lower().startswith("agent"):
+            raise UnauthorizedApprovalError(
+                "Agentes de IA não possuem permissão para autoaprovar pedidos!"
+            )
+
+        # A identidade válida vem sempre da autenticação do servidor
+        actor = principal.display_id
+
         # Aprovações do Coding Agent bloqueiam um runtime assíncrono; precisam
         # ser resolvidas pelo broker para libertar o loop de ferramentas.
         if coding_broker.has_ticket(request_id):
@@ -40,7 +66,7 @@ async def decide_approval(request_id: str, payload: ApprovalDecisionRequest):
             decided = coding_broker.decide(
                 request_id,
                 approved=payload.action == "approve",
-                decided_by=payload.decided_by,
+                decided_by=actor,
                 reason=payload.reason,
             )
             return {
@@ -51,19 +77,25 @@ async def decide_approval(request_id: str, payload: ApprovalDecisionRequest):
         if payload.action == "approve":
             decided = security_core.approval_engine.approve_request(
                 request_id=request_id,
-                decided_by=payload.decided_by,
+                decided_by=actor,
                 decision_reason=payload.reason,
             )
-            # Retoma tarefa associada
-            await jarvis_master.resume_after_approval(
-                task_id=decided.task_id,
-                approved_by=payload.decided_by,
-            )
+            # Retoma tarefa associada se pertencer ao Jarvis Master
+            try:
+                await jarvis_master.resume_after_approval(
+                    task_id=decided.task_id,
+                    approved_by=actor,
+                )
+            except ValueError as ve:
+                logger.debug("JarvisMaster ignorou retomada da tarefa '%s': %s", decided.task_id, ve)
+            except Exception as exc:
+                logger.warning("Falha ao retomar tarefa no JarvisMaster: %s", exc)
+
             return {"status": "approved", "request": decided}
         elif payload.action == "reject":
             decided = security_core.approval_engine.reject_request(
                 request_id=request_id,
-                decided_by=payload.decided_by,
+                decided_by=actor,
                 reason=payload.reason or "Rejeitado pelo utilizador",
             )
             return {"status": "rejected", "request": decided}
@@ -76,7 +108,10 @@ async def decide_approval(request_id: str, payload: ApprovalDecisionRequest):
 
 
 @router.post("/api/v1/system/kill-switch")
-async def trigger_kill_switch(payload: KillSwitchRequest):
+async def trigger_kill_switch(
+    payload: KillSwitchRequest,
+    principal: Principal = Depends(require_permission("security:kill")),
+):
     if payload.target == "global":
         security_core.kill_switch.trigger_global_kill(reason=payload.reason)
         return {"status": "global_kill_activated"}
@@ -104,25 +139,45 @@ async def toggle_network_isolation_endpoint(payload: NetworkIsolationPayload):
 
 
 @router.post("/api/v1/mobile/pair")
-async def pair_mobile_device(payload: DevicePairRequest):
-    reg = security_core.device_auth.pair_device(payload.device_name)
-    return {
-        "status": "paired",
-        "device_id": reg.device_id,
-        "device_name": reg.device_name,
-        "device_token": reg.device_token,
-    }
+async def pair_mobile_device(
+    payload: DevicePairRequest,
+    principal: Principal = Depends(require_admin),
+):
+    try:
+        reg = security_core.device_auth.pair_device(
+            device_name=payload.device_name,
+            scopes=payload.scopes,
+            created_by=principal.display_id,
+        )
+        return {
+            "status": "paired",
+            "device_id": reg.device_id,
+            "device_name": reg.device_name,
+            "device_token": reg.device_token,
+            "scopes": reg.scopes,
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
 
 @router.get("/api/v1/mobile/devices")
-async def list_mobile_devices():
+async def list_mobile_devices(
+    principal: Principal = Depends(require_admin),
+):
     return security_core.device_auth.list_devices()
 
 
 @router.post("/api/v1/mobile/revoke")
-async def revoke_mobile_device(payload: DeviceRevokeRequest):
+async def revoke_mobile_device(
+    payload: DeviceRevokeRequest,
+    principal: Principal = Depends(require_admin),
+):
     try:
-        revoked = security_core.device_auth.revoke_device(payload.device_id, reason=payload.reason)
+        revoked = security_core.device_auth.revoke_device(
+            payload.device_id,
+            reason=payload.reason or "Revogação pelo utilizador",
+            revoked_by=principal.display_id,
+        )
         return {"status": "revoked", "device_id": revoked.device_id}
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
@@ -189,23 +244,81 @@ async def list_security_policy_templates():
 
 
 @router.post("/api/v1/security/apply-policy")
-async def apply_security_policy_endpoint(payload: ApplySecurityPolicyPayload):
-    """Aplica o template de política de segurança diretamente no diretório do projeto."""
+async def apply_security_policy_endpoint(
+    payload: ApplySecurityPolicyPayload,
+    principal: Principal = Depends(get_principal),
+):
+    """Aplica o template de política de segurança diretamente no diretório do projeto com governança de aprovação."""
     try:
         proj_dir = workspace_service.get_project_dir(payload.project_id)
+        if not proj_dir.exists() or not proj_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"Projeto '{payload.project_id}' não encontrado.")
+
+        # Garante registro no PermissionEngine para validação estrita de caminho
+        if payload.project_id not in security_core.permission_engine._project_allowlists:
+            security_core.permission_engine.register_project(
+                project_id=payload.project_id,
+                root_path=str(proj_dir),
+            )
+
         templates = {t["id"]: t for t in security_core.policy_generator.get_available_templates()}
         tmpl = templates.get(payload.template_id)
         if not tmpl:
             raise HTTPException(status_code=404, detail="Template de política não encontrado.")
 
-        target_file = proj_dir / tmpl["filename"]
-        target_file.write_text(tmpl["code"], encoding="utf-8")
-        security_core.audit.log(
+        target_file = security_core.permission_engine.validate_path_access(
+            payload.project_id, tmpl["filename"]
+        )
+        old_content = target_file.read_text(encoding="utf-8", errors="replace") if target_file.is_file() else ""
+        diff = "".join(difflib.unified_diff(
+            old_content.splitlines(keepends=True),
+            tmpl["code"].splitlines(keepends=True),
+            fromfile=f"a/{tmpl['filename']}",
+            tofile=f"b/{tmpl['filename']}",
+        ))
+        task_id = f"security-policy:{payload.project_id}:{payload.template_id}"
+        if not payload.approval_id:
+            approval = security_core.approval_engine.create_request(
+                task_id=task_id,
+                agent_role=AgentRole.API_SECURITY_SPECIALIST.value,
+                operation="file_write",
+                impact_summary=f"Aplicar o template '{tmpl['title']}' no arquivo '{tmpl['filename']}'.",
+                affected_resources=[str(target_file)],
+                proposed_diff=diff,
+                reversible=True,
+            )
+            return {
+                "status": "approval_required",
+                "approval_id": approval.id,
+                "file": tmpl["filename"],
+                "path": str(target_file),
+                "impact_summary": approval.impact_summary,
+                "diff": diff,
+            }
+        approval = security_core.approval_engine.get_request(payload.approval_id)
+        if (
+            not approval
+            or approval.status != ApprovalStatus.APPROVED
+            or approval.operation != "file_write"
+            or approval.task_id != task_id
+            or str(target_file) not in approval.affected_resources
+        ):
+            raise PermissionDeniedError("Aprovação não correspondente ou não aprovada.")
+        await tool_gateway.execute_tool(ToolExecutionRequest(
+            tool_name="write_file",
+            arguments={"path": tmpl["filename"], "content": tmpl["code"]},
+            agent_role=AgentRole.API_SECURITY_SPECIALIST.value,
+            project_id=payload.project_id,
+            task_id=task_id,
+            approval_id=payload.approval_id,
+        ))
+        security_core.audit.record_event(
             operation="APPLY_SECURITY_POLICY",
-            user_id="local_developer",
-            target_resource=str(target_file),
+            user_id=principal.display_id,
+            project_id=payload.project_id,
+            tool_name="write_file",
             status="SUCCESS",
-            parameters={"project_id": payload.project_id, "template_id": payload.template_id},
+            parameters={"project_id": payload.project_id, "template_id": payload.template_id, "target_file": str(target_file)},
         )
         return {
             "status": "applied",
@@ -213,5 +326,11 @@ async def apply_security_policy_endpoint(payload: ApplySecurityPolicyPayload):
             "path": str(target_file),
             "message": f"Política '{tmpl['title']}' aplicada com sucesso.",
         }
+    except HTTPException:
+        raise
+    except PermissionDeniedError as pde:
+        raise HTTPException(status_code=403, detail=str(pde))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))

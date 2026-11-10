@@ -329,15 +329,20 @@ class CodingAgentRuntime:
             return
 
         # Ferramentas bloqueadas pelo Kill Switch
-        if hasattr(self.security_core, "kill_switch") and self.security_core.kill_switch.is_tool_blocked(
-            call.name
+        if hasattr(self.security_core, "kill_switch") and (
+            self.security_core.kill_switch.is_global_killed()
+            or self.security_core.kill_switch.is_tool_blocked(call.name)
         ):
             tool_result = ToolResult(
                 call_id=call.id,
                 name=call.name,
                 success=False,
                 denied=True,
-                error=f"A ferramenta '{call.name}' está bloqueada pelo Kill Switch.",
+                error=(
+                    "Execução suspensa pelo Kill Switch Global."
+                    if self.security_core.kill_switch.is_global_killed()
+                    else f"A ferramenta '{call.name}' está bloqueada pelo Kill Switch."
+                ),
             )
             async for event in self._finish_tool(tool_result, config, messages, result):
                 yield event

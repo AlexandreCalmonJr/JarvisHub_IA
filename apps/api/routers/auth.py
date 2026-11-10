@@ -1,0 +1,217 @@
+import logging
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field
+
+from apps.api.auth import (
+    SESSION_COOKIE,
+    AuthService,
+    Principal,
+    auth_service,
+    get_principal,
+    require_admin,
+)
+from packages.contracts.security import AuditEventSeverity
+
+logger = logging.getLogger("jarvis.api.auth.routes")
+router = APIRouter(tags=["auth"], prefix="/api/v1/auth")
+
+
+class AuthLoginRequest(BaseModel):
+    token: str = Field(..., min_length=1, description="Token de administrador ou sessão")
+
+
+class BootstrapExchangeRequest(BaseModel):
+    token: str = Field(..., min_length=1, description="Token de bootstrap de uso único")
+
+
+class CreateSessionRequest(BaseModel):
+    user_id: str = Field(..., min_length=1)
+    role: str = Field("developer", description="admin, developer ou auditor")
+    scopes: list[str] | None = None
+    expiry_hours: float | None = Field(None, ge=0.01, le=720)
+
+
+def _is_https(request: Request) -> bool:
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    return request.url.scheme == "https" or forwarded == "https"
+
+
+def _set_session_cookie(response: Response, request: Request, session) -> None:
+    expires_at = session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    max_age = max(1, int((expires_at - datetime.now(UTC)).total_seconds()))
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=session.session_id,
+        max_age=max_age,
+        httponly=True,
+        samesite="strict",
+        secure=_is_https(request),
+        path="/",
+    )
+
+
+def _session_payload(session) -> dict:
+    return {
+        "session_token": session.session_id,
+        "user_id": session.user_id,
+        "role": session.role,
+        "scopes": list(session.scopes),
+        "created_at": session.created_at,
+        "expires_at": session.expires_at,
+    }
+
+
+@router.post("/login")
+async def login(payload: AuthLoginRequest, request: Request, response: Response):
+    client = AuthService.client_key(request)
+    if not auth_service.check_rate_limit(f"login:{client}"):
+        raise HTTPException(status_code=429, detail="Demasiadas tentativas. Tente mais tarde.")
+
+    session = auth_service.login(payload.token)
+    if session is None:
+        auth_service.security.audit.record_event(
+            operation="AUTH_LOGIN_FAILED",
+            status="DENIED",
+            user_id="anonymous",
+            parameters={"client": client},
+            severity=AuditEventSeverity.WARNING,
+            reason="Token de login inválido.",
+        )
+        raise HTTPException(status_code=401, detail="Credenciais inválidas.")
+
+    _set_session_cookie(response, request, session)
+    auth_service.security.audit.record_event(
+        operation="AUTH_LOGIN_SUCCESS",
+        status="SUCCESS",
+        user_id=session.user_id,
+        parameters={"role": session.role, "session_id": session.session_id},
+        severity=AuditEventSeverity.INFO,
+    )
+    return {"status": "authenticated", **_session_payload(session)}
+
+
+@router.post("/bootstrap/exchange")
+async def exchange_bootstrap(
+    payload: BootstrapExchangeRequest, request: Request, response: Response
+):
+    client = AuthService.client_key(request)
+    if not auth_service.check_rate_limit(f"bootstrap:{client}", limit=5):
+        raise HTTPException(status_code=429, detail="Demasiadas tentativas. Tente mais tarde.")
+
+    session = auth_service.login_with_bootstrap(payload.token)
+    if session is None:
+        auth_service.security.audit.record_event(
+            operation="AUTH_BOOTSTRAP_FAILED",
+            status="DENIED",
+            user_id="anonymous",
+            parameters={"client": client},
+            severity=AuditEventSeverity.WARNING,
+            reason="Token de bootstrap inválido ou expirado.",
+        )
+        raise HTTPException(status_code=401, detail="Token de bootstrap inválido ou expirado.")
+
+    _set_session_cookie(response, request, session)
+    auth_service.security.audit.record_event(
+        operation="AUTH_BOOTSTRAP_SUCCESS",
+        status="SUCCESS",
+        user_id=session.user_id,
+        parameters={"session_id": session.session_id},
+        severity=AuditEventSeverity.INFO,
+    )
+    return {"status": "authenticated", **_session_payload(session)}
+
+
+@router.get("/me")
+async def me(principal: Principal = Depends(get_principal)):
+    payload = principal.to_dict()
+    payload["user_id"] = principal.subject_id
+    if principal.session_id:
+        session = auth_service.security.sessions.get_session(principal.session_id)
+        payload["expires_at"] = session.expires_at if session else None
+    else:
+        payload["expires_at"] = None
+    return payload
+
+
+@router.post("/logout")
+async def logout(response: Response, principal: Principal = Depends(get_principal)):
+    revoked = auth_service.logout(principal)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    if revoked:
+        auth_service.security.audit.record_event(
+            operation="AUTH_LOGOUT",
+            status="SUCCESS",
+            user_id=principal.display_id,
+            parameters={"session_id": principal.session_id},
+            severity=AuditEventSeverity.INFO,
+        )
+    return {"status": "logged_out", "session_revoked": revoked}
+
+
+@router.post("/sessions")
+async def create_human_session(
+    payload: CreateSessionRequest,
+    principal: Principal = Depends(require_admin),
+):
+    try:
+        session = auth_service.create_session(
+            user_id=payload.user_id,
+            role=payload.role,
+            scopes=payload.scopes,
+            expiry_hours=payload.expiry_hours,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    auth_service.security.audit.record_event(
+        operation="AUTH_SESSION_CREATED",
+        status="SUCCESS",
+        user_id=principal.display_id,
+        parameters={
+            "target_user": payload.user_id,
+            "role": payload.role,
+            "expiry_hours": payload.expiry_hours,
+        },
+        severity=AuditEventSeverity.INFO,
+    )
+    return {"status": "created", **_session_payload(session)}
+
+
+@router.get("/sessions")
+async def list_human_sessions(principal: Principal = Depends(require_admin)):
+    return {
+        "sessions": [
+            {
+                "session_id": s.session_id,
+                "user_id": s.user_id,
+                "role": s.role,
+                "scopes": list(s.scopes),
+                "created_at": s.created_at,
+                "expires_at": s.expires_at,
+                "last_seen_at": s.last_seen_at,
+                "is_revoked": s.is_revoked,
+            }
+            for s in auth_service.security.sessions.list_sessions(include_revoked=True)
+        ]
+    }
+
+
+@router.delete("/sessions/{session_id}")
+async def revoke_human_session(
+    session_id: str, principal: Principal = Depends(require_admin)
+):
+    revoked = auth_service.security.sessions.revoke_session(session_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    auth_service.security.audit.record_event(
+        operation="AUTH_SESSION_REVOKED",
+        status="REVOKED",
+        user_id=principal.display_id,
+        parameters={"session_id": session_id},
+        severity=AuditEventSeverity.WARNING,
+    )
+    return {"status": "revoked", "session_id": session_id}

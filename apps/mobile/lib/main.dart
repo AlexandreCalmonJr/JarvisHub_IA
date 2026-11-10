@@ -355,6 +355,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       final client = HttpClient();
       final uri = Uri.parse('${AppConfig.baseUrl}/api/v1/approvals');
       final request = await client.getUrl(uri);
+      if (AppConfig.deviceToken.isNotEmpty) {
+        request.headers.set('X-Device-Token', AppConfig.deviceToken);
+      }
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
       setState(() {
@@ -373,9 +376,11 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       final uri = Uri.parse('${AppConfig.baseUrl}/api/v1/approvals/$requestId/decide');
       final request = await client.postUrl(uri);
       request.headers.set('Content-Type', 'application/json');
+      if (AppConfig.deviceToken.isNotEmpty) {
+        request.headers.set('X-Device-Token', AppConfig.deviceToken);
+      }
       request.add(utf8.encode(jsonEncode({
         'action': action,
-        'decided_by': 'MobileUser',
         'reason': 'Aprovado via App Android Móvel',
       })));
       await request.close();
@@ -564,6 +569,9 @@ class _SystemStatusScreenState extends State<SystemStatusScreen> {
       final uri = Uri.parse('${AppConfig.baseUrl}/api/v1/system/kill-switch');
       final request = await client.postUrl(uri);
       request.headers.set('Content-Type', 'application/json');
+      if (AppConfig.deviceToken.isNotEmpty) {
+        request.headers.set('X-Device-Token', AppConfig.deviceToken);
+      }
       request.add(utf8.encode(jsonEncode({
         'target': 'global',
         'reason': 'Acionado de emergência pelo app móvel Android.',

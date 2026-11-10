@@ -8,6 +8,7 @@ from apps.api.schemas import (
     ProjectMemoryRequest,
 )
 from apps.api.deps import workspace_service, webhook_service, db_manager
+from services.security_core import PermissionDeniedError
 
 logger = logging.getLogger("jarvis.api.workspace")
 router = APIRouter(tags=["workspace"])
@@ -24,8 +25,12 @@ async def read_project_file_endpoint(project_id: str, path: str):
     try:
         content = workspace_service.read_project_file(project_id, path)
         return {"project_id": project_id, "path": path, "content": content}
+    except PermissionDeniedError as pde:
+        raise HTTPException(status_code=403, detail=str(pde))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
     except Exception as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/files/write")
@@ -44,6 +49,10 @@ async def write_project_file_endpoint(project_id: str, payload: WriteProjectFile
             "path": payload.path,
             "diff": res.get("diff", ""),
         }
+    except PermissionDeniedError as pde:
+        raise HTTPException(status_code=403, detail=str(pde))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Falha ao salvar arquivo no projeto: {exc}")
 
@@ -78,6 +87,8 @@ async def delete_workspace_project_endpoint(project_id: str):
         if not success:
             raise HTTPException(status_code=404, detail=f"Projeto '{project_id}' não encontrado no disco.")
         return {"status": "deleted", "project_id": project_id}
+    except PermissionDeniedError as pde:
+        raise HTTPException(status_code=403, detail=str(pde))
     except HTTPException:
         raise
     except Exception as exc:

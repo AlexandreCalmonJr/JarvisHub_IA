@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form
 
 from apps.api.schemas import (
@@ -27,7 +28,8 @@ async def upload_knowledge_document_endpoint(
 ):
     upload_dir = resolve_data_dir() / "knowledge_uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
-    target_path = upload_dir / file.filename
+    safe_name = Path(file.filename or "upload.bin").name
+    target_path = upload_dir / safe_name
     content_bytes = await file.read()
     target_path.write_bytes(content_bytes)
     result = knowledge_vault_service.index_file(target_path, category=category)

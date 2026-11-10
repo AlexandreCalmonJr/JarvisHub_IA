@@ -440,6 +440,9 @@ class UniversalOnlineAdapter(BaseModelAdapter):
         self.base_url = (base_url or self._default_base_url(self.provider_name)).rstrip("/")
         self.default_model = default_model or self._default_model_for_provider(self.provider_name)
         self.timeout_seconds = timeout_seconds
+        # Última utilização reportada pelo provedor durante streaming (quando disponível).
+        # O roteador híbrido usa esse dado para contabilizar custos sem inventar valores.
+        self.last_stream_usage: dict[str, int] | None = None
 
     @staticmethod
     def _default_base_url(provider: str) -> str:
@@ -736,6 +739,8 @@ class UniversalOnlineAdapter(BaseModelAdapter):
         if not self.api_key:
             raise ValueError(f"Chave de API não configurada para o provedor '{self.provider_name}'.")
 
+        self.last_stream_usage = None
+
         local_model_names = {"llama3.2:3b", "qwen2.5-coder:7b", "qwen2.5:7b", "mock-model"}
         if not request.model_name or request.model_name in local_model_names:
             target_model = self.default_model
@@ -791,6 +796,27 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                         try:
                             event = json.loads(data_str)
                         except Exception:
+                            continue
+                        if event.get("type") == "message_start":
+                            usage = (event.get("message") or {}).get("usage") or {}
+                            if usage:
+                                self.last_stream_usage = {
+                                    "prompt_tokens": int(usage.get("input_tokens") or 0),
+                                    "completion_tokens": int(usage.get("output_tokens") or 0),
+                                }
+                            continue
+                        if event.get("type") == "message_delta":
+                            usage = event.get("usage") or {}
+                            if usage:
+                                current = self.last_stream_usage or {
+                                    "prompt_tokens": 0,
+                                    "completion_tokens": 0,
+                                }
+                                current["completion_tokens"] = int(
+                                    usage.get("output_tokens")
+                                    or current["completion_tokens"]
+                                )
+                                self.last_stream_usage = current
                             continue
                         if event.get("type") == "content_block_delta":
                             delta = event.get("delta") or {}
@@ -858,6 +884,12 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                         break
                     try:
                         chunk = json.loads(data_str)
+                        usage = chunk.get("usage")
+                        if isinstance(usage, dict) and usage:
+                            self.last_stream_usage = {
+                                "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                                "completion_tokens": int(usage.get("completion_tokens") or 0),
+                            }
                         choices = chunk.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})

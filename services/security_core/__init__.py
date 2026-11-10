@@ -30,14 +30,19 @@ class SecurityCore:
     Ponto de entrada obrigatório para validação de permissões, auditoria, aprovações e kill switch.
     """
 
-    def __init__(self, workspace_service=None):
+    def __init__(self, workspace_service=None, auth_dir=None):
         self.audit = AuditTrail()
         self.sessions = SessionManager()
         self.kill_switch = KillSwitch(audit_trail=self.audit)
         self.approval_engine = ApprovalEngine(audit_trail=self.audit)
         self.permission_engine = PermissionEngine(audit_trail=self.audit)
         self.pipeline = QASecurityPipeline(audit_trail=self.audit)
-        self.device_auth = DeviceAuthManager(audit_trail=self.audit)
+        device_store = None
+        if auth_dir is not None:
+            from pathlib import Path
+
+            device_store = Path(auth_dir) / "devices.json"
+        self.device_auth = DeviceAuthManager(audit_trail=self.audit, store_path=device_store)
         self.cyber_shield = cyber_shield
         self.cve_scanner = CVEScannerService()
         self.red_team = RedTeamSandboxService(workspace_service=workspace_service)

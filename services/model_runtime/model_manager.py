@@ -80,9 +80,12 @@ class ModelManager:
                 raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
 
         # 2. Execução protegida pela fila de concorrência com suporte a Hybrid Gateway
+        used_provider = "ollama_local"
+
         async def _run_inference():
-            if self.hybrid_router and self.hybrid_router.online_config.enabled:
-                res, _ = await self.hybrid_router.route_inference(
+            nonlocal used_provider
+            if self.hybrid_router and (self.hybrid_router.online_config.enabled or getattr(request, "key_id", None)):
+                res, used_provider = await self.hybrid_router.route_inference(
                     request, has_external_data_approval=has_external_data_approval
                 )
                 return res
@@ -101,6 +104,7 @@ class ModelManager:
                 status="SUCCESS",
                 parameters={
                     "model": response.model_name,
+                    "provider": used_provider,
                     "prompt_tokens": response.prompt_tokens,
                     "completion_tokens": response.completion_tokens,
                     "duration_ms": response.duration_ms,
@@ -124,7 +128,7 @@ class ModelManager:
                 raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
 
         # 2. Streaming via Hybrid Router ou Adapter Local
-        if self.hybrid_router and self.hybrid_router.online_config.enabled:
+        if self.hybrid_router and (self.hybrid_router.online_config.enabled or getattr(request, "key_id", None)):
             async for chunk in self.hybrid_router.route_inference_stream(
                 request, has_external_data_approval=has_external_data_approval
             ):
