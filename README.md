@@ -44,7 +44,7 @@ Toda a fundamentação técnica, auditorias de segurança e manuais operacionais
 | **09** | **Manual de Operação, Backup e Recuperação** | Hot backups em modo WAL, recuperação de desastres, expurgo de tarefas e desfragmentação. | [09-manual-operacao-backup-e-recuperacao.md](docs/operations/09-manual-operacao-backup-e-recuperacao.md) |
 | **10** | **Manual do Project Workspace e Fluxo Git** | Importação de pastas, modos Read-Only/Plan-Only/Write, branches temporárias e diffs. | [10-manual-project-workspace-e-fluxo-git.md](docs/operations/10-manual-project-workspace-e-fluxo-git.md) |
 | **11** | **Manual do Dashboard e App Mobile** | Guia de uso das 17 páginas modulares, atalho `Ctrl+K`, comandos de chat e pareamento VPN Tailscale. | [11-manual-dashboard-e-app-mobile.md](docs/operations/11-manual-dashboard-e-app-mobile.md) |
-| **12** | **Plano de Testes, Benchmark e Release** | Métricas de estresse (191.9 RPS / 244 WPS), testes unitários e critérios de homologação v1.0. | [12-plano-de-testes-benchmarks-e-release.md](docs/operations/12-plano-de-testes-benchmarks-e-release.md) |
+| **12** | **Plano de Testes, Benchmark e Release** | Pirâmide de testes, benchmark SQLite reproduzível e critérios de promoção de release. | [12-plano-de-testes-benchmarks-e-release.md](docs/operations/12-plano-de-testes-benchmarks-e-release.md) |
 | **13** | **Auditoria de Paridade: Claude Code & OpenCode** | Matriz de paridade, lacunas identificadas por severidade, roadmap P0/P1/P2 e critérios de aceite do Coding Agent. | [13-auditoria-paridade-claude-code-opencode.md](docs/architecture/13-auditoria-paridade-claude-code-opencode.md) |
 
 ---
@@ -185,7 +185,7 @@ Abra o seu navegador em: **`http://127.0.0.1:8000`**
 
 * **Local-first**: o servidor inicia em `127.0.0.1` por padrão; acessos remotos exigem configuração explícita e HTTPS.
 * **Zero Snake_case Visível na UI**: Toda a interface foi rigorosamente traduzida para Português do Brasil claro e profissional.
-* **Código 100% Auditado**: 143 testes unitários, de integração e de segurança aprovados, sem bibliotecas órfãs e com separação estrita de camadas.
+* **Auditoria em andamento**: a suíte e os gates estão a ser executados na branch de homologação. Nenhum total de testes ou selo de aprovação é declarado sem evidência associada ao commit.
 * **Governança Human-in-the-Loop**: Nenhuma linha de código ou arquivo de projeto é alterado sem autorização explícita do desenvolvedor humano.
 * **Extensibilidade Controlada**: Servidores MCP são opcionais, definidos em `data/mcp_servers.json`, e ferramentas externas seguem a mesma política de risco e aprovação das nativas.
 
