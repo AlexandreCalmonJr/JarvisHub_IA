@@ -9,6 +9,7 @@ const view = read('../src/components/ProjectWorkspaceView.tsx');
 const card = read('../src/components/workspace/ProjectCard.tsx');
 const memory = read('../src/components/workspace/ProjectMemoryModal.tsx');
 const backend = read('../../api/routers/workspace.py');
+const webhooks = read('../src/components/workspace/WebhooksModal.tsx');
 
 test('workspace list and project memory API errors are not converted to empty arrays', () => {
   assert.match(api, /Falha ao carregar os projetos do workspace/);
@@ -40,4 +41,10 @@ test('workspace endpoints enforce account ownership on private project operation
   assert.ok((backend.match(/principal\s*:\s*Principal\s*=\s*Depends\(get_principal\)/g) || []).length >= 10);
   assert.match(backend, /owner_user_id=principal\.subject_id/);
   assert.match(backend, /_require_owned_project\(project_id, principal\)/);
+});
+
+test('webhook configuration failure is visible and cannot silently overwrite saved values', () => {
+  assert.match(webhooks, /setLoadError/);
+  assert.match(webhooks, /Não foi possível carregar as configurações atuais/);
+  assert.match(webhooks, /disabled=\{saving \|\| !!loadError\}/);
 });
