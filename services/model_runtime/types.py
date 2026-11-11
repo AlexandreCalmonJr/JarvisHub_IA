@@ -29,6 +29,8 @@ class InferenceRequest(BaseModel):
     # Identidade definida pelo servidor; usada para segregar telemetria por conta.
     owner_user_id: str | None = None
     agent_role: str | None = None
+    task_capability: str | None = None
+    force_local: bool = False
     timeout_seconds: float = 180.0
     # Schema de ferramentas no formato OpenAI ({"type": "function", ...}) ou Anthropic.
     # O adaptador converte quando necessário; vazio desativa tool calling.
