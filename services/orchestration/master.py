@@ -69,6 +69,7 @@ class JarvisMaster:
             "policy_violations": [],
             "approval_required": False,
             "approval_id": None,
+            "pending_project": None,
             "current_step": 0,
             "agent_outputs": [],
             "final_summary": None,
