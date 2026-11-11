@@ -400,7 +400,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     type="button"
                     onClick={() => {
                       setSelectedModel(null);
-                      localStorage.removeItem(getAccountStorageKey('jarvis_selected_model'));
+                      try {
+                        localStorage.removeItem(getAccountStorageKey('jarvis_selected_model'));
+                      } catch {
+                        // A seleção automática continua válida nesta sessão.
+                      }
                       setShowModelMenu(false);
                     }}
                     className="btn btn-ghost"
@@ -429,7 +433,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       type="button"
                       onClick={() => {
                         setSelectedModel(m);
-                        localStorage.setItem(getAccountStorageKey('jarvis_selected_model'), m.id);
+                        try {
+                          localStorage.setItem(getAccountStorageKey('jarvis_selected_model'), m.id);
+                        } catch {
+                          // A seleção continua ativa nesta sessão mesmo sem persistência local.
+                        }
                         setShowModelMenu(false);
                       }}
                       className="btn btn-ghost"
@@ -441,10 +449,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         fontSize: '0.78rem',
                         width: '100%',
                         backgroundColor: selectedModel?.id === m.id ? 'rgba(217, 119, 87, 0.15)' : 'transparent',
-                        color: selectedModel.id === m.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        color: selectedModel?.id === m.id ? 'var(--text-primary)' : 'var(--text-secondary)',
                       }}
                     >
-                      <span style={{ fontWeight: selectedModel.id === m.id ? 600 : 400 }}>{m.label}</span>
+                      <span style={{ fontWeight: selectedModel?.id === m.id ? 600 : 400 }}>{m.label}</span>
                       <span style={{ fontSize: '0.68rem', color: m.isCloud ? 'var(--accent-color)' : 'var(--text-muted)' }}>
                         {m.effort}
                       </span>

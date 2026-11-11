@@ -43,7 +43,6 @@ export async function createSystemBackup(): Promise<{ status: string }> {
     credentials: 'include',
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Falha ao gerar backup.' }));
     if (res.status === 403) {
       throw new Error('Apenas administradores podem criar backups do sistema.');
     }

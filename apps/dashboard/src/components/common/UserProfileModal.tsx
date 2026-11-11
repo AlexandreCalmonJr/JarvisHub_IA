@@ -154,9 +154,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleClearHistory = () => {
     if (window.confirm('Tem certeza de que deseja apagar todo o histórico de conversas locais? Esta ação não pode ser desfeita.')) {
-      localStorage.removeItem(getAccountStorageKey('jarvis_chat_messages_v1'));
-      localStorage.removeItem(getAccountStorageKey('jarvis_sessions_catalog_v1'));
-      notify('Histórico de conversas limpo com sucesso.', 'info');
+      const accountSuffix = getAccountStorageKey('__scope_probe__').slice('__scope_probe__'.length);
+      const fixedKeys = new Set([
+        getAccountStorageKey('jarvis_chat_messages_v1'),
+        getAccountStorageKey('jarvis_chat_session_id_v1'),
+        getAccountStorageKey('jarvis_sessions_catalog_v1'),
+      ]);
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index);
+        if (key && (fixedKeys.has(key) || (key.startsWith('jarvis_session_messages_') && key.endsWith(accountSuffix)))) {
+          localStorage.removeItem(key);
+        }
+      }
+      notify('Histórico local desta conta limpo com sucesso.', 'info');
       setTimeout(() => window.location.reload(), 600);
     }
   };
@@ -171,7 +181,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       a.download = `jarvis_chat_export_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      notify('Histórico de conversas exportado.', 'success');
+      notify('Conversa atual exportada.', 'success');
     } catch (e: any) {
       notify(`Erro ao exportar dados: ${e.message}`, 'error');
     }
@@ -273,7 +283,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               Nível de Experiência da Interface
             </label>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
-              Define a densidade visual preferida neste navegador:
+              Guarda a preferência de experiência neste navegador. Os módulos que ainda não suportam modos adaptativos mantêm a apresentação padrão.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
               {[
@@ -462,7 +472,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           >
             <strong style={{ color: 'var(--text-primary)' }}>Cofre privado por conta em implementação</strong>
             <p style={{ margin: '8px 0 0' }}>
-              A gravação segura de credenciais ainda não está disponível. Para proteger suas chaves, esta tela não envia nem armazena tokens de API. Aguarde a entrega do Cofre de Credenciais individual, com criptografia e isolamento entre contas.
+              As credenciais de providers devem ser geridas no módulo Gestor de Modelos, na área Cofre de Chaves, quando disponível para o seu perfil de acesso. Não coloque tokens ou palavras-passe nas instruções personalizadas.
             </p>
           </div>
         </section>
@@ -528,7 +538,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             }}
           >
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              Garantia de Privacidade & DLP Local:
+              Privacidade e políticas de dados:
             </div>
             A proteção de dados depende das políticas e integrações efetivamente ativas. Consulte Segurança e o Gestor de Modelos para verificar os controlos disponíveis nesta instalação.
           </div>
@@ -581,9 +591,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             }}
           >
             <div>
-              <strong style={{ fontSize: '0.90rem', color: '#f8fafc', display: 'block' }}>Exportar Histórico de Conversas</strong>
+              <strong style={{ fontSize: '0.90rem', color: '#f8fafc', display: 'block' }}>Exportar Conversa Atual</strong>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Exporta as mensagens guardadas localmente neste navegador em formato JSON.
+                Exporta as mensagens da conversa atual guardadas neste navegador em formato JSON.
               </span>
             </div>
             <button
