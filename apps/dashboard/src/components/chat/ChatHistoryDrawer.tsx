@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { fetchChatSessions, deleteChatSession, fetchChatSessionTasks } from '../../api';
 import { ChatSessionItem, ChatMessage } from '../../types';
+import { getAccountStorageKey } from '../../services/accountScope';
 
 export interface LocalSessionMeta {
   id: string;
@@ -23,7 +24,7 @@ export const STORAGE_CATALOG_KEY = 'jarvis_sessions_catalog_v1';
 
 export function getLocalSessionsCatalog(): LocalSessionMeta[] {
   try {
-    const raw = localStorage.getItem(STORAGE_CATALOG_KEY);
+    const raw = localStorage.getItem(getAccountStorageKey(STORAGE_CATALOG_KEY));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
@@ -36,7 +37,7 @@ export function getLocalSessionsCatalog(): LocalSessionMeta[] {
 
 export function saveLocalSessionsCatalog(catalog: LocalSessionMeta[]): void {
   try {
-    localStorage.setItem(STORAGE_CATALOG_KEY, JSON.stringify(catalog));
+    localStorage.setItem(getAccountStorageKey(STORAGE_CATALOG_KEY), JSON.stringify(catalog));
   } catch (e) {
     console.warn('Erro ao salvar catálogo local de sessões:', e);
   }
@@ -44,7 +45,7 @@ export function saveLocalSessionsCatalog(catalog: LocalSessionMeta[]): void {
 
 export function saveSessionMessagesLocally(sessionId: string, messages: ChatMessage[]): void {
   try {
-    localStorage.setItem(`jarvis_session_messages_${sessionId}`, JSON.stringify(messages));
+    localStorage.setItem(getAccountStorageKey(`jarvis_session_messages_${sessionId}`), JSON.stringify(messages));
   } catch (e) {
     console.warn('Erro ao persistir mensagens da sessão:', e);
   }
@@ -52,7 +53,7 @@ export function saveSessionMessagesLocally(sessionId: string, messages: ChatMess
 
 export function getSessionMessagesLocally(sessionId: string): ChatMessage[] | null {
   try {
-    const raw = localStorage.getItem(`jarvis_session_messages_${sessionId}`);
+    const raw = localStorage.getItem(getAccountStorageKey(`jarvis_session_messages_${sessionId}`));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -65,7 +66,7 @@ export function getSessionMessagesLocally(sessionId: string): ChatMessage[] | nu
 
 export function removeSessionLocally(sessionId: string): void {
   try {
-    localStorage.removeItem(`jarvis_session_messages_${sessionId}`);
+    localStorage.removeItem(getAccountStorageKey(`jarvis_session_messages_${sessionId}`));
     const cat = getLocalSessionsCatalog().filter((s) => s.id !== sessionId);
     saveLocalSessionsCatalog(cat);
   } catch (e) {
