@@ -191,6 +191,8 @@ async def discover_project_tests_endpoint(
     _require_owned_project(project_id, principal)
     try:
         return quality_studio_service.discover_project_tests(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -206,6 +208,10 @@ async def run_project_tests_endpoint(
             test_file=payload.test_file,
             timeout_seconds=payload.timeout_seconds,
         )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
