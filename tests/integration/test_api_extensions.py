@@ -42,11 +42,12 @@ async def test_api_models_endpoint():
 
         data = resp.json()
 
-        assert len(data["models"]) >= 3
-
+        # Apenas modelos confirmados pelo runtime local podem aparecer aqui.
+        assert isinstance(data["models"], list)
+        assert all(model["status"] == "ready" for model in data["models"])
         assert data["concurrency_limit"] == 1
-
-        assert any(m["name"] == "llama3.2:3b" for m in data["models"])
+        assert "online_models" in data
+        assert "hybrid_gateway" in data
 
 @pytest.mark.asyncio
 
