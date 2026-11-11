@@ -86,6 +86,8 @@ class ModelSelector:
             if stats is None:
                 stats = performance.get((candidate.model_name, candidate.provider, None))
             capability_score, capability_reason = self._capability_match(candidate, capability)
+            if capability in {"vision", "image"} and capability_score == 0:
+                continue
             candidates.append((candidate, stats, capability_score, capability_reason))
 
         if not candidates:
