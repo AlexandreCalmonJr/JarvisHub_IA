@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   runApp(const JarvisMobileApp());
@@ -160,36 +161,27 @@ class AppConfig {
 // ==========================================
 class SecureTokenStore {
   static const String _vaultFileName = '.jarvis_mobile_vault.enc';
-  static const String _secretKey = 'JARVIS_MOBILE_DEVICE_VAULT_KEY_2026';
+  static const String _credentialsKey = 'jarvis_mobile_credentials_v1';
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
-  static Future<File> _getVaultFile() async {
+  static Future<File> _getLegacyVaultFile() async {
     String basePath = '';
     try {
       if (Platform.isAndroid) {
         final dir = Directory('/data/user/0/com.jarvis.hub.jarvis_mobile/app_flutter');
-        if (await dir.exists()) {
-          basePath = dir.path;
-        }
+        if (await dir.exists()) basePath = dir.path;
       }
     } catch (_) {}
-    if (basePath.isEmpty) {
-      basePath = Directory.current.path;
-    }
+    if (basePath.isEmpty) basePath = Directory.current.path;
     return File('$basePath/$_vaultFileName');
   }
 
-  static List<int> _encrypt(String plainText) {
-    final bytes = utf8.encode(plainText);
-    final keyBytes = utf8.encode(_secretKey);
-    final result = List<int>.filled(bytes.length, 0);
-    for (int i = 0; i < bytes.length; i++) {
-      result[i] = bytes[i] ^ keyBytes[i % keyBytes.length];
-    }
-    return result;
-  }
-
-  static String _decrypt(List<int> cipherBytes) {
-    final keyBytes = utf8.encode(_secretKey);
+  // Apenas para migrar o formato XOR legado. Nunca mais é usado para gravar.
+  static String _decryptLegacy(List<int> cipherBytes) {
+    const legacyKey = 'JARVIS_MOBILE_DEVICE_VAULT_KEY_2026';
+    final keyBytes = utf8.encode(legacyKey);
     final result = List<int>.filled(cipherBytes.length, 0);
     for (int i = 0; i < cipherBytes.length; i++) {
       result[i] = cipherBytes[i] ^ keyBytes[i % keyBytes.length];
@@ -197,63 +189,69 @@ class SecureTokenStore {
     return utf8.decode(result);
   }
 
+  static Map<String, String> _defaults() => {
+        'token': '',
+        'baseUrl': AppConfig.baseUrl,
+        'environmentId': AppConfig.currentEnv.id,
+      };
+
   static Future<void> saveCredentials(
     String token, {
     String? baseUrl,
     String? environmentId,
   }) async {
-    try {
-      final file = await _getVaultFile();
-      final data = {
-        'token': token.trim(),
-        'baseUrl': (baseUrl ?? AppConfig.baseUrl).trim(),
-        'environmentId': environmentId ?? AppConfig.currentEnv.id,
-        'savedAt': DateTime.now().toIso8601String(),
-      };
-      final jsonStr = jsonEncode(data);
-      final encryptedBytes = _encrypt(jsonStr);
-      await file.writeAsBytes(encryptedBytes, flush: true);
-    } catch (_) {}
+    final data = {
+      'token': token.trim(),
+      'baseUrl': (baseUrl ?? AppConfig.baseUrl).trim(),
+      'environmentId': environmentId ?? AppConfig.currentEnv.id,
+      'savedAt': DateTime.now().toIso8601String(),
+    };
+    await _storage.write(key: _credentialsKey, value: jsonEncode(data));
   }
 
   static Future<Map<String, String>> loadCredentials() async {
     try {
-      final file = await _getVaultFile();
-      if (!await file.exists()) {
+      final stored = await _storage.read(key: _credentialsKey);
+      if (stored != null && stored.isNotEmpty) {
+        final map = jsonDecode(stored) as Map<String, dynamic>;
         return {
-          'token': '',
-          'baseUrl': AppConfig.baseUrl,
-          'environmentId': AppConfig.currentEnv.id,
+          'token': map['token'] as String? ?? '',
+          'baseUrl': map['baseUrl'] as String? ?? AppConfig.baseUrl,
+          'environmentId': map['environmentId'] as String? ?? AppConfig.currentEnv.id,
         };
       }
-      final bytes = await file.readAsBytes();
-      final jsonStr = _decrypt(bytes);
-      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
-      return {
-        'token': map['token'] as String? ?? '',
-        'baseUrl': map['baseUrl'] as String? ?? AppConfig.baseUrl,
-        'environmentId': map['environmentId'] as String? ?? AppConfig.currentEnv.id,
-      };
+
+      // Migração única: lê o ficheiro XOR antigo, grava no Android Keystore e apaga-o.
+      final legacyFile = await _getLegacyVaultFile();
+      if (await legacyFile.exists()) {
+        final legacy = jsonDecode(_decryptLegacy(await legacyFile.readAsBytes()))
+            as Map<String, dynamic>;
+        final migrated = {
+          'token': legacy['token'] as String? ?? '',
+          'baseUrl': legacy['baseUrl'] as String? ?? AppConfig.baseUrl,
+          'environmentId': legacy['environmentId'] as String? ?? AppConfig.currentEnv.id,
+          'savedAt': legacy['savedAt'] as String? ?? DateTime.now().toIso8601String(),
+        };
+        await _storage.write(key: _credentialsKey, value: jsonEncode(migrated));
+        await legacyFile.delete();
+        return {
+          'token': migrated['token'] as String,
+          'baseUrl': migrated['baseUrl'] as String,
+          'environmentId': migrated['environmentId'] as String,
+        };
+      }
     } catch (_) {
-      return {
-        'token': '',
-        'baseUrl': AppConfig.baseUrl,
-        'environmentId': AppConfig.currentEnv.id,
-      };
+      // Falha de leitura não deve bloquear a abertura do aplicativo.
     }
+    return _defaults();
   }
 
   static Future<void> clear() async {
-    try {
-      final file = await _getVaultFile();
-      if (await file.exists()) {
-        await file.writeAsBytes(List<int>.filled(64, 0));
-        await file.delete();
-      }
-    } catch (_) {}
+    await _storage.delete(key: _credentialsKey);
+    final legacyFile = await _getLegacyVaultFile();
+    if (await legacyFile.exists()) await legacyFile.delete();
   }
 }
-
 // ==========================================
 // RESPOSTA E CLIENTE HTTP AUTENTICADO
 // ==========================================
