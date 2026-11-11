@@ -87,7 +87,7 @@ async def test_data_scientist_can_execute_duckdb_tool(tmp_path):
         arguments={"sql": "SELECT 42 as answer, 'test' as label"},
         project_id="proj-ds",
     )
-    res = await gateway.execute_tool(req)
+    res = await gateway.execute_tool(req, owner_user_id="test-owner", actor_role="admin")
     assert res.success is True
     assert "answer" in res.stdout
     assert "42" in res.stdout
@@ -108,4 +108,4 @@ async def test_code_reviewer_blocked_on_mutating_tools(tmp_path):
         project_id="proj-cr",
     )
     with pytest.raises(PermissionDeniedError, match="Somente Leitura"):
-        await gateway.execute_tool(req)
+        await gateway.execute_tool(req, owner_user_id="test-owner", actor_role="admin")
