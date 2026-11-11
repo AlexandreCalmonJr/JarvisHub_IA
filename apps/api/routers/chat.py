@@ -241,6 +241,10 @@ async def chat_endpoint(
     request: ChatRequest, principal: Principal = Depends(get_principal)
 ):
     owner_user_id = _private_owner(principal)
+    if request.project_id and not db_manager.get_project(
+        request.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     engine = await _resolve_engine(request)
     # Reaproveita a mesma sessão no fallback do agente para o orquestrador,
     # evitando histórico duplicado ou sessões divergentes.
@@ -280,13 +284,6 @@ async def chat_endpoint(
             owner_user_id=owner_user_id,
         )
         try:
-            if request.project_id:
-                db_manager.register_project(
-                    project_id=request.project_id,
-                    name=request.project_id,
-                    root_path=f"workspace/{request.project_id}",
-                    owner_user_id=owner_user_id,
-                )
             tid = result["task_id"] if isinstance(result, dict) else result.task_id
             s_dict = result if isinstance(result, dict) else result.model_dump()
             db_manager.save_task(
@@ -309,6 +306,10 @@ async def chat_stream_endpoint(
     request: ChatRequest, principal: Principal = Depends(get_principal)
 ):
     owner_user_id = _private_owner(principal)
+    if request.project_id and not db_manager.get_project(
+        request.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     """
     Endpoint SSE para streaming de tokens em tempo real.
 
@@ -391,13 +392,6 @@ async def chat_stream_endpoint(
             )
 
             try:
-                if request.project_id:
-                    db_manager.register_project(
-                        project_id=request.project_id,
-                        name=request.project_id,
-                        root_path=f"workspace/{request.project_id}",
-                        owner_user_id=owner_user_id,
-                    )
                 tid = result["task_id"] if isinstance(result, dict) else result.task_id
                 s_dict = result if isinstance(result, dict) else result.model_dump()
                 db_manager.save_task(
