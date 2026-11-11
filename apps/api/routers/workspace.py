@@ -28,6 +28,8 @@ def _workspace_approval(
     proposed_diff: str | None = None,
 ):
     """Cria pedido pendente ou valida aprovação humana vinculada ao alvo exato."""
+    if security_core.kill_switch.is_global_killed():
+        raise PermissionDeniedError("Operação bloqueada pelo Kill Switch Global.")
     if not approval_id:
         request = security_core.approval_engine.create_request(
             task_id=task_id,
