@@ -130,6 +130,9 @@ if react_dist and (react_dist / "index.html").exists():
     spa_routes = [
         "/studio",
         "/chat",
+        "/logs",
+        "/backend-studio",
+        "/executive-report",
         "/office",
         "/workspace",
         "/tasks",

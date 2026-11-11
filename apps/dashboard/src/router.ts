@@ -27,7 +27,7 @@ export const TAB_PATHS: Record<string, string> = {
 };
 
 const PATH_TABS: Record<string, string> = {
-  '': 'chat',
+  '': 'overview',
   chat: 'chat',
   office: 'office',
   habbo: 'office',
@@ -74,7 +74,7 @@ export function tabFromLocation(pathname: string, search = ''): string {
 
   const path = pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
   if (path === 'apps/dashboard') {
-    return 'chat';
+    return 'overview';
   }
   return PATH_TABS[path] || 'not_found';
 }
