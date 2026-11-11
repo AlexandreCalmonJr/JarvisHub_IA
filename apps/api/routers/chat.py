@@ -89,10 +89,10 @@ _reachability = {"checked_at": 0.0, "ok": False, "provider": ""}
 
 def _private_owner(principal: Principal) -> str:
     # Dispositivos ainda não possuem vínculo explícito com uma conta humana.
-    if principal.kind != "human":
+    if principal.kind == "device" and principal.subject_id.startswith("device:"):
         raise HTTPException(
             status_code=403,
-            detail="Dispositivos precisam ser associados a uma conta antes de acessar dados privados.",
+            detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
         )
     return principal.subject_id
 
