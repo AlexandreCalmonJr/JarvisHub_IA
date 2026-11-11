@@ -143,7 +143,7 @@ async def list_agent_memories_endpoint(
 ):
     return db_manager.list_agent_memories(
         agent_role=role, category=category, limit=limit,
-        owner_user_id=_private_owner(principal),
+        owner_user_id=owner_user_id,
     )
 
 
@@ -270,6 +270,11 @@ def _resolve_agent_role(role_str: str) -> AgentRole:
 async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRunRequest):
     """Executa o especialista selecionado em modo ReAct com streaming de eventos SSE em tempo real."""
     agent_role = _resolve_agent_role(role)
+    owner_user_id = _private_owner(principal)
+    if payload.project_id and not db_manager.get_project(
+        payload.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         mode = AutonomousAgentMode(payload.mode.lower().strip())
     except ValueError:
