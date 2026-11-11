@@ -428,7 +428,7 @@ export const ModelManagerView: React.FC = () => {
           </button>}
           <button
             type="button"
-            onClick={loadData}
+            onClick={() => loadData()}
             disabled={loading}
             className="btn btn-ghost"
             style={{ fontSize: '0.8rem', padding: '6px 10px', color: 'var(--text-muted)' }}
@@ -453,7 +453,7 @@ export const ModelManagerView: React.FC = () => {
             budgetPercent={budgetPercent}
             providerName={data?.hybrid_gateway?.provider}
             onOpenWizard={() => setShowWizard(true)}
-            onRefresh={loadData}
+            onRefresh={() => loadData()}
           />}
           <LocalModelsGrid models={data?.models} />
         </div>
@@ -514,7 +514,7 @@ export const ModelManagerView: React.FC = () => {
       {isAdmin && <SetupWizardModal
         isOpen={showWizard}
         onClose={() => setShowWizard(false)}
-        onCompleted={loadData}
+        onCompleted={() => loadData()}
       />}
       </>
       )}
