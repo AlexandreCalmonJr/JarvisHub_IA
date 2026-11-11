@@ -1,7 +1,6 @@
 import difflib
 import logging
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -162,8 +161,8 @@ class ProjectWorkspaceService:
             except Exception:
                 try:
                     os.startfile(norm_path)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Não foi possível abrir o diretório do projeto: %s", exc)
         elif sys.platform == "darwin":
             subprocess.Popen(["open", norm_path])
         else:
@@ -213,8 +212,8 @@ class ProjectWorkspaceService:
             try:
                 os.chmod(path, stat.S_IWRITE)
                 func(path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao ajustar permissões do diretório: %s", exc)
 
         shutil.rmtree(project_dir, onerror=_remove_readonly)
         self._inventories.pop(project_id, None)
