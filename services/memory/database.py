@@ -1138,18 +1138,25 @@ class DatabaseManager:
 
     # --- Métodos de Gerenciamento de Skills ECC Customizadas ---
 
-    def save_user_skill(self, skill: dict[str, Any]) -> dict[str, Any]:
-        """Salva ou atualiza uma skill personalizada do ECC no SQLite."""
+    def save_user_skill(
+        self, skill: dict[str, Any], owner_user_id: str | None = None
+    ) -> dict[str, Any]:
+        """Salva uma skill personalizada sem permitir sobrescrita entre contas."""
         now = datetime.now(UTC).isoformat()
         agents_json = json.dumps(skill.get("assigned_agents", ["jarvis_master"]))
         with self._get_connection() as conn:
+            existing = conn.execute(
+                "SELECT owner_user_id FROM user_skills WHERE id = ?", (skill["id"],)
+            ).fetchone()
+            if existing and existing["owner_user_id"] != owner_user_id:
+                raise PermissionError("Skill pertence a outra conta ou é um registo legado sem proprietário.")
             conn.execute(
                 """
                 INSERT INTO user_skills (
                     id, name, version, origin, domain, description, instructions,
-                    assigned_agents_json, is_approved, created_at, updated_at
+                    assigned_agents_json, is_approved, created_at, updated_at, owner_user_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     version = excluded.version,
@@ -1160,6 +1167,7 @@ class DatabaseManager:
                     assigned_agents_json = excluded.assigned_agents_json,
                     is_approved = excluded.is_approved,
                     updated_at = excluded.updated_at
+                WHERE user_skills.owner_user_id IS excluded.owner_user_id
                 """,
                 (
                     skill["id"],
@@ -1173,14 +1181,20 @@ class DatabaseManager:
                     1 if skill.get("is_approved", True) else 0,
                     now,
                     now,
+                    owner_user_id,
                 ),
             )
         return skill
 
-    def list_user_skills(self) -> list[dict[str, Any]]:
-        """Retorna todas as skills adicionadas pelo usuário."""
+    def list_user_skills(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Retorna apenas skills da conta solicitante."""
         with self._get_connection() as conn:
-            rows = conn.execute("SELECT * FROM user_skills ORDER BY created_at DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM user_skills WHERE owner_user_id IS ? ORDER BY created_at DESC",
+                (owner_user_id,),
+            ).fetchall()
             skills = []
             for r in rows:
                 s = dict(r)
@@ -1192,10 +1206,25 @@ class DatabaseManager:
                 skills.append(s)
             return skills
 
-    def delete_user_skill(self, skill_id: str) -> bool:
-        """Remove uma skill customizada do banco de dados."""
+    def get_user_skill(
+        self, skill_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM user_skills WHERE id = ?", (skill_id,))
+            row = conn.execute(
+                "SELECT * FROM user_skills WHERE id = ? AND owner_user_id IS ?",
+                (skill_id, owner_user_id),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def delete_user_skill(
+        self, skill_id: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Remove uma skill apenas da conta proprietária."""
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM user_skills WHERE id = ? AND owner_user_id IS ?",
+                (skill_id, owner_user_id),
+            )
             return cur.rowcount > 0
 
     # --- Métodos da Base de Conhecimento RAG Local (Knowledge Vault) ---
