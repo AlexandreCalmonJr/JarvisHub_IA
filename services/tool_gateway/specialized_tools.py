@@ -301,12 +301,16 @@ def execute_scan_sast_patterns(
 # -------------------------------------------------------------------------
 
 def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
-    """Inspeciona todos os manifestos de dependência do projeto."""
+    """Inspeciona manifestos de dependência contidos no projeto."""
+    project_root = Path(project_root).resolve()
     manifests: dict[str, list[dict[str, str]]] = {}
 
     # 1. requirements.txt
-    req_file = project_root / "requirements.txt"
-    if req_file.exists():
+    try:
+        req_file = _resolve_project_target(project_root, "requirements.txt")
+    except PermissionError:
+        req_file = None
+    if req_file is not None and req_file.is_file():
         deps = []
         for line in req_file.read_text(encoding="utf-8", errors="ignore").splitlines():
             line = line.strip()
@@ -318,8 +322,11 @@ def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
         manifests["requirements.txt"] = deps
 
     # 2. pyproject.toml
-    pyproj = project_root / "pyproject.toml"
-    if pyproj.exists():
+    try:
+        pyproj = _resolve_project_target(project_root, "pyproject.toml")
+    except PermissionError:
+        pyproj = None
+    if pyproj is not None and pyproj.is_file():
         deps = []
         in_deps = False
         for line in pyproj.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -338,8 +345,11 @@ def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
             manifests["pyproject.toml"] = deps
 
     # 3. package.json
-    pkg_json = project_root / "package.json"
-    if pkg_json.exists():
+    try:
+        pkg_json = _resolve_project_target(project_root, "package.json")
+    except PermissionError:
+        pkg_json = None
+    if pkg_json is not None and pkg_json.is_file():
         try:
             data = json.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
             deps = []
@@ -388,8 +398,12 @@ def execute_generate_sbom(project_root: Path) -> tuple[bool, str, str]:
     }
 
     # Parser rápido das dependências para montar o JSON
-    req_file = project_root / "requirements.txt"
-    if req_file.exists():
+    project_root = Path(project_root).resolve()
+    try:
+        req_file = _resolve_project_target(project_root, "requirements.txt")
+    except PermissionError:
+        req_file = None
+    if req_file is not None and req_file.is_file():
         for line in req_file.read_text(encoding="utf-8", errors="ignore").splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
