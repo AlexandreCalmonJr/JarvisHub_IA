@@ -199,3 +199,12 @@ async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
     assert AgentRole.CODE_REVIEWER.value in roles
     assert roles[-1] == AgentRole.JARVIS_MASTER.value
     assert "Deliberação do JARVIS Maestro" in result["final_summary"]
+
+
+def test_chat_routes_complex_problem_solving_to_orchestrator():
+    from apps.api.routers.chat import _looks_actionable
+
+    assert _looks_actionable(
+        "Como resolver o problema de autenticação e segurança do Jarvis?"
+    )
+    assert not _looks_actionable("Como funciona o Jarvis?")
