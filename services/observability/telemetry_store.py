@@ -138,6 +138,62 @@ class SqliteTelemetryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+
+    def performance_by_model_for_owner(
+        self,
+        owner_user_id: str,
+        limit: int = 100,
+        minimum_samples: int = 5,
+        minimum_success_rate: float = 0.95,
+    ) -> list[dict[str, Any]]:
+        """Agrega desempenho por modelo/provedor/papel, sempre dentro de uma conta."""
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        safe_limit = max(1, min(int(limit), 100))
+        safe_minimum_samples = max(1, int(minimum_samples))
+        safe_success_rate = min(1.0, max(0.0, float(minimum_success_rate)))
+        with self._lock, self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT model_name, provider, agent_role,
+                       COUNT(*) AS total_inferences,
+                       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful,
+                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                       COALESCE(AVG(CASE WHEN status = 'success' THEN duration_ms END), 0) AS average_latency_ms,
+                       COALESCE(AVG(CASE WHEN status = 'success' THEN prompt_tokens + completion_tokens END), 0) AS average_tokens
+                FROM inference_telemetry
+                WHERE owner_user_id = ?
+                GROUP BY model_name, provider, agent_role
+                ORDER BY total_inferences DESC, average_latency_ms ASC
+                LIMIT ?
+                """,
+                (owner_user_id, safe_limit),
+            ).fetchall()
+        result = []
+        for row in rows:
+            total = int(row["total_inferences"] or 0)
+            successful = int(row["successful"] or 0)
+            success_rate = successful / total if total else 0.0
+            result.append(
+                {
+                    "model_name": row["model_name"],
+                    "provider": row["provider"],
+                    "agent_role": row["agent_role"],
+                    "total_inferences": total,
+                    "successful": successful,
+                    "failed": int(row["failed"] or 0),
+                    "success_rate": round(success_rate, 4),
+                    "average_latency_ms": round(float(row["average_latency_ms"] or 0), 2),
+                    "average_tokens": round(float(row["average_tokens"] or 0), 2),
+                    "sample_sufficient": total >= safe_minimum_samples,
+                    "routing_eligible": (
+                        total >= safe_minimum_samples
+                        and success_rate >= safe_success_rate
+                    ),
+                }
+            )
+        return result
+
     def summary_for_owner(self, owner_user_id: str) -> dict[str, int | float]:
         if not owner_user_id or not owner_user_id.strip():
             raise ValueError("owner_user_id is required")
