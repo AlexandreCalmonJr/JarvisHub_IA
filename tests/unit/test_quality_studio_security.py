@@ -53,16 +53,43 @@ def test_run_tests_rejects_absolute_test_path(tmp_path):
         asyncio.run(service.run_tests("project-a", str(test_file)))
 
 
-def test_timeout_is_clamped_and_invalid_timeout_does_not_expand_runtime(tmp_path):
+def test_timeout_is_clamped_before_runner_invocation(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
     project_dir = tmp_path / "project-a"
     project_dir.mkdir()
     (project_dir / "test_owned.py").write_text("def test_owned(): pass", encoding="utf-8")
-    service = QualityStudioService(WorkspaceStub(project_dir))
-    # The runner is invoked only after ownership/path validation; this verifies
-    # the public schema/service boundary remains bounded for extreme values.
-    assert service._is_safe_project_file(project_dir, project_dir / "test_owned.py")
-    assert not service._is_safe_project_file(project_dir, project_dir.parent / "test_owned.py")
+    captured = {}
 
+    class FakeSandbox:
+        def __init__(self, default_timeout_seconds, max_output_chars):
+            captured["timeout"] = default_timeout_seconds
+
+        async def run_command(self, command, cwd, timeout_seconds):
+            captured["command"] = command
+            captured["timeout_arg"] = timeout_seconds
+            return 0, "1 passed", "", 25.0
+
+    fake_module = SimpleNamespace(
+        SandboxTimeoutError=type("SandboxTimeoutError", (Exception,), {}),
+        SubprocessSandbox=FakeSandbox,
+    )
+    monkeypatch.setitem(sys.modules, "services.tool_gateway.sandbox", fake_module)
+
+    service = QualityStudioService(WorkspaceStub(project_dir))
+    result = asyncio.run(service.run_tests("project-a", timeout_seconds=9999))
+
+    assert captured["timeout"] == 300
+    assert captured["timeout_arg"] == 300
+    assert result["is_success"] is True
+
+
+def test_safe_project_file_helper_rejects_paths_outside_project(tmp_path):
+    project_dir = tmp_path / "project-a"
+    project_dir.mkdir()
+    service = QualityStudioService(WorkspaceStub(project_dir))
+    assert not service._is_safe_project_file(project_dir, project_dir.parent / "outside.py")
 
 def test_generated_playwright_script_escapes_user_supplied_strings():
     service = QualityStudioService()
