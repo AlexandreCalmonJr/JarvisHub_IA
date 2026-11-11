@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   RefreshCw,
-  AlertCircle,
   Cpu,
   AlertCircle,
   X,
@@ -22,7 +21,7 @@ interface SetupWizardModalProps {
 
 export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onClose, onCompleted }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [mode] = useState<'cloud' | 'local'>('local');
+  const [mode, setMode] = useState<'cloud' | 'local'>('local');
 
   const [saving, setSaving] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
@@ -158,7 +157,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                   Passo 1: Como você deseja rodar a inteligência do JARVIS?
                 </h3>
                 <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  Você pode alternar entre Nuvem e Local a qualquer momento após o setup.
+                  O modo local fica disponível de imediato. A configuração em nuvem será liberada após a implantação do Cofre Privado por Conta.
                 </p>
               </div>
 
@@ -389,7 +388,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     Modo Configurado:
                   </span>
                   <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc' }}>
-                    '100% Offline (Ollama)'
+                    100% Offline (Ollama)
                   </span>
                 </div>
 
@@ -406,7 +405,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
           )}
         </div>
 
-        {finishError && <div role="alert" style={{ padding: '10px 20px', color: '#f87171', fontSize: '0.82rem' }}>{finishError}</div>}
+        {finishError && <div role="alert" style={{ padding: '10px 20px', color: '#f87171', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px' }}><AlertCircle size={15} />{finishError}</div>}
                 {/* Footer do Wizard: Botões de Navegação */}
         <div
           style={{
