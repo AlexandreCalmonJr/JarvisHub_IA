@@ -5,7 +5,7 @@ import pytest
 
 from services.orchestration.master import JarvisMaster
 from services.project_workspace import ProjectWorkspaceService
-from services.security_core import SecurityCore
+from services.security_core import PermissionDeniedError, SecurityCore
 
 
 class _CheckpointGraph:
@@ -72,7 +72,7 @@ async def test_project_creation_is_executed_only_after_matching_human_approval(t
     master.graph = graph
 
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(PermissionDeniedError):
             await master.resume_after_approval(task_id, "admin_test")
         assert not project_root.exists()
 
