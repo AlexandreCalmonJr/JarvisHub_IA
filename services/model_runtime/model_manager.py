@@ -256,6 +256,8 @@ class ModelManager:
             if request.task_id and self.kill_switch.is_task_cancelled(request.task_id):
                 raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
 
+        request = await self._prepare_model_selection(request, has_external_data_approval)
+
         # 2. Streaming via Hybrid Router ou Adapter Local
         if self.hybrid_router and (self.hybrid_router.online_config.enabled or getattr(request, "key_id", None)):
             async for chunk in self.hybrid_router.route_inference_stream(
