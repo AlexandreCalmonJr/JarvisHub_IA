@@ -23,7 +23,6 @@ from .specialized_tools import (
     execute_scan_sast_patterns,
     execute_scan_secrets,
     execute_sql_query_explain,
-    vector_memory_manager,
 )
 from .types import ToolCategory, ToolExecutionRequest, ToolExecutionResult
 
