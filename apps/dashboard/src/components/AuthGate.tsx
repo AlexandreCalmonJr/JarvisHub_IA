@@ -167,6 +167,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               <button type="submit" disabled={busy} style={styles.button}>{busy ? 'A autenticar...' : 'Entrar no Jarvis'}</button>
             </form>
           ) : (
+            <>
             {mode === 'bootstrap' && (
               <p style={styles.helpText}>
                 Na pasta do projeto, execute <code>python -m apps.api.auth_cli status</code>.
