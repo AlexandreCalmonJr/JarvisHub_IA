@@ -133,7 +133,7 @@ export const SkillsManagerView: React.FC = () => {
 
       return matchSearch && matchDomain && matchStatus && matchCategory;
     });
-  }, [skills, searchQuery, domainFilter, statusFilter]);
+  }, [skills, searchQuery, domainFilter, statusFilter, categoryTab]);
 
   const activeCount = skills.filter((s) => s.is_approved && !s.is_revoked).length;
 
@@ -448,6 +448,10 @@ export const SkillsManagerView: React.FC = () => {
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
           <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px' }} />
           Carregando catálogo de skills e vinculações...
+        </div>
+      ) : catalogError ? (
+        <div role="alert" style={{ padding: '24px', border: '1px solid var(--danger-color)', borderRadius: '10px', color: 'var(--danger-color)', fontSize: '0.86rem' }}>
+          O catálogo não pôde ser carregado. Atualize a página ou tente novamente.
         </div>
       ) : filteredSkills.length === 0 ? (
         <div
