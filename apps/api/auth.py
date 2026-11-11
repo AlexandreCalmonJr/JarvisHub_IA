@@ -84,6 +84,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "approvals:decide",
         "security:read",
         "security:scan",
+        "security:write",
         "audit:read",
         "system:read",
         "hardware:read",
