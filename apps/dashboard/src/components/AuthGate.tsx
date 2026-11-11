@@ -7,7 +7,7 @@ interface SessionInfo { subject_id?: string; user_id?: string; role?: string; }
 interface UserRecord {
   username: string;
   display_name: string;
-  role: 'developer' | 'auditor';
+  role: 'admin' | 'developer' | 'auditor';
   is_active: boolean;
   created_at: string;
 }
@@ -23,7 +23,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [accessOpen, setAccessOpen] = useState(false);
   const [users, setUsers] = useState<UserRecord[]>([]);
-  const [newUser, setNewUser] = useState({ username: '', display_name: '', password: '', role: 'developer' as 'developer' | 'auditor' });
+  const [newUser, setNewUser] = useState({ username: '', display_name: '', password: '', role: 'developer' as 'admin' | 'developer' | 'auditor' });
   const [accessBusy, setAccessBusy] = useState(false);
   const [accessMessage, setAccessMessage] = useState('');
 
@@ -177,6 +177,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               <input type="password" autoComplete="new-password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} style={styles.input} minLength={12} required />
               <label style={styles.label}>Perfil de acesso</label>
               <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'developer' | 'auditor' })} style={styles.input}>
+                <option value="admin">Administrador — controlo total</option>
                 <option value="developer">Desenvolvedor — acesso de trabalho</option>
                 <option value="auditor">Auditor — apenas leitura</option>
               </select>
