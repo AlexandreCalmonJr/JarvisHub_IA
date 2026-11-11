@@ -29,6 +29,10 @@ test('test execution accepts only discovered project-relative files', () => {
   assert.match(router, /_require_owned_project\(payload\.project_id, principal\)/);
 });
 
+test('project code execution is restricted until OS-level account isolation exists', () => {
+  assert.match(router, /run_project_tests_endpoint[\\s\\S]*?principal\.role != "admin"/);
+});
+
 test('test runner timeout is bounded at the API and service layers', () => {
   assert.match(schema, /timeout_seconds: int = Field\(default=45, ge=5, le=300/);
   assert.match(backend, /max\(5, min\(int\(timeout_seconds\), 300\)\)/);
