@@ -20,7 +20,6 @@ import { ToastContainer } from './components/common/Toast';
 import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
 import { CommandPalette } from './components/common/CommandPalette';
 import { pathForTab, tabFromLocation } from './router';
-import { getAccountStorageKey } from './services/accountScope';
 import { API_BASE } from './services/api/client';
 
 // Code splitting: cada tela é carregada sob demanda

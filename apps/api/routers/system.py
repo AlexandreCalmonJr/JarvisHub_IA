@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 import os
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -172,7 +173,7 @@ async def complete_onboarding(principal: Principal = Depends(require_admin)):
     state = {
         "completed": True,
         "completed_by": principal.subject_id,
-        "completed_at": __import__("datetime").datetime.now(__import__("datetime").UTC).isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
     }
     temporary = _ONBOARDING_STATE_PATH.with_suffix(".tmp")
     try:
