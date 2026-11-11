@@ -17,6 +17,7 @@ import {
 import { SetupWizardModal } from './components/common/SetupWizardModal';
 import { UserProfileModal, getUserProfile, UserProfileData } from './components/common/UserProfileModal';
 import { ToastContainer } from './components/common/Toast';
+import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
 import { CommandPalette } from './components/common/CommandPalette';
 import { pathForTab, tabFromLocation } from './router';
 
@@ -647,6 +648,9 @@ const DashboardApp: React.FC = () => {
         }}
         onOpenProfile={() => setShowProfileModal(true)}
       />
+
+      {/* Aprovação humana integrada para operações do Workspace */}
+      <ApprovalPromptHost />
 
       {/* Notificações Toast Globais */}
       <ToastContainer />
