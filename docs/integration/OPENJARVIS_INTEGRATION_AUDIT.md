@@ -870,3 +870,22 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Confirmar que auditoria não devolve eventos de outro owner.
 - Testar CVE scan, red-team e políticas com admin/developer/auditor.
 - Build, lint e testes automatizados permanecem adiados para a fase final.
+
+## 24. Gestor de Modelos, Hugging Face e Cofre de Chaves
+
+**Estado:** permissões e tratamento do streaming reforçados; homologação pendente.
+
+- Cofre de Chaves, configuração do gateway híbrido, teste de conectividade, orçamento e instalação de modelos são operações administrativas; a interface e os handlers verificam o papel admin, em linha com as rotas.
+- Developers e auditores continuam a consultar modelos locais, pesquisar o Hugging Face e consultar o painel de qualidade; a instalação permanece reservada a administradores.
+- A API de modelos devolve ao utilizador comum apenas o estado mínimo de rota ativa e modelo necessário ao Chat. Estado da credencial, orçamento, gasto acumulado, limite de concorrência e fila global ficam restritos a administradores.
+- A instalação por SSE agora processa também o último evento quando o stream termina sem newline e não declara sucesso sem receber confirmação terminal do servidor.
+- O pedido de instalação envia credenciais de sessão; a pesquisa e o inventário não guardam chaves no navegador.
+- A verificação de modelo instalado evita falsos positivos quando o inventário devolve nomes vazios.
+- O KeyVault continua a apresentar apenas valores mascarados; a remoção exige confirmação e nenhum segredo é enviado para logs.
+
+### Validação pendente
+
+- Testar modelos locais vazios, gateway ativo/inativo, chave ausente, provider alterado, orçamento e falhas de conectividade.
+- Testar Hugging Face com pesquisa vazia, instalação concluída, erro e stream terminado sem evento terminal.
+- Confirmar que developer/auditor não conseguem consultar orçamento, gasto, estado da chave, fila global, KeyVault ou configuração híbrida.
+- Build, lint, testes automatizados e validação visual continuam adiados para a fase final.
