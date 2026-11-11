@@ -8,6 +8,7 @@ import {
   Key,
 } from 'lucide-react';
 import { fetchAgents, updateAgentConfig, fetchKeyVault, KeyVaultItem } from '../../api';
+import { getAgentLabel } from '../../types';
 import type { AgentInfo } from '../../types';
 import { notify } from '../common/Toast';
 import { AgentOfficeCanvas } from './AgentOfficeCanvas';
@@ -57,7 +58,7 @@ const toOfficeAgent = (agent: AgentInfo): OfficeAgent => {
   return {
     id: agent.role,
     name: agent.name,
-    role: agent.role,
+    role: getAgentLabel(agent.role) || agent.role,
     department,
     departmentName: departmentInfo.name,
     mission: agent.mission || 'Missão não descrita no catálogo.',
@@ -297,7 +298,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
             disabled={loading}
             className="btn btn-ghost"
             style={{ padding: '6px', color: 'var(--text-muted)' }}
-            title="Atualizar status das mesas"
+            title="Atualizar catálogo de agentes"
           >
             <RefreshCw size={14} className={loading ? 'spin' : ''} />
           </button>
