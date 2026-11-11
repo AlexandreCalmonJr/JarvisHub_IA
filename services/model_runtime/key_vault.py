@@ -19,6 +19,7 @@ import ctypes
 import json
 import logging
 import os
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -81,10 +82,22 @@ def _dpapi_protect(data: bytes, unprotect: bool = False) -> bytes:
 
 
 def _chmod_private(path: Path) -> None:
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    """Restringe a chave Fernet em POSIX e Windows; falha se não conseguir."""
+    if os.name == "nt":
+        username = os.environ.get("USERNAME") or os.environ.get("USER")
+        if not username:
+            raise OSError("Não foi possível identificar o utilizador para proteger a chave do cofre.")
+        result = subprocess.run(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{username}:F"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            raise OSError("Não foi possível aplicar ACL restrita à chave Fernet do cofre.")
+        return
+    os.chmod(path, 0o600)
 
 
 @dataclass
