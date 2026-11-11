@@ -1,153 +1,115 @@
-import { API_BASE } from './client';
+import { API_BASE, handleApiResponse } from './client';
 
-export async function fetchMockEndpoints(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/mock-server/endpoints`);
-  if (!res.ok) return [];
-  return res.json();
+const requestOptions: RequestInit = { credentials: 'include' };
+
+async function getJson<T>(path: string, error: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, requestOptions);
+  return handleApiResponse<T>(response, error);
 }
 
-export async function saveMockEndpoint(payload: any): Promise<any> {
-  const res = await fetch(`${API_BASE}/mock-server/endpoints`, {
+async function postJson<T>(path: string, payload: unknown, error: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...requestOptions,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro ao salvar mock' }));
-    throw new Error(err.detail || 'Falha ao salvar mock endpoint');
-  }
-  return res.json();
+  return handleApiResponse<T>(response, error);
+}
+
+export function fetchMockEndpoints(): Promise<any[]> {
+  return getJson('/mock-server/endpoints', 'Falha ao carregar endpoints simulados.');
+}
+
+export async function saveMockEndpoint(payload: any): Promise<any> {
+  return postJson('/mock-server/endpoints', payload, 'Falha ao salvar mock endpoint.');
 }
 
 export async function deleteMockEndpoint(id: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/mock-server/endpoints/${id}`, { method: 'DELETE' });
-  return res.json();
-}
-
-export async function fetchProjectDatabases(projectId: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/backend-studio/databases/${projectId}`);
-  if (!res.ok) return [];
-  return res.json();
-}
-
-export async function inspectSqlDatabase(dbPath: string, projectId?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/backend-studio/sql/inspect`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ db_path: dbPath, project_id: projectId }),
+  const response = await fetch(`${API_BASE}/mock-server/endpoints/${encodeURIComponent(id)}`, {
+    ...requestOptions,
+    method: 'DELETE',
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro ao inspecionar banco' }));
-    throw new Error(err.detail || 'Falha ao inspecionar banco SQLite');
-  }
-  return res.json();
+  return handleApiResponse(response, 'Falha ao excluir mock endpoint.');
 }
 
-export async function executeSqlQuery(dbPath: string, query: string, projectId?: string, limit: number = 200): Promise<any> {
-  const res = await fetch(`${API_BASE}/backend-studio/sql/query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ db_path: dbPath, query, project_id: projectId, limit }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro ao executar SQL' }));
-    throw new Error(err.detail || 'Falha ao executar query SQL');
-  }
-  return res.json();
+export function fetchProjectDatabases(projectId: string): Promise<any[]> {
+  return getJson(`/backend-studio/databases/${encodeURIComponent(projectId)}`, 'Falha ao carregar bancos do projeto.');
 }
 
-export async function auditSqlQuery(dbPath: string, query: string, projectId?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/backend-studio/sql/audit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ db_path: dbPath, query, project_id: projectId }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro ao auditar SQL' }));
-    throw new Error(err.detail || 'Falha ao auditar plano de query');
-  }
-  return res.json();
+export function inspectSqlDatabase(dbPath: string, projectId: string): Promise<any> {
+  return postJson('/backend-studio/sql/inspect', {
+    db_path: dbPath, project_id: projectId,
+  }, 'Falha ao inspecionar banco SQLite.');
 }
 
-export async function fetchProjectTests(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/quality-studio/tests/${projectId}`);
-  if (!res.ok) return { total_tests: 0, suites: [] };
-  return res.json();
+export function executeSqlQuery(
+  dbPath: string, query: string, projectId: string, limit = 200
+): Promise<any> {
+  return postJson('/backend-studio/sql/query', {
+    db_path: dbPath, query, project_id: projectId, limit,
+  }, 'Falha ao executar consulta SQL.');
 }
 
-export async function runProjectTests(projectId: string, testFile?: string, timeoutSeconds: number = 45): Promise<any> {
-  const res = await fetch(`${API_BASE}/quality-studio/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project_id: projectId, test_file: testFile, timeout_seconds: timeoutSeconds }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro ao rodar testes' }));
-    throw new Error(err.detail || 'Falha na execução de testes');
-  }
-  return res.json();
+export function auditSqlQuery(dbPath: string, query: string, projectId: string): Promise<any> {
+  return postJson('/backend-studio/sql/audit', {
+    db_path: dbPath, query, project_id: projectId,
+  }, 'Falha ao auditar plano de consulta.');
 }
 
-export async function generatePlaywrightTest(targetUrl: string, scenarioName: string, steps?: any[]): Promise<any> {
-  const res = await fetch(`${API_BASE}/quality-studio/generate-playwright`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target_url: targetUrl, scenario_name: scenarioName, steps }),
-  });
-  if (!res.ok) throw new Error('Falha ao gerar teste Playwright');
-  return res.json();
+export function fetchProjectTests(projectId: string): Promise<any> {
+  return getJson(`/quality-studio/tests/${encodeURIComponent(projectId)}`, 'Falha ao carregar testes do projeto.');
 }
 
-export async function fetchChaosEdgeCases(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/quality-studio/chaos-edge-cases`);
-  if (!res.ok) return [];
-  return res.json();
+export function runProjectTests(
+  projectId: string, testFile?: string, timeoutSeconds = 45
+): Promise<any> {
+  return postJson('/quality-studio/run', {
+    project_id: projectId, test_file: testFile, timeout_seconds: timeoutSeconds,
+  }, 'Falha na execução de testes.');
 }
 
-export async function extractColorPalette(hexPrimary: string, name?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/design-studio/palette`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hex_primary: hexPrimary, name }),
-  });
-  if (!res.ok) throw new Error('Falha ao extrair paleta');
-  return res.json();
+export function generatePlaywrightTest(
+  targetUrl: string, scenarioName: string, steps?: any[]
+): Promise<any> {
+  return postJson('/quality-studio/generate-playwright', {
+    target_url: targetUrl, scenario_name: scenarioName, steps,
+  }, 'Falha ao gerar teste Playwright.');
 }
 
-export async function auditWcagAccessibility(markup: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/design-studio/audit-wcag`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markup }),
-  });
-  if (!res.ok) throw new Error('Falha ao auditar acessibilidade');
-  return res.json();
+export function fetchChaosEdgeCases(): Promise<any[]> {
+  return getJson('/quality-studio/chaos-edge-cases', 'Falha ao carregar casos de borda.');
 }
 
-export async function fetchComponentBoilerplate(componentType: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/design-studio/components/${componentType}`);
-  if (!res.ok) throw new Error('Falha ao obter boilerplate de componente');
-  return res.json();
+export function extractColorPalette(hexPrimary: string, name?: string): Promise<any> {
+  return postJson('/design-studio/palette', {
+    hex_primary: hexPrimary, name,
+  }, 'Falha ao extrair paleta.');
 }
 
-export async function fetchProjectTechDebt(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/intelligence/tech-debt/${projectId}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro na análise de dívida técnica' }));
-    throw new Error(err.detail || 'Falha na análise');
-  }
-  return res.json();
+export function auditWcagAccessibility(markup: string): Promise<any> {
+  return postJson('/design-studio/audit-wcag', { markup }, 'Falha ao auditar acessibilidade.');
 }
 
-export async function fetchProductivityRoi(): Promise<any> {
-  const res = await fetch(`${API_BASE}/intelligence/productivity-roi`);
-  if (!res.ok) return {};
-  return res.json();
+export function fetchComponentBoilerplate(componentType: string): Promise<any> {
+  return getJson(
+    `/design-studio/components/${encodeURIComponent(componentType)}`,
+    'Falha ao obter boilerplate de componente.'
+  );
 }
 
-export async function fetchExecutiveReport(projectId?: string): Promise<any> {
-  const url = projectId ? `${API_BASE}/intelligence/executive-report?project_id=${projectId}` : `${API_BASE}/intelligence/executive-report`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Falha ao gerar relatório executivo');
-  return res.json();
+export function fetchProjectTechDebt(projectId: string): Promise<any> {
+  return getJson(
+    `/intelligence/tech-debt/${encodeURIComponent(projectId)}`,
+    'Falha na análise de dívida técnica.'
+  );
+}
+
+export function fetchProductivityRoi(): Promise<any> {
+  return getJson('/intelligence/productivity-roi', 'Falha ao carregar métricas globais.');
+}
+
+export function fetchExecutiveReport(projectId?: string): Promise<any> {
+  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+  return getJson(`/intelligence/executive-report${query}`, 'Falha ao gerar relatório executivo.');
 }
