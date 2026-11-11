@@ -196,6 +196,7 @@ class ApprovalEngine:
         operation: str,
         task_id: str,
         resource: str,
+        proposed_diff: str | None = None,
     ) -> ApprovalRequest:
         """Valida o escopo e consome uma aprovação exatamente uma vez.
 
@@ -210,6 +211,7 @@ class ApprovalEngine:
                 or request.operation != operation
                 or request.task_id != task_id
                 or resource not in request.affected_resources
+                or (proposed_diff is not None and request.proposed_diff != proposed_diff)
             ):
                 raise ValueError(
                     "Aprovação ausente, já utilizada ou não correspondente à operação e ao recurso."
