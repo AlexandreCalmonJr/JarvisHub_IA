@@ -31,7 +31,7 @@ export const ModelManagerView: React.FC = () => {
   const [provider, setProvider] = useState<string>('gemini');
   const [apiKey, setApiKey] = useState<string>('');
   const [showKey, setShowKey] = useState<boolean>(false);
-  const [defaultModel, setDefaultModel] = useState<string>('gemini-1.5-flash');
+  const [defaultModel, setDefaultModel] = useState<string>('gemini-2.5-flash');
   const [baseUrl, setBaseUrl] = useState<string>('https://generativelanguage.googleapis.com/v1beta/openai');
   const [maxBudget, setMaxBudget] = useState<number>(5.0);
   const [enabled, setEnabled] = useState<boolean>(false);
@@ -71,7 +71,7 @@ export const ModelManagerView: React.FC = () => {
         const hybridRes = hybridResult.value;
         setProvider(hybridRes.provider_name || 'gemini');
         setEnabled(Boolean(hybridRes.enabled));
-        setDefaultModel(hybridRes.default_model || 'gemini-1.5-flash');
+        setDefaultModel(hybridRes.default_model || 'gemini-2.5-flash');
         setBaseUrl(hybridRes.base_url || '');
         setMaxBudget(hybridRes.max_budget_usd || 5.0);
       } else if (includeAdminConfig && hybridResult.status === 'rejected') failures.push(hybridResult.reason instanceof Error ? hybridResult.reason.message : 'Falha ao consultar gateway híbrido.');

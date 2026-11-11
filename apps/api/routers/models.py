@@ -69,7 +69,13 @@ async def list_models_endpoint(principal=Depends(get_principal)):
     # Só anuncia um modelo online quando o gateway está ativo e a credencial correspondente existe.
     online_models = []
     active_key = key_vault.get_key(cfg.key_id) if cfg.key_id else None
-    if cfg.enabled and active_key and active_key.is_active and cfg.default_model:
+    gateway_active = bool(
+        cfg.enabled
+        and active_key
+        and active_key.is_active
+        and hybrid_router.online_adapter is not None
+    )
+    if gateway_active and cfg.default_model:
         online_models.append({
             "name": cfg.default_model,
             "provider": cfg.provider_name,
@@ -86,10 +92,10 @@ async def list_models_endpoint(principal=Depends(get_principal)):
             "waiting": model_manager.queue.waiting_count,
         },
         "hybrid_gateway": {
-            "enabled": cfg.enabled,
+            "enabled": gateway_active,
             "provider": cfg.provider_name,
             "model": cfg.default_model,
-            "has_api_key": bool(cfg.key_id and key_vault.get_key(cfg.key_id)),
+            "has_api_key": bool(active_key and active_key.is_active),
             "max_budget_usd": cfg.max_budget_usd,
             "current_spend_usd": cfg.current_spend_usd,
             "fallback_route": "ollama_local",
