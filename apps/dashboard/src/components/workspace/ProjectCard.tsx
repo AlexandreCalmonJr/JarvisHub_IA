@@ -13,6 +13,7 @@ import {
   MessageSquare,
   FolderOpen,
   Settings,
+  BookOpen,
 } from 'lucide-react';
 
 import {
@@ -67,6 +68,7 @@ interface ProjectCardProps {
   onDeleteProject?: (projectId: string) => void;
 
   onSelectForChat?: (projectId: string) => void;
+  onOpenMemory?: (projectId: string) => void;
 
 }
 
@@ -579,6 +581,19 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             >
               <MessageSquare size={14} color="#818cf8" />
               <span>Tratar no Chat</span>
+            </button>
+          )}
+
+          {onOpenMemory && (
+            <button
+              type="button"
+              onClick={() => onOpenMemory(project.id)}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.76rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="Consultar e editar as regras e decisões privadas deste projeto"
+            >
+              <BookOpen size={13} />
+              <span>Memória</span>
             </button>
           )}
 
