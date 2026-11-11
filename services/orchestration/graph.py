@@ -3,7 +3,6 @@ import re
 
 logger = logging.getLogger("jarvis.orchestration.graph")
 import json
-from pathlib import Path
 from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -426,8 +425,8 @@ def create_master_graph(
         if agent_registry:
             try:
                 prim_profile = agent_registry.get_profile(AgentRole(primary_agent))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Perfil do agente principal indisponível: %s", exc)
         is_hybrid_active = bool(
             model_manager.hybrid_router
             and getattr(model_manager.hybrid_router, "online_config", None)
@@ -465,8 +464,8 @@ def create_master_graph(
                     if p_id in p_lower or p_norm in p_lower or any(part in p_lower for part in p_id.split("-") if len(part) > 3):
                         project_id = prj["id"]
                         break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Projeto não identificado automaticamente: %s", exc)
         agent_outputs: list[dict[str, Any]] = []
         created_slug = None
         created_files: list[str] = []
@@ -1081,8 +1080,8 @@ def create_master_graph(
             if agent_registry:
                 try:
                     sec_profile = agent_registry.get_profile(AgentRole(sec_role))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Perfil do agente de segurança indisponível: %s", exc)
             if is_hybrid_active:
                 sec_pref = sec_profile.preferred_model if sec_profile else "auto_hybrid"
                 if not sec_pref or sec_pref in ("auto", "auto_hybrid", "llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
@@ -1106,8 +1105,8 @@ def create_master_graph(
                     t_res = await tool_gateway.execute_tool(t_req)
                     if t_res.success:
                         tool_evidence.append(f"Inspeção de workspace concluída via ToolGateway ({t_res.duration_ms:.1f}ms)")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Inspeção complementar do workspace falhou: %s", exc)
 
             if sec_role == AgentRole.SOFTWARE_ARCHITECT.value:
                 target_name = created_slug or (project_id or "projeto")
