@@ -1,9 +1,9 @@
-# 🚀 JARVIS AI HUB 2.0 — Release Oficial 2.0.0
+# 🚀 JARVIS AI HUB — Histórico do Release 2.0
 
-> **Data de Publicação**: 09 de Novembro de 2026  
-> **Versão Oficial**: `2.0.0`  
-> **Status**: Pronto para Produção & Homologado  
-> **Confinamento**: Local-First (`127.0.0.1:8000`)
+ > **Documento histórico**: release 2.0.0; não representa o estado atual do candidato 3.0.1.  
+ > **Versão histórica**: `2.0.0`  
+ > **Status atual**: não homologado para produção; consulte o README e os workflows da branch de desenvolvimento.  
+ > **Versão de desenvolvimento atual**: `3.0.1` (em homologação)
 
 ---
 
@@ -59,13 +59,13 @@ O **JARVIS AI HUB 2.0** representa o maior salto arquitetural e de experiência 
 
 ---
 
-## 📊 Matriz de Compatibilidade e Arquivos de Versão 2.0.0
+## 📊 Matriz histórica de compatibilidade — Release 2.0.0
 
 | Componente | Versão | Arquivo de Origem | Status |
 | :--- | :---: | :--- | :---: |
 | **Backend Core FastAPI** | `2.0.0` | [`apps/api/main.py`](apps/api/main.py) | ✅ Operacional |
 | **Router de Sistema REST** | `2.0.0` | [`apps/api/routers/system.py`](apps/api/routers/system.py) | ✅ Operacional |
-| **Python Package Config** | `2.0.0` | [`pyproject.toml`](pyproject.toml) | ✅ Homologado |
+| **Python Package Config** | `2.0.0` | [`pyproject.toml`](pyproject.toml) | ✅ Histórico — não homologado |
 | **Frontend Web React 19** | `2.0.0` | [`apps/dashboard/package.json`](apps/dashboard/package.json) | ✅ Compilado |
 | **Escritório Virtual 2.5D** | `2.0.0` | [`AgentOfficeCanvas.tsx`](apps/dashboard/src/components/office/AgentOfficeCanvas.tsx) | ✅ 60 FPS Ativo |
 | **Orquestrador Multi-Agente** | `2.0.0` | [`services/orchestration/graph.py`](services/orchestration/graph.py) | ✅ 26 Agentes |
@@ -90,3 +90,17 @@ O dashboard estará instantaneamente disponível em: **`http://127.0.0.1:8000/`*
 
 ---
 *JARVIS AI HUB 2.0 — Engenharia de Software Autônoma, Colaborativa e Segura.*
+
+
+---
+
+## Nota de governança de release
+
+Este ficheiro foi preservado por compatibilidade e rastreabilidade histórica. Não deve ser usado como evidência de que a versão 3.0.1 está homologada. A versão 3.0.1 só poderá ser declarada pronta após:
+- execução verde da CI para Python, dashboard e Flutter;
+- teste de autenticação ponta a ponta;
+- validação dos fluxos de aprovação de workspace;
+- build Android assinado com keystore de release sob custódia segura;
+- auditoria final e resultados reproduzíveis associados ao commit exato.
+
+Os valores históricos de throughput foram retirados como alegações de desempenho atual. Use `scripts/benchmark_sqlite.py` para uma medição reproduzível, limitada ao SQLite.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-ai-hub"
-version = "3.0.0"
+version = "3.0.1"
 description = "Plataforma local-first de agentes especializados para desenvolvimento, segurança e gestão de projetos"
 readme = "README.md"
 requires-python = ">=3.11"

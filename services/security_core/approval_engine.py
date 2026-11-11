@@ -1,3 +1,4 @@
+import threading
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -24,6 +25,7 @@ class ApprovalEngine:
 
     def __init__(self, audit_trail: AuditTrail | None = None, db_manager: Any | None = None):
         self._requests: dict[str, ApprovalRequest] = {}
+        self._consume_lock = threading.RLock()
         self._audit_trail = audit_trail
         self._db_manager = db_manager
         if self._db_manager:
@@ -186,6 +188,55 @@ class ApprovalEngine:
             except Exception:
                 pass
         return req
+
+    def consume_approved_request(
+        self,
+        request_id: str,
+        *,
+        operation: str,
+        task_id: str,
+        resource: str,
+        proposed_diff: str | None = None,
+    ) -> ApprovalRequest:
+        """Valida o escopo e consome uma aprovação exatamente uma vez.
+
+        A atualização condicional no SQLite é a autoridade entre processos;
+        o lock local também evita corridas dentro da mesma instância.
+        """
+        with self._consume_lock:
+            request = self.get_request(request_id)
+            if (
+                not request
+                or request.status != ApprovalStatus.APPROVED
+                or request.operation != operation
+                or request.task_id != task_id
+                or resource not in request.affected_resources
+                or (proposed_diff is not None and request.proposed_diff != proposed_diff)
+            ):
+                raise ValueError(
+                    "Aprovação ausente, já utilizada ou não correspondente à operação e ao recurso."
+                )
+
+            if self._db_manager and not self._db_manager.consume_approved_approval(request_id):
+                raise ValueError("A aprovação já foi utilizada ou deixou de estar válida.")
+
+            request.status = ApprovalStatus.CONSUMED
+            if self._audit_trail:
+                self._audit_trail.record_event(
+                    operation="APPROVAL_REQUEST_CONSUMED",
+                    status="CONSUMED",
+                    user_id=request.decided_by,
+                    agent_role=request.agent_role,
+                    parameters={
+                        "request_id": request_id,
+                        "operation": operation,
+                        "task_id": task_id,
+                        "resource": resource,
+                    },
+                    severity=AuditEventSeverity.WARNING,
+                    reason="Aprovação de uso único consumida pela execução autorizada.",
+                )
+            return request
 
     def list_pending_requests(self) -> list[ApprovalRequest]:
         return [r for r in self._requests.values() if r.status == ApprovalStatus.PENDING]

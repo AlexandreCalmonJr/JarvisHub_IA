@@ -113,7 +113,8 @@ async def test_frente_04_api_performance_endpoints():
         assert post_resp.status_code == 200
         updated = post_resp.json()
         assert updated["mode"] == "balanced"
-        assert updated["cpu_threads"] == 5
+        assert updated["cpu_threads"] == min(5, updated["logical_cores"])
+        assert updated["effective_threads"] <= updated["logical_cores"]
         assert updated["effective_mode"] == "balanced"
 
         # Restaura para automático

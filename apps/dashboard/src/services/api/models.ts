@@ -98,10 +98,12 @@ export async function fetchKeyVault(): Promise<KeyVaultItem[]> {
 
 export async function registerVaultKey(payload: {
   key_id: string;
-  provider_name: string;
+  label: string;
+  provider: string;
   api_key: string;
   base_url?: string;
-  preferred_model?: string;
+  default_model?: string;
+  is_active?: boolean;
 }): Promise<any> {
   const res = await fetch(`${API_BASE}/models/vault`, {
     method: 'POST',
@@ -111,6 +113,17 @@ export async function registerVaultKey(payload: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Falha ao salvar chave' }));
     throw new Error(err.detail || 'Falha ao cadastrar chave no cofre');
+  }
+  return res.json();
+}
+
+export async function deleteVaultKey(key_id: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao remover chave' }));
+    throw new Error(err.detail || 'Falha ao remover chave do cofre');
   }
   return res.json();
 }

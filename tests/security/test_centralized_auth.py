@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.api.auth import auth_service
+from apps.api.auth import AuthService, auth_service
 from apps.api.main import app
 from packages.contracts.agent import AgentRole
 
@@ -222,3 +222,34 @@ async def test_10_dashboard_and_public_routes_accessible_without_auth():
         # Rota de frontend SPA / dashboard estático
         res_dash = await client.get("/", headers={"x-no-auth": "1"})
         assert res_dash.status_code == 200
+
+
+def test_11_rate_limit_persists_across_auth_service_instances(monkeypatch, tmp_path):
+    """Tentativas de login permanecem limitadas após recriar o serviço."""
+    monkeypatch.setenv("JARVIS_ISSUE_BOOTSTRAP", "0")
+    first = AuthService(auth_service.security, tmp_path / "auth")
+    assert first.check_rate_limit("login:127.0.0.77", limit=1, window_seconds=60)
+
+    restarted = AuthService(auth_service.security, tmp_path / "auth")
+    assert restarted.check_rate_limit("login:127.0.0.77", limit=1, window_seconds=60) is False
+
+@pytest.mark.asyncio
+async def test_12_mock_server_requires_dedicated_authenticated_permission():
+    """Mock routes are available to developers but not to read-only auditors."""
+    auditor = auth_service.create_session("mock_auditor", "auditor")
+    developer = auth_service.create_session("mock_developer", "developer")
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        denied = await client.get(
+            "/api/v1/mock/health",
+            headers={"Authorization": f"Bearer {auditor.session_id}"},
+        )
+        assert denied.status_code == 403
+
+        allowed = await client.get(
+            "/api/v1/mock/health",
+            headers={"Authorization": f"Bearer {developer.session_id}"},
+        )
+        # 404 proves the mock route's permission gate passed; no mock is configured.
+        assert allowed.status_code == 404

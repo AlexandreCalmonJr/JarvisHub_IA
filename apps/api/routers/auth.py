@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -20,6 +21,27 @@ router = APIRouter(tags=["auth"], prefix="/api/v1/auth")
 
 class AuthLoginRequest(BaseModel):
     token: str = Field(..., min_length=1, description="Token de administrador ou sessão")
+
+
+
+class PasswordLoginRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=48, pattern=r"^[a-zA-Z0-9._-]+$")
+    password: str = Field(..., min_length=1, max_length=256)
+
+
+class CreateUserRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=48, pattern=r"^[a-zA-Z0-9._-]+$")
+    display_name: str = Field(..., min_length=2, max_length=100)
+    password: str = Field(..., min_length=12, max_length=256)
+    role: Literal["admin", "developer", "auditor"] = "developer"
+
+
+class ResetUserPasswordRequest(BaseModel):
+    password: str = Field(..., min_length=12, max_length=256)
+
+
+class SetUserStatusRequest(BaseModel):
+    is_active: bool
 
 
 class BootstrapExchangeRequest(BaseModel):
@@ -54,15 +76,18 @@ def _set_session_cookie(response: Response, request: Request, session) -> None:
     )
 
 
-def _session_payload(session) -> dict:
-    return {
-        "session_token": session.session_id,
+def _session_payload(session, *, include_token: bool = False) -> dict:
+    payload = {
         "user_id": session.user_id,
         "role": session.role,
         "scopes": list(session.scopes),
         "created_at": session.created_at,
         "expires_at": session.expires_at,
     }
+    # Token só é devolvido no provisionamento administrativo, nunca no login do browser.
+    if include_token:
+        payload["session_token"] = session.session_id
+    return payload
 
 
 @router.post("/login")
@@ -92,6 +117,109 @@ async def login(payload: AuthLoginRequest, request: Request, response: Response)
         severity=AuditEventSeverity.INFO,
     )
     return {"status": "authenticated", **_session_payload(session)}
+
+
+
+def _revoke_user_sessions(username: str) -> None:
+    for session in auth_service.security.sessions.list_sessions(include_revoked=False):
+        if session.user_id.casefold() == username.casefold():
+            auth_service.security.sessions.revoke_session(session.session_id)
+
+
+@router.post("/password-login")
+async def password_login(payload: PasswordLoginRequest, request: Request, response: Response):
+    client = AuthService.client_key(request)
+    if not auth_service.check_rate_limit(f"password-login:{client}", limit=8):
+        raise HTTPException(status_code=429, detail="Demasiadas tentativas. Tente mais tarde.")
+    session = auth_service.login_with_password(payload.username, payload.password)
+    if session is None:
+        auth_service.security.audit.record_event(
+            operation="AUTH_PASSWORD_LOGIN_FAILED",
+            status="DENIED",
+            user_id="anonymous",
+            parameters={"client": client, "username": payload.username},
+            severity=AuditEventSeverity.WARNING,
+            reason="Credenciais de conta inválidas ou conta desativada.",
+        )
+        raise HTTPException(status_code=401, detail="Utilizador ou palavra-passe inválidos.")
+    _set_session_cookie(response, request, session)
+    auth_service.security.audit.record_event(
+        operation="AUTH_PASSWORD_LOGIN_SUCCESS",
+        status="SUCCESS",
+        user_id=session.user_id,
+        parameters={"role": session.role, "session_id": session.session_id},
+        severity=AuditEventSeverity.INFO,
+    )
+    return {"status": "authenticated", **_session_payload(session)}
+
+
+@router.get("/users")
+async def list_users(principal: Principal = Depends(require_admin)):
+    return {"users": auth_service.user_store.list_users()}
+
+
+@router.post("/users", status_code=201)
+async def create_user(payload: CreateUserRequest, principal: Principal = Depends(require_admin)):
+    try:
+        user = auth_service.user_store.create_user(
+            username=payload.username.strip(),
+            display_name=payload.display_name.strip(),
+            password=payload.password,
+            role=payload.role,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    auth_service.security.audit.record_event(
+        operation="AUTH_USER_CREATED",
+        status="SUCCESS",
+        user_id=principal.display_id,
+        parameters={"target_user": user["username"], "role": user["role"]},
+        severity=AuditEventSeverity.INFO,
+    )
+    return {"status": "created", "user": user}
+
+
+@router.put("/users/{username}/password")
+async def reset_user_password(
+    username: str,
+    payload: ResetUserPasswordRequest,
+    principal: Principal = Depends(require_admin),
+):
+    if not auth_service.user_store.set_password(username, payload.password):
+        raise HTTPException(status_code=404, detail="Utilizador não encontrado.")
+    _revoke_user_sessions(username)
+    auth_service.security.audit.record_event(
+        operation="AUTH_USER_PASSWORD_RESET",
+        status="SUCCESS",
+        user_id=principal.display_id,
+        parameters={"target_user": username},
+        severity=AuditEventSeverity.WARNING,
+    )
+    return {"status": "password_updated", "username": username}
+
+
+@router.patch("/users/{username}/status")
+async def set_user_status(
+    username: str,
+    payload: SetUserStatusRequest,
+    principal: Principal = Depends(require_admin),
+):
+    try:
+        updated = auth_service.user_store.set_active(username, payload.is_active)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="Utilizador não encontrado.")
+    if not payload.is_active:
+        _revoke_user_sessions(username)
+    auth_service.security.audit.record_event(
+        operation="AUTH_USER_STATUS_CHANGED",
+        status="SUCCESS",
+        user_id=principal.display_id,
+        parameters={"target_user": username, "is_active": payload.is_active},
+        severity=AuditEventSeverity.WARNING,
+    )
+    return {"status": "updated", "username": username, "is_active": payload.is_active}
 
 
 @router.post("/bootstrap/exchange")
@@ -178,7 +306,7 @@ async def create_human_session(
         },
         severity=AuditEventSeverity.INFO,
     )
-    return {"status": "created", **_session_payload(session)}
+    return {"status": "created", **_session_payload(session, include_token=True)}
 
 
 @router.get("/sessions")

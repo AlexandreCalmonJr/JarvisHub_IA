@@ -1,11 +1,11 @@
-# ⚡ JARVIS AI HUB 2.0 (Release 2.0 Oficial)
+# ⚡ JARVIS AI HUB 3.0.1 (Candidato de Homologação)
 
 <div align="center">
 
-**Plataforma Corporativa Local-First de 26 Agentes Especializados de IA para Análise, Engenharia de Software, Cibersegurança, Dados, Escritório Virtual Gamificado e Gestão de Projetos Físicos**
+**Candidato 3.0.1 · Plataforma Corporativa Local-First de 26 Agentes Especializados de IA para Análise, Engenharia de Software, Cibersegurança, Dados, Escritório Virtual Gamificado e Gestão de Projetos Físicos**
 
-[![Versão: 2.0.0](https://img.shields.io/badge/Versão-2.0.0%20Oficial-emerald?style=for-the-badge&logo=rocket)](RELEASE_2.0.md)
-[![Status: Pronto para Produção](https://img.shields.io/badge/Status-100%25%20Homologado-success?style=for-the-badge&logo=checkmarx)](docs/operations/12-plano-de-testes-benchmarks-e-release.md)
+[![Versão: 3.0.1](https://img.shields.io/badge/Versão-3.0.1-blue?style=for-the-badge&logo=rocket)](RELEASE_2.0.md)
+[![Status: Homologação](https://img.shields.io/badge/Status-Homologação%20em%20andamento-orange?style=for-the-badge&logo=checkmarx)](docs/operations/12-plano-de-testes-benchmarks-e-release.md)
 [![Segurança: Local-First Blindado](https://img.shields.io/badge/Segurança-127.0.0.1%20Confinado-blue?style=for-the-badge&logo=shield)](docs/security/07-threat-model-e-politica-de-seguranca.md)
 [![Agentes: 26 Especialistas](https://img.shields.io/badge/Agentes-26%20Microsserviços%20Autônomos-purple?style=for-the-badge&logo=probot)](docs/architecture/04-catalogo-26-agentes-e-permissoes.md)
 [![Escritório: 2.5D Avatares](https://img.shields.io/badge/Escritório-2.5D%20Canvas%20Gamificado-gold?style=for-the-badge&logo=unity)](RELEASE_2.0.md)
@@ -14,9 +14,9 @@
 
 ---
 
-## 📖 Sumário Executivo do Release 2.0
+## 📖 Sumário Executivo do Candidato 3.0.1
 
-O **JARVIS AI HUB 2.0** é uma evolução marcante que transforma a orquestração de IA local em uma experiência corporativa rica, autônoma e gamificada:
+O **JARVIS AI HUB 3.0.1** é uma evolução arquitetural que transforma a orquestração de IA local em uma experiência corporativa rica, autônoma e gamificada:
 1. **26 Microsserviços Especialistas Autônomos**: Cada agente possui perfil cognitivo exclusivo, competências ECC ativas, chaves de API independentes (Groq, Gemini, DeepSeek, OpenAI ou Ollama local) e isolamento operacional.
 2. **Escritório Virtual ("Habbo Office" 2.5D Canvas)**: Simulação viva com ciclo de caminhada a 60 FPS, pausa para o café, mesas departamentais e convocação dinâmica para a Mesa Redonda de Consenso.
 3. **Invocação Direta de Especialistas & Inspeção Física**: Convoque qualquer especialista (como o Engenheiro de Cibersegurança) para auditar códigos reais em `workspace/<projeto>` com injeção automática de arquivos e pareceres técnicos contextualizados.
@@ -44,7 +44,7 @@ Toda a fundamentação técnica, auditorias de segurança e manuais operacionais
 | **09** | **Manual de Operação, Backup e Recuperação** | Hot backups em modo WAL, recuperação de desastres, expurgo de tarefas e desfragmentação. | [09-manual-operacao-backup-e-recuperacao.md](docs/operations/09-manual-operacao-backup-e-recuperacao.md) |
 | **10** | **Manual do Project Workspace e Fluxo Git** | Importação de pastas, modos Read-Only/Plan-Only/Write, branches temporárias e diffs. | [10-manual-project-workspace-e-fluxo-git.md](docs/operations/10-manual-project-workspace-e-fluxo-git.md) |
 | **11** | **Manual do Dashboard e App Mobile** | Guia de uso das 17 páginas modulares, atalho `Ctrl+K`, comandos de chat e pareamento VPN Tailscale. | [11-manual-dashboard-e-app-mobile.md](docs/operations/11-manual-dashboard-e-app-mobile.md) |
-| **12** | **Plano de Testes, Benchmark e Release** | Métricas de estresse (191.9 RPS / 244 WPS), testes unitários e critérios de homologação v1.0. | [12-plano-de-testes-benchmarks-e-release.md](docs/operations/12-plano-de-testes-benchmarks-e-release.md) |
+| **12** | **Plano de Testes, Benchmark e Release** | Pirâmide de testes, benchmark SQLite reproduzível e critérios de promoção de release. | [12-plano-de-testes-benchmarks-e-release.md](docs/operations/12-plano-de-testes-benchmarks-e-release.md) |
 | **13** | **Auditoria de Paridade: Claude Code & OpenCode** | Matriz de paridade, lacunas identificadas por severidade, roadmap P0/P1/P2 e critérios de aceite do Coding Agent. | [13-auditoria-paridade-claude-code-opencode.md](docs/architecture/13-auditoria-paridade-claude-code-opencode.md) |
 
 ---
@@ -122,37 +122,21 @@ Os 26 agentes são divididos em 6 divisões corporativas de engenharia:
 
 ---
 
-## 📊 Resultados do Benchmark de Alta Carga (Hardware Real)
+## 📊 Benchmarks e evidências
 
-Homologação realizada em **Intel Core i5 (4C/8T) + 32GB RAM + SSD** com banco SQLite em modo WAL:
+Os números históricos de RPS/WPS foram removidos desta apresentação porque o script que os originou não estava versionado de forma reproduzível. O projeto agora inclui `scripts/benchmark_sqlite.py`, que mede exclusivamente o SQLite em modo WAL.
 
-```
-======================================================================================
-  FASE 1: Stress de Leitura Concorrente (15 workers paralelos)
-  -> 100/100 requisições concluídas com 100.0% de sucesso (Zero erros)
-  -> Throughput Sustentado: 191.9 Requisições por Segundo (RPS)
-  -> Latência Média: 68.75 ms | Latência Mediana (P50): 42.27 ms
-======================================================================================
-  FASE 2: Stress de Escrita Concorrente (8 workers paralelos)
-  -> 30/30 gravações concluídas em 0.123s (Zero erros de lock de banco)
-  -> Taxa de Gravação: 244.0 Escritas por Segundo (WPS)
-  -> Latência Média de Escrita: 29.90 ms
-======================================================================================
-  FASE 3: Fila de Inferência & Proteção Térmica
-  -> InferenceQueue limitou a concorrência a 1 modelo ativo por vez
-  -> Processamento real do llama3.2:3b sem estrangulamento térmico de CPU
-  -> 4 de 4 tarefas concluídas e persistidas no SQLite (is_completed = 1)
-======================================================================================
-  FASE 4: Auditoria de Integridade Pós-Carga
-  -> PRAGMA integrity_check = ok (100% íntegro, sem corrupções)
-======================================================================================
+Execute com:
+
+```powershell
+python scripts/benchmark_sqlite.py --reads 1000 --writes 300 --readers 15 --writers 8
 ```
 
----
+O resultado JSON informa plataforma, versões, concorrência, latências, throughput agregado e integridade. **Não representa desempenho HTTP, inferência de modelos ou homologação integral do produto.** Resultados só devem ser publicados depois de execução identificada por commit e ambiente.
 
 ## 🖥️ Matriz das 17 Telas do Dashboard Web
 
-O painel foi totalmente modularizado, testado e blindado contra quebras responsivas:
+O painel está modularizado. A homologação de responsividade e acessibilidade permanece sujeita aos gates automatizados e testes manuais.
 
 1. **Chat Master**: Streaming de tokens em tempo real (SSE), suporte a entrada de voz, gaveta de histórico e comandos rápidos (`/ponytail`, `/debate`, `/rollback`).
 2. **Workspace & Projetos**: Importador de pastas locais, criação de branches de teste, geração de diffs e exportação de backup em ZIP limpo.
@@ -199,9 +183,9 @@ Abra o seu navegador em: **`http://127.0.0.1:8000`**
 
 ## 🔒 Compromissos de Engenharia & Segurança
 
-* **Blindagem 100% Confinada**: Todos os sockets de rede comunicam-se apenas via `127.0.0.1`.
+* **Local-first**: o servidor inicia em `127.0.0.1` por padrão; acessos remotos exigem configuração explícita e HTTPS.
 * **Zero Snake_case Visível na UI**: Toda a interface foi rigorosamente traduzida para Português do Brasil claro e profissional.
-* **Código 100% Auditado**: 143 testes unitários, de integração e de segurança aprovados, sem bibliotecas órfãs e com separação estrita de camadas.
+* **Auditoria em andamento**: a suíte e os gates estão a ser executados na branch de homologação. Nenhum total de testes ou selo de aprovação é declarado sem evidência associada ao commit.
 * **Governança Human-in-the-Loop**: Nenhuma linha de código ou arquivo de projeto é alterado sem autorização explícita do desenvolvedor humano.
 * **Extensibilidade Controlada**: Servidores MCP são opcionais, definidos em `data/mcp_servers.json`, e ferramentas externas seguem a mesma política de risco e aprovação das nativas.
 
@@ -210,3 +194,12 @@ Abra o seu navegador em: **`http://127.0.0.1:8000`**
 <div align="center">
 Desenvolvido com foco em Privacidade, Rigor de Engenharia de Software e Eficiência Local-First.
 </div>
+
+
+---
+
+## Estado de homologação 3.0.1
+
+Esta branch é um candidato de homologação, não uma declaração de produção. Os números de **265 testes**, **0 ignorados** e **329,17 kB** só serão publicados após execução verificável da suíte e do build, com artefatos ligados ao commit. Nenhum resultado de benchmark antigo deve ser interpretado como desempenho atual.
+
+A versão 3.0.1 está alinhada nos metadados do backend, dashboard e mobile. A tag Git de release será criada apenas depois de todos os gates passarem e da assinatura Android de produção ser configurada pelo responsável pela custódia do keystore.

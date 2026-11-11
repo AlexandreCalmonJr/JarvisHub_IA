@@ -9,21 +9,16 @@ interface ApprovalCenterProps {
 }
 
 export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRefresh }) => {
-  const [userName, setUserName] = useState('admin_dev');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const pendingList = approvals.filter(a => a.status === 'pending');
 
   const handleDecision = async (id: string, action: 'approve' | 'reject') => {
-    if (!userName.trim()) {
-      setErrorMessage('Identificação do utilizador humano autorizador é obrigatória.');
-      return;
-    }
     setErrorMessage(null);
     setActionLoading(id);
     try {
-      await decideApproval(id, action, userName.trim(), 'Decidido pelo Approval Center Web');
+      await decideApproval(id, action, 'Decidido pelo Approval Center Web');
       onRefresh();
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao processar decisão');
@@ -54,40 +49,16 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
         </div>
       </div>
 
-      {/* Identidade do Utilizador */}
       <div
         className="glass-card"
         style={{
-          padding: '14px 18px',
+          padding: '12px 16px',
           borderRadius: '10px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
+          color: 'var(--text-secondary)',
+          fontSize: '0.84rem',
         }}
       >
-        <div>
-          <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Identidade do Autorizador Humano:
-          </span>
-        </div>
-        <input
-          type="text"
-          value={userName}
-          onChange={(e) => setUserName(e.target.value)}
-          placeholder="Ex: alexandre_lead"
-          style={{
-            padding: '8px 14px',
-            backgroundColor: 'var(--bg-primary)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '8px',
-            color: 'var(--text-primary)',
-            fontSize: '0.85rem',
-            width: '260px',
-            outline: 'none',
-          }}
-        />
+        A decisão será registada com a identidade da sessão autenticada. A identidade não pode ser escolhida nem alterada pelo navegador.
       </div>
 
       {errorMessage && (

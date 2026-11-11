@@ -2,7 +2,7 @@ import io
 import zipfile
 import pytest
 from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service, webhook_service
+from apps.api.main import app, workspace_service
 
 
 @pytest.mark.asyncio
@@ -68,6 +68,18 @@ async def test_frente_05_dockerize_project():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         resp = await ac.post(f"/api/v1/workspace/projects/{proj_id}/dockerize")
+        assert resp.status_code == 200
+        pending = resp.json()
+        assert pending["status"] == "approval_required"
+        assert not (proj_dir / "Dockerfile").exists()
+        decision = await ac.post(
+            f"/api/v1/approvals/{pending['approval_id']}/decide",
+            json={"action": "approve", "reason": "Dockerização aprovada no teste"},
+        )
+        assert decision.status_code == 200
+        resp = await ac.post(
+            f"/api/v1/workspace/projects/{proj_id}/dockerize?approval_id={pending['approval_id']}"
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "dockerized"

@@ -74,10 +74,25 @@ async def test_frente_02_git_version_control_and_rollback():
             },
         )
         assert mod_resp.status_code == 200
-
-        # Verifica conteúdo atual (Versão 2)
+        mod_data = mod_resp.json()
+        assert mod_data["status"] == "approval_required"
+        assert "Versao 1" in (proj_dir / "index.js").read_text(encoding="utf-8")
+        approved_write = await ac.post(
+            f"/api/v1/approvals/{mod_data['approval_id']}/decide",
+            json={"action": "approve", "reason": "Aprovado no teste Git"},
+        )
+        assert approved_write.status_code == 200
+        applied_write = await ac.post(
+            f"/api/v1/workspace/projects/{proj_id}/files/write",
+            json={
+                "path": "index.js",
+                "content": "console.log('Versao 2 - alterada');\n",
+                "reason": "Segunda alteracao",
+                "approval_id": mod_data["approval_id"],
+            },
+        )
+        assert applied_write.status_code == 200
         assert "Versao 2" in (proj_dir / "index.js").read_text(encoding="utf-8")
-
         # 3. Consulta histórico Git
         history_resp = await ac.get(f"/api/v1/workspace/projects/{proj_id}/git-history")
         assert history_resp.status_code == 200
@@ -87,7 +102,18 @@ async def test_frente_02_git_version_control_and_rollback():
         # 4. Executa Rollback em 1 clique via API
         rollback_resp = await ac.post(f"/api/v1/workspace/projects/{proj_id}/rollback")
         assert rollback_resp.status_code == 200
-        rb_data = rollback_resp.json()
+        pending_rollback = rollback_resp.json()
+        assert pending_rollback["status"] == "approval_required"
+        approved_rollback = await ac.post(
+            f"/api/v1/approvals/{pending_rollback['approval_id']}/decide",
+            json={"action": "approve", "reason": "Rollback aprovado no teste"},
+        )
+        assert approved_rollback.status_code == 200
+        rollback_applied = await ac.post(
+            f"/api/v1/workspace/projects/{proj_id}/rollback?approval_id={pending_rollback['approval_id']}"
+        )
+        assert rollback_applied.status_code == 200
+        rb_data = rollback_applied.json()
         assert rb_data["status"] == "rolled_back"
         assert "undone_commit" in rb_data
 

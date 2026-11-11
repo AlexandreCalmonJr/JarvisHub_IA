@@ -79,7 +79,7 @@ MODE_INSTRUCTIONS = {
         "humana. Continue naturalmente após a decisão."
     ),
     AgentMode.AUTO: (
-        "MODO AUTOMÁTICO: você pode escrever e executar dentro do sandbox sem pausas, "
+        "MODO AUTOMÁTICO: leitura sem pausas; toda escrita ou execução exige aprovação humana, "
         "mas comandos destrutivos continuam bloqueados pela política de segurança."
     ),
 }
@@ -349,7 +349,7 @@ class CodingAgentRuntime:
             return
 
         # Aprovação humana
-        if spec.requires_approval and config.mode == AgentMode.ASK:
+        if spec.requires_approval:
             try:
                 preview = self.tools.preview(call, config.project_id)
             except PermissionDeniedError as exc:

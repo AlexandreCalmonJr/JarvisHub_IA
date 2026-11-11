@@ -1,7 +1,6 @@
 import difflib
 import logging
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -162,8 +161,8 @@ class ProjectWorkspaceService:
             except Exception:
                 try:
                     os.startfile(norm_path)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Não foi possível abrir o diretório do projeto: %s", exc)
         elif sys.platform == "darwin":
             subprocess.Popen(["open", norm_path])
         else:
@@ -213,8 +212,8 @@ class ProjectWorkspaceService:
             try:
                 os.chmod(path, stat.S_IWRITE)
                 func(path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao ajustar permissões do diretório: %s", exc)
 
         shutil.rmtree(project_dir, onerror=_remove_readonly)
         self._inventories.pop(project_id, None)
@@ -448,11 +447,41 @@ class ProjectWorkspaceService:
         project_dir = self.get_project_dir(project_id)
         return self.dockerizer.dockerize_project(project_id=project_id, project_dir=project_dir)
 
+    def validate_import_root(self, folder_path: str) -> Path:
+        """Valida importação apenas dentro de raízes explicitamente autorizadas.
+
+        Configure JARVIS_WORKSPACE_IMPORT_ROOTS com caminhos absolutos separados
+        por ponto e vírgula no Windows ou vírgula nos restantes ambientes.
+        Sem configuração, somente o workspace interno é uma raiz autorizada.
+        """
+        target = Path(folder_path).expanduser().resolve()
+        if not target.exists() or not target.is_dir():
+            raise FileNotFoundError(
+                f"O diretório informado não foi encontrado: '{folder_path}'"
+            )
+
+        raw_roots = os.environ.get("JARVIS_WORKSPACE_IMPORT_ROOTS", "").strip()
+        separator = ";" if os.name == "nt" else ","
+        configured = [item.strip() for item in raw_roots.split(separator) if item.strip()]
+        allowed_roots = [Path(item).expanduser().resolve() for item in configured]
+        if not allowed_roots:
+            allowed_roots = [self.base_dir.resolve()]
+
+        for root in allowed_roots:
+            try:
+                target.relative_to(root)
+                return target
+            except ValueError:
+                continue
+
+        raise PermissionDeniedError(
+            "Importação bloqueada: a pasta não está dentro de uma raiz autorizada. "
+            "Configure JARVIS_WORKSPACE_IMPORT_ROOTS com a raiz aprovada."
+        )
+
     def import_external_project(self, folder_path: str, custom_name: str | None = None) -> dict:
         """Importa e conecta uma pasta física existente no computador ao JARVIS AI HUB."""
-        path = Path(folder_path).resolve()
-        if not path.exists() or not path.is_dir():
-            raise FileNotFoundError(f"O diretório informado não foi encontrado: '{folder_path}'")
+        path = self.validate_import_root(folder_path)
 
         project_id = (custom_name or path.name).lower().replace(" ", "-").replace("_", "-")
         # Registra permissões no SecurityCore

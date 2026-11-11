@@ -3,7 +3,6 @@ import re
 
 logger = logging.getLogger("jarvis.orchestration.graph")
 import json
-from pathlib import Path
 from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -234,6 +233,34 @@ def create_master_graph(
                     AgentRole.FRONTEND_MOBILE_DEVELOPER.value,
                     AgentRole.QA_ENGINEER.value,
                 ]
+        elif (
+            len(prompt.split()) >= 6
+            and any(
+                marker in prompt
+                for marker in (
+                    "analise", "análise", "analisar", "investigue", "investigar",
+                    "resolver", "solucionar", "diagnosticar", "estratégia",
+                    "planejamento", "decisão", "compare", "avaliar",
+                    "problema", "problemas", "causa", "causas",
+                )
+            )
+            and not any(
+                action in prompt
+                for action in (
+                    "corrigir", "corrija", "implementar", "implemente", "editar", "edite",
+                    "modificar", "modifique", "mudar", "mude", "alterar", "altere",
+                    "adicionar", "adicione", "trocar", "troque", "atualizar", "atualize",
+                )
+            )
+        ):
+            # Problemas abertos e decisões complexas convocam a mesa redonda
+            # sem exigir que o utilizador conheça comandos como /debate.
+            intent = "multi_agent_consensus"
+            agents = [
+                AgentRole.SOFTWARE_ARCHITECT.value,
+                AgentRole.CYBERSECURITY_ENGINEER.value,
+                AgentRole.CODE_REVIEWER.value,
+            ]
         elif any(w in prompt for w in ("arquitetura", "estrutura", "diagrama", "módulos")):
             intent = "architecture_analysis"
             agents = [AgentRole.SOFTWARE_ARCHITECT.value, AgentRole.PROJECT_MANAGER.value]
@@ -371,41 +398,40 @@ def create_master_graph(
         approval_id = None
 
         if intent == "code_modification":
-            is_workspace_site = False
-            if workspace_service:
-                projects = workspace_service.list_available_projects()
-                p_lower = state["user_prompt"].lower()
-                for prj in projects:
-                    p_id = prj["id"].lower()
-                    if p_id in p_lower or any(
-                        part in p_lower for part in p_id.split("-") if len(part) > 2
-                    ):
-                        is_workspace_site = True
-                        break
-
-            # Se não for um site de workspace em edição rápida, exige aprovação humana
-            if not is_workspace_site:
-                approval_required = True
-                if project_id:
-                    try:
-                        security_core.permission_engine.check_operation_permission(
-                            agent_role=AgentRole.BACKEND_DEVELOPER,
-                            project_id=project_id,
-                            operation="file_write",
-                            has_human_approval=False,
+            # Nenhuma escrita física é tratada como "edição rápida": todas exigem
+            # pré-visualização e aprovação humana, inclusive projetos já registados.
+            approval_required = True
+            if not workspace_service:
+                violations.append("Serviço de workspace indisponível; alteração bloqueada.")
+            else:
+                try:
+                    preview, affected_resources = execute_workspace_modification(
+                        workspace_service=workspace_service,
+                        user_prompt=state["user_prompt"],
+                        project_id=project_id,
+                        preview_only=True,
+                    )
+                    if not affected_resources:
+                        raise PermissionDeniedError(
+                            "Não foi possível determinar o recurso físico que seria alterado."
                         )
-                    except PermissionDeniedError as err:
-                        violations.append(str(err))
-
-                appr = security_core.approval_engine.create_request(
-                    task_id=state["task_id"],
-                    agent_role=AgentRole.JARVIS_MASTER.value,
-                    operation="code_modification",
-                    impact_summary=f"Alteração de código solicitada pelo utilizador: '{state['user_prompt']}'",
-                    affected_resources=[f"project:{project_id or 'workspace'}"],
-                    reversible=True,
-                )
-                approval_id = appr.id
+                    appr = security_core.approval_engine.create_request(
+                        task_id=state["task_id"],
+                        agent_role=AgentRole.JARVIS_MASTER.value,
+                        operation="file_write",
+                        impact_summary=(
+                            f"Alteração de código solicitada pelo utilizador: "
+                            f"'{state['user_prompt']}'"
+                        ),
+                        affected_resources=affected_resources,
+                        proposed_diff=preview,
+                        reversible=True,
+                    )
+                    approval_id = appr.id
+                except Exception as exc:
+                    violations.append(
+                        f"Pré-visualização da alteração falhou; nenhuma escrita foi realizada: {exc}"
+                    )
 
         return {
             "policy_verified": len(violations) == 0,
@@ -427,8 +453,8 @@ def create_master_graph(
         if agent_registry:
             try:
                 prim_profile = agent_registry.get_profile(AgentRole(primary_agent))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Perfil do agente principal indisponível: %s", exc)
         is_hybrid_active = bool(
             model_manager.hybrid_router
             and getattr(model_manager.hybrid_router, "online_config", None)
@@ -466,8 +492,8 @@ def create_master_graph(
                     if p_id in p_lower or p_norm in p_lower or any(part in p_lower for part in p_id.split("-") if len(part) > 3):
                         project_id = prj["id"]
                         break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Projeto não identificado automaticamente: %s", exc)
         agent_outputs: list[dict[str, Any]] = []
         created_slug = None
         created_files: list[str] = []
@@ -650,343 +676,212 @@ def create_master_graph(
                     slug, name_clean, f"Portal completo de Cibersegurança e Inteligência de Ameaças para '{user_prompt}'"
                 )
 
-            scaffold_res = workspace_service.scaffold_project(
-                project_id=slug,
-                name=name_clean,
-                description=f"Projeto {project_type.upper()} criado pelo JARVIS AI HUB a partir do pedido: '{state['user_prompt']}'",
-                project_type=project_type,
-                files=custom_files if custom_files else None,
-            )
-            created_files = scaffold_res["files_created"]
-            root_path_str = scaffold_res["root_path"]
+            # Projeto novo também é uma escrita no Workspace: nenhuma pasta/arquivo
+            # é criada antes da aprovação humana vinculada ao caminho e payload proposto.
+            project_root = workspace_service.get_project_dir(slug).resolve()
+            if project_root.exists():
+                return {
+                    "policy_violations": [
+                        f"O projeto '{slug}' já existe. Selecione um identificador novo ou trate a atualização como modificação aprovada."
+                    ],
+                    "final_summary": f"Criação bloqueada: o projeto '{slug}' já existe.",
+                    "is_completed": False,
+                }
 
-            # --- ETAPA 3: Raciocínio Real do Desenvolvedor Especialista via LLM ---
-            dev_sys = build_specialist_prompt(
-                agent_role=dev_role.value,
-                agent_registry=agent_registry,
-                skills_catalog=skills_catalog,
-                db_manager=db_manager,
-                intent="project_creation",
-                user_prompt=user_prompt,
-                project_id=slug,
-                domain="frontend" if project_type in ("web", "flutter") else "backend",
-                previous_outputs=[{"agent_role": arch_role.value, "summary": arch_summary}],
-            )
-            dev_req = InferenceRequest(
-                prompt=(
-                    f"Como {get_agent_label(dev_role)}, apresente as decisões de implementação tomadas "
-                    f"para o projeto '{slug}', detalhando os módulos construídos ({', '.join(created_files)}) "
-                    f"para atender ao pedido do usuário: '{user_prompt}'."
-                ),
-                system_prompt=dev_sys,
-                model_name=model_name,
-                max_tokens=300,
-                temperature=0.3,
-                timeout_seconds=20.0,
-                task_id=state.get("task_id"),
-            )
-            dev_p_tokens = 40
-            dev_c_tokens = 130
-            dev_dur_ms = 14.0
+            # As equipas Dev e QA produzem os seus pareceres antes da aprovação,
+            # mas não recebem autorização para criar ou alterar ficheiros.
+            dev_summary = f"Plano de implementação preparado para {name_clean}; a escrita aguarda aprovação."
+            dev_tokens = 0
+            dev_duration = 0.0
             try:
-                dev_resp = await model_manager.generate(dev_req)
+                dev_resp = await model_manager.generate(
+                    InferenceRequest(
+                        prompt=(
+                            f"Como Desenvolvedor Especialista, prepare o plano de implementação para "
+                            f"'{name_clean}' ({project_type}). Pedido: {user_prompt}. "
+                            "Descreva módulos, ficheiros previstos e dependências. Não execute nem grave ficheiros."
+                        ),
+                        system_prompt=build_specialist_prompt(
+                            agent_role=dev_role.value,
+                            agent_registry=agent_registry,
+                            skills_catalog=skills_catalog,
+                            db_manager=db_manager,
+                            intent="project_creation",
+                            user_prompt=user_prompt,
+                            project_id=slug,
+                            domain="frontend" if project_type in ("web", "flutter") else "backend",
+                        ),
+                        model_name=model_name,
+                        max_tokens=300,
+                        temperature=0.3,
+                        timeout_seconds=20.0,
+                        task_id=state.get("task_id"),
+                    )
+                )
                 dev_summary = dev_resp.content.strip()
-                dev_p_tokens = dev_resp.prompt_tokens
-                dev_c_tokens = dev_resp.completion_tokens
-                dev_dur_ms = dev_resp.duration_ms
+                dev_tokens = dev_resp.completion_tokens
+                dev_duration = dev_resp.duration_ms
             except Exception as exc:
-                logger.info("Deliberação rápida do Desenvolvedor: %s", exc)
-                if is_english:
-                    dev_summary = (
-                        f"Implementação concluída com sucesso para '{slug}'. "
-                        "Desenvolvido motor dinâmico de quiz com feedback explicativo imediato, módulo de preenchimento "
-                        "de lacunas, flashcards de conversação com pronúncia por voz via SpeechSynthesis e painel de estatísticas diárias."
-                    )
-                elif is_security:
-                    dev_summary = (
-                        f"Implementação de Cibersegurança concluída com sucesso para '{slug}'. "
-                        "Desenvolvido portal completo em Dark Theme Cibernético com scanner reativo de vulnerabilidades OWASP, "
-                        "testador de entropia de credenciais com estimativa de quebra por força bruta, feed contínuo de incidentes SOC "
-                        "e painel de deliberações da Mesa Redonda."
-                    )
-                else:
-                    dev_summary = (
-                        f"Código-fonte gerado e gravado no disco com sucesso para o projeto '{slug}'. "
-                        f"Arquivos criados: {', '.join(created_files)} seguindo código limpo e padrões modernos."
-                    )
+                logger.info("Plano do Desenvolvedor Especialista indisponível: %s", exc)
 
-            # --- ETAPA 4: Auditoria de Qualidade pelo Engenheiro de QA (QA Engineer) ---
-            qa_sys = build_specialist_prompt(
-                agent_role=qa_role.value,
-                agent_registry=agent_registry,
-                skills_catalog=skills_catalog,
-                db_manager=db_manager,
-                intent="project_creation",
-                user_prompt=user_prompt,
-                project_id=slug,
-                domain="qa",
-                previous_outputs=[
-                    {"agent_role": arch_role.value, "summary": arch_summary},
-                    {"agent_role": dev_role.value, "summary": dev_summary},
-                ],
+            qa_summary = (
+                f"Plano de QA preparado para {name_clean}: validar estrutura, execução, "
+                "dependências e cenários principais após a criação aprovada."
             )
-            qa_req = InferenceRequest(
-                prompt=(
-                    f"Como Engenheiro de QA, avalie a integridade, compatibilidade, acessibilidade e "
-                    f"critérios de aceitação dos arquivos gerados para '{slug}': {', '.join(created_files)}."
-                ),
-                system_prompt=qa_sys,
-                model_name=model_name,
-                max_tokens=250,
-                temperature=0.3,
-                timeout_seconds=15.0,
-                task_id=state.get("task_id"),
-            )
-            qa_p_tokens = 30
-            qa_c_tokens = 90
-            qa_dur_ms = 10.0
+            qa_tokens = 0
+            qa_duration = 0.0
             try:
-                qa_resp = await model_manager.generate(qa_req)
+                qa_resp = await model_manager.generate(
+                    InferenceRequest(
+                        prompt=(
+                            f"Como Engenheiro de QA, prepare critérios de aceitação e testes para "
+                            f"'{name_clean}' ({project_type}). Pedido: {user_prompt}. "
+                            "Não execute testes nem altere ficheiros."
+                        ),
+                        system_prompt=build_specialist_prompt(
+                            agent_role=qa_role.value,
+                            agent_registry=agent_registry,
+                            skills_catalog=skills_catalog,
+                            db_manager=db_manager,
+                            intent="project_creation",
+                            user_prompt=user_prompt,
+                            project_id=slug,
+                            domain="quality_assurance",
+                        ),
+                        model_name=model_name,
+                        max_tokens=300,
+                        temperature=0.2,
+                        timeout_seconds=20.0,
+                        task_id=state.get("task_id"),
+                    )
+                )
                 qa_summary = qa_resp.content.strip()
-                qa_p_tokens = qa_resp.prompt_tokens
-                qa_c_tokens = qa_resp.completion_tokens
-                qa_dur_ms = qa_resp.duration_ms
+                qa_tokens = qa_resp.completion_tokens
+                qa_duration = qa_resp.duration_ms
             except Exception as exc:
-                logger.info("Deliberação rápida do Engenheiro de QA: %s", exc)
-                if is_security:
-                    qa_summary = (
-                        f"Homologação de Cibersegurança e QA concluída com 100% de aprovação para '{slug}'. "
-                        "Asserções estáticas validadas: sem dependências vulneráveis, inputs sanitizados contra XSS/SQLi, "
-                        "zero erros no console, viewport responsivo e tempo de carregamento inferior a 250ms."
-                    )
-                else:
-                    qa_summary = (
-                        f"Verificação estática e de integridade aprovada com sucesso para '{slug}'. "
-                        "Sintaxe validada sem erros, estrutura de arquivos íntegra, viewport responsivo e sem dependências órfãs."
-                    )
+                logger.info("Plano de QA indisponível: %s", exc)
 
-            # --- ETAPA 5: Contratos Formais de Parecer de Cada Especialista (AgentOutputContract) ---
-            arch_contract = AgentOutputContract(
-                agent_role=arch_role.value,
-                objective=f"Concepção técnica, requisitos e modularidade do projeto '{slug}'",
-                summary=arch_summary,
-                evidence=[
-                    f"Estrutura definida para {project_type.upper()}",
-                    f"Diretório físico: {root_path_str}",
-                    "Separação estrita de camadas e componentes",
-                ],
-                actions_taken=[
-                    "Interpretação semântica da requisição do usuário",
-                    "Definição da árvore de arquivos e padrões arquiteturais",
-                    "Aprovação do layout e diretrizes de modularidade",
-                ],
-                affected_files=[f"workspace/{slug}/{f}" for f in created_files],
-                tests_executed=["Inspeção arquitetural", "Validação de separação de camadas"],
-                risks=[],
-                blockers=[],
-                resource_usage=ResourceUsage(
-                    model_name=model_name,
-                    tokens_prompt=arch_p_tokens,
-                    tokens_completion=arch_c_tokens,
-                    duration_ms=arch_dur_ms,
-                ),
-                next_recommendation="Acompanhar implementação dos arquivos pelos especialistas.",
-            )
-            dev_contract = AgentOutputContract(
-                agent_role=dev_role.value,
-                objective=f"Geração física e implementação do código-fonte para '{slug}'",
-                summary=dev_summary,
-                evidence=[
-                    f"Pasta criada no computador em: {root_path_str}",
-                    f"Arquivos gravados no disco: {', '.join(created_files)}",
-                    "Projeto integrado com sucesso ao Project Workspace",
-                ],
-                actions_taken=[
-                    f"Geração e gravação dos arquivos físicos: {', '.join(created_files)}",
-                    "Implementação das regras de negócio e interatividade",
-                    "Validação de codificação UTF-8 e permissões de escrita",
-                ],
-                affected_files=[f"workspace/{slug}/{f}" for f in created_files],
-                tests_executed=["Verificação física de gravação no disco", "Teste de renderização"],
-                risks=[],
-                blockers=[],
-                resource_usage=ResourceUsage(
-                    model_name=model_name,
-                    tokens_prompt=dev_p_tokens,
-                    tokens_completion=dev_c_tokens,
-                    duration_ms=dev_dur_ms,
-                ),
-                next_recommendation="Submeter código para auditoria de QA e revisão do usuário.",
-            )
-            agent_outputs.append(dev_contract.model_dump())
-            agent_outputs.append(arch_contract.model_dump())
-
-            qa_contract = AgentOutputContract(
-                agent_role=qa_role.value,
-                objective=f"Auditoria de qualidade, testes e critérios de aceitação para '{slug}'",
-                summary=qa_summary,
-                evidence=[
-                    f"Arquivos inspecionados: {', '.join(created_files)}",
-                    "Smoke test de integridade sintática realizado",
-                    "Critérios de aceitação e acessibilidade validados",
-                ],
-                actions_taken=[
-                    "Inspeção estática dos arquivos gravados",
-                    "Validação de responsividade e compatibilidade",
-                    "Auditoria de conformidade com diretrizes do JARVIS",
-                ],
-                affected_files=[f"workspace/{slug}/{f}" for f in created_files],
-                tests_executed=["Verificação estática de sintaxe", "Teste de caminhos relativos e UTF-8"],
-                risks=[],
-                blockers=[],
-                resource_usage=ResourceUsage(
-                    model_name=model_name,
-                    tokens_prompt=qa_p_tokens,
-                    tokens_completion=qa_c_tokens,
-                    duration_ms=qa_dur_ms,
-                ),
-                next_recommendation="Projeto aprovado pelo QA para uso e execução imediata.",
-            )
-            agent_outputs.append(qa_contract.model_dump())
-
-            if is_security:
-                sec_contract = AgentOutputContract(
-                    agent_role=sec_role.value,
-                    objective=f"Auditoria de Cibersegurança e Conformidade OWASP para '{slug}'",
-                    summary=sec_summary,
-                    evidence=[
-                        "Conformidade estrita com OWASP Top 10 validada",
-                        "Sanitização de inputs e headers de proteção ativos",
-                        "Simulador de varredura e telemetria SOC integrados",
-                    ],
-                    actions_taken=[
-                        "Auditoria de superfície de ataque e modelagem de ameaças",
-                        "Configuração de regras defensivas WAF e rate-limiting",
-                        "Assinatura do parecer de cibersegurança para a Mesa Redonda",
-                    ],
-                    affected_files=[f"workspace/{slug}/{f}" for f in created_files],
-                    tests_executed=["Teste de injeção SQL/XSS", "Verificação de entropia de credenciais"],
+            agent_outputs.extend([
+                AgentOutputContract(
+                    agent_role=arch_role.value,
+                    objective="Arquitetura do novo projeto",
+                    summary=arch_summary,
+                    evidence=["Análise de arquitetura concluída; sem escrita no workspace."],
+                    actions_taken=["Análise de requisitos", "Planeamento de arquitetura"],
+                    affected_files=[],
+                    tests_executed=[],
                     risks=[],
                     blockers=[],
                     resource_usage=ResourceUsage(
                         model_name=model_name,
-                        tokens_prompt=40,
-                        tokens_completion=120,
-                        duration_ms=15.0,
+                        tokens_prompt=arch_p_tokens,
+                        tokens_completion=arch_c_tokens,
+                        duration_ms=arch_dur_ms,
                     ),
-                    next_recommendation="Monitoramento contínuo via telemetria SOC ativado.",
-                )
-                agent_outputs.append(sec_contract.model_dump())
-
-            # --- ETAPA 6: Resumo Executivo e Artefato para o Chat e Live Canvas ---
-            if is_english:
-                chat_msg = (
-                    f"🎯 **Plataforma de Exercícios em Inglês criada com sucesso no seu computador!**\n\n"
-                    f"📁 **Pasta local criada no disco**: `{root_path_str}`\n\n"
-                    f"✨ **Módulos interativos desenvolvidos sob medida pela equipe de agentes**:\n"
-                    f"- `index.html` (Interface moderna dark theme com abas de Quiz, Fill-in-the-blanks e Flashcards)\n"
-                    f"- `style.css` (Design responsivo estilo Claude Dark Warm com micro-animações e alto contraste)\n"
-                    f"- `app.js` (Lógica completa em JavaScript com áudio nativo de pronúncia via Web Speech API e pontuação)\n"
-                    f"- `README.md` (Instruções pedagógicas de estudo diário e vocabulário chave)\n\n"
-                    f"🚀 **Como abrir agora mesmo no seu navegador:**\n"
-                    f"Abra o arquivo diretamente no navegador ou visualize no Live Canvas ao lado:\n"
-                    f"`{root_path_str}\\index.html`\n\n"
-                    f"💡 *Dica de estudo*: Pratique 15 minutos por dia ouvindo os flashcards com pronúncia nativa e testando seus conhecimentos no quiz! Você pode pedir modificações a qualquer momento no chat (ex: *'no {slug}, adicione mais 10 perguntas sobre phrasal verbs'*)."
-                )
-            elif is_security:
-                chat_msg = (
-                    f"🛡️ **Portal de Cibersegurança & Inteligência de Ameaças criado com sucesso no seu computador!**\n\n"
-                    f"📁 **Pasta local criada no disco**: `{root_path_str}`\n\n"
-                    f"🏛️ **Mesa Redonda Convocada pelo JARVIS Maestro**:\n"
-                    f"Cada especialista executou sua respectiva tarefa e entregou seu relatório técnico:\n\n"
-                    f"- 🛡️ **Engenheiro de Cibersegurança**: {sec_summary}\n"
-                    f"- 🏛️ **Arquiteto de Software**: {arch_summary}\n"
-                    f"- 💻 **Dev Frontend & Mobile**: {dev_summary}\n"
-                    f"- 🧪 **Engenheiro de QA**: {qa_summary}\n\n"
-                    f"✨ **Arquivos físicos gravados no disco**:\n"
-                    f"- `index.html` (Portal de Cibersegurança com Scanner ao Vivo e Telemetria SOC)\n"
-                    f"- `style.css` (Tema Cyber Dark Glassmorphism com animações neon de pulso)\n"
-                    f"- `app.js` (Simulador interativo de varredura de vulnerabilidades e medidor de entropia)\n"
-                    f"- `relatorio_seguranca_owasp.md` (Relatório formal assinado pelos especialistas da Mesa Redonda)\n"
-                    f"- `README.md` (Instruções completas)\n\n"
-                    f"🚀 **Como visualizar agora mesmo no seu navegador:**\n"
-                    f"Abra o arquivo diretamente no navegador:\n"
-                    f"`{root_path_str}\\index.html`\n\n"
-                    f"💡 *Dica*: Abra o arquivo para testar o **Simulador de Varredura OWASP** e o **Analisador de Senhas** em tempo real!"
-                )
-            elif project_type == "python":
-                chat_msg = (
-                    f"🐍 **Projeto Python (FastAPI + Pytest) criado com sucesso no seu computador!**\n\n"
-                    f"📁 **Pasta local criada no disco**: `{root_path_str}`\n\n"
-                    f"✨ **Arquivos físicos gerados pela equipe de agentes**:\n"
-                    f"- `main.py` (API REST FastAPI assíncrona com validação Pydantic e Swagger)\n"
-                    f"- `requirements.txt` (Dependências do projeto)\n"
-                    f"- `tests/test_main.py` (Testes automatizados com Pytest e HTTPX)\n"
-                    f"- `README.md` (Documentação e passos de execução)\n\n"
-                    f"🚀 **Como executar agora no seu computador:**\n"
-                    f"```bash\ncd workspace/{slug}\npython -m venv .venv\n.venv\\Scripts\\activate\npip install -r requirements.txt\npython main.py\n```\n\n"
-                    f"O projeto já está ativo no **Project Workspace** e pronto para alterações pelo chat!"
-                )
-            elif project_type == "flutter":
-                chat_msg = (
-                    f"📱 **Aplicativo Mobile Flutter criado com sucesso no seu computador!**\n\n"
-                    f"📁 **Pasta local criada no disco**: `{root_path_str}`\n\n"
-                    f"✨ **Arquivos físicos do app gravados no disco**:\n"
-                    f"- `pubspec.yaml` (Configurações, dependências e assets Flutter)\n"
-                    f"- `lib/main.dart` (Código-fonte completo com Material 3 e Dark Theme)\n"
-                    f"- `test/widget_test.dart` (Testes automatizados de interface)\n"
-                    f"- `README.md` (Instruções completas para executar e compilar APK)\n\n"
-                    f"🚀 **Como executar ou testar agora no seu computador:**\n"
-                    f"```bash\ncd workspace/{slug}\nflutter run -d chrome\n# ou para gerar APK Android:\nflutter build apk --release\n```\n\n"
-                    f"O projeto já está ativo no **Project Workspace**!"
-                )
-            else:
-                chat_msg = (
-                    f"🎉 **Website criado com sucesso no seu computador para '{name_clean}'!**\n\n"
-                    f"📁 **Pasta local criada no disco**: `{root_path_str}`\n\n"
-                    f"✨ **Arquivos físicos gravados no disco**:\n"
-                    f"- `index.html` (Estrutura HTML5 moderna, semântica e responsiva)\n"
-                    f"- `style.css` (Estilização responsiva em dark theme com variáveis CSS)\n"
-                    f"- `app.js` (Interações e lógica funcional)\n"
-                    f"- `README.md` (Documentação e instruções)\n\n"
-                    f"🚀 **Como visualizar agora mesmo no seu navegador:**\n"
-                    f"Abra o arquivo diretamente no navegador:\n"
-                    f"`{root_path_str}\\index.html`\n\n"
-                    f"Você pode solicitar modificações no chat a qualquer momento (ex: *'no {slug}, adicione um novo módulo de contato'* ou *'mude a cor para azul petróleo'*)."
+                    next_recommendation="Rever o plano e aprovar a criação do projeto.",
+                ).model_dump(),
+                AgentOutputContract(
+                    agent_role=dev_role.value,
+                    objective="Plano de implementação",
+                    summary=dev_summary,
+                    evidence=["Plano técnico preparado; nenhuma alteração física executada."],
+                    actions_taken=["Planeamento de módulos e ficheiros"],
+                    affected_files=[],
+                    tests_executed=[],
+                    risks=[],
+                    blockers=[],
+                    resource_usage=ResourceUsage(
+                        model_name=model_name,
+                        tokens_prompt=0,
+                        tokens_completion=dev_tokens,
+                        duration_ms=dev_duration,
+                    ),
+                    next_recommendation="Implementar após a aprovação humana.",
+                ).model_dump(),
+                AgentOutputContract(
+                    agent_role=qa_role.value,
+                    objective="Plano de qualidade e aceitação",
+                    summary=qa_summary,
+                    evidence=["Critérios de QA preparados; nenhum teste foi executado."],
+                    actions_taken=["Planeamento de critérios de aceitação"],
+                    affected_files=[],
+                    tests_executed=[],
+                    risks=[],
+                    blockers=[],
+                    resource_usage=ResourceUsage(
+                        model_name=model_name,
+                        tokens_prompt=0,
+                        tokens_completion=qa_tokens,
+                        duration_ms=qa_duration,
+                    ),
+                    next_recommendation="Executar testes após a criação aprovada.",
+                ).model_dump(),
+            ])
+            if is_security and sec_summary:
+                agent_outputs.append(
+                    AgentOutputContract(
+                        agent_role=sec_role.value,
+                        objective="Revisão defensiva do projeto",
+                        summary=sec_summary,
+                        evidence=["Revisão de requisitos de segurança; sem escrita no workspace."],
+                        actions_taken=["Análise defensiva e de ameaças"],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[],
+                        resource_usage=ResourceUsage(
+                            model_name=model_name,
+                            tokens_prompt=0,
+                            tokens_completion=0,
+                            duration_ms=0.0,
+                        ),
+                        next_recommendation="Validar os controlos durante a implementação aprovada.",
+                    ).model_dump()
                 )
 
-            code_payload = ""
-            idx_path = Path(root_path_str) / "index.html"
-            if idx_path.exists():
-                try:
-                    code_payload = idx_path.read_text(encoding="utf-8")
-                except Exception:
-                    pass
-
-            artifact_wrapper = {
-                "active_agent_mode": "CLAUDE_DESIGN",
-                "chat_response": chat_msg,
-                "ui_layout_instructions": {
-                    "view_mode": "split_panel",
-                    "plan_status": [
-                        "Interpretação de requisitos e escopo (completed)",
-                        "Desenho de arquitetura e design tokens (completed)",
-                        "Geração dos arquivos físicos no disco (completed)",
-                        "Validação de qualidade e acessibilidade (completed)",
-                    ],
-                    "design_tokens_referenced": ["DESIGN.md", "CLAUDE.md"],
+            pending_project = {
+                "project_id": slug,
+                "name": name_clean,
+                "description": (
+                    f"Projeto {project_type.upper()} criado pelo JARVIS AI HUB "
+                    f"a partir do pedido: '{state['user_prompt']}'"
+                ),
+                "project_type": project_type,
+                "files": custom_files if custom_files else None,
+            }
+            approval_preview = json.dumps(
+                {
+                    "project_id": slug,
+                    "name": name_clean,
+                    "project_type": project_type,
+                    "files": custom_files or "Scaffold padrão do tipo selecionado",
                 },
-                "artifact_payload": {
-                    "identifier": slug,
-                    "title": name_clean,
-                    "language": "html" if project_type == "web" else project_type,
-                    "code": code_payload if code_payload else chat_msg,
-                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            approval = security_core.approval_engine.create_request(
+                task_id=state["task_id"],
+                agent_role=AgentRole.JARVIS_MASTER.value,
+                operation="project_create",
+                impact_summary=(
+                    f"Criar projeto {project_type.upper()} '{name_clean}' no Workspace "
+                    f"com base no pedido: {state['user_prompt']}"
+                ),
+                affected_resources=[str(project_root)],
+                proposed_diff=approval_preview,
+                reversible=True,
+            )
+            return {
+                "approval_required": True,
+                "approval_id": approval.id,
+                "pending_project": pending_project,
+                "agent_outputs": agent_outputs,
+                "final_summary": (
+                    f"Projeto '{name_clean}' preparado. A criação física aguarda aprovação humana."
+                ),
+                "is_completed": False,
             }
 
-            llm_text = f"```json\n{json.dumps(artifact_wrapper, ensure_ascii=False, indent=2)}\n```\n\n{chat_msg}"
-
-        # 2. Modificação física de arquivos existentes em workspace/
         elif intent == "code_modification" and workspace_service:
             msg, affected = execute_workspace_modification(
                 workspace_service=workspace_service,
@@ -1095,7 +990,7 @@ def create_master_graph(
                 fallback_2 = f"Cronograma: Divisão em ciclos de 30 dias com micro-hábitos diários, 5 expressões úteis por dia e revisão semanal de metas para '{clean_prompt}'."
                 fallback_3 = f"Garantia de Qualidade: Testes de retenção espaçada (SRS), diálogos guiados no chat e acompanhamento de vocabulário ativo para '{clean_prompt}'."
 
-                consensus_title = "🏛️ Mesa Redonda Multi-Agente: Plano Consensual de Aprendizado & Maestria"
+                consensus_title = "🏛️ Mesa Redonda Multi-Agente: Aprendizado & Maestria"
                 verdict = "Aprovado por consenso unânime entre Pesquisa, Metodologia e Avaliação de Qualidade."
                 pillar_a = "**Metodologia Comprovada**: Imersão diária e Comprehensible Input sem tradução mental."
                 pillar_b = "**Rotina Estruturada**: 20 minutos/dia com metas claras e sustentáveis."
@@ -1110,14 +1005,14 @@ def create_master_graph(
                 title_3 = "Parecer do Revisor de Código & QA (Modo Ponytail)"
 
                 prompt_1 = f"Como Arquiteto de Software, apresente sua análise estrutural, viabilidade, escalabilidade e trade-offs para: '{clean_prompt}'"
-                prompt_2 = f"Como Engenheiro de Cibersegurança, avalie as superfícies de ataque, mitigações OWASP, sanitização de inputs e blindagem necessária para: '{clean_prompt}'"
-                prompt_3 = f"Como Revisor de Código Sênior sob a disciplina Ponytail (YAGNI/DRY), aponte como implementar '{clean_prompt}' com a menor quantidade de código, sem dependências desnecessárias e com alta testabilidade."
+                prompt_2 = f"Como Engenheiro de Cibersegurança, avalie as superfícies de ataque, mitigações OWASP, sanitização de inputs e blindagem necessária para: '{clean_prompt}'. Leia o parecer arquitetural anterior, identifique riscos omitidos, concorde ou discorde com justificativa e proponha mitigação."
+                prompt_3 = f"Como Revisor de Código Sênior sob a disciplina Ponytail (YAGNI/DRY), revise criticamente os pareceres anteriores sobre '{clean_prompt}'. Aponte contradições, lacunas, riscos e a menor implementação testável. Não aprove automaticamente os pareceres."
 
                 fallback_1 = f"Análise Arquitetural: recomendada estrutura modular com baixo acoplamento e separação estrita de responsabilidades para '{clean_prompt}'."
                 fallback_2 = f"Parecer de Segurança: validação estrita de inputs, controle de acesso local e blindagem 127.0.0.1 prioritários para '{clean_prompt}'."
                 fallback_3 = f"Parecer de Revisão: foco estrito em YAGNI, preferência por bibliotecas nativas da plataforma e testes unitários diretos para '{clean_prompt}'."
 
-                consensus_title = "🏛️ Mesa Redonda Técnica: Consenso Multidisciplinar Estabelecido"
+                consensus_title = "🏛️ Mesa Redonda Técnica: Deliberação Multidisciplinar"
                 verdict = "Aprovado por deliberação consensual com 3 votos favoráveis."
                 pillar_a = "**Decisão Arquitetural**: Estrutura enxuta e modular com desacoplamento de serviços."
                 pillar_b = "**Mitigação de Segurança**: Blindagem de portas, sanitização contra injeções e isolamento de dados sensíveis."
@@ -1159,6 +1054,7 @@ def create_master_graph(
                 user_prompt=clean_prompt,
                 project_id=project_id,
                 domain="planning" if is_educational else "security",
+                previous_outputs=[{"agent_role": role_1, "summary": text_1}],
             )
             req_2 = InferenceRequest(
                 prompt=prompt_2,
@@ -1185,6 +1081,10 @@ def create_master_graph(
                 user_prompt=clean_prompt,
                 project_id=project_id,
                 domain="qa",
+                previous_outputs=[
+                    {"agent_role": role_1, "summary": text_1},
+                    {"agent_role": role_2, "summary": text_2},
+                ],
             )
             req_3 = InferenceRequest(
                 prompt=prompt_3,
@@ -1201,19 +1101,60 @@ def create_master_graph(
             except Exception:
                 text_3 = fallback_3
 
+            # O Maestro recebe os três pareceres, incluindo críticas e contrapontos,
+            # e produz uma síntese baseada no conteúdo real, sem presumir unanimidade.
+            peer_outputs = [
+                {"agent_role": role_1, "summary": text_1},
+                {"agent_role": role_2, "summary": text_2},
+                {"agent_role": role_3, "summary": text_3},
+            ]
+            master_prompt = (
+                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\n\n"
+                f"Parecer 1 ({role_1}):\n{text_1}\n\n"
+                f"Parecer 2 ({role_2}), que recebeu o parecer 1 e pôde contestá-lo:\n{text_2}\n\n"
+                f"Parecer 3 ({role_3}), que recebeu os dois pareceres anteriores:\n{text_3}\n\n"
+                "Compare as recomendações, resolva divergências com justificativa, destaque riscos "
+                "não resolvidos e apresente um plano final. Não invente consenso nem testes/evidências."
+            )
+            master_system = build_specialist_prompt(
+                agent_role=AgentRole.JARVIS_MASTER.value,
+                agent_registry=agent_registry,
+                skills_catalog=skills_catalog,
+                db_manager=db_manager,
+                intent="multi_agent_consensus",
+                user_prompt=clean_prompt,
+                project_id=project_id,
+                domain="planning",
+                previous_outputs=peer_outputs,
+            )
+            try:
+                master_response = await model_manager.generate(
+                    InferenceRequest(
+                        prompt=master_prompt,
+                        system_prompt=master_system,
+                        model_name=model_name,
+                        max_tokens=900,
+                        temperature=0.2,
+                        timeout_seconds=120.0,
+                        task_id=state.get("task_id"),
+                    )
+                )
+                master_summary = master_response.content.strip()
+            except Exception as exc:
+                logger.warning("Síntese do Jarvis Maestro indisponível: %s", exc)
+                master_summary = (
+                    "Síntese automática indisponível. Os três pareceres abaixo permanecem separados; "
+                    "não foi declarado consenso. Revise os pontos de divergência antes de executar."
+                )
+
             consensus_summary = (
                 f"# {consensus_title}\n\n"
-                f"Os 3 especialistas deliberaram sobre o tema apresentado. Abaixo constam os pareceres individuais e a diretriz consensual unificada:\n\n"
                 f"### 1. 🔬 {title_1}\n{text_1}\n\n"
                 f"### 2. 📋 {title_2}\n{text_2}\n\n"
                 f"### 3. ✅ {title_3}\n{text_3}\n\n"
                 f"---\n\n"
-                f"### ⚖️ Diretriz Consensual Aprovada pelo JARVIS Maestro\n\n"
-                f"- **Veredito**: {verdict}\n"
-                f"- {pillar_a}\n"
-                f"- {pillar_b}\n"
-                f"- {pillar_c}\n\n"
-                f"💡 *Dica*: Você pode iniciar a execução deste plano agora mesmo respondendo no chat!"
+                f"### ⚖️ Deliberação do JARVIS Maestro\n\n{master_summary}\n\n"
+                f"### Diretriz de referência\n- {pillar_a}\n- {pillar_b}\n- {pillar_c}"
             )
 
             # Insere contratos de cada especialista no estado para visualização no painel de raciocínio
@@ -1239,7 +1180,7 @@ def create_master_graph(
                     objective=title_2,
                     summary=text_2,
                     evidence=["Mesa Redonda Multi-Agente", "Planejamento Estratégico"],
-                    actions_taken=["Estruturação do Cronograma"],
+                    actions_taken=["Análise do contexto", "Revisão do parecer do primeiro especialista", "Proposta de contrapontos e recomendações"],
                     affected_files=[],
                     tests_executed=[],
                     risks=[],
@@ -1255,7 +1196,7 @@ def create_master_graph(
                     objective=title_3,
                     summary=text_3,
                     evidence=["Mesa Redonda Multi-Agente", "Garantia de Qualidade"],
-                    actions_taken=["Validação de Critérios de Retenção"],
+                    actions_taken=["Revisão dos dois pareceres anteriores", "Identificação de lacunas e riscos", "Validação de critérios de aceitação"],
                     affected_files=[],
                     tests_executed=[],
                     risks=[],
@@ -1272,7 +1213,7 @@ def create_master_graph(
                     objective="Consolidação e Deliberação da Mesa Redonda Técnica",
                     summary=consensus_summary,
                     evidence=["Deliberação Consensual", "Mesa Redonda Multi-Agente", consensus_title],
-                    actions_taken=["Mediação entre especialistas", "Síntese executiva"],
+                    actions_taken=["Mediação entre especialistas", "Comparação de divergências", "Síntese executiva baseada nos pareceres recebidos"],
                     affected_files=[],
                     tests_executed=[],
                     risks=[],
@@ -1365,8 +1306,8 @@ def create_master_graph(
             if agent_registry:
                 try:
                     sec_profile = agent_registry.get_profile(AgentRole(sec_role))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Perfil do agente de segurança indisponível: %s", exc)
             if is_hybrid_active:
                 sec_pref = sec_profile.preferred_model if sec_profile else "auto_hybrid"
                 if not sec_pref or sec_pref in ("auto", "auto_hybrid", "llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
@@ -1390,8 +1331,8 @@ def create_master_graph(
                     t_res = await tool_gateway.execute_tool(t_req)
                     if t_res.success:
                         tool_evidence.append(f"Inspeção de workspace concluída via ToolGateway ({t_res.duration_ms:.1f}ms)")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Inspeção complementar do workspace falhou: %s", exc)
 
             if sec_role == AgentRole.SOFTWARE_ARCHITECT.value:
                 target_name = created_slug or (project_id or "projeto")
@@ -1645,9 +1586,19 @@ def create_master_graph(
     async def finalize_task(state: TaskState) -> dict[str, Any]:
         if state.get("approval_required"):
             appr_id = state.get("approval_id")
+            if state.get("classified_intent") == "project_creation":
+                impact = "criação de projeto e gravação dos ficheiros no Workspace"
+            else:
+                impact = "alteração de código pendente de revisão"
+            prepared_summary = state.get("final_summary")
+            approval_notice = (
+                f"Solicitação '{appr_id}' aguarda aprovação humana no Approval Center. "
+                f"Impacto: {impact}. Nenhum ficheiro foi alterado ainda."
+            )
             summary = (
-                f"A operação requer aprovação humana prévia. Solicitação '{appr_id}' criada no Approval Center. "
-                f"Impacto: alteração de código pendente de revisão."
+                f"{prepared_summary}\n\n{approval_notice}"
+                if prepared_summary
+                else f"A operação requer aprovação humana prévia. {approval_notice}"
             )
             return {"final_summary": summary, "is_completed": False}
 

@@ -35,13 +35,28 @@ async def test_frente_01_workspace_buttons_and_files():
         )
         assert write_resp.status_code == 200
         write_data = write_resp.json()
-        assert write_data["status"] == "saved"
+        assert write_data["status"] == "approval_required"
         assert "diff" in write_data
+        assert (test_proj_dir / "main.py").read_text(encoding="utf-8") == "print('hello front 1')"
 
-        # 5. Verifica se backup .bak foi criado
+        decision = await ac.post(
+            f"/api/v1/approvals/{write_data['approval_id']}/decide",
+            json={"action": "approve", "reason": "Aprovado no teste de integração"},
+        )
+        assert decision.status_code == 200
+        applied = await ac.post(
+            "/api/v1/workspace/projects/test_frente1_project/files/write",
+            json={
+                "path": "main.py",
+                "content": "print('hello updated front 1')\n",
+                "reason": "Teste de comparador e aplicador de diff",
+                "approval_id": write_data["approval_id"],
+            },
+        )
+        assert applied.status_code == 200
+        assert applied.json()["status"] == "saved"
         assert (test_proj_dir / "main.py.bak").exists()
         assert (test_proj_dir / "main.py").read_text(encoding="utf-8") == "print('hello updated front 1')\n"
-
         # Limpeza
         workspace_service.delete_project("test_frente1_project")
 

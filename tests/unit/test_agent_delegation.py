@@ -139,20 +139,72 @@ async def test_multi_agent_sequential_execution_in_jarvis_master():
         user_prompt="cria um site simples de cafeteria com index.html e style.css"
     )
 
-    assert res["is_completed"] is True
+    assert res["is_completed"] is False
+    assert res["approval_required"] is True
+    assert res["approval_id"]
     assert res["classified_intent"] == "project_creation"
     assert len(res["selected_agents"]) >= 2
     assert AgentRole.FRONTEND_MOBILE_DEVELOPER.value in res["selected_agents"]
     assert AgentRole.SOFTWARE_ARCHITECT.value in res["selected_agents"]
 
-    # Deve conter os contratos de ambos os agentes na saída sequencial
+    # Os pareceres de Arquitetura, Desenvolvimento e QA são preparados sem escrita.
     outputs = res["agent_outputs"]
     assert len(outputs) >= 2
     roles = [o["agent_role"] for o in outputs]
     assert AgentRole.FRONTEND_MOBILE_DEVELOPER.value in roles
     assert AgentRole.SOFTWARE_ARCHITECT.value in roles
 
-    # Verifica consolidação no sumário final limpo e conversacional
-    summary = res["final_summary"]
-    assert "Website criado com sucesso" in summary
-    assert outputs[1]["agent_role"] == AgentRole.SOFTWARE_ARCHITECT.value
+    # A criação física só acontece após decisão humana vinculada à tarefa.
+    security.approval_engine.approve_request(
+        res["approval_id"],
+        decided_by="test_admin",
+        decision_reason="Aprovado no teste de integração.",
+    )
+    completed = await master.resume_after_approval(
+        task_id=res["task_id"],
+        approved_by="test_admin",
+    )
+    assert completed["is_completed"] is True
+    assert completed["pending_project"] is None
+    assert "criado após aprovação humana" in completed["final_summary"]
+
+
+@pytest.mark.asyncio
+async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
+    from services.model_runtime import MockAdapter, ModelManager
+    from services.orchestration import JarvisMaster
+    from services.security_core import SecurityCore
+
+    security = SecurityCore()
+    model_mgr = ModelManager(adapter=MockAdapter(default_response="Parecer simulado com análise e riscos."), audit_trail=security.audit)
+    master = JarvisMaster(security_core=security, model_manager=model_mgr)
+    captured_system_prompts = []
+    original_generate = model_mgr.generate
+
+    async def capture_generate(request):
+        captured_system_prompts.append(request.system_prompt)
+        return await original_generate(request)
+
+    model_mgr.generate = capture_generate
+
+    result = await master.execute_task(
+        user_prompt="Analise criticamente o problema de arquitetura segura para um serviço local multiagente"
+    )
+
+    assert result["classified_intent"] == "multi_agent_consensus"
+    assert any("Parecer simulado com análise e riscos." in prompt for prompt in captured_system_prompts)
+    roles = [output["agent_role"] for output in result["agent_outputs"]]
+    assert AgentRole.SOFTWARE_ARCHITECT.value in roles
+    assert AgentRole.CYBERSECURITY_ENGINEER.value in roles
+    assert AgentRole.CODE_REVIEWER.value in roles
+    assert roles[-1] == AgentRole.JARVIS_MASTER.value
+    assert "Deliberação do JARVIS Maestro" in result["final_summary"]
+
+
+def test_chat_routes_complex_problem_solving_to_orchestrator():
+    from apps.api.routers.chat import _looks_actionable
+
+    assert _looks_actionable(
+        "Como resolver o problema de autenticação e segurança do Jarvis?"
+    )
+    assert not _looks_actionable("Como funciona o Jarvis?")

@@ -1,84 +1,65 @@
-# 📊 Plano de Testes, Resultados de Benchmark e Critérios de Release
+# Plano de Testes, Benchmark e Critérios de Release — 3.0.1
 
-> **Projeto**: JARVIS AI HUB  
-> **Versão**: 1.0.0 (Release Candidate)  
-> **Ambiente dos Testes**: Intel Core i5-8265U (4C/8T) + 32GB RAM + SSD  
+> **Estado:** candidato de homologação. Este documento define os gates; não declara resultados que ainda não foram executados no commit atual.
 
----
+## 1. Pirâmide de testes
 
-## 1. Estrutura da Pirâmide de Testes Automatizados
+- **Unitários:** contratos, serviços, modelos, persistência e utilitários.
+- **Segurança:** autenticação, autorização, sessões, KeyVault, contenção de paths, aprovação humana, ToolGateway e Kill Switch.
+- **Integração:** rotas FastAPI com ASGITransport e persistência SQLite.
+- **E2E:** bootstrap → login → sessão autenticada; workspace → pedido → decisão humana → execução.
+- **Dashboard:** TypeScript e bundle Vite.
+- **Mobile:** Flutter analyze, testes, APK debug e, antes da distribuição, APK/AAB release assinado.
 
-O JARVIS AI HUB conta com uma suíte de testes automatizados dividida em camadas estratégicas:
+## 2. Execução automatizada
 
-```mermaid
-flowchart TD
-    E2E["Testes E2E (Playwright & Fluxos Completos)"]
-    INT["Testes de Integração de APIs (10 Frentes de Routers)"]
-    SEC["Testes de Segurança & ToolGateway (12 Testes Críticos)"]
-    UNIT["Testes Unitários de Serviços & Contratos (23 Testes)"]
+O workflow .github/workflows/quality.yml executa:
+- pytest completo e smoke de autenticação;
+- Ruff com regras críticas nos ficheiros de segurança alterados e relatório do baseline completo;
+- TypeScript e build de produção do dashboard;
+- Flutter analyze, flutter test e build APK debug.
 
-    E2E --> INT
-    INT --> SEC
-    SEC --> UNIT
+Cada resultado deve ser associado ao SHA do commit. Um job cancelado, pendente ou sem logs não é evidência de aprovação.
+
+## 3. Benchmark reproduzível
+
+O script anterior scratch/high_load_test.py não está no repositório e os números históricos de RPS/WPS foram retirados como alegações de desempenho atual.
+
+O benchmark versionado scripts/benchmark_sqlite.py mede apenas a persistência SQLite em WAL. Não mede HTTP, inferência, orquestração ou desempenho global do produto.
+
+Execute:
+
+```powershell
+python scripts/benchmark_sqlite.py --reads 1000 --writes 300 --readers 15 --writers 8
 ```
 
-* **Testes Unitários (`tests/unit`)**: Validação de Pydantic schemas, delegação de agentes, memórias cognitivas, hashing de skills e inventários de workspace.
-* **Testes de Segurança (`tests/security`)**: Verificação de algoritmo de redaction, bloqueio de Path Traversal, proibição de autoaprovação de agentes, limites de sandbox com timeout de 60s e acionamento de Kill Switch.
-* **Testes de Integração (`tests/integration`)**: Verificação dos endpoints FastAPI via `AsyncClient` e `ASGITransport`.
+Guarde o JSON de saída com:
+- SHA do commit;
+- sistema operativo e hardware;
+- versões Python e SQLite;
+- parâmetros de concorrência;
+- latências p50/p95 e throughput agregado;
+- resultado de PRAGMA integrity_check.
 
----
+Não publique RPS/WPS de API com base neste microbenchmark.
 
-## 2. Resultados Reais do Benchmark de Alta Carga (Stress Test)
+## 4. Critérios de aceitação
 
-O teste de estresse de alta concorrência foi executado através do script [`scratch/high_load_test.py`](file:///C:/Users/Administrator/.gemini/antigravity/brain/e5310551-95f5-4341-839e-23b12f307825/scratch/high_load_test.py) após a limpeza e recriação do banco de dados local com modo WAL ativado:
+| Gate | Critério | Estado |
+|---|---|---|
+| Autenticação | Login real, bootstrap de uso único e rota autenticada | Pendente de CI |
+| Segredos | KeyVault cifrado, DPAPI/ACL e ausência de chave em respostas/logs | Pendente de CI |
+| Egresso | Todos os caminhos online governados por HybridRouter | Pendente de testes integrados |
+| Workspace | Aprovação humana e allowlist de importação | Pendente de CI |
+| Android | Keystore de release sob custódia e assinatura verificada | Requer segredo do responsável |
+| Dashboard | TypeScript e bundle Vite sem erros | Pendente de CI |
+| Mobile | analyze, testes e APK debug | Pendente de CI |
+| Ruff | F821/F401/S110/S112 e redução progressiva do baseline | Pendente de CI |
+| Documentação | Versões e métricas alinhadas ao commit validado | Em revisão |
+| Benchmark | Execução reproduzível e artefacto JSON | Pendente de execução no ambiente-alvo |
 
-```
-======================================================================================
-  JARVIS AI HUB - RELATÓRIO CONSOLIDADO DO BENCHMARK DE ALTA CARGA
-  Ambiente: Intel Core i5 (CPU AVX2) + 32GB RAM + SQLite WAL (64MB Cache)
-======================================================================================
-```
+## 5. Política de promoção
 
-### Fase 1: Stress de Leitura Concorrente no SQLite (Modo WAL)
-* **Requisições Totais**: 100 leituras disparadas simultaneamente.
-* **Concorrência**: 15 workers paralelos.
-* **Taxa de Sucesso**: **100/100 (100.0%)** — Zero erros.
-* **Throughput**: **191.9 requisições por segundo (RPS)**.
-* **Latência Mínima**: **14.33 ms**
-* **Latência Média**: **68.75 ms**
-* **Latência P50 (Mediana)**: **42.27 ms**
-* **Latência P95**: **223.26 ms**
-* **Latência Máxima**: **268.78 ms**
+A versão 3.0.1 só poderá receber tag de release e ser promovida depois de todos os gates obrigatórios passarem. A assinatura release deve usar a mesma chave de distribuição, protegida e custodiada fora do repositório, conforme docs/operations/android-release-signing.md.
 
-### Fase 2: Stress de Escrita Concorrente no SQLite
-* **Gravações Totais**: 30 escritas cognitivas simultâneas.
-* **Concorrência**: 8 workers paralelos.
-* **Taxa de Sucesso**: **30/30 (100.0%)**.
-* **Travamentos de Banco (*Database Locked*)**: **0 falhas** (Eliminado pelo WAL + busy_timeout de 5000ms).
-* **Taxa de Gravação**: **244.0 escritas por segundo**.
-* **Latência Média de Escrita**: **29.90 ms**.
-
-### Fase 3: Fila de Inferência e Proteção Térmica de CPU
-* **Concorrência no Chat**: 4 requisições simultâneas enviadas no mesmo instante à `InferenceQueue`.
-* **Comportamento da Fila**: O semáforo serializou a execução em 1 por vez (`max_concurrent = 1`), impedindo que a CPU Intel i5 saturasse e congelasse o computador.
-* **Integridade de Processamento**: Todas as 4 tarefas foram concluídas pelo grafo e salvas no banco com `is_completed = 1`.
-
-### Fase 4: Auditoria de Integridade Física do Banco
-* **`PRAGMA integrity_check;`**: `ok` (100% íntegro, sem corrupções físicas no arquivo).
-* **Modo de Journal**: `wal` confirmado.
-
----
-
-## 3. Critérios de Aceitação para a Release v1.0 (Quality Gates)
-
-Para que uma versão seja promovida para Release Candidate ou Produção, ela deve atender 100% dos seguintes critérios:
-
-| Critério de Qualidade | Meta Exigida | Resultado Obtido v1.0 | Status |
-| :--- | :---: | :---: | :---: |
-| **Aprovação na Suíte de Testes Unitários e Segurança** | 100% (Sem falhas) | **35/35 Aprovados** (2.88s) | ✅ APROVADO |
-| **Compilação do Frontend SPA (Vite + TypeScript)** | 0 Erros de Tipagem | **Aprovado em 3.72s** | ✅ APROVADO |
-| **Comunicação de APIs ao Vivo (Endpoints do Hub)** | 100% Status 200 | **17/17 Respondendo 200 OK** | ✅ APROVADO |
-| **Invariante de Segurança (Autoaprovação Bloqueada)** | 0 Violações | **100% Mitigado no ApprovalEngine** | ✅ APROVADO |
-| **Confinamento de Rede Local** | Vínculo em `127.0.0.1` | **Zero Portas Abertas em 0.0.0.0** | ✅ APROVADO |
-| **Auditoria Visual de Interface** | 0 termos em *snake_case* | **100% em Português do Brasil Claro** | ✅ APROVADO |
-| **Tamanho Modular de Código** | Views principais < 350 linhas | **Todas as 16 views modularizadas** | ✅ APROVADO |
+Não declarar “100% homologado”, “pronto para produção”, 265 testes aprovados, zero ignorados, 329,17 kB ou números RPS/WPS até que a execução correspondente esteja disponível e ligada ao commit exato.

@@ -4,6 +4,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseStoreFile = System.getenv("JARVIS_KEYSTORE_PATH")
+val releaseStorePassword = System.getenv("JARVIS_KEYSTORE_PASSWORD")
+val releaseKeyAlias = System.getenv("JARVIS_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("JARVIS_KEY_PASSWORD")
+val releaseSigningConfigured = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
+
 android {
     namespace = "com.jarvis.hub.jarvis_mobile"
     compileSdk = flutter.compileSdkVersion
@@ -29,11 +41,23 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseSigningConfigured) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Nunca assina builds de distribuição com a chave debug.
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }
@@ -46,4 +70,14 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+tasks.configureEach {
+    if (name in setOf("assembleRelease", "packageRelease", "bundleRelease")) {
+        doFirst {
+            check(releaseSigningConfigured) {
+                "Build release bloqueado: configure JARVIS_KEYSTORE_PATH, JARVIS_KEYSTORE_PASSWORD, JARVIS_KEY_ALIAS e JARVIS_KEY_PASSWORD. A chave debug nunca será usada para distribuição."
+            }
+        }
+    }
 }

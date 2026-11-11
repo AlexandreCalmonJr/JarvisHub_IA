@@ -1,6 +1,10 @@
+import hashlib
 import logging
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Depends
 from fastapi.responses import HTMLResponse
+
+from apps.api.auth import Principal, get_principal
+from apps.api.deps import security_core
 
 from apps.api.schemas import (
     WriteProjectFilePayload,
@@ -12,6 +16,47 @@ from services.security_core import PermissionDeniedError
 
 logger = logging.getLogger("jarvis.api.workspace")
 router = APIRouter(tags=["workspace"])
+
+def _workspace_approval(
+    *,
+    approval_id: str | None,
+    task_id: str,
+    operation: str,
+    summary: str,
+    resource: str,
+    proposed_diff: str | None = None,
+):
+    """Cria pedido pendente ou valida aprovação humana vinculada ao alvo exato."""
+    if security_core.kill_switch.is_global_killed():
+        raise PermissionDeniedError("Operação bloqueada pelo Kill Switch Global.")
+    if not approval_id:
+        request = security_core.approval_engine.create_request(
+            task_id=task_id,
+            agent_role="workspace_operator",
+            operation=operation,
+            impact_summary=summary,
+            affected_resources=[resource],
+            proposed_diff=proposed_diff,
+            reversible=operation != "project_delete",
+        )
+        return request
+
+    try:
+        security_core.approval_engine.consume_approved_request(
+            approval_id,
+            operation=operation,
+            task_id=task_id,
+            resource=resource,
+        )
+    except ValueError as exc:
+        raise PermissionDeniedError(str(exc)) from exc
+    return None
+
+
+def _require_human(principal: Principal) -> None:
+    if principal.kind != "human":
+        raise HTTPException(status_code=403, detail="Esta operação exige aprovação de um utilizador humano.")
+
 
 
 @router.get("/api/v1/workspace/projects")
@@ -34,40 +79,119 @@ async def read_project_file_endpoint(project_id: str, path: str):
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/files/write")
-async def write_project_file_endpoint(project_id: str, payload: WriteProjectFilePayload):
-    """Grava o novo conteúdo no arquivo físico do projeto com criação automática de backup .bak."""
+async def write_project_file_endpoint(
+    project_id: str,
+    payload: WriteProjectFilePayload,
+    principal: Principal = Depends(get_principal),
+):
+    """Solicita aprovação vinculada ao arquivo/diff e só grava após decisão humana."""
+    _require_human(principal)
     try:
-        res = workspace_service.modify_project_file(
+        project_dir = workspace_service.get_project_dir(project_id).resolve()
+        if not project_dir.is_dir():
+            raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+        target = (project_dir / payload.path).resolve()
+        try:
+            target.relative_to(project_dir)
+        except ValueError as exc:
+            raise PermissionDeniedError("Caminho fora da raiz autorizada do projeto.") from exc
+        if target.name.startswith(".env") or target.suffix.lower() in {".key", ".pem"}:
+            raise PermissionDeniedError("Modificação de arquivo sensível bloqueada.")
+        if (project_dir / ".git").resolve() in target.parents:
+            raise PermissionDeniedError("Modificação direta de arquivos internos do Git bloqueada.")
+
+        old = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+        diff = "".join(__import__("difflib").unified_diff(
+            old.splitlines(keepends=True),
+            payload.content.splitlines(keepends=True),
+            fromfile=f"a/{payload.path}",
+            tofile=f"b/{payload.path}",
+        ))
+        fingerprint = hashlib.sha256(
+            f"{project_id}\0{target}\0{hashlib.sha256(old.encode('utf-8')).hexdigest()}\0{payload.content}".encode("utf-8")
+        ).hexdigest()
+        task_id = f"workspace:file_write:{fingerprint}"
+        pending = _workspace_approval(
+            approval_id=payload.approval_id,
+            task_id=task_id,
+            operation="file_write",
+            summary=f"Gravar {payload.path} no projeto {project_id}: {payload.reason}",
+            resource=str(target),
+            proposed_diff=diff,
+        )
+        if pending:
+            return {
+                "status": "approval_required",
+                "approval_id": pending.id,
+                "project_id": project_id,
+                "path": payload.path,
+                "diff": diff,
+            }
+
+        result = workspace_service.modify_project_file(
             project_id=project_id,
             rel_path=payload.path,
             new_content=payload.content,
             reason=payload.reason,
         )
-        return {
-            "status": "saved",
-            "project_id": project_id,
-            "path": payload.path,
-            "diff": res.get("diff", ""),
-        }
-    except PermissionDeniedError as pde:
-        raise HTTPException(status_code=403, detail=str(pde))
-    except FileNotFoundError as fnf:
-        raise HTTPException(status_code=404, detail=str(fnf))
+        security_core.audit.record_event(
+            operation="WORKSPACE_FILE_WRITE_APPROVED",
+            status="SUCCESS",
+            user_id=principal.display_id,
+            project_id=project_id,
+            parameters={"path": payload.path, "approval_id": payload.approval_id},
+        )
+        return {**result, "status": "saved", "approval_id": payload.approval_id}
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Falha ao salvar arquivo no projeto: {exc}")
-
+        logger.exception("Falha ao salvar arquivo no workspace")
+        raise HTTPException(status_code=500, detail="Falha ao salvar arquivo no projeto.") from exc
 
 @router.post("/api/v1/workspace/projects/{project_id}/rollback")
-async def rollback_project_endpoint(project_id: str):
-    """Desfaz a última alteração de código via Git local com restauração instantânea dos arquivos."""
+async def rollback_project_endpoint(
+    project_id: str,
+    approval_id: str | None = None,
+    principal: Principal = Depends(get_principal),
+):
+    """Solicita aprovação explícita antes de executar git reset --hard."""
+    _require_human(principal)
     try:
-        res = workspace_service.rollback_last_change(project_id)
-        return res
-    except FileNotFoundError as fnf:
-        raise HTTPException(status_code=404, detail=str(fnf))
+        project_dir = workspace_service.get_project_dir(project_id).resolve()
+        history = workspace_service.get_git_history(project_id, max_count=1)
+        head = history[0].get("hash", "unknown") if history else "unknown"
+        task_id = f"workspace:rollback:{project_id}:{head}"
+        pending = _workspace_approval(
+            approval_id=approval_id,
+            task_id=task_id,
+            operation="git_rollback",
+            summary=f"Reverter o último commit do projeto {project_id} (HEAD {head}).",
+            resource=str(project_dir),
+        )
+        if pending:
+            return {"status": "approval_required", "approval_id": pending.id, "project_id": project_id, "current_head": head}
+        result = workspace_service.rollback_last_change(project_id)
+        security_core.audit.record_event(
+            operation="WORKSPACE_ROLLBACK_APPROVED",
+            status="SUCCESS",
+            user_id=principal.display_id,
+            project_id=project_id,
+            parameters={"approval_id": approval_id, "previous_head": head},
+        )
+        return result
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Falha ao executar rollback: {exc}")
-
+        logger.exception("Falha no rollback do workspace")
+        raise HTTPException(status_code=500, detail="Falha ao executar rollback.") from exc
 
 @router.get("/api/v1/workspace/projects/{project_id}/git-history")
 async def get_project_git_history_endpoint(project_id: str):
@@ -80,20 +204,43 @@ async def get_project_git_history_endpoint(project_id: str):
 
 
 @router.delete("/api/v1/workspace/projects/{project_id}")
-async def delete_workspace_project_endpoint(project_id: str):
-    """Exclui permanentemente um projeto e todos os seus arquivos do disco."""
+async def delete_workspace_project_endpoint(
+    project_id: str,
+    approval_id: str | None = None,
+    principal: Principal = Depends(get_principal),
+):
+    """Solicita aprovação explícita antes da exclusão física irreversível."""
+    _require_human(principal)
     try:
+        project_dir = workspace_service.get_project_dir(project_id).resolve()
+        task_id = f"workspace:delete:{project_id}:{project_dir}"
+        pending = _workspace_approval(
+            approval_id=approval_id,
+            task_id=task_id,
+            operation="project_delete",
+            summary=f"Excluir permanentemente o projeto {project_id} e todo o seu conteúdo.",
+            resource=str(project_dir),
+        )
+        if pending:
+            return {"status": "approval_required", "approval_id": pending.id, "project_id": project_id, "path": str(project_dir)}
         success = workspace_service.delete_project(project_id)
         if not success:
             raise HTTPException(status_code=404, detail=f"Projeto '{project_id}' não encontrado no disco.")
+        security_core.audit.record_event(
+            operation="WORKSPACE_PROJECT_DELETE_APPROVED",
+            status="SUCCESS",
+            user_id=principal.display_id,
+            project_id=project_id,
+            parameters={"approval_id": approval_id, "path": str(project_dir)},
+        )
         return {"status": "deleted", "project_id": project_id}
-    except PermissionDeniedError as pde:
-        raise HTTPException(status_code=403, detail=str(pde))
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Falha ao excluir projeto: {exc}")
-
+        logger.exception("Falha ao excluir projeto do workspace")
+        raise HTTPException(status_code=500, detail="Falha ao excluir projeto.") from exc
 
 @router.get("/api/v1/workspace/projects/{project_id}/export-zip")
 async def export_project_zip_endpoint(project_id: str):
@@ -112,24 +259,51 @@ async def export_project_zip_endpoint(project_id: str):
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/dockerize")
-async def dockerize_project_endpoint(project_id: str):
-    """Gera automaticamente Dockerfile, docker-compose.yml e .dockerignore para o projeto."""
+async def dockerize_project_endpoint(
+    project_id: str,
+    approval_id: str | None = None,
+    principal: Principal = Depends(get_principal),
+):
+    """Gera ficheiros Docker somente após aprovação humana explícita."""
+    _require_human(principal)
     try:
+        project_dir = workspace_service.get_project_dir(project_id).resolve()
+        task_id = f"workspace:dockerize:{project_id}:{project_dir}"
+        pending = _workspace_approval(
+            approval_id=approval_id,
+            task_id=task_id,
+            operation="workspace_dockerize",
+            summary=f"Gerar Dockerfile, docker-compose.yml e .dockerignore no projeto {project_id}.",
+            resource=str(project_dir),
+        )
+        if pending:
+            return {"status": "approval_required", "approval_id": pending.id, "project_id": project_id}
         res = workspace_service.dockerize_project(project_id)
-        # Dispara notificação assíncrona se ativada
         try:
             await webhook_service.send_notification(
                 title=f"Projeto Dockerizado: {project_id}",
-                message=f"Ambiente Docker multi-stage criado com sucesso para {res.get('stack', 'Aplicação')}. Pronto para 'docker compose up --build'.",
+                message=f"Ambiente Docker criado para {res.get('stack', 'Aplicação')}.",
                 event_type="dockerize",
             )
         except Exception:
-            pass
+            logger.exception("Falha ao notificar dockerização do projeto %s", project_id)
+        security_core.audit.record_event(
+            operation="WORKSPACE_DOCKERIZE_APPROVED",
+            status="SUCCESS",
+            user_id=principal.display_id,
+            project_id=project_id,
+            parameters={"approval_id": approval_id},
+        )
         return res
-    except FileNotFoundError as fnf:
-        raise HTTPException(status_code=404, detail=str(fnf))
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Falha ao dockerizar projeto: {exc}")
+        logger.exception("Falha ao dockerizar projeto")
+        raise HTTPException(status_code=500, detail="Falha ao dockerizar projeto.") from exc
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/open-folder")
@@ -177,16 +351,44 @@ async def get_project_preview_endpoint(project_id: str):
 
 
 @router.post("/api/v1/workspace/import")
-async def import_external_folder_endpoint(payload: ImportFolderPayload):
-    """Importa e conecta uma pasta física do computador como projeto no JARVIS AI HUB."""
+async def import_external_folder_endpoint(
+    payload: ImportFolderPayload,
+    principal: Principal = Depends(get_principal),
+):
+    """Importa somente raízes previamente autorizadas e após aprovação humana."""
+    _require_human(principal)
     try:
-        res = workspace_service.import_external_project(payload.folder_path, payload.name)
-        return {"status": "imported", "project": res}
-    except FileNotFoundError as fnf:
-        raise HTTPException(status_code=404, detail=str(fnf))
+        target = workspace_service.validate_import_root(payload.folder_path)
+        name = payload.name or target.name
+        project_id = name.lower().replace(" ", "-").replace("_", "-")
+        task_id = f"workspace:import:{project_id}:{target}"
+        pending = _workspace_approval(
+            approval_id=payload.approval_id,
+            task_id=task_id,
+            operation="project_import",
+            summary=f"Importar a pasta autorizada '{target}' como projeto '{project_id}'.",
+            resource=str(target),
+        )
+        if pending:
+            return {"status": "approval_required", "approval_id": pending.id, "path": str(target), "project_id": project_id}
+        result = workspace_service.import_external_project(str(target), payload.name)
+        security_core.audit.record_event(
+            operation="WORKSPACE_IMPORT_APPROVED",
+            status="SUCCESS",
+            user_id=principal.display_id,
+            project_id=project_id,
+            parameters={"approval_id": payload.approval_id, "path": str(target)},
+        )
+        return {**result, "status": "imported", "approval_id": payload.approval_id}
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Falha ao importar diretório: {exc}")
-
+        logger.exception("Falha ao importar pasta para workspace")
+        raise HTTPException(status_code=400, detail="Falha ao importar diretório.") from exc
 
 @router.get("/api/v1/workspace/projects/{project_id}/memory")
 async def get_project_memory_endpoint(project_id: str):

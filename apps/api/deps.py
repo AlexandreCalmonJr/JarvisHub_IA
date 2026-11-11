@@ -37,6 +37,7 @@ from services.model_runtime import (
     load_hybrid_config_from_disk,
     save_hybrid_config_to_disk,  # noqa: F401
 )
+from services.model_runtime.key_vault import KeyVaultService
 from services.model_runtime.huggingface_service import (
     AGENT_MODEL_RECOMMENDATIONS,  # noqa: F401
     CURATED_HUGGINGFACE_MODELS,  # noqa: F401
@@ -133,18 +134,43 @@ HYBRID_CONFIG_PATH = data_dir / "hybrid_gateway_config.json"
 hybrid_config = load_hybrid_config_from_disk(HYBRID_CONFIG_PATH)
 
 
-def build_online_adapter(cfg: OnlineProviderConfig) -> UniversalOnlineAdapter | None:
-    if cfg.api_key:
-        return UniversalOnlineAdapter(
-            api_key=cfg.api_key,
-            provider_name=cfg.provider_name,
-            base_url=cfg.base_url,
-            default_model=cfg.default_model,
-        )
-    return None
+# Cofre cifrado no diretório de dados efetivo do utilizador/instalação.
+key_vault = KeyVaultService(vault_path=data_dir / "api_keys_vault.json")
+
+# Migração única: remove a chave legada do JSON de configuração e grava-a no KeyVault.
+if hybrid_config.api_key:
+    key_vault.save_key(
+        key_id=hybrid_config.key_id or "hybrid_primary",
+        label=f"{hybrid_config.provider_name.upper()} — Gateway Híbrido",
+        provider=hybrid_config.provider_name,
+        api_key=hybrid_config.api_key,
+        base_url=hybrid_config.base_url,
+        default_model=hybrid_config.default_model,
+        is_active=hybrid_config.enabled,
+    )
+    hybrid_config.key_id = hybrid_config.key_id or "hybrid_primary"
+    hybrid_config.api_key = None
+    save_hybrid_config_to_disk(hybrid_config, HYBRID_CONFIG_PATH)
 
 
-online_adapter = build_online_adapter(hybrid_config)
+def build_online_adapter(
+    cfg: OnlineProviderConfig,
+    vault: KeyVaultService,
+) -> UniversalOnlineAdapter | None:
+    if not cfg.enabled or not cfg.key_id:
+        return None
+    profile = vault.get_key(cfg.key_id)
+    if not profile or not profile.api_key or not profile.is_active:
+        return None
+    return UniversalOnlineAdapter(
+        api_key=profile.api_key,
+        provider_name=profile.provider,
+        base_url=profile.base_url,
+        default_model=profile.default_model,
+    )
+
+
+online_adapter = build_online_adapter(hybrid_config, key_vault)
 
 # Inicialização dos serviços centrais
 auth_dir = data_dir / "auth"
@@ -162,10 +188,6 @@ if workspace_root.exists():
                 project_id=p_dir.name,
                 root_path=str(p_dir),
             )
-
-from services.model_runtime.key_vault import KeyVaultService
-
-key_vault = KeyVaultService()
 
 hybrid_router = HybridModelRouter(
     local_adapter=OllamaAdapter(),

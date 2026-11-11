@@ -10,12 +10,17 @@ Princípios:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 import os
 import re
 import secrets
+import sqlite3
 import subprocess
 import time
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,7 +29,7 @@ from fastapi.responses import JSONResponse
 
 from apps.api.deps import data_dir, security_core
 from packages.contracts.security import AuditEventSeverity
-from services.security_core.auth_store import AdminCredentialStore
+from services.security_core.auth_store import AdminCredentialStore, UserCredentialStore
 
 logger = logging.getLogger("jarvis.api.auth")
 
@@ -36,6 +41,7 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api"),
     ("GET", "/api/v1/system/health"),
     ("POST", "/api/v1/auth/login"),
+    ("POST", "/api/v1/auth/password-login"),
     ("POST", "/api/v1/auth/bootstrap/exchange"),
 }
 
@@ -86,6 +92,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "mcp:read",
         "mcp:reload",
         "voice:use",
+        "mock:serve",
         "profile:read",
         "profile:write",
     },
@@ -186,6 +193,8 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     ({"POST"}, re.compile(r"^/api/v1/mcp/reload$"), "mcp:reload"),
     # Voz
     ({"POST"}, re.compile(r"^/api/v1/voice/.*$"), "voice:use"),
+    # Mock Server: execução dos endpoints simulados apenas para utilizadores autenticados com escopo dedicado.
+    ({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}, re.compile(r"^/api/v1/mock/.*$"), "mock:serve"),
     # Studios
     ({"GET"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:read"),
     ({"POST", "DELETE"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:use"),
@@ -244,39 +253,44 @@ def required_permission(method: str, path: str) -> str | None:
 
 
 def write_private_file(path: Path, content: str) -> Path:
-    """Grava um segredo num arquivo com permissões restritas (best-effort por SO).
+    """Grava um segredo e só o publica depois de restringir as permissões.
 
-    O valor nunca é enviado para stdout/logs. No Windows, remove a herança de ACL
-    e concede acesso apenas ao utilizador atual. Em POSIX, aplica modo 0600.
+    Falhas ao proteger o arquivo são fatais: não deixa um segredo persistido
+    com ACL/permissões desconhecidas. O valor nunca é enviado para stdout/logs.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(content.rstrip("\n") + "\n", encoding="utf-8")
+    tmp_path = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
     try:
-        os.chmod(tmp_path, 0o600)
-    except OSError:
-        pass
-    os.replace(tmp_path, path)
-    if os.name == "nt":
-        username = os.environ.get("USERNAME") or os.environ.get("USER")
-        if username:
-            try:
-                subprocess.run(
-                    [
-                        "icacls",
-                        str(path),
-                        "/inheritance:r",
-                        "/grant:r",
-                        f"{username}:F",
-                    ],
-                    check=False,
-                    capture_output=True,
-                    timeout=10,
-                )
-            except (OSError, subprocess.SubprocessError):
-                pass
-    return path
+        tmp_path.write_text(content.rstrip("\n") + "\n", encoding="utf-8")
+        if os.name == "nt":
+            username = os.environ.get("USERNAME") or os.environ.get("USER")
+            if not username:
+                raise OSError("Não foi possível identificar o utilizador para proteger o segredo.")
+            domain = os.environ.get("USERDOMAIN", "").strip()
+            account = f"{domain}\\{username}" if domain else username
+            result = subprocess.run(
+                [
+                    "icacls",
+                    str(tmp_path),
+                    "/inheritance:r",
+                    "/grant:r",
+                    f"{account}:F",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                raise OSError("Não foi possível aplicar ACL restrita ao arquivo secreto.")
+        else:
+            os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)
+        return path
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 class AuthService:
@@ -285,10 +299,15 @@ class AuthService:
         self.auth_dir = Path(auth_dir)
         self.auth_dir.mkdir(parents=True, exist_ok=True)
         self.admin_store = AdminCredentialStore(self.auth_dir / "admin.json")
+        self.user_store = UserCredentialStore(self.auth_dir / "users.sqlite3")
         self.admin_token_path = self.auth_dir / "admin_token.txt"
         self.bootstrap_token_path = self.auth_dir / "bootstrap_token.txt"
+        self.bootstrap_state_path = self.auth_dir / "bootstrap_state.json"
         self._bootstrap_tokens: dict[str, float] = {}
+        self._bootstrap_lock = threading.Lock()
         self._attempts: dict[str, list[float]] = {}
+        self.rate_limit_path = self.auth_dir / "rate_limits.sqlite3"
+        self._initialize_rate_limit_store()
         self._ensure_admin_credential()
         # Emite um bootstrap token de uso único no arranque, entregue apenas por
         # arquivo restrito. O launcher lê o arquivo e troca-o por uma sessão.
@@ -331,21 +350,73 @@ class AuthService:
         ttl_seconds: int | None = None,
         persist: bool = True,
     ) -> str:
-        ttl = ttl_seconds or int(os.environ.get("JARVIS_BOOTSTRAP_TTL", "600"))
+        ttl = ttl_seconds if ttl_seconds is not None else int(
+            os.environ.get("JARVIS_BOOTSTRAP_TTL", "600")
+        )
+        if ttl < 1 or ttl > 3600:
+            raise ValueError("A validade do bootstrap deve estar entre 1 e 3600 segundos.")
         token = f"jrv_boot_{secrets.token_urlsafe(32)}"
-        self._bootstrap_tokens[token] = time.time() + ttl
+        expires_at = time.time() + ttl
         if persist:
-            path = write_private_file(self.bootstrap_token_path, token)
+            # O launcher recebe o token no arquivo restrito; o servidor valida
+            # usando somente o hash e a expiração persistidos, inclusive quando
+            # a emissão foi feita por uma CLI em outro processo.
+            write_private_file(self.bootstrap_token_path, token)
+            state = {
+                "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+                "expires_at": expires_at,
+            }
+            write_private_file(self.bootstrap_state_path, json.dumps(state))
             logger.info(
-                "Bootstrap token de uso único emitido em %s (validade: %ss).", path, ttl
+                "Bootstrap token de uso único emitido em arquivo restrito (validade: %ss).",
+                ttl,
             )
+        else:
+            # Modo efêmero reservado a testes e chamadas internas do mesmo processo.
+            self._bootstrap_tokens[token] = expires_at
         return token
 
     def exchange_bootstrap_token(self, token: str) -> bool:
-        expires_at = self._bootstrap_tokens.pop(token, None)
-        if not expires_at:
+        if not token:
             return False
-        return time.time() <= expires_at
+
+        # Compatibilidade com tokens efêmeros explicitamente não persistidos.
+        expires_at = self._bootstrap_tokens.pop(token, None)
+        if expires_at is not None:
+            return time.time() <= expires_at
+
+        expected_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self._bootstrap_lock:
+            try:
+                state = json.loads(self.bootstrap_state_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                return False
+
+            stored_hash = str(state.get("token_hash", ""))
+            if not hmac.compare_digest(expected_hash, stored_hash):
+                return False
+
+            # Rename atómico: apenas um worker/processo consegue reivindicar
+            # o estado de uso único. Um token inválido não consome o bootstrap.
+            claim_path = self.bootstrap_state_path.with_name(
+                f"{self.bootstrap_state_path.name}.{secrets.token_hex(8)}.claim"
+            )
+            try:
+                os.replace(self.bootstrap_state_path, claim_path)
+            except OSError:
+                return False
+
+            try:
+                claimed = json.loads(claim_path.read_text(encoding="utf-8"))
+                claimed_hash = str(claimed.get("token_hash", ""))
+                valid_hash = hmac.compare_digest(expected_hash, claimed_hash)
+                valid_time = time.time() <= float(claimed.get("expires_at", 0))
+                return valid_hash and valid_time
+            except (OSError, ValueError, TypeError):
+                return False
+            finally:
+                claim_path.unlink(missing_ok=True)
+                self.bootstrap_token_path.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # Autenticação
@@ -453,6 +524,12 @@ class AuthService:
             return self.security.sessions.validate_session(token)
         return None
 
+    def login_with_password(self, username: str, password: str):
+        user = self.user_store.authenticate(username.strip(), password)
+        if not user:
+            return None
+        return self.create_session(user["username"], user["role"])
+
     def login_with_bootstrap(self, token: str):
         if not self.exchange_bootstrap_token(token):
             return None
@@ -464,17 +541,57 @@ class AuthService:
         return self.security.sessions.revoke_session(principal.session_id)
 
     # ------------------------------------------------------------------
-    # Rate limiting simples (não é autenticação; apenas proteção anti-brute-force)
+    # Rate limiting persistente (proteção anti-brute-force)
     # ------------------------------------------------------------------
+    def _initialize_rate_limit_store(self) -> None:
+        """Cria armazenamento SQLite local para preservar limites após reinícios."""
+        with sqlite3.connect(self.rate_limit_path, timeout=5) as conn:
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS auth_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bucket_key TEXT NOT NULL,
+                    attempted_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_auth_attempts_key_time "
+                "ON auth_attempts(bucket_key, attempted_at)"
+            )
+
     def check_rate_limit(self, key: str, limit: int = 8, window_seconds: int = 60) -> bool:
+        if limit < 1 or window_seconds < 1:
+            raise ValueError("Rate limit e janela devem ser valores positivos.")
         now = time.time()
-        bucket = [t for t in self._attempts.get(key, []) if now - t < window_seconds]
-        if len(bucket) >= limit:
-            self._attempts[key] = bucket
+        cutoff = now - window_seconds
+        try:
+            with sqlite3.connect(self.rate_limit_path, timeout=5) as conn:
+                conn.execute("PRAGMA busy_timeout=5000")
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "DELETE FROM auth_attempts WHERE attempted_at < ?",
+                    (now - max(window_seconds * 4, 3600),),
+                )
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM auth_attempts "
+                    "WHERE bucket_key = ? AND attempted_at >= ?",
+                    (key, cutoff),
+                ).fetchone()[0]
+                if count >= limit:
+                    conn.commit()
+                    return False
+                conn.execute(
+                    "INSERT INTO auth_attempts(bucket_key, attempted_at) VALUES (?, ?)",
+                    (key, now),
+                )
+                conn.commit()
+                return True
+        except sqlite3.Error:
+            # Falha fechada: não aceitar novas tentativas se o controle persistente falhar.
+            logger.exception("Rate limiter persistente indisponível; tentativa bloqueada.")
             return False
-        bucket.append(now)
-        self._attempts[key] = bucket
-        return True
 
     @staticmethod
     def client_key(request: Request) -> str:

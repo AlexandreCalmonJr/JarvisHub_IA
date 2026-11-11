@@ -18,6 +18,7 @@ class TaskState(TypedDict):
     policy_violations: list[str]
     approval_required: bool
     approval_id: str | None
+    pending_project: dict[str, Any] | None
     current_step: int
     agent_outputs: list[dict[str, Any]]
     final_summary: str | None

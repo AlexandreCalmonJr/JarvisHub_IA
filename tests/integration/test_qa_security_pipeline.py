@@ -17,10 +17,11 @@ def pipeline_env():
     return pipeline, security
 
 
-def test_detect_flutter_stack(pipeline_env):
+def test_detect_flutter_stack(pipeline_env, tmp_path):
     pipeline, _ = pipeline_env
-    flutter_dir = Path("workspace/demo_flutter_app").resolve()
-    assert flutter_dir.exists()
+    flutter_dir = tmp_path / "demo_flutter_app"
+    flutter_dir.mkdir()
+    (flutter_dir / "pubspec.yaml").write_text("name: demo_flutter_app\\n", encoding="utf-8")
     stack = pipeline.detect_stack(flutter_dir)
     assert stack == StackType.FLUTTER
 

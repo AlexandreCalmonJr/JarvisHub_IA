@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { AuthGate } from './components/AuthGate';
 import { Sidebar } from './components/Sidebar';
 import { SystemHealth, ApprovalRequestItem } from './types';
 import { fetchHealth, fetchApprovals } from './api';
@@ -92,7 +93,7 @@ const ViewFallback: React.FC = () => (
   </div>
 );
 
-export const App: React.FC = () => {
+const DashboardApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>(() =>
     tabFromLocation(window.location.pathname, window.location.search)
   );
@@ -637,5 +638,11 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+export const App: React.FC = () => (
+  <AuthGate>
+    <DashboardApp />
+  </AuthGate>
+);
 
 export default App;

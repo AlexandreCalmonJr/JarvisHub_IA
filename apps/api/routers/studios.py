@@ -51,7 +51,7 @@ async def delete_mock_endpoint(endpoint_id: str):
 
 @router.api_route(
     "/api/v1/mock/{mock_path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
 )
 async def serve_mock_route(mock_path: str, request: Request):
     """Roteador coringa do Mock Server nativo que atende requisições simuladas."""
@@ -212,8 +212,8 @@ async def get_productivity_roi_endpoint():
     return engineering_intelligence_service.calculate_productivity_and_roi()
 
 
-@router.get("/api/v1/intelligence/executive-report")
-@router.get("/api/v1/reports/executive")
+@router.get("/api/v1/intelligence/executive-report", operation_id="get_intelligence_executive_report")
+@router.get("/api/v1/reports/executive", operation_id="get_legacy_executive_report")
 async def get_executive_report_endpoint(project_id: str | None = None):
     """Gera relatório executivo de governança e ROI estruturado em Markdown e HTML."""
     return engineering_intelligence_service.generate_executive_report(project_id=project_id)

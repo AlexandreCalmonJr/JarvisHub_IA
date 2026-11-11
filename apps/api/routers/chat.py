@@ -86,8 +86,19 @@ _reachability = {"checked_at": 0.0, "ok": False, "provider": ""}
 
 
 def _looks_actionable(prompt: str) -> bool:
-    """Classifica se o pedido exige governança do orquestrador/Coding Agent."""
+    """Classifica ações protegidas e problemas complexos que exigem delegação."""
     lowered = prompt.lower().strip()
+
+    # Problemas abertos devem chegar ao JarvisMaster para convocar especialistas,
+    # mesmo quando a frase começa como pergunta conversacional.
+    complex_markers = (
+        "analise", "análise", "analisar", "investigue", "investigar",
+        "resolver", "solucionar", "diagnosticar", "estratégia",
+        "planejamento", "decisão", "compare", "avaliar",
+        "problema", "problemas", "causa", "causas",
+    )
+    if len(lowered.split()) >= 6 and any(marker in lowered for marker in complex_markers):
+        return True
 
     if lowered.endswith("?") or any(
         lowered.startswith(q) for q in DIALOGUE_PREFIXES

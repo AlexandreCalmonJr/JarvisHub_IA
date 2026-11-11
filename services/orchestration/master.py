@@ -1,10 +1,12 @@
+import json
 import uuid
 from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
 
 from services.model_runtime import ModelManager
-from services.security_core import SecurityCore
+from packages.contracts.approval import ApprovalStatus
+from services.security_core import PermissionDeniedError, SecurityCore
 
 from .graph import create_master_graph, execute_workspace_modification
 from .state import TaskState
@@ -68,6 +70,7 @@ class JarvisMaster:
             "policy_violations": [],
             "approval_required": False,
             "approval_id": None,
+            "pending_project": None,
             "current_step": 0,
             "agent_outputs": [],
             "final_summary": None,
@@ -88,22 +91,96 @@ class JarvisMaster:
             raise ValueError(f"Nenhum estado persistido encontrado para a tarefa '{task_id}'.")
 
         current_values = dict(checkpoint.values)
+        approval_id = current_values.get("approval_id")
+        intent = current_values.get("classified_intent")
+        approval = self.security_core.approval_engine.get_request(approval_id) if approval_id else None
+
+        if intent == "code_modification":
+            if (
+                not approval
+                or approval.status != ApprovalStatus.APPROVED
+                or approval.task_id != task_id
+                or approval.operation != "file_write"
+                or approval.decided_by != approved_by
+            ):
+                raise PermissionDeniedError(
+                    "Retomada bloqueada: aprovação humana ausente, pendente ou não vinculada a esta tarefa."
+                )
+
+        elif intent == "project_creation":
+            pending_project = current_values.get("pending_project")
+            if (
+                not approval
+                or approval.status != ApprovalStatus.APPROVED
+                or approval.task_id != task_id
+                or approval.operation != "project_create"
+                or approval.decided_by != approved_by
+                or not isinstance(pending_project, dict)
+                or self.workspace_service is None
+            ):
+                raise PermissionDeniedError(
+                    "Criação bloqueada: aprovação humana ou payload pendente inválido."
+                )
+
+            project_id = str(pending_project.get("project_id", ""))
+            project_root = self.workspace_service.get_project_dir(project_id).resolve()
+            expected_preview = json.dumps(
+                {
+                    "project_id": project_id,
+                    "name": pending_project.get("name"),
+                    "project_type": pending_project.get("project_type"),
+                    "files": pending_project.get("files") or "Scaffold padrão do tipo selecionado",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            if (
+                str(project_root) not in approval.affected_resources
+                or approval.proposed_diff != expected_preview
+                or project_root.exists()
+            ):
+                raise PermissionDeniedError(
+                    "Criação bloqueada: o destino ou conteúdo do projeto mudou após a aprovação."
+                )
+
+            created = self.workspace_service.scaffold_project(**pending_project)
+            self.security_core.audit.record_event(
+                operation="WORKSPACE_PROJECT_CREATE_APPROVED",
+                status="SUCCESS",
+                user_id=approved_by,
+                project_id=project_id,
+                parameters={
+                    "approval_id": approval_id,
+                    "path": str(project_root),
+                    "files": created.get("files_created", []),
+                },
+            )
+            current_values["approval_required"] = False
+            current_values["pending_project"] = None
+            current_values["final_summary"] = (
+                f"Projeto '{pending_project.get('name')}' criado após aprovação humana. "
+                f"Pasta: {created.get('root_path')}. "
+                f"Ficheiros: {', '.join(created.get('files_created', []))}."
+            )
+            current_values["is_completed"] = True
+            await self.graph.aupdate_state(config, current_values)
+            return current_values
+
         current_values["approval_required"] = False
 
         mod_extra = ""
         if (
             self.workspace_service
-            and current_values.get("classified_intent") == "code_modification"
+            and intent == "code_modification"
         ):
-            try:
-                msg, _ = execute_workspace_modification(
-                    workspace_service=self.workspace_service,
-                    user_prompt=current_values.get("user_prompt", ""),
-                    project_id=current_values.get("project_id"),
-                )
-                mod_extra = f"\n\n{msg}"
-            except Exception as e:
-                mod_extra = f"\n\n[Aviso]: Não foi possível gravar alteração física no disco: {e}"
+            msg, _ = execute_workspace_modification(
+                workspace_service=self.workspace_service,
+                user_prompt=current_values.get("user_prompt", ""),
+                project_id=current_values.get("project_id"),
+                approval_id=approval_id,
+                task_id=task_id,
+            )
+            mod_extra = f"\n\n{msg}"
 
         current_values["final_summary"] = (
             f"Aprovação concedida por '{approved_by}'. A alteração foi autorizada e executada no sistema.{mod_extra}"

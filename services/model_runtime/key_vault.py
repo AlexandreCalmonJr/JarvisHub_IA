@@ -19,6 +19,7 @@ import ctypes
 import json
 import logging
 import os
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -81,10 +82,22 @@ def _dpapi_protect(data: bytes, unprotect: bool = False) -> bytes:
 
 
 def _chmod_private(path: Path) -> None:
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    """Restringe a chave Fernet em POSIX e Windows; falha se não conseguir."""
+    if os.name == "nt":
+        username = os.environ.get("USERNAME") or os.environ.get("USER")
+        if not username:
+            raise OSError("Não foi possível identificar o utilizador para proteger a chave do cofre.")
+        result = subprocess.run(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{username}:F"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            raise OSError("Não foi possível aplicar ACL restrita à chave Fernet do cofre.")
+        return
+    os.chmod(path, 0o600)
 
 
 @dataclass
@@ -121,9 +134,13 @@ class KeyVaultService:
             return None
         key = Fernet.generate_key()
         tmp = self._fernet_key_path.with_suffix(self._fernet_key_path.suffix + ".tmp")
-        tmp.write_bytes(key)
-        _chmod_private(tmp)
-        os.replace(tmp, self._fernet_key_path)
+        try:
+            tmp.write_bytes(key)
+            _chmod_private(tmp)
+            os.replace(tmp, self._fernet_key_path)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
         logger.info("Chave de cifra do cofre criada em arquivo restrito: %s", self._fernet_key_path)
         return Fernet(key)
 
@@ -189,7 +206,12 @@ class KeyVaultService:
                 logger.info("Carregadas %d chaves do cofre de APIs.", len(self._keys))
                 return
             except Exception as exc:
-                logger.error("Falha ao ler o cofre de APIs cifrado: %s", exc)
+                self._keys.clear()
+                logger.error("Falha ao ler o cofre de APIs cifrado; inicialização bloqueada: %s", exc)
+                raise RuntimeError(
+                    "O KeyVault existente não pôde ser aberto com segurança. "
+                    "Não será ignorado nem substituído automaticamente."
+                ) from exc
 
         # Migração automática a partir do hybrid_gateway_config.json legado
         legacy_path = Path("data") / "hybrid_gateway_config.json"
@@ -222,6 +244,7 @@ class KeyVaultService:
             os.replace(tmp_path, self.vault_path)
         except Exception as exc:
             logger.error("Falha ao persistir cofre de chaves cifrado: %s", exc)
+            raise RuntimeError("Não foi possível persistir o KeyVault cifrado.") from exc
 
     def list_keys(self) -> list[dict[str, Any]]:
         """Retorna todas as chaves cadastradas, sem nunca expor a chave crua."""

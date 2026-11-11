@@ -51,6 +51,11 @@ _api_docs_enabled = os.environ.get("JARVIS_ENABLE_API_DOCS", "").strip().lower()
     "yes",
 }
 
+_runtime_environment = os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")).strip().lower()
+if _api_docs_enabled and _runtime_environment in {"prod", "production"}:
+    logger.warning("Documentação OpenAPI foi solicitada, mas permanece desativada em produção.")
+    _api_docs_enabled = False
+
 # Inicialização central do FastAPI
 app = FastAPI(
     title="JARVIS AI HUB 3.0",
@@ -193,7 +198,7 @@ else:
             <div class="card">
             <div class="badge">● Backend Operacional</div>
             <h1>JARVIS AI HUB — Conectado</h1>
-            <p>O monólito modular está 100% ativo e sincronizado. Clique abaixo para recarregar o estúdio interativo.</p>
+            <p>O backend está disponível. Clique abaixo para recarregar o painel quando o bundle React estiver instalado.</p>
             <button class="btn" onclick="window.location.reload()">Carregar Painel do Usuário</button>
             </div></body></html>"""
         )

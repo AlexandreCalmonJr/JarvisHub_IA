@@ -12,6 +12,7 @@ Cobre rigorosamente os 7 cenários obrigatórios:
 """
 
 import os
+import logging
 import tempfile
 from pathlib import Path
 import pytest
@@ -20,10 +21,10 @@ from httpx import ASGITransport, AsyncClient
 from apps.api.deps import security_core, tool_gateway, workspace_service
 from apps.api.main import app
 from packages.contracts.agent import AgentRole
-from packages.contracts.approval import ApprovalStatus
-from packages.contracts.security import AuditEventSeverity, ProjectWorkMode
+from packages.contracts.security import AuditEventSeverity
 from services.security_core import PermissionDeniedError
 from services.tool_gateway import ToolExecutionRequest
+from services.orchestration.workspace_actions import execute_workspace_modification
 
 
 @pytest.fixture
@@ -39,8 +40,8 @@ def test_project_id():
     # Cleanup
     try:
         workspace_service.delete_project(pid)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger(__name__).debug("Cleanup de projeto falhou: %s", exc)
 
 
 @pytest.mark.asyncio
@@ -208,8 +209,8 @@ async def test_04_symlinks_cannot_escape_project_root(test_project_id):
             if symlink_path.is_symlink() or symlink_path.exists():
                 try:
                     os.unlink(symlink_path)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logging.getLogger(__name__).debug("Remoção do symlink de teste falhou: %s", exc)
 
 
 @pytest.mark.asyncio
@@ -387,3 +388,124 @@ async def test_09_protected_files_blocked_from_modification(test_project_id):
             new_content="[core] hacked = true",
         )
 
+@pytest.mark.asyncio
+async def test_08_workspace_api_write_requires_matching_human_approval(test_project_id):
+    """Workspace API não escreve antes da aprovação e rejeita pedidos pendentes."""
+    project_dir = workspace_service.get_project_dir(test_project_id)
+    target = project_dir / "main.py"
+    original = target.read_text(encoding="utf-8")
+    payload = {
+        "path": "main.py",
+        "content": "print('approved content')\n",
+        "reason": "Teste de aprovação explícita",
+    }
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        requested = await client.post(
+            f"/api/v1/workspace/projects/{test_project_id}/files/write",
+            json=payload,
+        )
+        assert requested.status_code == 200
+        data = requested.json()
+        assert data["status"] == "approval_required"
+        assert target.read_text(encoding="utf-8") == original
+
+        pending_attempt = await client.post(
+            f"/api/v1/workspace/projects/{test_project_id}/files/write",
+            json={**payload, "approval_id": data["approval_id"]},
+        )
+        assert pending_attempt.status_code == 403
+        assert target.read_text(encoding="utf-8") == original
+
+        decision = await client.post(
+            f"/api/v1/approvals/{data['approval_id']}/decide",
+            json={"action": "approve", "reason": "Aprovado no teste E2E"},
+        )
+        assert decision.status_code == 200
+        assert decision.json()["status"] == "approved"
+
+        applied = await client.post(
+            f"/api/v1/workspace/projects/{test_project_id}/files/write",
+            json={**payload, "approval_id": data["approval_id"]},
+        )
+        assert applied.status_code == 200
+        assert applied.json()["status"] == "saved"
+        assert target.read_text(encoding="utf-8") == payload["content"]
+
+
+def test_09_external_import_requires_an_explicitly_allowed_root(monkeypatch, tmp_path):
+    """A importação fora do workspace só é permitida quando a raiz é configurada."""
+    external_root = tmp_path / "approved-imports"
+    external_root.mkdir()
+    project = external_root / "sample"
+    project.mkdir()
+
+    monkeypatch.delenv("JARVIS_WORKSPACE_IMPORT_ROOTS", raising=False)
+    with pytest.raises(PermissionDeniedError, match="raiz autorizada"):
+        workspace_service.validate_import_root(str(project))
+
+    monkeypatch.setenv("JARVIS_WORKSPACE_IMPORT_ROOTS", str(external_root))
+    assert workspace_service.validate_import_root(str(project)) == project.resolve()
+
+
+
+def test_10_orchestrator_workspace_edit_is_preview_only_until_approved(tmp_path):
+    """O caminho antigo do JARVIS Master não pode escrever sem aprovação."""
+    project_id = "test_orchestrator_approval"
+    initial = "<html><head><title>Inicial</title></head><body><h1>Inicial</h1></body></html>"
+    workspace_service.scaffold_project(
+        project_id=project_id,
+        name="Orchestrator Approval Test",
+        project_type="web",
+        files={"index.html": initial},
+    )
+    task_id = "task-orchestrator-approval-test"
+    prompt = "mude o título para Jarvis Seguro"
+
+    try:
+        preview, resources = execute_workspace_modification(
+            workspace_service=workspace_service,
+            user_prompt=prompt,
+            project_id=project_id,
+            preview_only=True,
+        )
+        target = workspace_service.get_project_dir(project_id) / "index.html"
+        assert target.read_text(encoding="utf-8") == initial
+        assert resources == [str(target.resolve())]
+        assert "Jarvis Seguro" in preview
+
+        with pytest.raises(PermissionDeniedError, match="aprovação humana"):
+            execute_workspace_modification(
+                workspace_service=workspace_service,
+                user_prompt=prompt,
+                project_id=project_id,
+                task_id=task_id,
+            )
+        assert target.read_text(encoding="utf-8") == initial
+
+        approval = security_core.approval_engine.create_request(
+            task_id=task_id,
+            agent_role="jarvis_master",
+            operation="file_write",
+            impact_summary="Alterar o título do projeto de teste",
+            affected_resources=resources,
+            proposed_diff=preview,
+        )
+        security_core.approval_engine.approve_request(
+            approval.id,
+            decided_by="admin_test",
+            decision_reason="Aprovado no teste",
+        )
+        message, changed = execute_workspace_modification(
+            workspace_service=workspace_service,
+            user_prompt=prompt,
+            project_id=project_id,
+            approval_id=approval.id,
+            task_id=task_id,
+        )
+        assert "após aprovação humana" in message
+        assert changed == resources
+        assert "Jarvis Seguro" in target.read_text(encoding="utf-8")
+    finally:
+        workspace_service.delete_project(project_id)
