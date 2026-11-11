@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from apps.api.auth import Principal, get_principal, require_permission
+from apps.api.auth import Principal, get_principal, require_permission, require_admin
 from apps.api.schemas import (
     UserProfilePayload,
     WebhookConfigPayload,
@@ -80,7 +80,9 @@ async def health_details(
 
 
 @router.get("/api/v1/system/resources")
-async def system_resources():
+async def system_resources(
+    principal: Principal = Depends(require_permission("system:read")),
+):
     return resource_manager.collect_metrics(
         queue_active=model_manager.queue.active_count,
         queue_waiting=model_manager.queue.waiting_count,
@@ -88,7 +90,12 @@ async def system_resources():
 
 
 @router.get("/api/v1/system/server-logs")
-async def get_server_logs_endpoint(limit: int = 200, level: str | None = None, search: str | None = None):
+async def get_server_logs_endpoint(
+    limit: int = 200,
+    level: str | None = None,
+    search: str | None = None,
+    principal: Principal = Depends(require_admin),
+):
     """Retorna os logs mais recentes do servidor em formato estruturado."""
     return {
         "total": len(log_buffer.buffer),
@@ -97,7 +104,9 @@ async def get_server_logs_endpoint(limit: int = 200, level: str | None = None, s
 
 
 @router.get("/api/v1/system/server-logs/stream")
-async def stream_server_logs_endpoint():
+async def stream_server_logs_endpoint(
+    principal: Principal = Depends(require_admin),
+):
     """Streaming SSE em tempo real dos logs do servidor para o console do frontend."""
     queue = await log_buffer.subscribe()
 
@@ -115,7 +124,9 @@ async def stream_server_logs_endpoint():
 
 
 @router.post("/api/v1/system/server-logs/clear")
-async def clear_server_logs_endpoint():
+async def clear_server_logs_endpoint(
+    principal: Principal = Depends(require_admin),
+):
     """Limpa o buffer de logs em memória."""
     log_buffer.clear()
     return {"status": "cleared"}
@@ -140,7 +151,9 @@ async def save_user_profile_endpoint(
 
 
 @router.post("/api/v1/system/backup")
-async def create_system_backup_endpoint():
+async def create_system_backup_endpoint(
+    principal: Principal = Depends(require_admin),
+):
     """Cria uma cópia física segura de backup do banco SQLite."""
     try:
         backup_path = db_manager.create_database_backup()
@@ -150,18 +163,25 @@ async def create_system_backup_endpoint():
 
 
 @router.get("/api/v1/system/webhooks")
-async def get_webhooks_config_endpoint():
+async def get_webhooks_config_endpoint(
+    principal: Principal = Depends(require_admin),
+):
     """Retorna configurações ativas de notificações via webhook (com credenciais ofuscadas)."""
     return webhook_service.get_safe_config()
 
 
 @router.post("/api/v1/system/webhooks")
-async def save_webhooks_config_endpoint(payload: WebhookConfigPayload):
+async def save_webhooks_config_endpoint(
+    payload: WebhookConfigPayload,
+    principal: Principal = Depends(require_admin),
+):
     """Salva preferências e URLs/tokens de Webhook do Discord e Telegram."""
     return webhook_service.save_config(payload.model_dump())
 
 
 @router.post("/api/v1/system/webhooks/test")
-async def test_webhook_endpoint():
+async def test_webhook_endpoint(
+    principal: Principal = Depends(require_admin),
+):
     """Dispara mensagem de teste para os webhooks configurados."""
     return await webhook_service.test_webhook()
