@@ -9,7 +9,7 @@ export async function fetchHealth(): Promise<SystemHealth> {
 
 export async function fetchResources(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/resources`);
-  if (!res.ok) return { cpu_percent: 0, ram_percent: 0, disk_free_gb: 0 };
+  if (!res.ok) throw new Error("Falha ao obter métricas de recursos do sistema");
   return res.json();
 }
 
@@ -22,12 +22,19 @@ export async function fetchServerLogs(
   if (level && level !== 'ALL') url += `&level=${encodeURIComponent(level)}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
   const res = await fetch(url);
-  if (!res.ok) return { total: 0, logs: [] };
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Falha ao carregar logs do servidor" }));
+    throw new Error(err.detail || "Falha ao carregar logs do servidor");
+  }
   return res.json();
 }
 
 export async function clearServerLogs(): Promise<void> {
-  await fetch(`${API_BASE}/system/server-logs/clear`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/system/server-logs/clear`, { method: 'POST' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Falha ao limpar logs do servidor" }));
+    throw new Error(err.detail || "Falha ao limpar logs do servidor");
+  }
 }
 
 export async function fetchUserProfileApi(): Promise<any> {
