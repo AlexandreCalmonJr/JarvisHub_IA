@@ -103,6 +103,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       let remoteSessions: ChatSessionItem[] = [];
       try {
         remoteSessions = await fetchChatSessions();
+        setHistoryError(null);
       } catch (e) {
         setHistoryError(e instanceof Error ? e.message : 'Falha ao carregar histórico remoto.');
         remoteSessions = [];
