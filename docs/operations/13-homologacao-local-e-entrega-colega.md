@@ -12,28 +12,16 @@ A branch deve receber as correções e os testes antes da homologação. O coleg
 
 ## Conta administrativa local
 
-A conta administrativa é criada explicitamente em cada instalação. Não há senha padrão embutida no código nem credenciais partilhadas no Git.
+Na primeira inicialização de cada instalação, o próprio backend verifica se existe um administrador ativo. Se não existir, cria automaticamente o utilizador `admin`; se já existir, mantém a conta e a senha atuais, sem duplicar nem redefinir credenciais.
 
-Na raiz do repositório, executar:
+Em ambiente local de desenvolvimento/homologação, a senha inicial é `admin 123`. A senha é armazenada com PBKDF2-HMAC-SHA256, nunca em texto puro. Em ambiente de produção, a senha inicial deve ser fornecida por `JARVIS_BOOTSTRAP_ADMIN_PASSWORD`; o sistema não utiliza a senha padrão conhecida nesse ambiente.
 
-```powershell
-python -m apps.api.auth_cli create-admin --username admin
-```
-
-Quando solicitado, informar a senha inicial combinada para a homologação. A senha é armazenada com PBKDF2-HMAC-SHA256 e não é escrita no repositório. A senha de homologação `admin 123` é temporária e deve ser substituída por uma senha forte antes de qualquer utilização fora da rede local de testes.
-
-Verificar o estado:
-
-```powershell
-python -m apps.api.auth_cli status
-```
-
-Se já existir um administrador ativo, o comando não cria outro automaticamente. Não apagar a base de autenticação para contornar essa proteção.
+Não é necessário executar comandos, abrir PowerShell administrativo ou criar ficheiros manualmente. Cada computador cria a sua própria conta na primeira inicialização.
 
 ## Etapa A — computador principal
 
 1. Confirmar que a branch é `release/local-homologation` e que o working tree está limpo ou que todas as alterações locais foram preservadas.
-2. Criar/confirmar a conta administrativa local.
+2. Iniciar o JARVIS; a conta administrativa local é criada automaticamente se ainda não existir.
 3. Instalar dependências a partir dos manifests versionados, sem copiar `data/`, tokens, chaves ou bases locais de outro computador.
 4. Executar a suíte de testes do backend e do dashboard.
 5. Executar o build do dashboard.
@@ -45,7 +33,7 @@ Se já existir um administrador ativo, o comando não cria outro automaticamente
 
 1. Clonar o repositório e fazer checkout do commit de homologação aprovado.
 2. Criar ambiente virtual e instalar dependências documentadas.
-3. Criar a própria conta administrativa local com o comando acima; não copiar `data/auth/`, tokens, cookies, chaves de API ou base de dados do primeiro computador.
+3. Iniciar o JARVIS para criar automaticamente a conta administrativa independente; não copiar `data/auth/`, tokens, cookies, chaves de API ou base de dados do primeiro computador.
 4. Iniciar o JARVIS e confirmar health check, login, navegação e funcionalidades acordadas.
 5. Criar uma segunda conta de teste e verificar que projetos, tarefas, conversas, memórias, aprovações, documentos, webhooks e credenciais não atravessam contas.
 6. Registar sistema operativo, versão Python/Node, commit testado e erros encontrados.
