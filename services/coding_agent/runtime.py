@@ -152,7 +152,7 @@ class CodingAgentRuntime:
         messages: list[ChatTurn] = [ChatTurn(role="system", content=system_prompt)]
         messages.extend(history)
         messages.append(ChatTurn(role="user", content=config.prompt))
-        self._persist(session_id, config.project_id, "user", config.prompt)
+        self._persist(session_id, config.project_id, "user", config.prompt, owner_user_id=config.owner_user_id)
 
         available_tools = self._tools_for_mode(config.mode)
         if not available_tools:
@@ -200,7 +200,8 @@ class CodingAgentRuntime:
             except ProviderError as exc:
                 result.error = str(exc)
                 self._persist(
-                    session_id, config.project_id, "assistant", f"[erro do provedor] {exc}"
+                    session_id, config.project_id, "assistant", f"[erro do provedor] {exc}",
+                    owner_user_id=config.owner_user_id
                 )
                 yield {"type": "error", "task_id": task_id, "error": str(exc)}
                 break
@@ -225,6 +226,7 @@ class CodingAgentRuntime:
                     config.project_id,
                     "assistant",
                     reply.content,
+                    owner_user_id=config.owner_user_id,
                 )
                 result.is_completed = True
                 break
@@ -241,6 +243,7 @@ class CodingAgentRuntime:
                 config.project_id,
                 "assistant",
                 reply.content,
+                owner_user_id=config.owner_user_id,
                 tool_calls=[call.model_dump() for call in reply.tool_calls],
             )
 
@@ -383,6 +386,7 @@ class CodingAgentRuntime:
                     affected_resources=preview["affected_resources"],
                     proposed_diff=preview.get("proposed_diff"),
                     reversible=preview.get("reversible", True),
+                    owner_user_id=config.owner_user_id,
                 )
                 yield {
                     "type": "approval_required",
@@ -469,6 +473,7 @@ class CodingAgentRuntime:
             model_text,
             tool_call_id=tool_result.call_id,
             tool_name=tool_result.name,
+            owner_user_id=config.owner_user_id,
         )
         output = tool_result.output or tool_result.error or ""
         if len(output) > MAX_EVENT_OUTPUT:
@@ -508,7 +513,8 @@ class CodingAgentRuntime:
             return []
         try:
             rows = self.db_manager.list_chat_messages(
-                session_id, limit=MAX_HISTORY_MESSAGES, ascending=False
+                session_id, limit=MAX_HISTORY_MESSAGES, ascending=False,
+                owner_user_id=config.owner_user_id
             )
         except Exception as exc:
             logger.warning("Falha ao carregar histórico da sessão %s: %s", session_id, exc)
@@ -574,6 +580,7 @@ class CodingAgentRuntime:
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
         tool_name: str | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         if self.db_manager is None:
             return
@@ -586,6 +593,7 @@ class CodingAgentRuntime:
                 tool_calls=tool_calls,
                 tool_call_id=tool_call_id,
                 tool_name=tool_name,
+                owner_user_id=owner_user_id,
             )
         except Exception as exc:
             logger.warning("Falha ao persistir mensagem do agente: %s", exc)
