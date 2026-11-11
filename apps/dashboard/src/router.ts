@@ -24,6 +24,7 @@ export const TAB_PATHS: Record<string, string> = {
   quality: '/quality',
   design: '/design',
   executive_report: '/executive-report',
+  learning: '/learning',
 };
 
 const PATH_TABS: Record<string, string> = {
@@ -56,6 +57,8 @@ const PATH_TABS: Record<string, string> = {
   design: 'design',
   'executive-report': 'executive_report',
   executive_report: 'executive_report',
+  learning: 'learning',
+  help: 'learning',
   intelligence: 'executive_report',
 };
 

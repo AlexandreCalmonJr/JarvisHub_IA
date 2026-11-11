@@ -75,6 +75,9 @@ const ExecutiveReportView = lazy(() =>
 const CodingAgentView = lazy(() =>
   import('./components/CodingAgentView').then((m) => ({ default: m.CodingAgentView }))
 );
+const LearningCenterView = lazy(() =>
+  import('./components/LearningCenterView').then((m) => ({ default: m.LearningCenterView }))
+);
 const AgentOfficeView = lazy(() =>
   import('./components/office/AgentOfficeView').then((m) => ({ default: m.AgentOfficeView }))
 );
@@ -118,7 +121,7 @@ const DashboardApp: React.FC = () => {
       models: 'models:read', coding: 'coding:read', agents: 'agents:read',
       knowledge: 'knowledge:read', tasks: 'tasks:read', backend_studio: 'studios:read',
       quality: 'studios:read', skills: 'skills:read', security: 'security:read',
-      executive_report: 'studios:read',
+      executive_report: 'studios:read', learning: 'profile:read',
     };
     return !required[tab] || hasPermission(required[tab]);
   };
@@ -686,6 +689,7 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
             {activeTab === 'advisor' && <HardwareAdvisorView />}
             {activeTab === 'server_logs' && <ServerLogsView />}
+            {activeTab === 'learning' && <LearningCenterView activeTab={activeTab} onNavigate={navigate} />}
           </Suspense>
           )}
         </main>

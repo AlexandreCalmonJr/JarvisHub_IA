@@ -133,6 +133,7 @@ if react_dist and (react_dist / "index.html").exists():
         "/logs",
         "/backend-studio",
         "/executive-report",
+        "/learning",
         "/office",
         "/workspace",
         "/tasks",

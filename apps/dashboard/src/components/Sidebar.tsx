@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   AlertTriangle,
   FileText,
+  BookOpen,
 } from 'lucide-react';
 import { getLocalSessionsCatalog, removeSessionLocally, LocalSessionMeta } from './chat/ChatHistoryDrawer';
 import { getUserProfile } from './common/UserProfileModal';
@@ -132,6 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'security', label: 'Segurança', permission: 'security:read', icon: <ShieldAlert size={13} color="var(--danger-color)" /> },
     { id: 'approvals', label: 'Central de Aprovações', permission: 'approvals:read', icon: <AlertTriangle size={13} color="var(--warning-color)" />, badge: pendingApprovalsCount },
     { id: 'server_logs', label: 'Logs do Servidor', adminOnly: true, icon: <FileText size={13} color="var(--accent-color)" /> },
+    { id: 'learning', label: 'Aprendizagem & Ajuda', permission: 'profile:read', icon: <BookOpen size={13} color="var(--accent-color)" /> },
   ].filter((item) => item.adminOnly ? isAdmin : hasPermission(item.permission || ''));
 
 
