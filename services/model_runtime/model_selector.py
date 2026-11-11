@@ -15,6 +15,7 @@ class ModelCandidate:
     local: bool
     family: str
     context_length: int
+    estimated_cost_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class ModelSelection:
     reason: str
     sample_sufficient: bool
     success_rate: float | None
+    estimated_cost_usd: float = 0.0
 
 
 class ModelSelector:
@@ -73,6 +75,10 @@ class ModelSelector:
         allow_external: bool,
         contains_sensitive_data: bool,
         has_external_data_approval: bool,
+        pricing_by_provider: dict[str, tuple[float, float]] | None = None,
+        prompt_text: str = "",
+        system_prompt: str | None = None,
+        max_tokens: int | None = 2048,
     ) -> ModelSelection:
         capability = self._normalize_capability(task_capability, agent_role)
         performance: dict[tuple[str, str, str | None], dict[str, Any]] = {}
@@ -81,6 +87,9 @@ class ModelSelector:
                 performance[(row["model_name"], row["provider"], row.get("agent_role"))] = row
 
         candidates: list[tuple[ModelCandidate, dict[str, Any] | None, int, str]] = []
+        pricing = pricing_by_provider or {}
+        estimated_input_tokens = max(1, (len(prompt_text) + len(system_prompt or "")) // 4)
+        estimated_output_tokens = max(1, int(max_tokens or 2048))
         for metadata in models:
             is_cloud = metadata.parameter_size == "Cloud API"
             provider = f"online_gateway ({metadata.family})" if is_cloud else "ollama_local"
@@ -88,12 +97,18 @@ class ModelSelector:
                 continue
             if is_cloud and contains_sensitive_data and not has_external_data_approval:
                 continue
+            input_rate, output_rate = pricing.get(metadata.family, (0.0, 0.0)) if is_cloud else (0.0, 0.0)
+            estimated_cost = (
+                (estimated_input_tokens / 1000.0) * max(0.0, float(input_rate))
+                + (estimated_output_tokens / 1000.0) * max(0.0, float(output_rate))
+            )
             candidate = ModelCandidate(
                 model_name=metadata.name,
                 provider=provider,
                 local=not is_cloud,
                 family=metadata.family,
                 context_length=metadata.context_length,
+                estimated_cost_usd=round(estimated_cost, 6),
             )
             stats = performance.get((candidate.model_name, candidate.provider, agent_role))
             if stats is None:
@@ -115,6 +130,7 @@ class ModelSelector:
         pool = eligible or candidates
 
         ranked: list[tuple[float, ModelSelection]] = []
+        max_estimated_cost = max((item[0].estimated_cost_usd for item in pool), default=0.0)
         for candidate, stats, capability_score, capability_reason in pool:
             score = float(capability_score)
             reasons = [capability_reason]
@@ -134,12 +150,19 @@ class ModelSelector:
             if candidate.context_length >= 32000:
                 score += 2
                 reasons.append("janela de contexto ampla")
+            if candidate.estimated_cost_usd > 0 and max_estimated_cost > 0:
+                cost_penalty = 15 * (candidate.estimated_cost_usd / max_estimated_cost)
+                score -= cost_penalty
+                reasons.append(f"custo estimado ${candidate.estimated_cost_usd:.6f} (penalidade {cost_penalty:.1f})")
+            else:
+                reasons.append("sem custo externo estimado")
             selection = ModelSelection(
                 candidate=candidate,
                 score=round(score, 2),
                 reason="; ".join(reasons),
                 sample_sufficient=sample_sufficient,
                 success_rate=success_rate,
+                estimated_cost_usd=candidate.estimated_cost_usd,
             )
             ranked.append((score, selection))
 
