@@ -111,7 +111,7 @@ async def write_project_file_endpoint(
             tofile=f"b/{payload.path}",
         ))
         fingerprint = hashlib.sha256(
-            f"{project_id}\0{target}\0{payload.content}".encode("utf-8")
+            f"{project_id}\0{target}\0{hashlib.sha256(old.encode('utf-8')).hexdigest()}\0{payload.content}".encode("utf-8")
         ).hexdigest()
         task_id = f"workspace:file_write:{fingerprint}"
         pending = _workspace_approval(
