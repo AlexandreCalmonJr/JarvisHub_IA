@@ -51,7 +51,7 @@ async def delete_mock_endpoint(endpoint_id: str):
 
 @router.api_route(
     "/api/v1/mock/{mock_path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
 )
 async def serve_mock_route(mock_path: str, request: Request):
     """Roteador coringa do Mock Server nativo que atende requisições simuladas."""
