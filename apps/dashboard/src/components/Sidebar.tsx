@@ -100,7 +100,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'backend_studio', label: 'Backend & APIs (Mock)', icon: <Server size={13} color="#60a5fa" /> },
     { id: 'quality', label: 'Qualidade & QA (Testes)', icon: <CheckCircle2 size={13} color="#34d399" /> },
     { id: 'knowledge', label: 'Base de Conhecimento (RAG)', icon: <Database size={13} color="#a78bfa" /> },
-    { id: 'overview', label: 'Métricas do Sistema', icon: <Activity size={13} color="#f43f5e" /> },
+    { id: 'overview', label: 'Visão Geral', icon: <Activity size={13} color="#f43f5e" /> },
+    { id: 'design', label: 'Design Studio', icon: <Sparkles size={13} color="#d97757" /> },
+    { id: 'executive_report', label: 'Relatório Executivo', icon: <FileText size={13} color="#94a3b8" /> },
+    { id: 'advisor', label: 'Hardware Advisor', icon: <Cpu size={13} color="#fbbf24" /> },
   ];
 
   const settingsItems = [
@@ -128,6 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
+        className={mobileOpen ? 'jarvis-sidebar is-mobile-open' : 'jarvis-sidebar'}
         style={{
           width: isCollapsed ? '64px' : '260px',
           backgroundColor: 'var(--bg-secondary)',
