@@ -136,7 +136,12 @@ export const QualityStudioView: React.FC = () => {
         <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--text-primary)' }}>
           <AlertCircle size={16} color="#f87171" />
           <span style={{ fontSize: '0.84rem' }}>{projectsError || discoveryError || chaosError || playwrightError}</span>
-          <button className="btn btn-ghost" onClick={() => selectedProjectId ? loadProjectTests(selectedProjectId) : loadProjects()}>Tentar novamente</button>
+          <button className="btn btn-ghost" onClick={() => {
+            if (projectsError) loadProjects();
+            else if (discoveryError && selectedProjectId) loadProjectTests(selectedProjectId);
+            else if (chaosError) loadChaosCases();
+            else if (playwrightError) handleGeneratePlaywright();
+          }}>Tentar novamente</button>
         </div>
       )}
       {/* Header */}
@@ -155,7 +160,7 @@ export const QualityStudioView: React.FC = () => {
             Quality Studio & Testes E2E
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
-            Automação de testes em sandbox, gerador de roteiros Playwright e suíte de testes de estresse (Chaos Testing).
+            Execução controlada de testes, gerador de roteiros Playwright e suíte de casos de borda (Chaos Testing).
           </p>
         </div>
 
