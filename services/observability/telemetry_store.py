@@ -97,6 +97,28 @@ class SqliteTelemetryStore:
                 )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS inference_quality_feedback (
+                    id TEXT PRIMARY KEY,
+                    owner_user_id TEXT NOT NULL,
+                    inference_id TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    agent_role TEXT,
+                    task_id TEXT,
+                    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+                    created_at TEXT NOT NULL,
+                    UNIQUE(owner_user_id, inference_id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_quality_feedback_owner_model
+                ON inference_quality_feedback(owner_user_id, model_name, provider, agent_role)
+                """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_model_selection_owner_created
                 ON model_selection_decisions(owner_user_id, created_at DESC)
                 """
@@ -291,6 +313,78 @@ class SqliteTelemetryStore:
                 (owner_user_id, safe_limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def record_quality_feedback(
+        self, *, owner_user_id: str, inference_id: str, rating: int
+    ) -> bool:
+        """Registra avaliação humana apenas para inferência bem-sucedida da própria conta."""
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        if not inference_id or not inference_id.strip():
+            raise ValueError("inference_id is required")
+        if isinstance(rating, bool) or not 1 <= int(rating) <= 5:
+            raise ValueError("rating must be between 1 and 5")
+        with self._lock, self._connection() as conn:
+            inference = conn.execute(
+                """
+                SELECT id, model_name, provider, agent_role, task_id
+                FROM inference_telemetry
+                WHERE id = ? AND owner_user_id = ? AND status = 'success'
+                """,
+                (inference_id, owner_user_id),
+            ).fetchone()
+            if inference is None:
+                return False
+            conn.execute(
+                """
+                INSERT INTO inference_quality_feedback (
+                    id, owner_user_id, inference_id, model_name, provider,
+                    agent_role, task_id, rating, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_user_id, inference_id) DO UPDATE SET
+                    rating = excluded.rating,
+                    created_at = excluded.created_at
+                """,
+                (
+                    str(uuid.uuid4()), owner_user_id, inference["id"],
+                    inference["model_name"], inference["provider"],
+                    inference["agent_role"], inference["task_id"],
+                    int(rating), datetime.now(UTC).isoformat(),
+                ),
+            )
+        return True
+
+    def quality_by_model_for_owner(
+        self, owner_user_id: str, minimum_feedback: int = 3
+    ) -> list[dict[str, Any]]:
+        """Agrega avaliações humanas por modelo, sempre isoladas por conta."""
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        minimum = max(1, int(minimum_feedback))
+        with self._lock, self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT model_name, provider, agent_role,
+                       COUNT(*) AS feedback_count,
+                       AVG(rating) AS average_rating
+                FROM inference_quality_feedback
+                WHERE owner_user_id = ?
+                GROUP BY model_name, provider, agent_role
+                """,
+                (owner_user_id,),
+            ).fetchall()
+        return [
+            {
+                "model_name": row["model_name"],
+                "provider": row["provider"],
+                "agent_role": row["agent_role"],
+                "feedback_count": int(row["feedback_count"]),
+                "average_rating": round(float(row["average_rating"] or 0), 3),
+                "sample_sufficient": int(row["feedback_count"]) >= minimum,
+            }
+            for row in rows
+        ]
 
     def summary_for_owner(self, owner_user_id: str) -> dict[str, int | float]:
         if not owner_user_id or not owner_user_id.strip():
