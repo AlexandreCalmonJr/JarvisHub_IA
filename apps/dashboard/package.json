@@ -22,7 +22,8 @@
     "test:knowledge": "node --experimental-strip-types --test scripts/knowledge.test.mjs",
     "test:skills": "node --experimental-strip-types --test scripts/skills.test.mjs",
     "test:backend-studio": "node --experimental-strip-types --test scripts/backend-studio.test.mjs",
-    "test:quality-studio": "node --experimental-strip-types --test scripts/quality-studio.test.mjs"
+    "test:quality-studio": "node --experimental-strip-types --test scripts/quality-studio.test.mjs",
+    "test:design-studio": "node --experimental-strip-types --test scripts/design-studio.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
