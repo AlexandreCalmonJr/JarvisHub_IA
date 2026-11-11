@@ -44,7 +44,9 @@ class FakeDB:
         self.tasks: list[dict] = []
         self.projects: list[dict] = []
 
-    def add_chat_message(self, session_id, role, content, project_id=None):
+    def add_chat_message(
+        self, session_id, role, content, project_id=None, owner_user_id=None
+    ):
         self.messages.append(
             {
                 "session_id": session_id,
@@ -70,7 +72,10 @@ class FakeAgentRuntime:
         self.run_calls = []
 
     def _persist_user(self, config):
-        self.db.add_chat_message(config.session_id, "user", config.prompt, config.project_id)
+        self.db.add_chat_message(
+            config.session_id, "user", config.prompt, config.project_id,
+            owner_user_id=config.owner_user_id,
+        )
 
     async def complete(self, config):
         self.complete_calls.append(config)
@@ -91,7 +96,10 @@ class FakeAgentRuntime:
     async def run(self, config):
         self.run_calls.append(config)
         session_id = config.session_id or "chat-gerado"
-        self.db.add_chat_message(session_id, "user", config.prompt, config.project_id)
+        self.db.add_chat_message(
+            session_id, "user", config.prompt, config.project_id,
+            owner_user_id=config.owner_user_id,
+        )
         yield {"type": "start", "session_id": session_id, "engine": "agent"}
         if self.fail:
             yield {
