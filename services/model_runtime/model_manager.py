@@ -75,16 +75,12 @@ class ModelManager:
     ) -> InferenceRequest:
         if request.model_name not in {"auto", "auto_hybrid"}:
             return request
-        if request.model_name == "auto_hybrid" and not (
-            self.hybrid_router and self.hybrid_router.online_config.enabled
+        allow_external = bool(
+            request.model_name == "auto_hybrid"
+            and self.hybrid_router
+            and self.hybrid_router.online_config.enabled
             and self.hybrid_router.online_adapter
-        ):
-            allow_external = False
-        else:
-            allow_external = bool(
-                self.hybrid_router and self.hybrid_router.online_config.enabled
-                and self.hybrid_router.online_adapter
-            )
+        )
 
         models = await self.list_available_models()
         selection = self.model_selector.select(
