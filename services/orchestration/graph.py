@@ -962,7 +962,7 @@ def create_master_graph(
                 fallback_2 = f"Cronograma: Divisão em ciclos de 30 dias com micro-hábitos diários, 5 expressões úteis por dia e revisão semanal de metas para '{clean_prompt}'."
                 fallback_3 = f"Garantia de Qualidade: Testes de retenção espaçada (SRS), diálogos guiados no chat e acompanhamento de vocabulário ativo para '{clean_prompt}'."
 
-                consensus_title = "🏛️ Mesa Redonda Multi-Agente: Plano Consensual de Aprendizado & Maestria"
+                consensus_title = "🏛️ Mesa Redonda Multi-Agente: Aprendizado & Maestria"
                 verdict = "Aprovado por consenso unânime entre Pesquisa, Metodologia e Avaliação de Qualidade."
                 pillar_a = "**Metodologia Comprovada**: Imersão diária e Comprehensible Input sem tradução mental."
                 pillar_b = "**Rotina Estruturada**: 20 minutos/dia com metas claras e sustentáveis."
@@ -984,7 +984,7 @@ def create_master_graph(
                 fallback_2 = f"Parecer de Segurança: validação estrita de inputs, controle de acesso local e blindagem 127.0.0.1 prioritários para '{clean_prompt}'."
                 fallback_3 = f"Parecer de Revisão: foco estrito em YAGNI, preferência por bibliotecas nativas da plataforma e testes unitários diretos para '{clean_prompt}'."
 
-                consensus_title = "🏛️ Mesa Redonda Técnica: Consenso Multidisciplinar Estabelecido"
+                consensus_title = "🏛️ Mesa Redonda Técnica: Deliberação Multidisciplinar"
                 verdict = "Aprovado por deliberação consensual com 3 votos favoráveis."
                 pillar_a = "**Decisão Arquitetural**: Estrutura enxuta e modular com desacoplamento de serviços."
                 pillar_b = "**Mitigação de Segurança**: Blindagem de portas, sanitização contra injeções e isolamento de dados sensíveis."
@@ -1081,10 +1081,10 @@ def create_master_graph(
                 {"agent_role": role_3, "summary": text_3},
             ]
             master_prompt = (
-                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\\n\\n"
-                f"Parecer 1 ({role_1}):\\n{text_1}\\n\\n"
-                f"Parecer 2 ({role_2}), que recebeu o parecer 1 e pôde contestá-lo:\\n{text_2}\\n\\n"
-                f"Parecer 3 ({role_3}), que recebeu os dois pareceres anteriores:\\n{text_3}\\n\\n"
+                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\n\n"
+                f"Parecer 1 ({role_1}):\n{text_1}\n\n"
+                f"Parecer 2 ({role_2}), que recebeu o parecer 1 e pôde contestá-lo:\n{text_2}\n\n"
+                f"Parecer 3 ({role_3}), que recebeu os dois pareceres anteriores:\n{text_3}\n\n"
                 "Compare as recomendações, resolva divergências com justificativa, destaque riscos "
                 "não resolvidos e apresente um plano final. Não invente consenso nem testes/evidências."
             )
@@ -1120,13 +1120,13 @@ def create_master_graph(
                 )
 
             consensus_summary = (
-                f"# {consensus_title}\\n\\n"
-                f"### 1. 🔬 {title_1}\\n{text_1}\\n\\n"
-                f"### 2. 📋 {title_2}\\n{text_2}\\n\\n"
-                f"### 3. ✅ {title_3}\\n{text_3}\\n\\n"
-                f"---\\n\\n"
-                f"### ⚖️ Deliberação do JARVIS Maestro\\n\\n{master_summary}\\n\\n"
-                f"### Diretriz de referência\\n- {pillar_a}\\n- {pillar_b}\\n- {pillar_c}"
+                f"# {consensus_title}\n\n"
+                f"### 1. 🔬 {title_1}\n{text_1}\n\n"
+                f"### 2. 📋 {title_2}\n{text_2}\n\n"
+                f"### 3. ✅ {title_3}\n{text_3}\n\n"
+                f"---\n\n"
+                f"### ⚖️ Deliberação do JARVIS Maestro\n\n{master_summary}\n\n"
+                f"### Diretriz de referência\n- {pillar_a}\n- {pillar_b}\n- {pillar_c}"
             )
 
             # Insere contratos de cada especialista no estado para visualização no painel de raciocínio
@@ -1152,7 +1152,7 @@ def create_master_graph(
                     objective=title_2,
                     summary=text_2,
                     evidence=["Mesa Redonda Multi-Agente", "Planejamento Estratégico"],
-                    actions_taken=["Estruturação do Cronograma"],
+                    actions_taken=["Análise do contexto", "Revisão do parecer do primeiro especialista", "Proposta de contrapontos e recomendações"],
                     affected_files=[],
                     tests_executed=[],
                     risks=[],
@@ -1168,7 +1168,7 @@ def create_master_graph(
                     objective=title_3,
                     summary=text_3,
                     evidence=["Mesa Redonda Multi-Agente", "Garantia de Qualidade"],
-                    actions_taken=["Validação de Critérios de Retenção"],
+                    actions_taken=["Revisão dos dois pareceres anteriores", "Identificação de lacunas e riscos", "Validação de critérios de aceitação"],
                     affected_files=[],
                     tests_executed=[],
                     risks=[],
@@ -1185,7 +1185,7 @@ def create_master_graph(
                     objective="Consolidação e Deliberação da Mesa Redonda Técnica",
                     summary=consensus_summary,
                     evidence=["Deliberação Consensual", "Mesa Redonda Multi-Agente", consensus_title],
-                    actions_taken=["Mediação entre especialistas", "Síntese executiva"],
+                    actions_taken=["Mediação entre especialistas", "Comparação de divergências", "Síntese executiva baseada nos pareceres recebidos"],
                     affected_files=[],
                     tests_executed=[],
                     risks=[],
