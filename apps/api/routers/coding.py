@@ -39,6 +39,15 @@ MODE_LABELS = {
 }
 
 
+
+def _private_owner(principal: Principal) -> str:
+    if principal.kind != "human":
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivos precisam ser associados a uma conta antes de acessar dados privados.",
+        )
+    return principal.subject_id
+
 def _provider_info() -> dict[str, Any]:
     try:
         provider = coding_runtime.provider_factory()
@@ -74,26 +83,37 @@ async def list_coding_tools():
 
 
 @router.get("/api/v1/coding/sessions/{session_id}/messages")
-async def list_coding_messages(session_id: str, limit: int = 200):
+async def list_coding_messages(
+    session_id: str, limit: int = 200,
+    principal: Principal = Depends(get_principal),
+):
     """Histórico fiel da sessão (mensagens, chamadas e resultados de ferramentas)."""
     from apps.api.deps import db_manager
 
     return {
         "session_id": session_id,
-        "messages": db_manager.list_chat_messages(session_id, limit=limit),
+        "messages": db_manager.list_chat_messages(
+            session_id, limit=limit, owner_user_id=_private_owner(principal)
+        ),
     }
 
 
 @router.delete("/api/v1/coding/sessions/{session_id}/messages")
-async def clear_coding_messages(session_id: str):
+async def clear_coding_messages(
+    session_id: str, principal: Principal = Depends(get_principal)
+):
     from apps.api.deps import db_manager
 
-    deleted = db_manager.clear_session_messages(session_id)
+    deleted = db_manager.clear_session_messages(
+        session_id, owner_user_id=_private_owner(principal)
+    )
     return {"session_id": session_id, "deleted": deleted}
 
 
 @router.post("/api/v1/coding/run/stream")
-async def run_coding_agent_stream(payload: CodingRunRequest):
+async def run_coding_agent_stream(
+    payload: CodingRunRequest, principal: Principal = Depends(get_principal)
+):
     """Executa o agente e transmite cada evento do loop por SSE."""
     try:
         mode = AgentMode(payload.mode.lower().strip())
@@ -103,8 +123,10 @@ async def run_coding_agent_stream(payload: CodingRunRequest):
             detail="Modo inválido. Use 'plan', 'ask' ou 'auto'.",
         )
 
+    owner_user_id = _private_owner(principal)
     session_id = payload.session_id or f"coding-{uuid.uuid4().hex[:10]}"
-    lock = _session_locks.setdefault(session_id, asyncio.Lock())
+    lock_key = f"{owner_user_id}:{session_id}"
+    lock = _session_locks.setdefault(lock_key, asyncio.Lock())
     if lock.locked():
         raise HTTPException(
             status_code=409,
@@ -115,6 +137,7 @@ async def run_coding_agent_stream(payload: CodingRunRequest):
         prompt=payload.prompt.strip(),
         project_id=payload.project_id,
         session_id=session_id,
+        owner_user_id=owner_user_id,
         task_id=payload.task_id,
         mode=mode,
         model=payload.model,
@@ -158,9 +181,11 @@ async def run_coding_agent_stream(payload: CodingRunRequest):
 
 
 @router.get("/api/v1/coding/approvals")
-async def list_coding_approvals():
-    """Aprovações pendentes (inclui as criadas pelo agente de código)."""
-    return coding_broker.list_pending()
+async def list_coding_approvals(
+    principal: Principal = Depends(get_principal),
+):
+    """Lista aprovações pendentes somente da conta autenticada."""
+    return coding_broker.list_pending(owner_user_id=_private_owner(principal))
 
 
 @router.post("/api/v1/coding/approvals/{approval_id}/decide")
@@ -170,6 +195,7 @@ async def decide_coding_approval(
     principal: Principal = Depends(get_principal),
 ):
     """Aprova ou rejeita uma operação e liberta imediatamente o runtime."""
+    owner_user_id = _private_owner(principal)
     action = payload.action.strip().lower()
     if action not in {"approve", "reject"}:
         raise HTTPException(status_code=400, detail="Ação inválida. Use 'approve' ou 'reject'.")
@@ -198,6 +224,7 @@ async def decide_coding_approval(
             approved=action == "approve",
             decided_by=actor,
             reason=payload.reason,
+            owner_user_id=owner_user_id,
         )
     except UnauthorizedApprovalError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
