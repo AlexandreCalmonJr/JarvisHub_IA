@@ -1,8 +1,12 @@
+import difflib
 import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
+
+from packages.contracts.approval import ApprovalStatus
+from services.security_core import PermissionDeniedError
 
 logger = logging.getLogger("jarvis.orchestration.workspace")
 
@@ -11,6 +15,10 @@ def execute_workspace_modification(
     workspace_service: Any,
     user_prompt: str,
     project_id: str | None = None,
+    *,
+    approval_id: str | None = None,
+    task_id: str | None = None,
+    preview_only: bool = False,
 ) -> tuple[str, list[str]]:
     """Acessa os arquivos do projeto no disco, aplica a modificação solicitada e retorna o diff."""
     if not workspace_service:
@@ -112,6 +120,47 @@ def execute_workspace_modification(
     if new_content == content:
         new_content += f"\n/* Modificação JARVIS: {user_prompt} */\n"
 
+    project_root = workspace_service.get_project_dir(target_project).resolve()
+    target_path = (project_root / target_file).resolve()
+    try:
+        target_path.relative_to(project_root)
+    except ValueError as exc:
+        raise PermissionDeniedError("Caminho fora da raiz autorizada do projeto.") from exc
+
+    diff_display = "".join(
+        difflib.unified_diff(
+            content.splitlines(keepends=True),
+            new_content.splitlines(keepends=True),
+            fromfile=f"a/{target_file}",
+            tofile=f"b/{target_file}",
+        )
+    ) or f"+ {target_file} atualizado"
+
+    if preview_only:
+        preview = (
+            f"Pré-visualização da alteração proposta para {target_project}/{target_file}:\n"
+            f"```diff\n{diff_display}\n```"
+        )
+        return (preview, [str(target_path)])
+
+    if not approval_id or not task_id:
+        raise PermissionDeniedError(
+            "Escrita do workspace bloqueada: é obrigatória uma aprovação humana associada à tarefa."
+        )
+
+    approval = workspace_service.security_core.approval_engine.get_request(approval_id)
+    if (
+        not approval
+        or approval.status != ApprovalStatus.APPROVED
+        or approval.task_id != task_id
+        or approval.operation != "file_write"
+        or str(target_path) not in approval.affected_resources
+        or approval.proposed_diff != preview
+    ):
+        raise PermissionDeniedError(
+            "Aprovação ausente, pendente ou não correspondente ao ficheiro/diff proposto."
+        )
+
     res = workspace_service.modify_project_file(
         project_id=target_project,
         rel_path=target_file,
@@ -119,14 +168,14 @@ def execute_workspace_modification(
         reason=user_prompt,
     )
 
-    diff_display = res["diff"] if res["diff"] else f"+ {target_file} atualizado"
+    applied_diff = res.get("diff") or diff_display
     msg = (
-        f"✅ **Arquivo atualizado no disco do seu computador com sucesso!**\n\n"
+        f"✅ **Arquivo atualizado no disco do seu computador após aprovação humana!**\n\n"
         f"📁 **Projeto**: `workspace/{target_project}/`\n"
         f"📄 **Arquivo modificado**: `{target_file}` (Backup de segurança `.bak` criado)\n\n"
-        f"🔍 **Diff das alterações gravadas no arquivo**:\n```diff\n{diff_display}\n```"
+        f"🔍 **Diff das alterações gravadas no arquivo**:\n```diff\n{applied_diff}\n```"
     )
-    return (msg, [f"workspace/{target_project}/{target_file}"])
+    return (msg, [str(target_path)])
 
 
 INTENT_DOMAIN_MAP = {
