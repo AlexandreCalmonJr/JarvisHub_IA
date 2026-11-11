@@ -639,10 +639,10 @@ const DashboardApp: React.FC = () => {
   );
 };
 
-export default App;
-
 export const App: React.FC = () => (
   <AuthGate>
     <DashboardApp />
   </AuthGate>
 );
+
+export default App;
