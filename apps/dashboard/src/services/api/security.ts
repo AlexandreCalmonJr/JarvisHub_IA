@@ -10,13 +10,12 @@ export async function fetchApprovals(): Promise<ApprovalRequestItem[]> {
 export async function decideApproval(
   requestId: string,
   action: 'approve' | 'reject',
-  decidedBy: string,
   reason?: string
 ): Promise<{ status: string }> {
   const res = await fetch(`${API_BASE}/approvals/${requestId}/decide`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, decided_by: decidedBy, reason }),
+    body: JSON.stringify({ action, reason }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Erro na aprovação' }));
