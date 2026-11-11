@@ -81,16 +81,28 @@ async def decide_approval(
                 decided_by=actor,
                 decision_reason=payload.reason,
             )
-            # Retoma tarefa associada se pertencer ao Jarvis Master
-            try:
-                await jarvis_master.resume_after_approval(
-                    task_id=decided.task_id,
-                    approved_by=actor,
-                )
-            except ValueError as ve:
-                logger.debug("JarvisMaster ignorou retomada da tarefa '%s': %s", decided.task_id, ve)
-            except Exception as exc:
-                logger.warning("Falha ao retomar tarefa no JarvisMaster: %s", exc)
+            # Pedidos de workspace API são retomados pelo próprio cliente após a decisão.
+            # Tarefas do Jarvis Master retomam o checkpoint e executam o payload aprovado.
+            if not decided.task_id.startswith("workspace:"):
+                try:
+                    await jarvis_master.resume_after_approval(
+                        task_id=decided.task_id,
+                        approved_by=actor,
+                    )
+                except ValueError as ve:
+                    logger.debug("JarvisMaster não encontrou checkpoint para '%s': %s", decided.task_id, ve)
+                except PermissionDeniedError as exc:
+                    logger.warning("Execução bloqueada após aprovação %s: %s", request_id, exc)
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"A aprovação foi registada, mas a execução foi bloqueada: {exc}",
+                    ) from exc
+                except Exception as exc:
+                    logger.exception("Falha ao executar tarefa aprovada %s", request_id)
+                    raise HTTPException(
+                        status_code=500,
+                        detail="A aprovação foi registada, mas a execução da tarefa falhou.",
+                    ) from exc
 
             return {"status": "approved", "request": decided}
         elif payload.action == "reject":
