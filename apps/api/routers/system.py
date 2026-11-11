@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from apps.api.auth import Principal, require_permission
+from apps.api.auth import Principal, get_principal, require_permission
 from apps.api.schemas import (
     UserProfilePayload,
     WebhookConfigPayload,
@@ -122,23 +122,20 @@ async def clear_server_logs_endpoint():
 
 
 @router.get("/api/v1/user/profile")
-async def get_user_profile_endpoint():
-    """Retorna as preferências e identidade do desenvolvedor salvas no SQLite."""
-    return db_manager.get_user_profile()
+async def get_user_profile_endpoint(
+    principal: Principal = Depends(get_principal),
+):
+    """Retorna apenas o perfil privado da conta autenticada."""
+    return db_manager.get_user_profile(owner_user_id=principal.subject_id)
 
 
 @router.post("/api/v1/user/profile")
-async def save_user_profile_endpoint(payload: UserProfilePayload):
-    """Salva configurações e diretrizes customizadas do desenvolvedor no SQLite."""
+async def save_user_profile_endpoint(
+    payload: UserProfilePayload, principal: Principal = Depends(get_principal)
+):
+    """Salva configurações e diretrizes no espaço privado da conta."""
     profile_dict = payload.model_dump()
-    db_manager.set_user_profile(profile_dict)
-
-    if payload.huggingfaceToken and not hybrid_config.api_key:
-        hybrid_config.api_key = payload.huggingfaceToken
-        hybrid_config.provider_name = "huggingface"
-        hybrid_config.base_url = "https://api-inference.huggingface.co/v1"
-        save_hybrid_config_to_disk(hybrid_config, HYBRID_CONFIG_PATH)
-
+    db_manager.set_user_profile(profile_dict, owner_user_id=principal.subject_id)
     return {"status": "saved", "profile": profile_dict}
 
 
