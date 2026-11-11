@@ -70,7 +70,7 @@ class ModelSelector:
         candidates: list[tuple[ModelCandidate, dict[str, Any] | None, int, str]] = []
         for metadata in models:
             is_cloud = metadata.parameter_size == "Cloud API"
-            provider = metadata.family if is_cloud else "ollama_local"
+            provider = f"online_gateway ({metadata.family})" if is_cloud else "ollama_local"
             if is_cloud and not allow_external:
                 continue
             if is_cloud and contains_sensitive_data and not has_external_data_approval:
