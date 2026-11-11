@@ -548,7 +548,7 @@ class HybridModelRouter:
                 },
                 severity=AuditEventSeverity.INFO,
             )
-            return res, candidate.label
+            return res.model_copy(update={"cost_usd": round(cost, 6)}), candidate.label
 
         except Exception as exc:
             if not settled:
