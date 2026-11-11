@@ -259,6 +259,7 @@ async def chat_endpoint(
                     prompt=request.prompt,
                     session_id=session_id or "",
                     project_id=request.project_id,
+                    owner_user_id=owner_user_id,
                     model=request.model,
                 )
             )
