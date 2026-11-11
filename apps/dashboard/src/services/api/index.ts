@@ -10,3 +10,4 @@ export * from './security';
 export * from './studios';
 export * from './system';
 export * from './coding';
+export * from './profile';
