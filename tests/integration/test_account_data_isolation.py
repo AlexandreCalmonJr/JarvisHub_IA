@@ -76,3 +76,41 @@ def test_project_and_task_writes_reject_cross_account_ownership(tmp_path):
         pass
     else:
         raise AssertionError("Another account must not attach tasks to this project")
+
+
+def test_approval_queries_and_consumption_are_scoped_to_owner(tmp_path):
+    db = DatabaseManager(db_path=str(tmp_path / "approvals.db"))
+    db.save_approval(
+        id="approval-a",
+        task_id="task-a",
+        agent_role="jarvis_master",
+        operation="file_write",
+        impact_summary="Account A change",
+        owner_user_id="account-a",
+    )
+    db.save_approval(
+        id="approval-b",
+        task_id="task-b",
+        agent_role="jarvis_master",
+        operation="file_write",
+        impact_summary="Account B change",
+        owner_user_id="account-b",
+    )
+
+    assert db.get_approval("approval-b", owner_user_id="account-a") is None
+    assert [row["id"] for row in db.list_approvals(
+        owner_user_id="account-a"
+    )] == ["approval-a"]
+
+    with db._get_connection() as conn:
+        conn.execute(
+            "UPDATE approvals SET status = 'approved' WHERE id IN (?, ?)",
+            ("approval-a", "approval-b"),
+        )
+
+    assert db.consume_approved_approval(
+        "approval-b", owner_user_id="account-a"
+    ) is False
+    assert db.consume_approved_approval(
+        "approval-a", owner_user_id="account-a"
+    ) is True
