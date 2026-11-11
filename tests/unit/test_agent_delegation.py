@@ -180,7 +180,7 @@ async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
     master = JarvisMaster(security_core=security, model_manager=model_mgr)
 
     result = await master.execute_task(
-        user_prompt="/debate Avaliar arquitetura segura para um serviço local multiagente"
+        user_prompt="Analise criticamente o problema de arquitetura segura para um serviço local multiagente"
     )
 
     assert result["classified_intent"] == "multi_agent_consensus"
