@@ -32,19 +32,30 @@ export const ServerLogsView: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const [copied, setCopied] = useState<boolean>(false);
   const [showInferenceTable, setShowInferenceTable] = useState<boolean>(true);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Carrega métricas e logs iniciais
   const loadInitialData = async () => {
-    try {
-      const [logsData, metricsData] = await Promise.all([
-        fetchServerLogs(300, levelFilter, searchFilter),
-        fetchModelMetrics(),
-      ]);
-      setLogs(logsData.logs || []);
-      setMetrics(metricsData);
-    } catch (e) {
-      console.error('Falha ao obter logs/métricas:', e);
+    setLoading(true);
+    const [logsResult, metricsResult] = await Promise.allSettled([
+      fetchServerLogs(300, levelFilter, searchFilter),
+      fetchModelMetrics(),
+    ]);
+    if (logsResult.status === 'fulfilled') {
+      setLogs(logsResult.value.logs || []);
+      setLogsError(null);
+    } else {
+      setLogsError(logsResult.reason instanceof Error ? logsResult.reason.message : 'Falha ao carregar logs do servidor.');
     }
+    if (metricsResult.status === 'fulfilled') {
+      setMetrics(metricsResult.value);
+      setMetricsError(null);
+    } else {
+      setMetricsError(metricsResult.reason instanceof Error ? metricsResult.reason.message : 'Falha ao carregar métricas.');
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -93,8 +104,9 @@ export const ServerLogsView: React.FC = () => {
     try {
       await clearServerLogs();
       setLogs([]);
+      setLogsError(null);
     } catch (e: any) {
-      alert(`Erro ao limpar logs: ${e.message}`);
+      setLogsError(e.message || 'Não foi possível limpar os logs.');
     }
   };
 
@@ -157,6 +169,10 @@ export const ServerLogsView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {loading && <p role="status" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando logs e métricas...</p>}
+      {logsError && <div role="alert" style={{ padding: '12px 14px', border: '1px solid var(--danger-color)', borderRadius: '8px', color: 'var(--danger-color)', fontSize: '0.84rem' }}>{logsError}</div>}
+      {metricsError && <div role="alert" style={{ padding: '12px 14px', border: '1px solid var(--warning-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Métricas indisponíveis: {metricsError}</div>}
 
       {/* Cards de Métricas */}
       <ModelMetricsCards metrics={metrics} />
