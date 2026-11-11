@@ -78,6 +78,7 @@ class UserCredentialStore:
 
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._dummy_hash = self._hash_password(secrets.token_urlsafe(32))
         with sqlite3.connect(self.database_path, timeout=10) as conn:
             conn.execute("PRAGMA busy_timeout=10000")
             conn.execute(
@@ -146,7 +147,13 @@ class UserCredentialStore:
                 "SELECT * FROM human_users WHERE username = ? COLLATE NOCASE",
                 (username,),
             ).fetchone()
-        if not row or not row["is_active"] or not self._verify_password(password, row["password_hash"]):
+        if not row:
+            self._verify_password(password, self._dummy_hash)
+            return None
+        if not row["is_active"]:
+            self._verify_password(password, row["password_hash"])
+            return None
+        if not self._verify_password(password, row["password_hash"]):
             return None
         return {key: row[key] for key in ("username", "display_name", "role", "is_active", "created_at")}
 
