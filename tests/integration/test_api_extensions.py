@@ -180,9 +180,13 @@ async def test_api_audit_logs():
 
 async def test_api_tools_catalog_and_execution():
 
+    from apps.api.auth import auth_service
+
+    session = auth_service.create_session("admin", "admin", scopes=["*"])
+    headers = {"Authorization": f"Bearer {session.session_id}"}
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as ac:
 
         # 1. Catálogo de ferramentas
 
@@ -208,6 +212,10 @@ async def test_api_tools_catalog_and_execution():
 
         demo_dir.mkdir(parents=True, exist_ok=True)
 
+        db_manager.register_project(
+            "demo_flutter_app", "Demo Flutter App", str(demo_dir.resolve()),
+            owner_user_id="admin",
+        )
         security_core.permission_engine.register_project("demo_flutter_app", str(demo_dir.resolve()))
 
         payload = {
