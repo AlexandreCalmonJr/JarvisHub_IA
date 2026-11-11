@@ -40,6 +40,11 @@ class ResetUserPasswordRequest(BaseModel):
     password: str = Field(..., min_length=12, max_length=256)
 
 
+class ChangeOwnPasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=256)
+    new_password: str = Field(..., min_length=12, max_length=256)
+
+
 class SetUserStatusRequest(BaseModel):
     is_active: bool
 
@@ -257,12 +262,47 @@ async def exchange_bootstrap(
 async def me(principal: Principal = Depends(get_principal)):
     payload = principal.to_dict()
     payload["user_id"] = principal.subject_id
+    environment = __import__("os").environ.get("JARVIS_ENVIRONMENT", __import__("os").environ.get("JARVIS_ENV", "development")).strip().lower()
+    payload["must_change_password"] = bool(
+        principal.kind == "human"
+        and principal.subject_id.casefold() == "admin"
+        and environment not in {"prod", "production"}
+        and auth_service.user_store.authenticate(principal.subject_id, "jarvishub")
+    )
     if principal.session_id:
         session = auth_service.security.sessions.get_session(principal.session_id)
         payload["expires_at"] = session.expires_at if session else None
     else:
         payload["expires_at"] = None
     return payload
+
+
+@router.post("/password/change")
+async def change_own_password(
+    payload: ChangeOwnPasswordRequest,
+    principal: Principal = Depends(get_principal),
+):
+    """Permite ao utilizador autenticado trocar a própria palavra-passe."""
+    if principal.kind != "human" or not principal.session_id or principal.via_admin_token:
+        raise HTTPException(status_code=403, detail="Inicie sessão com a sua conta para alterar a palavra-passe.")
+    user = auth_service.user_store.authenticate(principal.subject_id, payload.current_password)
+    if user is None:
+        raise HTTPException(status_code=400, detail="A palavra-passe atual não confere.")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="A nova palavra-passe deve ser diferente da atual.")
+    if not auth_service.user_store.set_password(principal.subject_id, payload.new_password):
+        raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    for session in auth_service.security.sessions.list_sessions(include_revoked=False):
+        if session.user_id.casefold() == principal.subject_id.casefold() and session.session_id != principal.session_id:
+            auth_service.security.sessions.revoke_session(session.session_id)
+    auth_service.security.audit.record_event(
+        operation="AUTH_OWN_PASSWORD_CHANGED",
+        status="SUCCESS",
+        user_id=principal.display_id,
+        parameters={"session_id": principal.session_id},
+        severity=AuditEventSeverity.WARNING,
+    )
+    return {"status": "password_updated", "must_change_password": False}
 
 
 @router.post("/logout")
