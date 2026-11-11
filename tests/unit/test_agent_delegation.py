@@ -139,20 +139,31 @@ async def test_multi_agent_sequential_execution_in_jarvis_master():
         user_prompt="cria um site simples de cafeteria com index.html e style.css"
     )
 
-    assert res["is_completed"] is True
+    assert res["is_completed"] is False
+    assert res["approval_required"] is True
+    assert res["approval_id"]
     assert res["classified_intent"] == "project_creation"
     assert len(res["selected_agents"]) >= 2
     assert AgentRole.FRONTEND_MOBILE_DEVELOPER.value in res["selected_agents"]
     assert AgentRole.SOFTWARE_ARCHITECT.value in res["selected_agents"]
 
-    # Deve conter os contratos de ambos os agentes na saída sequencial
+    # Os pareceres de Arquitetura, Desenvolvimento e QA são preparados sem escrita.
     outputs = res["agent_outputs"]
     assert len(outputs) >= 2
     roles = [o["agent_role"] for o in outputs]
     assert AgentRole.FRONTEND_MOBILE_DEVELOPER.value in roles
     assert AgentRole.SOFTWARE_ARCHITECT.value in roles
 
-    # Verifica consolidação no sumário final limpo e conversacional
-    summary = res["final_summary"]
-    assert "Website criado com sucesso" in summary
-    assert outputs[1]["agent_role"] == AgentRole.SOFTWARE_ARCHITECT.value
+    # A criação física só acontece após decisão humana vinculada à tarefa.
+    security.approval_engine.approve_request(
+        res["approval_id"],
+        decided_by="test_admin",
+        decision_reason="Aprovado no teste de integração.",
+    )
+    completed = await master.resume_after_approval(
+        task_id=res["task_id"],
+        approved_by="test_admin",
+    )
+    assert completed["is_completed"] is True
+    assert completed["pending_project"] is None
+    assert "criado após aprovação humana" in completed["final_summary"]
