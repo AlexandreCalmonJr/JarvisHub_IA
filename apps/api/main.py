@@ -43,11 +43,22 @@ from apps.api.routers import (
     voice,
 )
 
+# Documentação interativa é opt-in explícito. Em produção (padrão) os endpoints
+# /docs, /redoc e /openapi.json não são sequer registados.
+_api_docs_enabled = os.environ.get("JARVIS_ENABLE_API_DOCS", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
 # Inicialização central do FastAPI
 app = FastAPI(
     title="JARVIS AI HUB 3.0",
-    version="3.0.0",
+    version="3.0.1",
     description="Backend central REST e WebSocket para orquestração de 26 agentes especializados local-first",
+    docs_url="/docs" if _api_docs_enabled else None,
+    redoc_url="/redoc" if _api_docs_enabled else None,
+    openapi_url="/openapi.json" if _api_docs_enabled else None,
 )
 
 DEFAULT_ALLOWED_ORIGINS = [

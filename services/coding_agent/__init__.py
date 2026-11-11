@@ -10,11 +10,13 @@ from .context import build_project_context, detect_project_commands
 from .providers import (
     AnthropicChatProvider,
     ChatProvider,
+    GovernedChatProvider,
     OllamaChatProvider,
     OpenAICompatibleChatProvider,
     ProviderError,
     ResilientChatProvider,
     resolve_chat_provider,
+    resolve_governed_chat_provider,
 )
 from .runtime import CodingAgentRuntime
 from .tools import CodingToolExecutor
@@ -43,6 +45,7 @@ __all__ = [
     "ChatTurn",
     "CodingAgentRuntime",
     "CodingToolExecutor",
+    "GovernedChatProvider",
     "OllamaChatProvider",
     "OpenAICompatibleChatProvider",
     "ProviderError",
@@ -55,4 +58,5 @@ __all__ = [
     "build_project_context",
     "detect_project_commands",
     "resolve_chat_provider",
+    "resolve_governed_chat_provider",
 ]

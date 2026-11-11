@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from packages.contracts.security import AuditEventSeverity
-from services.security_core import ApprovalEngine, AuditTrail
+from services.security_core import ApprovalEngine, AuditTrail, contains_sensitive_data
 
 from .adapter import BaseModelAdapter
 from .types import InferenceRequest, InferenceResponse
@@ -403,6 +403,94 @@ class HybridModelRouter:
             reason="Chamada externa autorizada pela política unificada de inferência.",
         )
         return _ExternalPolicyDecision(True, "", estimated_cost)
+
+    # ------------------------------------------------------------------
+    # Política aplicada aos provedores de chat (Coding Agent / Chat / Autónomo)
+    # ------------------------------------------------------------------
+    def _resolve_chat_candidate(
+        self, provider_name: str, model_name: str | None
+    ) -> _ExternalCandidate | None:
+        """Resolve o destino online usado pelos provedores de chat."""
+        if not (self.online_config.enabled and self.online_adapter):
+            return None
+        rate_in, rate_out = self._rates_for_provider(
+            provider_name or self.online_config.provider_name
+        )
+        return _ExternalCandidate(
+            adapter=self.online_adapter,
+            provider=provider_name or self.online_config.provider_name,
+            route="chat_provider",
+            label=f"chat_provider ({provider_name})",
+            model_name=model_name or self.online_config.default_model,
+            always_override_model=False,
+            cost_per_1k_input=rate_in,
+            cost_per_1k_output=rate_out,
+        )
+
+    async def authorize_chat_egress(
+        self,
+        *,
+        provider_name: str,
+        model_name: str | None,
+        text: str,
+        contains_sensitive: bool | None = None,
+        has_external_data_approval: bool = False,
+        max_tokens: int = 2048,
+    ) -> _ExternalPolicyDecision:
+        """Aplica contenção de sensíveis, orçamento e auditoria a uma chamada de chat.
+
+        Retorna uma decisão com `allowed=False` quando o chamador deve usar
+        exclusivamente o provedor local. Nenhum provedor online pode ser chamado
+        sem passar por este método.
+        """
+        candidate = self._resolve_chat_candidate(provider_name, model_name)
+        if candidate is None:
+            return _ExternalPolicyDecision(True, "local", 0.0)
+        request = InferenceRequest(
+            prompt=text,
+            model_name=model_name or candidate.model_name or "",
+            max_tokens=max_tokens,
+            contains_sensitive_data=(
+                contains_sensitive
+                if contains_sensitive is not None
+                else contains_sensitive_data(text)
+            ),
+        )
+        return await self._authorize_external_call(
+            request, candidate, has_external_data_approval
+        )
+
+    def settle_chat_egress(
+        self,
+        reservation_usd: float,
+        *,
+        provider_name: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        route: str = "chat_provider",
+    ) -> float:
+        """Contabiliza o custo real de uma chamada de chat já concluída."""
+        rate_in, rate_out = self._rates_for_provider(provider_name)
+        cost = self._calculate_cost(prompt_tokens, completion_tokens, rate_in, rate_out)
+        self._settle_budget(reservation_usd, cost)
+        self._audit_event(
+            operation="ONLINE_CHAT_COMPLETED",
+            status="SUCCESS",
+            parameters={
+                "provider": provider_name,
+                "route": route,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "cost_usd": round(cost, 6),
+            },
+            severity=AuditEventSeverity.INFO,
+        )
+        return cost
+
+    def release_chat_egress(self, reservation_usd: float) -> None:
+        """Libera uma reserva de orçamento quando a chamada externa falhou."""
+        if reservation_usd:
+            self._release_budget(reservation_usd)
 
     async def route_inference(
         self,

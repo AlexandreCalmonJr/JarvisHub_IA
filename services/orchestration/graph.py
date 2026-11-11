@@ -12,6 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
 from services.model_runtime import InferenceRequest, ModelManager
 from services.security_core import PermissionDeniedError, SecurityCore
+from services.tool_gateway import ToolExecutionRequest
 
 from .state import TaskState
 from .self_correction import SelfCorrectionEngine

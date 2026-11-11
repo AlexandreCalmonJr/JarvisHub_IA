@@ -31,6 +31,13 @@ def redact_string(text: str) -> str:
     return sanitized
 
 
+def contains_sensitive_data(text: str) -> bool:
+    """Deteta padrões de segredo que exigem contenção antes de egresso externo."""
+    if not isinstance(text, str) or not text:
+        return False
+    return any(pattern.search(text) for pattern in SECRET_PATTERNS)
+
+
 def redact_data(data: dict | list | str | Any) -> Any:
     """Redige recursivamente segredos em dicionários, listas e strings."""
     if isinstance(data, str):

@@ -803,6 +803,173 @@ class ResilientChatProvider(ChatProvider):
                 raise ProviderError(f"Streaming interrompido pelo provedor: {exc}") from exc
 
 
+class GovernedChatProvider(ResilientChatProvider):
+    """Provedor de chat que só permite egresso externo via HybridModelRouter.
+
+    Reaproveita o failover do :class:`ResilientChatProvider`, mas toda a chamada
+    ao provedor primário passa antes pela política central (dados sensíveis,
+    orçamento e auditoria). Se a política negar, o pedido é servido localmente.
+    """
+
+    def __init__(
+        self,
+        primary: ChatProvider,
+        fallback: ChatProvider,
+        router: Any,
+        has_external_data_approval: bool = False,
+    ):
+        super().__init__(primary=primary, fallback=fallback)
+        self.router = router
+        self.has_external_data_approval = has_external_data_approval
+        self.name = f"governed({self.name})"
+
+    @staticmethod
+    def _turns_text(turns: list[ChatTurn]) -> str:
+        return "\n".join(turn.content or "" for turn in turns)
+
+    async def complete(
+        self,
+        *,
+        turns: list[ChatTurn],
+        tools: list[ToolSpec],
+        model: str | None,
+        temperature: float,
+        max_tokens: int,
+        timeout_seconds: float,
+    ) -> ProviderReply:
+        text = self._turns_text(turns)
+        decision = await self.router.authorize_chat_egress(
+            provider_name=self.primary.name,
+            model_name=model,
+            text=text,
+            has_external_data_approval=self.has_external_data_approval,
+            max_tokens=max_tokens,
+        )
+        if not decision.allowed:
+            logger.warning(
+                "Egresso externo negado (%s). Executando em provedor local '%s'.",
+                decision.reason,
+                self.fallback.name,
+            )
+            return await self.fallback.complete(
+                turns=turns,
+                tools=tools,
+                model=self.fallback.default_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+            )
+
+        try:
+            reply = await self.primary.complete(
+                turns=turns,
+                tools=tools,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+            )
+        except Exception as exc:
+            self.router.release_chat_egress(decision.reservation_usd)
+            logger.warning(
+                "Provedor primário '%s' falhou (%s). Failover local para '%s'.",
+                self.primary.name,
+                exc,
+                self.fallback.name,
+            )
+            return await self.fallback.complete(
+                turns=turns,
+                tools=tools,
+                model=self.fallback.default_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+            )
+
+        prompt_tokens = reply.prompt_tokens or max(1, len(text) // 4)
+        completion_tokens = reply.completion_tokens or max(1, len(reply.content) // 4)
+        self.router.settle_chat_egress(
+            decision.reservation_usd,
+            provider_name=self.primary.name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        return reply
+
+    async def stream(
+        self,
+        *,
+        turns: list[ChatTurn],
+        tools: list[ToolSpec],
+        model: str | None,
+        temperature: float,
+        max_tokens: int,
+        timeout_seconds: float,
+    ) -> AsyncIterator[str]:
+        text = self._turns_text(turns)
+        decision = await self.router.authorize_chat_egress(
+            provider_name=self.primary.name,
+            model_name=model,
+            text=text,
+            has_external_data_approval=self.has_external_data_approval,
+            max_tokens=max_tokens,
+        )
+        if not decision.allowed:
+            async for chunk in self.fallback.stream(
+                turns=turns,
+                tools=tools,
+                model=self.fallback.default_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+            ):
+                yield chunk
+            return
+
+        emitted_any = False
+        emitted_chars = 0
+        try:
+            async for chunk in self.primary.stream(
+                turns=turns,
+                tools=tools,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+            ):
+                emitted_any = True
+                emitted_chars += len(chunk)
+                yield chunk
+        except Exception as exc:
+            self.router.release_chat_egress(decision.reservation_usd)
+            if emitted_any:
+                logger.warning("Streaming externo interrompido: %s", exc)
+                return
+            logger.warning(
+                "Provedor primário '%s' falhou no streaming (%s). Failover local.",
+                self.primary.name,
+                exc,
+            )
+            async for chunk in self.fallback.stream(
+                turns=turns,
+                tools=tools,
+                model=self.fallback.default_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+            ):
+                yield chunk
+            return
+
+        self.router.settle_chat_egress(
+            decision.reservation_usd,
+            provider_name=self.primary.name,
+            prompt_tokens=max(1, len(text) // 4),
+            completion_tokens=max(1, emitted_chars // 4),
+            route="chat_stream_estimated",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Fábrica
 # ---------------------------------------------------------------------------
@@ -848,3 +1015,21 @@ def resolve_chat_provider(
         )
 
     return ResilientChatProvider(primary=primary, fallback=local)
+
+
+def resolve_governed_chat_provider(
+    online_config: Any | None,
+    router: Any,
+    local_provider: ChatProvider | None = None,
+    has_external_data_approval: bool = False,
+) -> ChatProvider:
+    """Resolve o provedor de chat e aplica a política central do HybridRouter."""
+    provider = resolve_chat_provider(online_config, local_provider)
+    if isinstance(provider, ResilientChatProvider) and router is not None:
+        return GovernedChatProvider(
+            primary=provider.primary,
+            fallback=provider.fallback,
+            router=router,
+            has_external_data_approval=has_external_data_approval,
+        )
+    return provider

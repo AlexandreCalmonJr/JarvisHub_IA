@@ -3,64 +3,110 @@ import json
 import logging
 import re
 import time
+import uuid
 
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 
+from apps.api.deps import chat_runtime, db_manager, jarvis_master
 from apps.api.schemas import ChatRequest
-from apps.api.deps import chat_runtime, jarvis_master, db_manager
 from services.coding_agent import ChatRunConfig, ProviderError
 from services.orchestration.state import TaskState
 
 logger = logging.getLogger("jarvis.api.chat")
 router = APIRouter(tags=["chat"])
 
-# Pedidos que continuam no orquestrador determinístico (escrita, aprovação,
-# criação de projeto e mesa redonda). O chat conversacional usa o runtime real.
+# Ações que exigem a governança do orquestrador/Coding Agent: escrita em disco,
+# execução de comandos, aprovações, rollback, auditoria e mesa redonda.
 ACTION_PATTERNS = [
-    r"\bcri(?:a|e|ar)\s+(?:um\s+)?(?:site|projeto|app|aplicativo|p[áa]gina|landing)\b",
+    # Criação de projetos e artefatos persistidos.
+    r"\bcri(?:a|e|ar)\s+(?:(?:um|uma|o|a|os|as)\s+)?(?:nov[oa]s?\s+)?(?:sites?|projetos?|apps?|aplicativos?|p[áa]ginas?|landings?|arquivos?|diret[óo]rios?|pastas?|m[óo]dulos?|componentes?|scripts?|testes?)\b",
     r"\bnovo\s+projeto\b",
+    # Alteração de arquivos/código.
     r"\b(?:editar|edite|alterar|altere|adicionar|adicione|corrigir|corrija|implementar|implemente|modificar|modifique|mudar|mude|trocar|troque|atualizar|atualize|refatorar|refatore)\b",
+    r"\b(?:fa[çc]a|realize|realizar|aplique|aplicar|preciso\s+de|quero)\s+(?:(?:a|o|uma|um)\s+)?(?:altera[çc][ãa]o|mudan[çc]a|implementa[çc][ãa]o|corre[çc][ãa]o|refatora[çc][ãa]o|modifica[çc][ãa]o)\b",
+    r"\b(?:remover|remova|apagar|apague|deletar|delete)\s+(?:(?:o|a|um|uma|os|as)\s+)?(?:arquivos?|diret[óo]rios?|pastas?|projetos?|m[óo]dulos?|componentes?|c[óo]digos?)\b",
+    # Execução de comandos.
+    r"\b(?:executar|execute|rodar|rode|subir|suba|iniciar|inicie)\s+(?:(?:o|a|um|uma|os|as)\s+)?(?:aplica[çc][ãa]o|servidor|servi[çc]o|deploy|container|comandos?|scripts?|terminal|shell|testes?|build|pipeline|migra[çc][ãa]o)\b",
+    r"\b(?:fa[çc]a|realize|executar|execute|rodar|rode|subir|suba)\s+(?:o\s+|um\s+)?deploy\b",
+    r"\bexecu[çc][ãa]o\s+de\s+comandos?\b",
+    r"\b(?:no|pelo|via|usando)\s+(?:o\s+)?terminal\b",
+    r"\blinha\s+de\s+comando\b",
+    r"\b(?:npm|pnpm|yarn|pip|pip3|poetry|git|docker|kubectl|bash|powershell|cmd)\s+(?:install|run|build|test|add|commit|push|pull|clone|compose|exec)\b",
+    # Aprovações humanas e rollback.
+    r"\b(?:aprovar|aprove|autorizar|autorize|rejeitar|rejeite)\b",
+    r"\baprova[çc][ãa]o\b|\baprova[çc][õo]es\b",
     r"\brollback\b|\bdesfazer\b",
+    # Mesa redonda multiagente e auditoria operacional.
     r"\bmesa\s+redonda\b|\bdebate\b|\bconsenso\b",
     r"\bauditar\b|\bauditoria\b",
     r"/rollback|/debate|/audit",
 ]
 
+# Planejamento é diálogo: pedir um plano não deve disparar escrita em disco.
+PLANNING_PATTERNS = [
+    r"^\s*(?:planeje|planejar|planejamento|elabore|elaborar)\b",
+    r"^\s*(?:fa[çc]a|crie|monte|prepare|desenvolva)\s+(?:um\s+|o\s+)?(?:plano|planejamento|roadmap|estrat[ée]gia)\b",
+    r"^\s*(?:qual|quais|como)\b.*\b(?:plano|planejamento|roadmap|estrat[ée]gia)\b",
+]
+
+# Aberturas conversacionais: perguntas e explicações não são comandos de disco.
+DIALOGUE_PREFIXES = (
+    "podemos",
+    "como",
+    "é possível",
+    "e possivel",
+    "seria possível",
+    "seria possivel",
+    "o que acha de",
+    "qual a melhor forma",
+    "você acha",
+    "voce acha",
+    "dá para",
+    "da para",
+    "você pode explicar",
+    "voce pode explicar",
+    "explique",
+    "explica",
+    "me explique",
+    "me explica",
+    "o que é",
+    "o que e",
+    "o que são",
+    "o que sao",
+    "descreva",
+    "descreve",
+    "fale sobre",
+    "conte sobre",
+    "por que",
+    "porque",
+)
+
 _reachability = {"checked_at": 0.0, "ok": False, "provider": ""}
 
 
 def _looks_actionable(prompt: str) -> bool:
+    """Classifica se o pedido exige governança do orquestrador/Coding Agent."""
     lowered = prompt.lower().strip()
 
-    # Perguntas exploratórias ou propostas com interrogação são tratadas como diálogo
-    # e planejamento conversacional no runtime inteligente, e NÃO como comandos cegos de disco.
     if lowered.endswith("?") or any(
-        lowered.startswith(q)
-        for q in (
-            "podemos",
-            "como",
-            "é possível",
-            "e possivel",
-            "seria possível",
-            "seria possivel",
-            "o que acha de",
-            "qual a melhor forma",
-            "você acha",
-            "voce acha",
-            "dá para",
-            "da para",
-            "você pode explicar",
-            "voce pode explicar",
-        )
+        lowered.startswith(q) for q in DIALOGUE_PREFIXES
     ):
+        return False
+
+    if any(re.search(pattern, lowered, re.IGNORECASE) for pattern in PLANNING_PATTERNS):
         return False
 
     return any(re.search(pattern, lowered, re.IGNORECASE) for pattern in ACTION_PATTERNS)
 
 
 async def _provider_reachable() -> bool:
-    """Verifica (com cache curto) se o provedor de chat pode responder agora."""
+    """Verifica (com cache curto) se o provedor de chat pode responder agora.
+
+    Reutiliza a fábrica real do runtime. Para o Ollama (primário ou fallback
+    resiliente) sonda ``/api/tags``; para provedores online configurados a
+    presença de credencial é o sinal disponível sem custo de inferência.
+    """
     now = time.monotonic()
     if now - _reachability["checked_at"] < 15.0:
         return bool(_reachability["ok"])
@@ -72,20 +118,43 @@ async def _provider_reachable() -> bool:
         provider_name = getattr(provider, "name", "unknown")
         import httpx
 
-        # Se há Ollama presente como primário ou fallback resiliente, testa reachability local
-        base_url = getattr(provider, "base_url", None)
-        if not base_url and hasattr(provider, "fallback"):
-            base_url = getattr(provider.fallback, "base_url", None)
-        if not base_url:
-            base_url = "http://127.0.0.1:11434"
+        # Testa o Ollama quando ele é o provedor ou o fallback do provedor resiliente.
+        local_candidates = []
+        if hasattr(provider, "fallback"):
+            local_candidates.append(provider.fallback)
+        local_candidates.append(provider)
 
-        try:
-            async with httpx.AsyncClient(timeout=1.5) as client:
-                response = await client.get(f"{base_url}/api/tags")
-                if response.status_code == 200:
-                    ok = True
-        except Exception:
-            ok = bool(getattr(provider, "api_key", ""))
+        for candidate in local_candidates:
+            base_url = getattr(candidate, "base_url", None)
+            candidate_name = str(getattr(candidate, "name", "")).lower()
+            if not base_url:
+                continue
+            is_local = any(
+                host in base_url
+                for host in ("127.0.0.1", "localhost", "0.0.0.0", "[::1]")
+            )
+            # Evita sondar endpoints online em um caminho que não existe.
+            if (
+                "ollama" not in candidate_name
+                and "11434" not in base_url
+                and not is_local
+            ):
+                continue
+            try:
+                async with httpx.AsyncClient(timeout=1.5) as client:
+                    response = await client.get(f"{base_url}/api/tags")
+                    if response.status_code == 200:
+                        ok = True
+                        break
+            except Exception as exc:
+                logger.debug("Sondagem de reachability falhou em %s: %s", base_url, exc)
+                continue
+
+        if not ok:
+            primary = getattr(provider, "primary", provider)
+            ok = bool(
+                getattr(primary, "api_key", "") or getattr(provider, "api_key", "")
+            )
     except Exception as exc:
         logger.info("Provedor de chat indisponível; usando orquestrador: %s", exc)
         ok = False
@@ -95,9 +164,24 @@ async def _provider_reachable() -> bool:
 
 
 async def _resolve_engine(request: ChatRequest) -> str:
+    """Resolve o motor respeitando o contrato de ``ChatRequest``.
+
+    - ``orchestrator``: sempre o JARVIS Maestro.
+    - ``agent``: sempre o runtime conversacional (com fallback em caso de falha).
+    - ``auto``: conversa/planejamento vão para o agente quando o provedor está
+      disponível; ações críticas permanecem no orquestrador.
+    """
     if request.engine in {"agent", "orchestrator"}:
         return request.engine
-    # Por padrão, todas as requisições do chat passam pelo JARVIS Maestro Multi-Agente (26 Especialistas)
+
+    if _looks_actionable(request.prompt):
+        logger.info("Modo auto: ação crítica detectada; usando orquestrador.")
+        return "orchestrator"
+
+    if await _provider_reachable():
+        return "agent"
+
+    logger.info("Modo auto: provedor conversacional indisponível; usando orquestrador.")
     return "orchestrator"
 
 
@@ -130,13 +214,18 @@ def _persist_turn(
 @router.post("/api/v1/chat")
 async def chat_endpoint(request: ChatRequest):
     engine = await _resolve_engine(request)
+    # Reaproveita a mesma sessão no fallback do agente para o orquestrador,
+    # evitando histórico duplicado ou sessões divergentes.
+    session_id = request.session_id
+    if engine == "agent" and not session_id:
+        session_id = f"chat-{uuid.uuid4().hex[:10]}"
     agent_persisted = False
     if engine == "agent":
         try:
             return await chat_runtime.complete(
                 ChatRunConfig(
                     prompt=request.prompt,
-                    session_id=request.session_id or "",
+                    session_id=session_id or "",
                     project_id=request.project_id,
                     model=request.model,
                 )
@@ -148,7 +237,7 @@ async def chat_endpoint(request: ChatRequest):
     try:
         result: TaskState = await jarvis_master.execute_task(
             user_prompt=request.prompt,
-            session_id=request.session_id,
+            session_id=session_id,
             project_id=request.project_id,
         )
         summary = result.get("final_summary", "") if isinstance(result, dict) else result.final_summary
@@ -158,7 +247,7 @@ async def chat_endpoint(request: ChatRequest):
             request.project_id,
             request.prompt,
             summary,
-            persist_user=not (agent_persisted and request.session_id),
+            persist_user=not agent_persisted,
         )
         try:
             if request.project_id:
@@ -207,12 +296,9 @@ async def chat_stream_endpoint(request: ChatRequest):
                 if event.get("type") == "start":
                     runtime_session_id = event.get("session_id") or runtime_session_id
                 if event.get("type") == "error" and not emitted_token:
-                    # Em modo auto, provedor indisponível (chave inválida, offline) não
-                    # deve quebrar o chat: seguimos pelo orquestrador e reaproveitamos
-                    # a sessão já persistida pelo runtime.
-                    if request.engine != "auto":
-                        yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
-                        return
+                    # Provedor indisponível (chave inválida, offline) não deve
+                    # quebrar o chat: seguimos pelo orquestrador e reaproveitamos
+                    # a sessão já persistida pelo runtime, sem duplicar o turno.
                     logger.info(
                         "Chat conversacional indisponível (%s); usando orquestrador.",
                         event.get("error"),

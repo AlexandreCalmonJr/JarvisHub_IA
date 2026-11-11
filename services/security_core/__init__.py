@@ -20,7 +20,7 @@ from .pipeline_types import (
 from .policy_generator import SecurityPolicyGenerator
 from .qa_security_pipeline import QASecurityPipeline
 from .red_team_sandbox import RedTeamSandboxService
-from .redaction import redact_data, redact_string
+from .redaction import contains_sensitive_data, redact_data, redact_string
 from .session_manager import SessionManager, UserRole, UserSession
 
 
@@ -90,6 +90,7 @@ __all__ = [
     "UserRole",
     "UserSession",
     "cyber_shield",
+    "contains_sensitive_data",
     "redact_data",
     "redact_string",
 ]

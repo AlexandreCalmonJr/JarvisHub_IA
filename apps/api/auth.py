@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import secrets
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -242,15 +243,61 @@ def required_permission(method: str, path: str) -> str | None:
     return None
 
 
+def write_private_file(path: Path, content: str) -> Path:
+    """Grava um segredo num arquivo com permissões restritas (best-effort por SO).
+
+    O valor nunca é enviado para stdout/logs. No Windows, remove a herança de ACL
+    e concede acesso apenas ao utilizador atual. Em POSIX, aplica modo 0600.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(content.rstrip("\n") + "\n", encoding="utf-8")
+    try:
+        os.chmod(tmp_path, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp_path, path)
+    if os.name == "nt":
+        username = os.environ.get("USERNAME") or os.environ.get("USER")
+        if username:
+            try:
+                subprocess.run(
+                    [
+                        "icacls",
+                        str(path),
+                        "/inheritance:r",
+                        "/grant:r",
+                        f"{username}:F",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    timeout=10,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
+    return path
+
+
 class AuthService:
     def __init__(self, security, auth_dir: Path):
         self.security = security
         self.auth_dir = Path(auth_dir)
         self.auth_dir.mkdir(parents=True, exist_ok=True)
         self.admin_store = AdminCredentialStore(self.auth_dir / "admin.json")
+        self.admin_token_path = self.auth_dir / "admin_token.txt"
+        self.bootstrap_token_path = self.auth_dir / "bootstrap_token.txt"
         self._bootstrap_tokens: dict[str, float] = {}
         self._attempts: dict[str, list[float]] = {}
         self._ensure_admin_credential()
+        # Emite um bootstrap token de uso único no arranque, entregue apenas por
+        # arquivo restrito. O launcher lê o arquivo e troca-o por uma sessão.
+        if os.environ.get("JARVIS_ISSUE_BOOTSTRAP", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+        }:
+            self.issue_bootstrap_token()
 
     # ------------------------------------------------------------------
     # Bootstrap / admin
@@ -263,21 +310,35 @@ class AuthService:
             return
         if not self.admin_store.has_credential:
             token = self.admin_store.generate_token()
+            path = write_private_file(self.admin_token_path, token)
             logger.warning(
-                "Credencial de administrador criada. Guarde este token num local seguro: %s", token
-            )
-            print(
-                "\n[JARVIS] Credencial de administrador criada (guarde-a):\n"
-                f"[JARVIS] {token}\n"
-                "[JARVIS] Para regenerar: python -m apps.api.auth_cli reset-admin\n"
+                "Credencial de administrador criada. O token foi gravado em arquivo "
+                "restrito (%s) e nunca é impresso. Rode "
+                "'python -m apps.api.auth_cli rotate-admin' para o rotacionar.",
+                path,
             )
 
     def verify_admin_token(self, token: str) -> bool:
         return self.admin_store.verify(token)
 
-    def issue_bootstrap_token(self, ttl_seconds: int = BOOTSTRAP_TTL_SECONDS) -> str:
+    def rotate_admin_token(self) -> Path:
+        """Gera um novo token admin, substitui o hash e entrega-o por arquivo restrito."""
+        token = self.admin_store.generate_token()
+        return write_private_file(self.admin_token_path, token)
+
+    def issue_bootstrap_token(
+        self,
+        ttl_seconds: int | None = None,
+        persist: bool = True,
+    ) -> str:
+        ttl = ttl_seconds or int(os.environ.get("JARVIS_BOOTSTRAP_TTL", "600"))
         token = f"jrv_boot_{secrets.token_urlsafe(32)}"
-        self._bootstrap_tokens[token] = time.time() + ttl_seconds
+        self._bootstrap_tokens[token] = time.time() + ttl
+        if persist:
+            path = write_private_file(self.bootstrap_token_path, token)
+            logger.info(
+                "Bootstrap token de uso único emitido em %s (validade: %ss).", path, ttl
+            )
         return token
 
     def exchange_bootstrap_token(self, token: str) -> bool:

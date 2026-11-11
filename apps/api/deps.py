@@ -14,7 +14,7 @@ from services.coding_agent import (
     ChatAgentRuntime,
     CodingAgentRuntime,
     CodingToolExecutor,
-    resolve_chat_provider,
+    resolve_governed_chat_provider,
 )
 from services.design_studio import DesignStudioService
 from services.engineering_intelligence import EngineeringIntelligenceService
@@ -337,12 +337,16 @@ coding_runtime = CodingAgentRuntime(
     tools=coding_tools,
     broker=coding_broker,
     db_manager=db_manager,
-    provider_factory=lambda: resolve_chat_provider(hybrid_router.online_config),
+    provider_factory=lambda: resolve_governed_chat_provider(
+        hybrid_router.online_config, hybrid_router
+    ),
 )
 
 # Chat conversacional com memória e streaming real (mesma camada de provedores)
 chat_runtime = ChatAgentRuntime(
-    provider_factory=lambda: resolve_chat_provider(hybrid_router.online_config),
+    provider_factory=lambda: resolve_governed_chat_provider(
+        hybrid_router.online_config, hybrid_router
+    ),
     db_manager=db_manager,
     workspace_service=workspace_service,
 )
@@ -356,7 +360,9 @@ autonomous_agent_runtime = AutonomousAgentRuntime(
     db_manager=db_manager,
     agent_registry=agent_registry,
     skills_manager=skills_catalog,
-    provider_factory=lambda: resolve_chat_provider(hybrid_router.online_config),
+    provider_factory=lambda: resolve_governed_chat_provider(
+        hybrid_router.online_config, hybrid_router
+    ),
 )
 
 # Servidores MCP opcionais (descoberta sob demanda em /api/v1/mcp/reload)
