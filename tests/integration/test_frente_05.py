@@ -68,6 +68,9 @@ async def test_frente_05_dockerize_project():
     proj_dir.mkdir(parents=True, exist_ok=True)
     (proj_dir / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8")
     (proj_dir / "requirements.txt").write_text("fastapi\nuvicorn\n", encoding="utf-8")
+    db_manager.register_project(
+        proj_id, "Front 5 Docker Test", str(proj_dir), owner_user_id="admin"
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
