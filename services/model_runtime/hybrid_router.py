@@ -189,6 +189,9 @@ class HybridModelRouter:
         A resolução não concede autorização: toda chamada externa ainda passa por
         `_authorize_external_call`, que aplica a mesma política aos dois caminhos.
         """
+        if getattr(request, "force_local", False):
+            return None
+
         req_key_id = getattr(request, "key_id", None)
         if req_key_id:
             try:
