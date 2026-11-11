@@ -364,8 +364,11 @@ async def open_workspace_folder_endpoint(
 
 
 @router.post("/api/v1/workspace/open-root")
-async def open_workspace_root_endpoint():
-    """Abre o diretório geral de workspace no Windows Explorer."""
+async def open_workspace_root_endpoint(
+    principal: Principal = Depends(get_principal),
+):
+    """Abre o diretório geral de workspace apenas para utilizadores autenticados."""
+    _require_human(principal)
     try:
         path = workspace_service.open_root_folder()
         return {"status": "opened", "path": path}

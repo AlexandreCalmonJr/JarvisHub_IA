@@ -47,7 +47,7 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
     notify('Abrindo diretório geral de workspace no Windows Explorer...', 'info');
     try {
       const res = await openWorkspaceRoot();
-      notify(`Pasta geral aberta no Explorer: ${res?.path || 'workspace/'}`, 'success');
+      notify('Pasta geral do workspace aberta no computador do servidor.', 'success');
     } catch (e: any) {
       notify(`Erro ao abrir pasta de workspaces no Explorer: ${e.message}`, 'error');
     } finally {
