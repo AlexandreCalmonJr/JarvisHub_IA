@@ -154,17 +154,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleClearHistory = () => {
     if (window.confirm('Tem certeza de que deseja apagar todo o histórico de conversas locais? Esta ação não pode ser desfeita.')) {
-      const accountSuffix = getAccountStorageKey('__scope_probe__').slice('__scope_probe__'.length);
-      const fixedKeys = new Set([
-        getAccountStorageKey('jarvis_chat_messages_v1'),
-        getAccountStorageKey('jarvis_chat_session_id_v1'),
-        getAccountStorageKey('jarvis_sessions_catalog_v1'),
-      ]);
-      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-        const key = localStorage.key(index);
-        if (key && (fixedKeys.has(key) || (key.startsWith('jarvis_session_messages_') && key.endsWith(accountSuffix)))) {
-          localStorage.removeItem(key);
+      try {
+        const accountSuffix = getAccountStorageKey('__scope_probe__').slice('__scope_probe__'.length);
+        const fixedKeys = new Set([
+          getAccountStorageKey('jarvis_chat_messages_v1'),
+          getAccountStorageKey('jarvis_chat_session_id_v1'),
+          getAccountStorageKey('jarvis_sessions_catalog_v1'),
+        ]);
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+          const key = localStorage.key(index);
+          if (key && (fixedKeys.has(key) || (key.startsWith('jarvis_session_messages_') && key.endsWith(accountSuffix)))) {
+            localStorage.removeItem(key);
+          }
         }
+      } catch {
+        notify('O navegador não permitiu limpar o armazenamento local.', 'error');
+        return;
       }
       notify('Histórico local desta conta limpo com sucesso.', 'info');
       setTimeout(() => window.location.reload(), 600);
@@ -470,7 +475,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               lineHeight: 1.5,
             }}
           >
-            <strong style={{ color: 'var(--text-primary)' }}>Cofre privado por conta em implementação</strong>
+            <strong style={{ color: 'var(--text-primary)' }}>Gestão de credenciais no Gestor de Modelos</strong>
             <p style={{ margin: '8px 0 0' }}>
               As credenciais de providers devem ser geridas no módulo Gestor de Modelos, na área Cofre de Chaves, quando disponível para o seu perfil de acesso. Não coloque tokens ou palavras-passe nas instruções personalizadas.
             </p>
