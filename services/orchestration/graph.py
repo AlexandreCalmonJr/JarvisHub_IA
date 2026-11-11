@@ -286,6 +286,23 @@ def create_master_graph(
         ):
             intent = "code_explanation"
             agents = [AgentRole.SOFTWARE_ARCHITECT.value]
+        elif len(prompt.split()) >= 6 and any(
+            marker in prompt
+            for marker in (
+                "analise", "análise", "analisar", "investigue", "investigar",
+                "resolver", "solucionar", "diagnosticar", "estratégia",
+                "planejamento", "decisão", "compare", "avaliar",
+                "problema", "problemas", "causa", "causas",
+            )
+        ):
+            # Problemas abertos e decisões complexas convocam a mesa redonda
+            # sem exigir que o utilizador conheça comandos como /debate.
+            intent = "multi_agent_consensus"
+            agents = [
+                AgentRole.SOFTWARE_ARCHITECT.value,
+                AgentRole.CYBERSECURITY_ENGINEER.value,
+                AgentRole.CODE_REVIEWER.value,
+            ]
         else:
             intent = "conversation"
             agents = [AgentRole.JARVIS_MASTER.value]
