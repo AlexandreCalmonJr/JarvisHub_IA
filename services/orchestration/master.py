@@ -153,6 +153,13 @@ class JarvisMaster:
                 )
 
             created = self.workspace_service.scaffold_project(**pending_project)
+            if self.db_manager is not None and owner_user_id is not None:
+                self.db_manager.register_project(
+                    project_id=project_id,
+                    name=str(pending_project.get("name") or project_id),
+                    root_path=str(project_root),
+                    owner_user_id=owner_user_id,
+                )
             self.security_core.audit.record_event(
                 operation="WORKSPACE_PROJECT_CREATE_APPROVED",
                 status="SUCCESS",
