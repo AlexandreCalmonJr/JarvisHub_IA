@@ -94,6 +94,9 @@ async def get_inference_telemetry(
         "model_performance": telemetry_store.performance_by_model_for_owner(
             principal.subject_id
         ),
+        "model_selections": telemetry_store.list_model_selections_for_owner(
+            principal.subject_id
+        ),
     }
 
 
