@@ -114,3 +114,35 @@ def test_approval_queries_and_consumption_are_scoped_to_owner(tmp_path):
     assert db.consume_approved_approval(
         "approval-a", owner_user_id="account-a"
     ) is True
+
+
+def test_knowledge_vault_is_private_per_account_even_for_same_filename(tmp_path):
+    db = DatabaseManager(db_path=str(tmp_path / "knowledge.db"))
+    db.insert_knowledge_chunks(
+        doc_name="manual.pdf", file_type="PDF", category="private",
+        chunks=["alpha private document"], owner_user_id="account-a",
+    )
+    db.insert_knowledge_chunks(
+        doc_name="manual.pdf", file_type="PDF", category="private",
+        chunks=["beta private document"], owner_user_id="account-b",
+    )
+
+    assert [row["content"] for row in db.search_knowledge_vault(
+        "private", owner_user_id="account-a"
+    )] == ["alpha private document"]
+    assert [row["content"] for row in db.search_knowledge_vault(
+        "private", owner_user_id="account-b"
+    )] == ["beta private document"]
+    assert [row["doc_name"] for row in db.list_knowledge_documents(
+        owner_user_id="account-a"
+    )] == ["manual.pdf"]
+
+    assert db.delete_knowledge_document(
+        "manual.pdf", owner_user_id="account-a"
+    ) is True
+    assert db.delete_knowledge_document(
+        "manual.pdf", owner_user_id="account-a"
+    ) is False
+    assert db.search_knowledge_vault(
+        "private", owner_user_id="account-b"
+    )[0]["content"] == "beta private document"
