@@ -44,6 +44,7 @@ from services.model_runtime.huggingface_service import (
     search_huggingface_hub,  # noqa: F401
     stream_ollama_pull,  # noqa: F401
 )
+from services.observability.telemetry_store import SqliteTelemetryStore
 from services.observability import (
     attach_server_logging,  # noqa: F401
     inference_tracker,  # noqa: F401
@@ -197,11 +198,13 @@ hybrid_router = HybridModelRouter(
     audit_trail=security_core.audit,
     key_vault=key_vault,
 )
+telemetry_store = SqliteTelemetryStore(db_path=data_dir / "telemetry.db")
 model_manager = ModelManager(
     adapter=OllamaAdapter(),
     kill_switch=security_core.kill_switch,
     audit_trail=security_core.audit,
     hybrid_router=hybrid_router,
+    telemetry_store=telemetry_store,
 )
 db_manager = DatabaseManager(db_path=str(data_dir / "jarvis.db"))
 security_core.set_db_manager(db_manager)
