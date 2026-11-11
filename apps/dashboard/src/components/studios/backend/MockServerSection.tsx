@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Clock,
   Play,
+  AlertCircle,
 } from 'lucide-react';
 import {
   fetchMockEndpoints,
@@ -17,6 +18,8 @@ import {
 export const MockServerSection: React.FC = () => {
   const [mockEndpoints, setMockEndpoints] = useState<any[]>([]);
   const [mockLoading, setMockLoading] = useState(false);
+  const [mockError, setMockError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showMockModal, setShowMockModal] = useState(false);
   const [newMockName, setNewMockName] = useState('');
   const [newMockMethod, setNewMockMethod] = useState('GET');
@@ -38,9 +41,10 @@ export const MockServerSection: React.FC = () => {
     setMockLoading(true);
     try {
       const data = await fetchMockEndpoints();
-      setMockEndpoints(data || []);
-    } catch (e) {
-      console.error(e);
+      setMockEndpoints(data);
+      setMockError(null);
+    } catch (e: any) {
+      setMockError(e?.message || 'Não foi possível carregar os endpoints simulados.');
     } finally {
       setMockLoading(false);
     }
@@ -70,19 +74,23 @@ export const MockServerSection: React.FC = () => {
       });
 
       setShowMockModal(false);
-      loadMockEndpoints();
+      await loadMockEndpoints();
     } catch (err: any) {
-      alert(`Erro ao salvar mock endpoint: ${err.message}`);
+      setMockError(`Erro ao salvar mock endpoint: ${err.message}`);
     }
   };
 
   const handleDeleteMock = async (id: string) => {
-    if (!window.confirm('Deseja excluir este endpoint simulado?')) return;
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
     try {
       await deleteMockEndpoint(id);
-      loadMockEndpoints();
+      setConfirmDeleteId(null);
+      await loadMockEndpoints();
     } catch (err: any) {
-      alert(`Erro ao excluir: ${err.message}`);
+      setMockError(`Erro ao excluir endpoint: ${err.message}`);
     }
   };
 
@@ -92,7 +100,7 @@ export const MockServerSection: React.FC = () => {
     try {
       const cleanPath = path.startsWith('/') ? path : `/${path}`;
       const url = `/api/v1/mock${cleanPath}`;
-      const res = await fetch(url, { method });
+      const res = await fetch(url, { method, credentials: 'include' });
       const durationMs = Math.round(performance.now() - start);
       const body = await res.json().catch(() => ({}));
       setTestResult({
@@ -126,7 +134,7 @@ export const MockServerSection: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span className="badge badge-info">127.0.0.1 Blindado</span>
+          <span className="badge badge-info">Isolado por conta</span>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             Roteador coringa ativo em <code>/api/v1/mock/*</code>
           </span>
@@ -153,6 +161,14 @@ export const MockServerSection: React.FC = () => {
         </div>
       </div>
 
+      {mockError && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--text-primary)' }}>
+          <AlertCircle size={16} color="#f87171" />
+          <span style={{ flex: 1, fontSize: '0.84rem' }}>{mockError}</span>
+          <button className="btn btn-ghost" onClick={loadMockEndpoints} disabled={mockLoading}>Tentar novamente</button>
+        </div>
+      )}
+
       {/* Lista de Mock Endpoints */}
       <div
         style={{
@@ -162,7 +178,9 @@ export const MockServerSection: React.FC = () => {
           overflow: 'hidden',
         }}
       >
-        {mockEndpoints.length === 0 ? (
+        {mockLoading && mockEndpoints.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>Carregando endpoints...</div>
+        ) : mockEndpoints.length === 0 && !mockError ? (
           <div
             style={{
               padding: '40px 20px',
@@ -260,13 +278,19 @@ export const MockServerSection: React.FC = () => {
                     Testar Rota
                   </button>
 
+                  {confirmDeleteId === ep.id && (
+                    <>
+                      <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>Excluir este mock?</span>
+                      <button className="btn btn-ghost" onClick={() => setConfirmDeleteId(null)} style={{ padding: '4px 8px' }}>Cancelar</button>
+                    </>
+                  )}
                   <button
                     onClick={() => handleDeleteMock(ep.id)}
                     className="btn btn-ghost"
                     style={{ color: '#ef4444', padding: '6px' }}
-                    title="Excluir endpoint simulado"
+                    title={confirmDeleteId === ep.id ? 'Confirmar exclusão' : 'Excluir endpoint simulado'}
                   >
-                    <Trash2 size={15} />
+                    {confirmDeleteId === ep.id ? 'Confirmar' : <Trash2 size={15} />}
                   </button>
                 </div>
               </div>
