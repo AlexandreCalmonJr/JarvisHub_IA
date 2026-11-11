@@ -597,7 +597,7 @@ def create_master_graph(
                 timeout_seconds=20.0,
                 task_id=state.get("task_id"),
                 owner_user_id=state.get("owner_user_id"),
-agent_role=arch_role.value,
+                agent_role=arch_role.value,
             )
             arch_p_tokens = 35
             arch_c_tokens = 110
@@ -656,7 +656,7 @@ agent_role=arch_role.value,
                     timeout_seconds=20.0,
                     task_id=state.get("task_id"),
                     owner_user_id=state.get("owner_user_id"),
-agent_role=sec_role.value,
+                    agent_role=sec_role.value,
                 )
                 try:
                     sec_resp = await model_manager.generate(sec_req)
@@ -712,7 +712,7 @@ agent_role=sec_role.value,
                             skills_catalog=skills_catalog,
                             db_manager=db_manager,
                 owner_user_id=state.get("owner_user_id"),
-agent_role=dev_role.value,
+                agent_role=dev_role.value,
                             intent="project_creation",
                             user_prompt=user_prompt,
                             project_id=slug,
@@ -752,7 +752,7 @@ agent_role=dev_role.value,
                             skills_catalog=skills_catalog,
                             db_manager=db_manager,
                 owner_user_id=state.get("owner_user_id"),
-agent_role=qa_role.value,
+                agent_role=qa_role.value,
                             intent="project_creation",
                             user_prompt=user_prompt,
                             project_id=slug,
@@ -947,7 +947,7 @@ agent_role=qa_role.value,
                     timeout_seconds=45.0,
                     task_id=state.get("task_id"),
                     owner_user_id=state.get("owner_user_id"),
-agent_role=primary_agent,
+                    agent_role=primary_agent,
                 )
                 try:
                     conv_resp = await model_manager.generate(conv_req)
@@ -1078,7 +1078,7 @@ agent_role=primary_agent,
                     timeout_seconds=120.0,
                     task_id=state.get("task_id"),
                     owner_user_id=state.get("owner_user_id"),
-agent_role=specialist_role,
+                    agent_role=specialist_role,
                     key_id=getattr(specialist_profile, "assigned_key_id", None),
                 )
                 try:
@@ -1151,7 +1151,7 @@ agent_role=specialist_role,
                         timeout_seconds=120.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
-agent_role=AgentRole.JARVIS_MASTER.value,
+                        agent_role=AgentRole.JARVIS_MASTER.value,
                     )
                 )
             except Exception as exc:
@@ -1288,7 +1288,7 @@ agent_role=AgentRole.JARVIS_MASTER.value,
                 timeout_seconds=90.0,
                 task_id=state.get("task_id"),
                 owner_user_id=state.get("owner_user_id"),
-agent_role=primary_agent,
+                agent_role=primary_agent,
                 key_id=getattr(prim_profile, "assigned_key_id", None),
             )
 
@@ -1387,7 +1387,7 @@ agent_role=primary_agent,
                         timeout_seconds=120.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
-agent_role=secondary_role,
+                        agent_role=secondary_role,
                         key_id=getattr(secondary_profile, "assigned_key_id", None),
                     )
                 )
