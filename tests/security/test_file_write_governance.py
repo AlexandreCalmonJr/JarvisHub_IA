@@ -12,6 +12,7 @@ Cobre rigorosamente os 7 cenários obrigatórios:
 """
 
 import os
+import logging
 import tempfile
 from pathlib import Path
 import pytest
@@ -20,8 +21,7 @@ from httpx import ASGITransport, AsyncClient
 from apps.api.deps import security_core, tool_gateway, workspace_service
 from apps.api.main import app
 from packages.contracts.agent import AgentRole
-from packages.contracts.approval import ApprovalStatus
-from packages.contracts.security import AuditEventSeverity, ProjectWorkMode
+from packages.contracts.security import AuditEventSeverity
 from services.security_core import PermissionDeniedError
 from services.tool_gateway import ToolExecutionRequest
 from services.orchestration.workspace_actions import execute_workspace_modification
@@ -40,8 +40,8 @@ def test_project_id():
     # Cleanup
     try:
         workspace_service.delete_project(pid)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger(__name__).debug("Cleanup de projeto falhou: %s", exc)
 
 
 @pytest.mark.asyncio
@@ -209,8 +209,8 @@ async def test_04_symlinks_cannot_escape_project_root(test_project_id):
             if symlink_path.is_symlink() or symlink_path.exists():
                 try:
                     os.unlink(symlink_path)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logging.getLogger(__name__).debug("Remoção do symlink de teste falhou: %s", exc)
 
 
 @pytest.mark.asyncio
