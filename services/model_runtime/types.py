@@ -46,6 +46,7 @@ class InferenceResponse(BaseModel):
     completion_tokens: int = 0
     duration_ms: float = 0.0
     tokens_per_second: float = 0.0
+    cost_usd: float = 0.0
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     finish_reason: str = "stop"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
