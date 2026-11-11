@@ -654,3 +654,30 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - A lista de presets de provedores continua sendo uma lista de opções de configuração; não é apresentada como disponibilidade operacional.
 - Ainda é necessário validar a experiência de admin, developer e auditor, testar o fluxo de cadastro/teste/remoção de chaves e conferir o comportamento do gateway com chave ativa, inativa, ausente e adaptador indisponível.
 - Build, lint, testes unitários, integração e responsividade não foram executados.
+
+## 17. Security Center — permissões e fluxo de hardening
+
+**Estado:** ajustes incrementais gravados na branch de auditoria; validação de runtime e testes continuam pendentes.
+
+### 17.1 Contenção e auditoria
+
+- O Kill Switch global e o cancelamento manual de tarefas só aparecem após confirmar uma sessão humana com papel `admin`, em linha com a permissão `security:kill`.
+- Os perfis com permissão de auditoria continuam a consultar a sua própria trilha de eventos.
+- Mensagens de sucesso e erro usam estados visuais distintos; uma falha não é apresentada com aparência de sucesso.
+- O acento visual foi alinhado aos tokens laranja do projeto.
+
+### 17.2 DevSecOps
+
+- Varredura CVE e auditoria Red Team só aparecem para perfis humanos `admin` e `developer`, que possuem `security:scan`.
+- A aplicação de políticas só aparece para esses perfis, compatível com `security:write`; perfis de consulta continuam a ver os templates e a copiar o código.
+- O pedido de hardening agora distingue explicitamente `approval_required` de `applied`. A interface não declara que um ficheiro foi alterado antes da aprovação e execução efetivas.
+- O ID de aprovação pendente é guardado localmente com chave delimitada pela conta. Após aprovar no Centro de Aprovações, o utilizador pode regressar e concluir a aplicação com o mesmo ID.
+- Falhas de cópia são tratadas sem falso estado de sucesso; IDs de projeto são codificados nas chamadas da API.
+- As respostas de política deixaram de devolver o caminho físico absoluto do servidor.
+
+### 17.3 Pendências específicas
+
+- Validar o ciclo completo: solicitar política, aprovar, regressar ao DevSecOps e concluir a escrita; verificar também rejeição e expiração do pedido.
+- Verificar que perfis auditor não executam scans, Red Team, alterações de políticas ou Kill Switch; confirmar acesso de leitura conforme permissões.
+- Avaliar a recuperação de referências locais a aprovações rejeitadas/expiradas e a apresentação de estado operacional do Cyber Shield.
+- Build, lint, testes de autorização, integração e responsividade não foram executados.
