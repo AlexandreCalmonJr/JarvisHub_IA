@@ -11,10 +11,9 @@ const auditView = read('../src/components/security/ContainmentAuditSection.tsx')
 
 const agentsRouter = read('../../api/routers/agents.py');
 const toolGateway = read('../../../services/tool_gateway/gateway.py');
-const auth = read('../../api/auth.py');
 
 test('tool execution is authenticated, permission-checked and owner-scoped', () => {
-  assert.match(agentsRouter, /execute_tool_endpoint[\\s\\S]*?Depends\(require_permission\("coding:use"\)\)/);
+  assert.match(agentsRouter, /execute_tool_endpoint[\s\S]*?Depends\(require_permission\("coding:use"\)\)/);
   assert.match(agentsRouter, /get_project\(request\.project_id, owner_user_id=owner_user_id\)/);
   assert.match(agentsRouter, /owner_user_id=owner_user_id, actor_role=principal\.role/);
   assert.match(auth, /\/api\/v1\/tools\/execute.*coding:use/);
