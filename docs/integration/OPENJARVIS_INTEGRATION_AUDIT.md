@@ -496,3 +496,46 @@ Os testes **não foram executados** nesta etapa. A consulta ao GitHub não retor
 - Testar streaming separadamente: a contabilização de custo e telemetria de streaming ainda não foi completada nesta etapa.
 
 Os testes adicionados/atualizados permanecem pendentes de execução no ambiente de homologação.
+
+
+## 13. Quinta etapa — avaliação humana de qualidade e aprendizagem do Maestro
+
+**Estado:** implementação inicial concluída; validação de testes e integração de interface pendentes.
+
+### 13.1 Feedback associado à inferência
+
+- Criada a tabela `inference_quality_feedback`, que guarda owner, ID da inferência, modelo, provedor, papel do agente, tarefa, nota e data.
+- O endpoint `POST /api/v1/system/inference-feedback` recebe somente `inference_id` e nota de 1 a 5. Modelo, provedor, papel, tarefa e owner são recuperados no servidor a partir da telemetria.
+- Só é possível avaliar inferências concluídas com sucesso e pertencentes à conta autenticada. IDs de outra conta, inexistentes ou com falha retornam não encontrado.
+- Uma nova avaliação da mesma inferência atualiza a nota anterior, evitando duplicação de amostras.
+- O endpoint exige a permissão `system:feedback`; a identidade nunca é recebida do cliente.
+- A rota privada de telemetria inclui `model_quality`, agregado por modelo, provedor e papel, filtrado pelo owner.
+
+### 13.2 Aprendizagem conservadora
+
+- O seletor consulta as avaliações da própria conta e só considera o sinal após pelo menos três avaliações por modelo/provedor/papel.
+- A média de 1 a 5 aplica ajuste limitado de -10 a +10 pontos na classificação. A justificativa da seleção informa a média e o número de avaliações.
+- Sem amostra suficiente, a qualidade não influencia a seleção. A indisponibilidade da telemetria não impede inferências.
+- O feedback não treina pesos automaticamente, não altera o catálogo de modelos e não muda permissões, privacidade, aprovação externa, orçamento ou kill switch.
+- A avaliação é associada ao ID de uma inferência específica, não propagada indiscriminadamente a todos os especialistas de uma tarefa.
+
+### 13.3 Contrato da API
+
+Exemplo de corpo:
+```json
+{
+  "inference_id": "ID retornado em records pela telemetria",
+  "rating": 5
+}
+```
+
+O ID é obtido em `GET /api/v1/system/inference-telemetry`, no campo `records[].id`. Não enviar nome de modelo, owner ou papel do agente no feedback.
+
+### 13.4 Pendências de homologação
+
+- Executar testes de isolamento, rejeição de inferência alheia/falhada, atualização de nota e mínimo de três avaliações.
+- Validar autorização para contas humanas e dispositivos emparelhados com scope `system:feedback`.
+- Criar interface de avaliação no dashboard e apresentar a nota associada à resposta correta. A API já existe, mas a interface ainda não foi implementada.
+- Avaliar futuramente feedback explícito de tarefa completa e critérios objetivos de qualidade; não confundir avaliação de uma inferência com qualidade global de todo o fluxo multiagente.
+
+Os testes desta etapa foram adicionados, mas ainda não foram executados.
