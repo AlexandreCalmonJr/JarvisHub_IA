@@ -539,3 +539,13 @@ O ID é obtido em `GET /api/v1/system/inference-telemetry`, no campo `records[].
 - Avaliar futuramente feedback explícito de tarefa completa e critérios objetivos de qualidade; não confundir avaliação de uma inferência com qualidade global de todo o fluxo multiagente.
 
 Os testes desta etapa foram adicionados, mas ainda não foram executados.
+
+
+### 13.5 Interface do Dashboard — feedback no chat e painel de qualidade
+
+- Cada resposta do Maestro com `task_id` consulta as inferências bem-sucedidas daquela tarefa, sem buscar inferências de outras contas.
+- O endpoint de telemetria aceita filtro opcional `task_id` e retorna `feedback_rating` junto a cada registro.
+- O chat apresenta controles de nota de 1 a 5 por inferência/modelo/especialista. Após salvar, o estado visual mostra a nota persistida.
+- O gestor de modelos ganhou a aba **Qualidade & Aprendizagem**, com média, número de avaliações e indicação de amostra suficiente.
+- A aba consulta apenas o agregado da conta autenticada; não expõe prompts nem respostas.
+- Inferências de fluxos conversacionais que não geram `task_id` no orquestrador não exibem avaliação nesta versão.
