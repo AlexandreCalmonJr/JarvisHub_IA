@@ -90,17 +90,18 @@ class JarvisMaster:
 
         current_values = dict(checkpoint.values)
         approval_id = current_values.get("approval_id")
-        approval = self.security_core.approval_engine.get_request(approval_id) if approval_id else None
-        if (
-            not approval
-            or approval.status != ApprovalStatus.APPROVED
-            or approval.task_id != task_id
-            or approval.operation != "file_write"
-            or approval.decided_by != approved_by
-        ):
-            raise PermissionDeniedError(
-                "Retomada bloqueada: aprovação humana ausente, pendente ou não vinculada a esta tarefa."
-            )
+        if current_values.get("classified_intent") == "code_modification":
+            approval = self.security_core.approval_engine.get_request(approval_id) if approval_id else None
+            if (
+                not approval
+                or approval.status != ApprovalStatus.APPROVED
+                or approval.task_id != task_id
+                or approval.operation != "file_write"
+                or approval.decided_by != approved_by
+            ):
+                raise PermissionDeniedError(
+                    "Retomada bloqueada: aprovação humana ausente, pendente ou não vinculada a esta tarefa."
+                )
 
         current_values["approval_required"] = False
 
