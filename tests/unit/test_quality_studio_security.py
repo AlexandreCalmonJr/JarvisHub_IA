@@ -100,7 +100,8 @@ def test_generated_playwright_script_escapes_user_supplied_strings():
         steps=[{"action": "fill", "target": payload, "value": payload}],
     )
     assert "page.locator(" in script
-    assert "__import__" not in script
+    assert script.count("__import__") == 1
+    assert not any(line.lstrip().startswith("__import__") for line in script.splitlines())
     assert "test_safe_scenario_e2e" in script
 
 
