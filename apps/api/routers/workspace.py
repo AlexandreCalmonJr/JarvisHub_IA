@@ -380,7 +380,7 @@ async def import_external_folder_endpoint(
             project_id=project_id,
             parameters={"approval_id": payload.approval_id, "path": str(target)},
         )
-        return {"status": "imported", "project": result}
+        return {**result, "status": "imported", "approval_id": payload.approval_id}
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except FileNotFoundError as exc:
