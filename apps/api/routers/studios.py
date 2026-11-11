@@ -310,4 +310,7 @@ async def get_executive_report_endpoint(
             status_code=403,
             detail="Relatórios globais estão disponíveis apenas para administradores. Selecione um projeto próprio.",
         )
-    return engineering_intelligence_service.generate_executive_report(project_id=project_id)
+    return engineering_intelligence_service.generate_executive_report(
+        project_id=project_id,
+        owner_user_id=principal.subject_id if project_id else None,
+    )
