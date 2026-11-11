@@ -96,6 +96,15 @@ class ModelManager:
             allow_external=allow_external,
             contains_sensitive_data=request.contains_sensitive_data,
             has_external_data_approval=has_external_data_approval,
+            pricing_by_provider={
+                self.hybrid_router.online_config.provider_name: (
+                    self.hybrid_router.online_config.cost_per_1k_input,
+                    self.hybrid_router.online_config.cost_per_1k_output,
+                )
+            } if allow_external else {},
+            prompt_text=request.prompt,
+            system_prompt=request.system_prompt,
+            max_tokens=request.max_tokens,
         )
         selected_request = request.model_copy(deep=True)
         selected_request.model_name = selection.candidate.model_name
@@ -191,6 +200,7 @@ class ModelManager:
             duration_ms=measured_duration_ms,
             prompt_tokens=response.prompt_tokens,
             completion_tokens=response.completion_tokens,
+            cost_usd=response.cost_usd,
             model_name=response.model_name,
         )
 
@@ -221,6 +231,7 @@ class ModelManager:
         duration_ms: float,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
+        cost_usd: float = 0.0,
         error_type: str | None = None,
         model_name: str | None = None,
     ) -> None:
@@ -238,6 +249,7 @@ class ModelManager:
                 duration_ms=duration_ms,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                cost_usd=cost_usd,
                 error_type=error_type,
             )
         except Exception:
