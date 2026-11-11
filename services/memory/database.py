@@ -354,6 +354,28 @@ class DatabaseManager:
                 conn.execute("RELEASE SAVEPOINT agent_memory_owner_migration")
                 raise
 
+        version_three = conn.execute(
+            "SELECT 1 FROM schema_migrations WHERE version = 3"
+        ).fetchone()
+        if not version_three:
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(mobile_devices)").fetchall()
+            }
+            if "owner_user_id" not in columns:
+                conn.execute("ALTER TABLE mobile_devices ADD COLUMN owner_user_id TEXT")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_devices_owner_user "
+                "ON mobile_devices(owner_user_id)"
+            )
+            conn.execute(
+                """
+                INSERT INTO schema_migrations (version, name, applied_at)
+                VALUES (3, 'mobile_device_account_owner', ?)
+                """,
+                (datetime.now(UTC).isoformat(),),
+            )
+
     def register_project(
         self, project_id: str, name: str, root_path: str, mode: str = "read_only",
         owner_user_id: str | None = None,
@@ -1449,6 +1471,7 @@ class DatabaseManager:
         is_revoked: bool = False,
         paired_at: str | datetime | None = None,
         last_seen_at: str | datetime | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         p_at = (
             paired_at.isoformat()
@@ -1467,17 +1490,18 @@ class DatabaseManager:
                 """
                 INSERT INTO mobile_devices (
                     device_id, device_name, token_hash, scopes_json,
-                    is_revoked, paired_at, last_seen_at
+                    is_revoked, paired_at, last_seen_at, owner_user_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(device_id) DO UPDATE SET
                     device_name=excluded.device_name,
                     token_hash=excluded.token_hash,
                     scopes_json=excluded.scopes_json,
                     is_revoked=excluded.is_revoked,
-                    last_seen_at=excluded.last_seen_at
+                    last_seen_at=excluded.last_seen_at,
+                    owner_user_id=COALESCE(mobile_devices.owner_user_id, excluded.owner_user_id)
                 """,
-                (device_id, device_name, token_hash, scopes_json, rev_int, p_at, ls_at),
+                (device_id, device_name, token_hash, scopes_json, rev_int, p_at, ls_at, owner_user_id),
             )
 
     def get_device(self, device_id: str) -> dict[str, Any] | None:
