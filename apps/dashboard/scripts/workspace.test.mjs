@@ -10,6 +10,8 @@ const card = read('../src/components/workspace/ProjectCard.tsx');
 const memory = read('../src/components/workspace/ProjectMemoryModal.tsx');
 const backend = read('../../api/routers/workspace.py');
 const webhooks = read('../src/components/workspace/WebhooksModal.tsx');
+const approvalHost = read('../src/components/common/ApprovalPromptHost.tsx');
+const app = read('../src/App.tsx');
 
 test('workspace list and project memory API errors are not converted to empty arrays', () => {
   assert.match(api, /Falha ao carregar os projetos do workspace/);
@@ -47,4 +49,12 @@ test('webhook configuration failure is visible and cannot silently overwrite sav
   assert.match(webhooks, /setLoadError/);
   assert.match(webhooks, /Não foi possível carregar as configurações atuais/);
   assert.match(webhooks, /disabled=\{saving \|\| !!loadError\}/);
+});
+
+test('workspace human approvals use the dashboard modal instead of native browser confirmation', () => {
+  assert.doesNotMatch(api, /window\.confirm/);
+  assert.match(api, /jarvis:approval-prompt/);
+  assert.match(approvalHost, /Aprovar e continuar/);
+  assert.match(approvalHost, /Rejeitar operação/);
+  assert.match(app, /<ApprovalPromptHost \/>/);
 });
