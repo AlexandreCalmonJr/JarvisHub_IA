@@ -110,3 +110,47 @@ def test_selector_prefers_lower_estimated_cost_between_external_candidates():
     assert result.candidate.model_name == "model-gemini"
     assert result.estimated_cost_usd < 0.001
     assert "custo estimado" in result.reason
+
+
+def test_selector_uses_owner_historical_cost_when_live_price_is_unknown():
+    class HistoricalTelemetry:
+        def performance_by_model_for_owner(self, owner):
+            assert owner == "account-1"
+            return [
+                {
+                    "model_name": "model-a",
+                    "provider": "online_gateway (provider-a)",
+                    "agent_role": "research_analyst",
+                    "total_inferences": 5,
+                    "sample_sufficient": True,
+                    "success_rate": 1.0,
+                    "average_latency_ms": 100,
+                    "average_cost_usd": 0.002,
+                },
+                {
+                    "model_name": "model-b",
+                    "provider": "online_gateway (provider-b)",
+                    "agent_role": "research_analyst",
+                    "total_inferences": 5,
+                    "sample_sufficient": True,
+                    "success_rate": 1.0,
+                    "average_latency_ms": 100,
+                    "average_cost_usd": 0.001,
+                },
+            ]
+
+    result = ModelSelector().select(
+        models=[
+            metadata("model-a", family="provider-a", cloud=True),
+            metadata("model-b", family="provider-b", cloud=True),
+        ],
+        owner_user_id="account-1",
+        agent_role="research_analyst",
+        task_capability="general",
+        telemetry_store=HistoricalTelemetry(),
+        allow_external=True,
+        contains_sensitive_data=False,
+        has_external_data_approval=False,
+    )
+    assert result.candidate.model_name == "model-b"
+    assert result.estimated_cost_usd == 0.001
