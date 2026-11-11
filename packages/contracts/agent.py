@@ -145,6 +145,7 @@ class AutonomousAgentRunConfig(BaseModel):
     prompt: str
     session_id: str = Field(default_factory=lambda: f"session-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}")
     project_id: str | None = None
+    owner_user_id: str | None = None
     mode: AutonomousAgentMode = AutonomousAgentMode.ASK
     max_iterations: int = 15
     temperature: float = 0.3
