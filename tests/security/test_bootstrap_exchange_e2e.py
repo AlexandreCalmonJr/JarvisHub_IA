@@ -19,7 +19,6 @@ async def test_bootstrap_exchange_creates_authenticated_session_across_services(
         exchange = await client.post(
             "/api/v1/auth/bootstrap/exchange",
             json={"token": token},
-            headers={"x-no-auth": "1"},
         )
         assert exchange.status_code == 200
         assert exchange.json()["status"] == "authenticated"
@@ -35,6 +34,5 @@ async def test_bootstrap_exchange_creates_authenticated_session_across_services(
         replay = await client.post(
             "/api/v1/auth/bootstrap/exchange",
             json={"token": token},
-            headers={"x-no-auth": "1"},
         )
         assert replay.status_code == 401
