@@ -23,10 +23,10 @@ test('approval decision failures are surfaced and do not change the queue optimi
 });
 
 test('approval listing and decisions are scoped to the authenticated account', () => {
-  assert.match(backend, /@router\.get\("\/api\/v1\/approvals"\)[\s\S]{0,180}owner_user_id=owner/);
+  assert.match(backend, /@router\.get\(\"\/api\/v1\/approvals\"\)[\s\S]{0,180}owner_user_id=owner/);
   assert.match(backend, /get_request\([\s\S]{0,120}owner_user_id=owner/);
   assert.match(backend, /approve_request\([\s\S]{0,160}owner_user_id=owner/);
-  assert.match(backend, /reject_request\\([\\s\\S]{0,300}owner_user_id=owner/);
+  assert.match(backend, /reject_request\([\s\S]{0,300}owner_user_id=owner/);
 });
 
 test('approval identity is derived from the server session', () => {
