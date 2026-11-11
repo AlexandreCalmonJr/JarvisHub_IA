@@ -1,4 +1,6 @@
-import pytest\n\nfrom services.security_core.auth_store import UserCredentialStore
+import pytest
+
+from services.security_core.auth_store import UserCredentialStore
 
 
 def test_user_passwords_are_hashed_and_authenticate(tmp_path):
