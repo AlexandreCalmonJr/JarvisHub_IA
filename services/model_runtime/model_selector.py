@@ -83,8 +83,12 @@ class ModelSelector:
         capability = self._normalize_capability(task_capability, agent_role)
         performance: dict[tuple[str, str, str | None], dict[str, Any]] = {}
         if telemetry_store and owner_user_id:
-            for row in telemetry_store.performance_by_model_for_owner(owner_user_id):
-                performance[(row["model_name"], row["provider"], row.get("agent_role"))] = row
+            try:
+                for row in telemetry_store.performance_by_model_for_owner(owner_user_id):
+                    performance[(row["model_name"], row["provider"], row.get("agent_role"))] = row
+            except Exception:
+                # A indisponibilidade da telemetria não deve impedir inferência.
+                performance = {}
 
         candidates: list[tuple[ModelCandidate, dict[str, Any] | None, int, str]] = []
         pricing = pricing_by_provider or {}
