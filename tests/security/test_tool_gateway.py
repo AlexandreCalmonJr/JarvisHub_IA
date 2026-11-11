@@ -37,7 +37,7 @@ async def test_arbitrary_shell_tool_is_blocked(gateway_and_project):
         project_id="proj-safe",
     )
     with pytest.raises(PermissionDeniedError, match="não está no catálogo autorizado"):
-        await gw.execute_tool(req)
+        await gw.execute_tool(req, owner_user_id="test-owner")
 
 
 @pytest.mark.asyncio
@@ -72,7 +72,7 @@ async def test_tool_read_file_and_list_dir_success(gateway_and_project):
         agent_role=AgentRole.SOFTWARE_ARCHITECT.value,
         project_id="proj-safe",
     )
-    res_list = await gw.execute_tool(req_list)
+    res_list = await gw.execute_tool(req_list, owner_user_id="test-owner")
     assert res_list.success is True
     assert "README.md" in res_list.stdout
 
@@ -99,3 +99,17 @@ async def test_sandbox_timeout_terminates_subprocess(tmp_path):
     cmd = ["python", "-c", "import time; time.sleep(2)"]
     with pytest.raises(SandboxTimeoutError, match="tempo limite"):
         await sandbox.run_command(cmd, cwd=tmp_path)
+
+
+
+@pytest.mark.asyncio
+async def test_vector_search_is_blocked_until_private_account_indexes_exist(gateway_and_project):
+    gw, _, _ = gateway_and_project
+    req = ToolExecutionRequest(
+        tool_name="vector_search",
+        arguments={"table": "project_vectors", "vector": [0.0] * 128},
+        agent_role=AgentRole.SOFTWARE_ARCHITECT.value,
+        project_id="proj-safe",
+    )
+    with pytest.raises(PermissionDeniedError, match="isolamento dos índices por conta"):
+        await gw.execute_tool(req, owner_user_id="test-owner")
