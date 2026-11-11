@@ -49,18 +49,18 @@ def main() -> int:
             conn.execute("CREATE TABLE samples (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
             conn.execute("INSERT INTO samples(payload) VALUES (?)", ("seed",))
 
-        def read_one(_: int) -> float:
+        def read_one(_: int) -> tuple[str, float]:
             started = time.perf_counter()
             with connect(db_path) as conn:
                 conn.execute("SELECT payload FROM samples ORDER BY id DESC LIMIT 1").fetchone()
-            return time.perf_counter() - started
+            return ("read", time.perf_counter() - started)
 
-        def write_one(index: int) -> float:
+        def write_one(index: int) -> tuple[str, float]:
             started = time.perf_counter()
             with connect(db_path) as conn:
                 conn.execute("INSERT INTO samples(payload) VALUES (?)", (f"payload-{index}",))
                 conn.commit()
-            return time.perf_counter() - started
+            return ("write", time.perf_counter() - started)
 
         started = time.perf_counter()
         read_latencies: list[float] = []
@@ -70,15 +70,12 @@ def main() -> int:
             futures.extend(pool.submit(read_one, i) for i in range(args.reads))
             futures.extend(pool.submit(write_one, i) for i in range(args.writes))
             for future in as_completed(futures):
-                latency = future.result()
-                # Each task is tagged by future order below in a second deterministic batch.
-                # The mixed workload result is reported as aggregate operation latency.
-                read_latencies.append(latency)
+                operation, latency = future.result()
+                if operation == "read":
+                    read_latencies.append(latency)
+                else:
+                    write_latencies.append(latency)
         elapsed = time.perf_counter() - started
-
-        # Independent read/write latency samples provide per-operation percentiles.
-        read_latencies = [read_one(i) for i in range(min(args.reads, 250))]
-        write_latencies = [write_one(i + args.writes) for i in range(min(args.writes, 250))]
         with connect(db_path) as conn:
             rows = conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0]
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
