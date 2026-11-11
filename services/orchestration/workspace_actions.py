@@ -1,8 +1,6 @@
 import difflib
 import logging
-import os
 import re
-from pathlib import Path
 from typing import Any
 
 from packages.contracts.approval import ApprovalStatus
