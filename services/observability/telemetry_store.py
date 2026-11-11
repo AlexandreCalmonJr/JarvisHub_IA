@@ -182,22 +182,29 @@ class SqliteTelemetryStore:
             )
         return record_id
 
-    def list_for_owner(self, owner_user_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    def list_for_owner(
+        self, owner_user_id: str, limit: int = 50, task_id: str | None = None
+    ) -> list[dict[str, Any]]:
         if not owner_user_id or not owner_user_id.strip():
             raise ValueError("owner_user_id is required")
         safe_limit = max(1, min(int(limit), 500))
         with self._lock, self._connection() as conn:
-            rows = conn.execute(
-                """
-                SELECT id, task_id, agent_role, model_name, provider, status,
-                       duration_ms, prompt_tokens, completion_tokens, cost_usd, error_type, created_at
-                FROM inference_telemetry
-                WHERE owner_user_id = ?
-                ORDER BY created_at DESC
-                LIMIT ?
-                """,
-                (owner_user_id, safe_limit),
-            ).fetchall()
+            query = """
+                SELECT i.id, i.task_id, i.agent_role, i.model_name, i.provider, i.status,
+                       i.duration_ms, i.prompt_tokens, i.completion_tokens, i.cost_usd,
+                       i.error_type, i.created_at, f.rating AS feedback_rating
+                FROM inference_telemetry AS i
+                LEFT JOIN inference_quality_feedback AS f
+                  ON f.owner_user_id = i.owner_user_id AND f.inference_id = i.id
+                WHERE i.owner_user_id = ?
+            """
+            params: list[Any] = [owner_user_id]
+            if task_id:
+                query += " AND i.task_id = ?"
+                params.append(task_id)
+            query += " ORDER BY i.created_at DESC LIMIT ?"
+            params.append(safe_limit)
+            rows = conn.execute(query, tuple(params)).fetchall()
         return [dict(row) for row in rows]
 
 
