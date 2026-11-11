@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import secrets
+import sqlite3
 import subprocess
 import time
 import threading
@@ -295,6 +296,8 @@ class AuthService:
         self._bootstrap_tokens: dict[str, float] = {}
         self._bootstrap_lock = threading.Lock()
         self._attempts: dict[str, list[float]] = {}
+        self.rate_limit_path = self.auth_dir / "rate_limits.sqlite3"
+        self._initialize_rate_limit_store()
         self._ensure_admin_credential()
         # Emite um bootstrap token de uso único no arranque, entregue apenas por
         # arquivo restrito. O launcher lê o arquivo e troca-o por uma sessão.
@@ -522,17 +525,57 @@ class AuthService:
         return self.security.sessions.revoke_session(principal.session_id)
 
     # ------------------------------------------------------------------
-    # Rate limiting simples (não é autenticação; apenas proteção anti-brute-force)
+    # Rate limiting persistente (proteção anti-brute-force)
     # ------------------------------------------------------------------
+    def _initialize_rate_limit_store(self) -> None:
+        """Cria armazenamento SQLite local para preservar limites após reinícios."""
+        with sqlite3.connect(self.rate_limit_path, timeout=5) as conn:
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS auth_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bucket_key TEXT NOT NULL,
+                    attempted_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_auth_attempts_key_time "
+                "ON auth_attempts(bucket_key, attempted_at)"
+            )
+
     def check_rate_limit(self, key: str, limit: int = 8, window_seconds: int = 60) -> bool:
+        if limit < 1 or window_seconds < 1:
+            raise ValueError("Rate limit e janela devem ser valores positivos.")
         now = time.time()
-        bucket = [t for t in self._attempts.get(key, []) if now - t < window_seconds]
-        if len(bucket) >= limit:
-            self._attempts[key] = bucket
+        cutoff = now - window_seconds
+        try:
+            with sqlite3.connect(self.rate_limit_path, timeout=5) as conn:
+                conn.execute("PRAGMA busy_timeout=5000")
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "DELETE FROM auth_attempts WHERE attempted_at < ?",
+                    (now - max(window_seconds * 4, 3600),),
+                )
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM auth_attempts "
+                    "WHERE bucket_key = ? AND attempted_at >= ?",
+                    (key, cutoff),
+                ).fetchone()[0]
+                if count >= limit:
+                    conn.commit()
+                    return False
+                conn.execute(
+                    "INSERT INTO auth_attempts(bucket_key, attempted_at) VALUES (?, ?)",
+                    (key, now),
+                )
+                conn.commit()
+                return True
+        except sqlite3.Error:
+            # Falha fechada: não aceitar novas tentativas se o controle persistente falhar.
+            logger.exception("Rate limiter persistente indisponível; tentativa bloqueada.")
             return False
-        bucket.append(now)
-        self._attempts[key] = bucket
-        return True
 
     @staticmethod
     def client_key(request: Request) -> str:
