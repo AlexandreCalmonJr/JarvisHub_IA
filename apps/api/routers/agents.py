@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from apps.api.auth import Principal, get_principal
 from apps.api.deps import (
     AGENT_PROFILES,
     InferenceRequest,
@@ -35,7 +36,6 @@ router = APIRouter(tags=["agents"])
 
 _agent_session_locks: dict[str, asyncio.Lock] = {}
 
-from apps.api.auth import Principal, get_principal
 
 def _private_owner(principal: Principal) -> str:
     if principal.kind != "human":
