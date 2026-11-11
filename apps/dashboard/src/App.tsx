@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Code2,
   PanelLeft,
+  CircleHelp,
 } from 'lucide-react';
 import { SetupWizardModal } from './components/common/SetupWizardModal';
 import { InitialPasswordChangeModal } from './components/common/InitialPasswordChangeModal';
@@ -114,6 +115,7 @@ const DashboardApp: React.FC = () => {
   const [authLoaded, setAuthLoaded] = useState(false);
   const [authMustChangePassword, setAuthMustChangePassword] = useState(false);
   const [guidedTourOpen, setGuidedTourOpen] = useState(false);
+  const [learningContextTab, setLearningContextTab] = useState('overview');
   const hasPermission = (permission: string) => authPermissions.includes('*') || authPermissions.includes(permission);
   const canAccessTab = (tab: string) => {
     if (tab === 'not_found') return true;
@@ -193,6 +195,7 @@ const DashboardApp: React.FC = () => {
   }, [authLoaded, authKind, authRole]);
 
   const navigate = (tab: string) => {
+    if (tab === 'learning' && activeTab !== 'learning') setLearningContextTab(activeTab);
     const path = pathForTab(tab);
     if (path === '/404') return;
     setActiveTab(tab);
@@ -530,6 +533,8 @@ const DashboardApp: React.FC = () => {
 
           {/* Lado Direito: Busca, Status de Blindagem, Avatar e Controles Desktop ─ □ ✕ */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button type="button" className="btn btn-ghost" onClick={() => navigate('learning')} title="Ajuda contextual e tutoriais" aria-label="Abrir ajuda contextual"><CircleHelp size={16}/></button>
+
             {/* Paleta de Comandos */}
             <button
               onClick={() => setShowCommandPalette(true)}
@@ -694,7 +699,7 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
             {activeTab === 'advisor' && <HardwareAdvisorView />}
             {activeTab === 'server_logs' && <ServerLogsView />}
-            {activeTab === 'learning' && <LearningCenterView activeTab={activeTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} />}
+            {activeTab === 'learning' && <LearningCenterView activeTab={learningContextTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} />}
           </Suspense>
           )}
         </main>
