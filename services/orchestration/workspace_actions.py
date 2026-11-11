@@ -98,7 +98,7 @@ def execute_workspace_modification(
         or "nome" in p_lower
     ):
         match_title = re.search(
-            r'(?:mude|altere|troque|coloque)\s+(?:o\s+)?t[ií]tulo\s+(?:para|de)?\s+["\']?([^"\']+)["\']?',
+            r'(?:mude|mudar|altere|alterar|troque|trocar|coloque|colocar|modifique|modificar)\s+(?:o\s+)?t[ií]tulo\s+(?:para|de)?\s+["\']?([^"\']+)["\']?',
             user_prompt,
             re.IGNORECASE,
         )
