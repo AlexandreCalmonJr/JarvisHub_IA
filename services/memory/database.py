@@ -1160,78 +1160,92 @@ class DatabaseManager:
         chunks: list[str],
         file_size_formatted: str = "",
         source_path: str = "",
+        owner_user_id: str | None = None,
     ) -> int:
-        """Insere trechos de um documento processado na Base de Conhecimento."""
+        """Substitui chunks apenas do mesmo documento e proprietário."""
         now = datetime.now(UTC).isoformat()
         inserted_count = 0
+        owner_key = owner_user_id or "legacy"
+        doc_hash = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:10]
         with self._get_connection() as conn:
-            # Remove versão anterior do documento se já existia
-            conn.execute("DELETE FROM knowledge_vault WHERE doc_name = ?", (doc_name,))
+            if owner_user_id is None:
+                conn.execute(
+                    "DELETE FROM knowledge_vault WHERE doc_name = ? AND owner_user_id IS NULL",
+                    (doc_name,),
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM knowledge_vault WHERE doc_name = ? AND owner_user_id = ?",
+                    (doc_name, owner_user_id),
+                )
             for idx, chunk in enumerate(chunks):
-                chunk_id = f"{doc_name}_{idx}_{now[:10]}"
+                chunk_id = f"{doc_hash}_{doc_name}_{idx}_{now[:10]}"
                 conn.execute(
                     """
                     INSERT INTO knowledge_vault (
                         id, doc_name, file_type, category, chunk_index,
-                        content, file_size_formatted, source_path, created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        content, file_size_formatted, source_path, created_at, owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        chunk_id,
-                        doc_name,
-                        file_type,
-                        category,
-                        idx,
-                        chunk.strip(),
-                        file_size_formatted,
-                        source_path,
-                        now,
+                        chunk_id, doc_name, file_type, category, idx, chunk.strip(),
+                        file_size_formatted, source_path, now, owner_user_id,
                     ),
                 )
                 inserted_count += 1
         return inserted_count
 
-    def list_knowledge_documents(self) -> list[dict[str, Any]]:
-        """Lista resumos dos documentos indexados na Base de Conhecimento."""
+    def list_knowledge_documents(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Lista somente documentos do proprietário informado."""
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
                 SELECT doc_name, file_type, category, file_size_formatted, source_path,
                        count(*) as total_chunks, max(created_at) as created_at
                 FROM knowledge_vault
+                WHERE owner_user_id IS ?
                 GROUP BY doc_name, file_type, category, file_size_formatted, source_path
                 ORDER BY created_at DESC
-                """
+                """,
+                (owner_user_id,),
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [dict(row) for row in rows]
 
-    def delete_knowledge_document(self, doc_name: str) -> bool:
-        """Exclui um documento e todos os seus chunks da Base de Conhecimento."""
+    def delete_knowledge_document(
+        self, doc_name: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Exclui chunks somente do documento pertencente à conta."""
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM knowledge_vault WHERE doc_name = ?", (doc_name,))
+            cur = conn.execute(
+                "DELETE FROM knowledge_vault WHERE doc_name = ? AND owner_user_id IS ?",
+                (doc_name, owner_user_id),
+            )
             return cur.rowcount > 0
 
-    def search_knowledge_vault(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
-        """Realiza busca textual relacional de alta precisão na Base de Conhecimento."""
+    def search_knowledge_vault(
+        self, query: str, limit: int = 4, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Busca textual restrita ao proprietário informado."""
         if not query or not query.strip():
             return []
-        keywords = [k.lower().strip() for k in query.split() if len(k) > 2]
+        keywords = [word.lower().strip() for word in query.split() if len(word) > 2]
         if not keywords:
             keywords = [query.lower().strip()]
-
+        conditions = " OR ".join(["lower(content) LIKE ?" for _ in keywords])
+        params: list[Any] = [f"%{word}%" for word in keywords]
+        params.append(owner_user_id)
+        params.append(max(1, min(limit, 100)))
+        sql = f"""
+            SELECT doc_name, category, chunk_index, content, source_path
+            FROM knowledge_vault
+            WHERE ({conditions}) AND owner_user_id IS ?
+            LIMIT ?
+        """
         with self._get_connection() as conn:
-            # Query com LIKE múltiplo por termos de busca
-            conditions = " OR ".join(["lower(content) LIKE ?" for _ in keywords])
-            params = [f"%{k}%" for k in keywords]
-            sql = f"""
-                SELECT doc_name, category, chunk_index, content, source_path
-                FROM knowledge_vault
-                WHERE {conditions}
-                LIMIT ?
-            """
-            rows = conn.execute(sql, (*params, limit)).fetchall()
-            return [dict(r) for r in rows]
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
 
     # =========================================================================
     # SecurityCore Persistence Methods (Approvals, Devices, Sessions, Audit)
