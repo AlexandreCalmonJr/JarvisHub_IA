@@ -201,6 +201,7 @@ async def pair_mobile_device(
             device_name=payload.device_name,
             scopes=payload.scopes,
             created_by=principal.display_id,
+            owner_user_id=principal.subject_id,
         )
         return {
             "status": "paired",
