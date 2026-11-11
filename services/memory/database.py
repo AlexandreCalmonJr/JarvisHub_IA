@@ -1076,6 +1076,19 @@ class DatabaseManager:
                 result.append(item)
             return result
 
+    def consume_approved_approval(self, approval_id: str) -> bool:
+        """Consome atomicamente uma aprovação, impedindo replay entre processos."""
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                """
+                UPDATE approvals
+                SET status = 'consumed'
+                WHERE id = ? AND status = 'approved'
+                """,
+                (approval_id,),
+            )
+            return cur.rowcount == 1
+
     def update_approval_decision(
         self,
         approval_id: str,
