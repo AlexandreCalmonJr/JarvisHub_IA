@@ -817,25 +817,51 @@ class DatabaseManager:
         content: str,
         context: str | None = None,
         importance: int = 1,
+        owner_user_id: str | None = None,
     ) -> str:
-        """Salva ou atualiza uma memória episódica transversal para um especialista específico."""
+        """Guarda memória do agente no espaço privado da conta ou no legado."""
         import uuid
         now = datetime.now(UTC).isoformat()
         mem_id = f"amem-{uuid.uuid4().hex[:8]}"
         clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
+        values = (
+            mem_id, clean_role, category.lower(), key.strip(), content.strip(),
+            context, max(1, min(5, importance)), now, now, owner_user_id,
+        )
         with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO agent_memories (id, agent_role, category, key, content, context, importance, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(agent_role, category, key) DO UPDATE SET
-                    content=excluded.content,
-                    context=coalesce(excluded.context, agent_memories.context),
-                    importance=excluded.importance,
-                    updated_at=excluded.updated_at
-                """,
-                (mem_id, clean_role, category.lower(), key.strip(), content.strip(), context, max(1, min(5, importance)), now, now),
-            )
+            if owner_user_id is None:
+                conn.execute(
+                    """
+                    INSERT INTO agent_memories (
+                        id, agent_role, category, key, content, context,
+                        importance, created_at, updated_at, owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                    ON CONFLICT(agent_role, category, key) WHERE owner_user_id IS NULL
+                    DO UPDATE SET
+                        content=excluded.content,
+                        context=coalesce(excluded.context, agent_memories.context),
+                        importance=excluded.importance,
+                        updated_at=excluded.updated_at
+                    """,
+                    values[:9],
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO agent_memories (
+                        id, agent_role, category, key, content, context,
+                        importance, created_at, updated_at, owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(owner_user_id, agent_role, category, key)
+                    WHERE owner_user_id IS NOT NULL
+                    DO UPDATE SET
+                        content=excluded.content,
+                        context=coalesce(excluded.context, agent_memories.context),
+                        importance=excluded.importance,
+                        updated_at=excluded.updated_at
+                    """,
+                    values,
+                )
         return mem_id
 
     def list_agent_memories(
@@ -843,10 +869,11 @@ class DatabaseManager:
         agent_role: str | None = None,
         category: str | None = None,
         limit: int = 20,
+        owner_user_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Lista memórias episódicas filtradas por papel de especialista e/ou categoria."""
-        query = "SELECT id, agent_role, category, key, content, context, importance, created_at, updated_at FROM agent_memories WHERE 1=1"
-        params: list[Any] = []
+        """Lista memórias apenas do proprietário informado."""
+        query = "SELECT id, agent_role, category, key, content, context, importance, created_at, updated_at FROM agent_memories WHERE owner_user_id IS ?"
+        params: list[Any] = [owner_user_id]
         if agent_role:
             clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
             query += " AND agent_role = ?"
@@ -855,23 +882,29 @@ class DatabaseManager:
             query += " AND category = ?"
             params.append(category.lower())
         query += " ORDER BY importance DESC, updated_at DESC LIMIT ?"
-        params.append(limit)
-
+        params.append(max(1, min(limit, 500)))
         with self._get_connection() as conn:
-            cur = conn.execute(query, params)
-            return [dict(r) for r in cur.fetchall()]
+            return [dict(row) for row in conn.execute(query, params).fetchall()]
 
-    def delete_agent_memory(self, memory_id: str) -> bool:
-        """Remove uma memória episódica específica por ID."""
+    def delete_agent_memory(
+        self, memory_id: str, owner_user_id: str | None = None
+    ) -> bool:
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM agent_memories WHERE id = ?", (memory_id,))
+            cur = conn.execute(
+                "DELETE FROM agent_memories WHERE id = ? AND owner_user_id IS ?",
+                (memory_id, owner_user_id),
+            )
             return cur.rowcount > 0
 
-    def clear_agent_memories(self, agent_role: str) -> int:
-        """Limpa todas as memórias acumuladas de um especialista específico."""
+    def clear_agent_memories(
+        self, agent_role: str, owner_user_id: str | None = None
+    ) -> int:
         clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM agent_memories WHERE agent_role = ?", (clean_role,))
+            cur = conn.execute(
+                "DELETE FROM agent_memories WHERE agent_role = ? AND owner_user_id IS ?",
+                (clean_role, owner_user_id),
+            )
             return cur.rowcount
 
     def set_agent_config(
