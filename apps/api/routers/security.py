@@ -194,8 +194,10 @@ async def toggle_network_isolation_endpoint(payload: NetworkIsolationPayload):
 @router.post("/api/v1/mobile/pair")
 async def pair_mobile_device(
     payload: DevicePairRequest,
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_permission("mobile:pair")),
 ):
+    if principal.kind != "human":
+        raise HTTPException(status_code=403, detail="Apenas uma conta humana pode emparelhar dispositivos.")
     try:
         reg = security_core.device_auth.pair_device(
             device_name=payload.device_name,
