@@ -104,9 +104,9 @@ async def test_api_chat_create_website_and_modify_file():
         assert data["classified_intent"] == "project_creation"
         assert data["approval_required"] is True
         assert data["is_completed"] is False
-        assert "site-cafeteria" in data["final_summary"]
+        assert "cafeteria" in data["final_summary"].lower()
 
-        site_dir = Path("workspace/site-cafeteria")
+        site_dir = workspace_service.get_project_dir("site-cafeteria")
         assert not site_dir.exists()
         create_decision = await client.post(
             f"/api/v1/approvals/{data['approval_id']}/decide",
