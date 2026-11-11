@@ -3,7 +3,7 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from apps.api.deps import (
@@ -34,6 +34,16 @@ logger = logging.getLogger("jarvis.api.agents")
 router = APIRouter(tags=["agents"])
 
 _agent_session_locks: dict[str, asyncio.Lock] = {}
+
+from apps.api.auth import Principal, get_principal
+
+def _private_owner(principal: Principal) -> str:
+    if principal.kind != "human":
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivos precisam ser associados a uma conta antes de acessar dados privados.",
+        )
+    return principal.subject_id
 
 
 @router.get("/api/v1/agents")
@@ -127,12 +137,21 @@ async def update_agent_config_endpoint(role: str, payload: AgentConfigUpdateRequ
 
 
 @router.get("/api/v1/agents/{role}/memories")
-async def list_agent_memories_endpoint(role: str, category: str | None = None, limit: int = 50):
-    return db_manager.list_agent_memories(agent_role=role, category=category, limit=limit)
+async def list_agent_memories_endpoint(
+    role: str, category: str | None = None, limit: int = 50,
+    principal: Principal = Depends(get_principal),
+):
+    return db_manager.list_agent_memories(
+        agent_role=role, category=category, limit=limit,
+        owner_user_id=_private_owner(principal),
+    )
 
 
 @router.post("/api/v1/agents/{role}/memories")
-async def create_agent_memory_endpoint(role: str, payload: AgentMemoryCreateRequest):
+async def create_agent_memory_endpoint(
+    role: str, payload: AgentMemoryCreateRequest,
+    principal: Principal = Depends(get_principal),
+):
     mem_id = db_manager.set_agent_memory(
         agent_role=role,
         category=payload.category,
@@ -140,13 +159,18 @@ async def create_agent_memory_endpoint(role: str, payload: AgentMemoryCreateRequ
         content=payload.content,
         context=payload.context,
         importance=payload.importance,
+        owner_user_id=_private_owner(principal),
     )
     return {"status": "created", "id": mem_id, "agent_role": role, "key": payload.key}
 
 
 @router.delete("/api/v1/agents/{role}/memories/{memory_id}")
-async def delete_agent_memory_endpoint(role: str, memory_id: str):
-    success = db_manager.delete_agent_memory(memory_id)
+async def delete_agent_memory_endpoint(
+    role: str, memory_id: str, principal: Principal = Depends(get_principal)
+):
+    success = db_manager.delete_agent_memory(
+        memory_id, owner_user_id=_private_owner(principal)
+    )
     if not success:
         raise HTTPException(status_code=404, detail="Memória não encontrada.")
     return {"status": "deleted", "id": memory_id}
@@ -296,11 +320,16 @@ async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRun
 
 
 @router.get("/api/v1/agents/{role}/history")
-async def get_agent_history_endpoint(role: str, session_id: str | None = None, limit: int = 100):
+async def get_agent_history_endpoint(
+    role: str, session_id: str | None = None, limit: int = 100,
+    principal: Principal = Depends(get_principal),
+):
     """Lista histórico conversacional e eventos de ferramentas persistidos para a sessão do especialista."""
     agent_role = _resolve_agent_role(role)
     effective_session = session_id or f"ses-{agent_role.value}"
-    messages = db_manager.list_chat_messages(effective_session, limit=limit)
+    messages = db_manager.list_chat_messages(
+        effective_session, limit=limit, owner_user_id=_private_owner(principal)
+    )
     return {
         "agent_role": agent_role.value,
         "session_id": effective_session,
