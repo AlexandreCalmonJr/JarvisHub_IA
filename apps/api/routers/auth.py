@@ -293,6 +293,8 @@ async def change_own_password(
     """Permite ao utilizador autenticado trocar a própria palavra-passe."""
     if principal.kind != "human" or not principal.session_id or principal.via_admin_token:
         raise HTTPException(status_code=403, detail="Inicie sessão com a sua conta para alterar a palavra-passe.")
+    if not auth_service.check_rate_limit(f"password-change:{principal.subject_id}", limit=5, window_seconds=300):
+        raise HTTPException(status_code=429, detail="Muitas tentativas de alteração. Tente novamente mais tarde.")
     user = auth_service.user_store.authenticate(principal.subject_id, payload.current_password)
     if user is None:
         raise HTTPException(status_code=400, detail="A palavra-passe atual não confere.")
