@@ -19,6 +19,7 @@ import { FolderIndexModal, TextSnippetModal } from './knowledge/DocumentModals';
 export const KnowledgeVaultView: React.FC = () => {
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -42,8 +43,9 @@ export const KnowledgeVaultView: React.FC = () => {
     try {
       const docs = await fetchKnowledgeDocuments();
       setDocuments(docs || []);
+      setDocumentsError(null);
     } catch (e: any) {
-      console.error(e);
+      setDocumentsError(e instanceof Error ? e.message : 'Falha ao carregar documentos do Knowledge Vault.');
     } finally {
       setLoading(false);
     }
@@ -132,7 +134,10 @@ export const KnowledgeVaultView: React.FC = () => {
       return;
     }
     try {
-      await deleteKnowledgeDocument(docName);
+      const result = await deleteKnowledgeDocument(docName);
+      if (result?.status !== 'deleted') {
+        throw new Error('O documento não foi encontrado na sua conta.');
+      }
       notify(`Documento '${docName}' removido com sucesso`, 'success');
       await loadDocuments();
       if (searchQuery) handleSearch();
@@ -232,6 +237,7 @@ export const KnowledgeVaultView: React.FC = () => {
       <DocumentListGrid
         documents={documents}
         loading={loading}
+        error={documentsError}
         onDelete={handleDelete}
         onSelectFileClick={() => fileInputRef.current?.click()}
       />
