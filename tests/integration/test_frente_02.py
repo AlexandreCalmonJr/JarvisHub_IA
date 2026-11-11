@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service
+from apps.api.main import app, workspace_service, db_manager
 from services.orchestration.self_correction import SelfCorrectionEngine
 
 
@@ -61,6 +61,9 @@ async def test_frente_02_git_version_control_and_rollback():
         (proj_dir / "index.js").write_text("console.log('Versao 1');\n", encoding="utf-8")
 
         # 1. Garante inicialização do repo Git
+        db_manager.register_project(
+            proj_id, "Front 2 Git Test", str(proj_dir), owner_user_id="admin"
+        )
         assert workspace_service.ensure_git_repo(proj_id) is True
         assert (proj_dir / ".git").exists()
 
