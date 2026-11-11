@@ -193,6 +193,7 @@ def test_telemetry_persists_and_aggregates_actual_cost_per_owner(tmp_path):
     assert store.summary_for_owner("user-cost")["total_cost_usd"] == 0.0012
     performance = store.performance_by_model_for_owner("user-cost")[0]
     assert performance["total_cost_usd"] == 0.0012
+    assert performance["average_cost_usd"] == 0.0012
 
 
 def test_existing_telemetry_database_is_migrated_without_losing_rows(tmp_path):
