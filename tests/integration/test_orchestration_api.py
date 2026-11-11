@@ -93,8 +93,6 @@ async def test_api_chat_code_modification_creates_approval():
 
 @pytest.mark.asyncio
 async def test_api_chat_create_website_and_modify_file():
-    from pathlib import Path
-
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         create_payload = {"prompt": "cria um site simples de cafeteria para mim com index.html e style.css"}
