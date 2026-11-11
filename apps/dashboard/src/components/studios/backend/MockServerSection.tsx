@@ -223,7 +223,7 @@ export const MockServerSection: React.FC = () => {
             <Server size={36} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
             <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Nenhum mock cadastrado</p>
             <p style={{ fontSize: '0.85rem', marginTop: '4px' }}>
-              Crie rotas simuladas com JSON customizado para testar seus frontends.
+              {canManageMocks ? 'Crie rotas simuladas com JSON customizado para testar os seus frontends.' : 'Não existem endpoints simulados registados nesta conta.'}
             </p>
           </div>
         ) : (

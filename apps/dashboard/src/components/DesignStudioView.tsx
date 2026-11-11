@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../services/api/client';
 import {
   extractColorPalette,
   auditWcagAccessibility,
@@ -13,7 +14,9 @@ import {
 } from 'lucide-react';
 
 export const DesignStudioView: React.FC = () => {
-  const [activeSubTab, setActiveSubTab] = useState<'palette' | 'wcag' | 'components'>('palette');
+  const [activeSubTab, setActiveSubTab] = useState<'palette' | 'wcag' | 'components'>('components');
+  const [canUseDesignTools, setCanUseDesignTools] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
 
   // Paleta de Cores
   const [primaryHex, setPrimaryHex] = useState('#d97757');
@@ -67,15 +70,41 @@ export const DesignStudioView: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!canUseDesignTools) return;
     const timer = window.setTimeout(() => loadPalette(primaryHex, paletteName), 300);
     return () => window.clearTimeout(timer);
-  }, [primaryHex, paletteName]);
+  }, [primaryHex, paletteName, canUseDesignTools]);
 
   useEffect(() => {
     loadComponent(selectedCompType);
   }, [selectedCompType]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const allowed = principal?.kind === 'human' &&
+          (principal?.role === 'admin' || principal?.role === 'developer');
+        setCanUseDesignTools(allowed);
+        setActiveSubTab(allowed ? 'palette' : 'components');
+        setRoleLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanUseDesignTools(false);
+          setActiveSubTab('components');
+          setRoleLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleAuditWcag = async () => {
+    if (!canUseDesignTools) return;
     setWcagLoading(true);
     setWcagError(null);
     setWcagResult(null);
@@ -91,6 +120,7 @@ export const DesignStudioView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões do Design Studio…</div>}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -113,20 +143,20 @@ export const DesignStudioView: React.FC = () => {
 
         {/* Sub-abas em Pílulas */}
         <div style={{ display: 'flex', gap: '6px', backgroundColor: 'var(--bg-tertiary)', padding: '4px', borderRadius: '9999px', border: '1px solid var(--border-color)' }}>
-          <button
+          {canUseDesignTools && <button
             onClick={() => setActiveSubTab('palette')}
             className={`btn ${activeSubTab === 'palette' ? 'btn-primary' : 'btn-ghost'}`}
             style={{ fontSize: '0.82rem', padding: '6px 16px', borderRadius: '9999px' }}
           >
             Paleta de Cores
-          </button>
-          <button
+          </button>}
+          {canUseDesignTools && <button
             onClick={() => setActiveSubTab('wcag')}
             className={`btn ${activeSubTab === 'wcag' ? 'btn-primary' : 'btn-ghost'}`}
             style={{ fontSize: '0.82rem', padding: '6px 16px', borderRadius: '9999px' }}
           >
             Acessibilidade (WCAG)
-          </button>
+          </button>}
           <button
             onClick={() => setActiveSubTab('components')}
             className={`btn ${activeSubTab === 'components' ? 'btn-primary' : 'btn-ghost'}`}
@@ -138,7 +168,7 @@ export const DesignStudioView: React.FC = () => {
       </div>
 
       {/* ABA 1: PALETA DE CORES */}
-      {activeSubTab === 'palette' && (
+      {canUseDesignTools && activeSubTab === 'palette' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Seletor de Cor Primária */}
           <div
@@ -190,9 +220,13 @@ export const DesignStudioView: React.FC = () => {
             {paletteData && (
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(paletteData.css_variables);
-                  setCopiedCss(true);
-                  setTimeout(() => setCopiedCss(false), 2000);
+                  if (!navigator.clipboard?.writeText) return;
+                  navigator.clipboard.writeText(paletteData.css_variables)
+                    .then(() => {
+                      setCopiedCss(true);
+                      window.setTimeout(() => setCopiedCss(false), 2000);
+                    })
+                    .catch(() => setPaletteError('Não foi possível copiar as variáveis CSS.'));
                 }}
                 className="btn btn-primary"
                 style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', borderRadius: '8px' }}
@@ -248,7 +282,7 @@ export const DesignStudioView: React.FC = () => {
       )}
 
       {/* ABA 2: AUDITORIA WCAG 2.1 */}
-      {activeSubTab === 'wcag' && (
+      {canUseDesignTools && activeSubTab === 'wcag' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div
             className="glass-card"
@@ -367,7 +401,7 @@ export const DesignStudioView: React.FC = () => {
       {/* ABA 3: COMPONENTES PRONTOS */}
       {activeSubTab === 'components' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             {[
               { id: 'navbar', label: 'Barra de Navegação' },
               { id: 'feature_card', label: 'Card de Recursos' },
@@ -388,9 +422,13 @@ export const DesignStudioView: React.FC = () => {
             {componentCode && (
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(componentCode);
-                  setCopiedComp(true);
-                  setTimeout(() => setCopiedComp(false), 2000);
+                  if (!navigator.clipboard?.writeText) return;
+                  navigator.clipboard.writeText(componentCode)
+                    .then(() => {
+                      setCopiedComp(true);
+                      window.setTimeout(() => setCopiedComp(false), 2000);
+                    })
+                    .catch(() => setComponentError('Não foi possível copiar o componente.'));
                 }}
                 className="btn btn-ghost"
                 style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
