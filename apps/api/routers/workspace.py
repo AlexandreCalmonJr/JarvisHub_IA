@@ -142,7 +142,7 @@ async def write_project_file_endpoint(
             project_id=project_id,
             parameters={"path": payload.path, "approval_id": payload.approval_id},
         )
-        return {"status": "saved", "project_id": project_id, "path": payload.path, "diff": result.get("diff", "")}
+        return {**result, "status": "saved", "approval_id": payload.approval_id}
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except FileNotFoundError as exc:
