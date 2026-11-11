@@ -26,6 +26,15 @@ import {
 import { getLocalSessionsCatalog, removeSessionLocally, LocalSessionMeta } from './chat/ChatHistoryDrawer';
 import { getUserProfile } from './common/UserProfileModal';
 
+interface SidebarNavItem {
+  id: string;
+  label: string;
+  permission?: string;
+  adminOnly?: boolean;
+  icon: React.ReactNode;
+  badge?: number;
+}
+
 interface SidebarProps {
   permissions?: string[];
   role?: string;
@@ -100,13 +109,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setMobileOpen(false);
   };
 
-  const agentItems = [
+  const agentItems: SidebarNavItem[] = [
     { id: 'agents', label: 'Centro de Agentes', permission: 'agents:read', icon: <Bot size={13} color="var(--accent-color)" /> },
     { id: 'coding', label: 'Coding Agent', permission: 'coding:read', icon: <Terminal size={13} color="var(--accent-color)" /> },
     { id: 'tasks', label: 'Fila de Tarefas', permission: 'tasks:read', icon: <ListTodo size={13} color="var(--accent-color)" /> },
   ].filter((item) => hasPermission(item.permission));
 
-  const engineeringItems = [
+  const engineeringItems: SidebarNavItem[] = [
     { id: 'backend_studio', label: 'Backend & APIs', permission: 'studios:read', icon: <Server size={13} color="var(--accent-color)" /> },
     { id: 'quality', label: 'Qualidade & QA', permission: 'studios:read', icon: <CheckCircle2 size={13} color="var(--accent-color)" /> },
     { id: 'knowledge', label: 'Base de Conhecimento', permission: 'knowledge:read', icon: <Database size={13} color="var(--accent-color)" /> },
@@ -117,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ].filter((item) => item.adminOnly ? isAdmin : hasPermission(item.permission || ''));
 
 
-  const settingsItems = [
+  const settingsItems: SidebarNavItem[] = [
     { id: 'models', label: 'Modelos & Cofre', permission: 'models:read', icon: <Key size={13} color="var(--accent-color)" /> },
     { id: 'skills', label: 'Habilidades (Skills)', permission: 'skills:read', icon: <Sparkles size={13} color="var(--accent-color)" /> },
     { id: 'security', label: 'Segurança', permission: 'security:read', icon: <ShieldAlert size={13} color="var(--danger-color)" /> },
