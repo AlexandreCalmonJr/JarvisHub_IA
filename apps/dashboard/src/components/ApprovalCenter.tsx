@@ -5,10 +5,12 @@ import { ShieldAlert, Check, X, FileDiff } from 'lucide-react';
 
 interface ApprovalCenterProps {
   approvals: ApprovalRequestItem[];
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
+  loading?: boolean;
+  error?: string | null;
 }
 
-export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRefresh }) => {
+export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRefresh, loading = false, error = null }) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -19,7 +21,7 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
     setActionLoading(id);
     try {
       await decideApproval(id, action, 'Decidido pelo Approval Center Web');
-      onRefresh();
+      await onRefresh();
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao processar decisão');
     } finally {
@@ -77,7 +79,16 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
       )}
 
       {/* Lista de Pedidos */}
-      {pendingList.length === 0 ? (
+      {error ? (
+        <div role="alert" className="glass-card" style={{ padding: '18px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '12px', color: 'var(--text-secondary)' }}>
+          Não foi possível consultar as aprovações: {error}
+          <button type="button" onClick={onRefresh} className="btn btn-ghost" style={{ marginLeft: '10px' }}>Tentar novamente</button>
+        </div>
+      ) : loading ? (
+        <div role="status" className="glass-panel" style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+          A carregar pedidos de aprovação…
+        </div>
+      ) : pendingList.length === 0 ? (
         <div
           className="glass-panel"
           style={{
