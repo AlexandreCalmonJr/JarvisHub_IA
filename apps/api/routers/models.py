@@ -83,24 +83,30 @@ async def list_models_endpoint(principal=Depends(get_principal)):
             "label": f"{cfg.default_model} ({cfg.provider_name.upper()} — configurado e ativo)",
         })
 
-    return {
+    response = {
         "models": installed_local,
         "online_models": online_models,
-        "concurrency_limit": 1,
-        "queue_status": {
-            "active": model_manager.queue.active_count,
-            "waiting": model_manager.queue.waiting_count,
-        },
+        # Chat clients need only the active route and model name; budget,
+        # spend, credential state and global queue telemetry are admin-only.
         "hybrid_gateway": {
             "enabled": gateway_active,
             "provider": cfg.provider_name,
             "model": cfg.default_model,
-            "has_api_key": bool(active_key and active_key.is_active),
-            "max_budget_usd": cfg.max_budget_usd,
-            "current_spend_usd": cfg.current_spend_usd,
             "fallback_route": "ollama_local",
         },
     }
+    if principal.kind == "human" and principal.role == "admin":
+        response["concurrency_limit"] = 1
+        response["queue_status"] = {
+            "active": model_manager.queue.active_count,
+            "waiting": model_manager.queue.waiting_count,
+        }
+        response["hybrid_gateway"].update({
+            "has_api_key": bool(active_key and active_key.is_active),
+            "max_budget_usd": cfg.max_budget_usd,
+            "current_spend_usd": cfg.current_spend_usd,
+        })
+    return response
 
 
 @router.get("/api/v1/system/model-metrics")
