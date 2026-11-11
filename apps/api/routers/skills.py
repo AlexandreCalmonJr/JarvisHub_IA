@@ -30,8 +30,9 @@ def _skill_owner(principal: Principal) -> str:
 async def list_skills_endpoint(principal: Principal = Depends(get_principal)):
     owner = _skill_owner(principal)
     shared = [
-        skill for skill in skills_catalog.list_all_skills()
-        if skill.get("origin") not in {"user_created", "imported_ecc"}
+        skill.model_dump()
+        for skill in skills_catalog.list_all_skills()
+        if getattr(skill, "origin", None) not in {"user_created", "imported_ecc"}
     ]
     return shared + db_manager.list_user_skills(owner_user_id=owner)
 
