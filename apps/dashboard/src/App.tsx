@@ -170,6 +170,16 @@ const DashboardApp: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!authLoaded || authKind !== 'human' || authRole !== 'admin') return;
+    try {
+      const isCompleted = localStorage.getItem(getAccountStorageKey('jarvis_setup_completed'));
+      if (isCompleted !== 'true') setShowSetupWizard(true);
+    } catch {
+      // Sem armazenamento local, não iniciar automaticamente o wizard.
+    }
+  }, [authLoaded, authKind, authRole]);
+
   const navigate = (tab: string) => {
     const path = pathForTab(tab);
     if (path === '/404') return;
@@ -191,11 +201,6 @@ const DashboardApp: React.FC = () => {
 
   // Verificação de primeiro acesso (First-Run Onboarding), rota e atalhos de teclado
   useEffect(() => {
-    const isCompleted = localStorage.getItem(getAccountStorageKey('jarvis_setup_completed'));
-    if (isCompleted !== 'true') {
-      setShowSetupWizard(true);
-    }
-
     const initialTab = tabFromLocation(window.location.pathname, window.location.search);
     const initialPath = pathForTab(initialTab);
     if (initialTab !== 'not_found' && window.location.pathname !== initialPath) {
@@ -680,7 +685,7 @@ const DashboardApp: React.FC = () => {
 
       {/* Assistente de Configuração Inicial Global */}
       <SetupWizardModal
-        isOpen={showSetupWizard}
+        isOpen={showSetupWizard && authLoaded && authKind === 'human' && authRole === 'admin'}
         onClose={() => setShowSetupWizard(false)}
         onCompleted={loadData}
       />
@@ -689,10 +694,10 @@ const DashboardApp: React.FC = () => {
       <UserProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
-        onOpenSetupWizard={() => {
+        onOpenSetupWizard={authKind === 'human' && authRole === 'admin' ? () => {
           setShowProfileModal(false);
           setShowSetupWizard(true);
-        }}
+        } : undefined}
         onProfileUpdated={(updated) => setUserProfile(updated)}
       />
 

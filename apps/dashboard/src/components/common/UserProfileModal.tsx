@@ -82,22 +82,35 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [canEditProfile, setCanEditProfile] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
-    const stored = localStorage.getItem(getAccountStorageKey('jarvis_experience_mode'));
-    return stored === 'essential' || stored === 'advanced' ? stored : 'technical';
+    try {
+      const stored = localStorage.getItem(getAccountStorageKey('jarvis_experience_mode'));
+      return stored === 'essential' || stored === 'advanced' ? stored : 'technical';
+    } catch {
+      return 'technical';
+    }
   });
 
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
     setIsAdmin(false);
+    setCanEditProfile(false);
     fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((principal) => {
-        if (!cancelled) setIsAdmin(principal?.kind === 'human' && principal?.role === 'admin');
+        if (!cancelled) {
+          const human = principal?.kind === 'human';
+          setIsAdmin(human && principal?.role === 'admin');
+          setCanEditProfile(human && (principal?.role === 'admin' || principal?.role === 'developer'));
+        }
       })
       .catch(() => {
-        if (!cancelled) setIsAdmin(false);
+        if (!cancelled) {
+          setIsAdmin(false);
+          setCanEditProfile(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -132,7 +145,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (saving) return;
+    if (!canEditProfile || saving) return;
     setSaving(true);
     try {
       try {
@@ -160,6 +173,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   };
 
   const handleBackupDatabase = async () => {
+    if (!isAdmin) return;
     setBackingUp(true);
     try {
       await createSystemBackup();
@@ -318,7 +332,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <button
                   key={mode.id}
                   type="button"
-                  onClick={() => setExperienceMode(mode.id as any)}
+                  onClick={() => {
+                    const nextMode = mode.id as 'essential' | 'technical' | 'advanced';
+                    setExperienceMode(nextMode);
+                    try {
+                      localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), nextMode);
+                    } catch {
+                      // A preferência permanece ativa apenas nesta sessão.
+                    }
+                  }}
                   style={{
                     padding: '10px 12px',
                     borderRadius: '8px',
@@ -339,6 +361,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
+          {!canEditProfile && <div role="status" style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>Perfil em modo de consulta. A edição exige a permissão profile:write.</div>}
+          <fieldset disabled={!canEditProfile} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div className="user-profile-avatar-section">
             <label className="user-profile-field-label">Ícone do perfil</label>
             <div className="user-profile-avatar-options" role="group" aria-label="Escolher ícone do perfil">
@@ -424,18 +448,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+          </fieldset>
+          {canEditProfile && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
             <button type="submit" disabled={saving || loadingProfile} className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Save size={15} />
               <span>{saving ? 'Salvando…' : 'Salvar Perfil'}</span>
             </button>
-          </div>
+          </div>}
         </form>
       )}
 
       {/* Conteúdo Aba: Instruções Personalizadas (ChatGPT style) */}
       {activeTab === 'instructions' && (
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {!canEditProfile && <div role="status" style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>Instruções personalizadas em modo de consulta. A edição exige a permissão profile:write.</div>}
+          <fieldset disabled={!canEditProfile} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
               O que o JARVIS deve saber sobre você para fornecer respostas melhores?
@@ -470,12 +497,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <button type="submit" className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          </fieldset>
+          {canEditProfile && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+            <button type="submit" disabled={saving} className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Save size={15} />
               <span>{saving ? 'Salvando…' : 'Salvar Instruções'}</span>
             </button>
-          </div>
+          </div>}
         </form>
       )}
 
