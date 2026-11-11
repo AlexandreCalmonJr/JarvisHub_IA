@@ -68,3 +68,34 @@ def test_approval_cannot_be_consumed_for_different_scope(tmp_path, operation, ta
         )
 
     assert engine.get_request(request.id).status == ApprovalStatus.APPROVED
+
+
+def test_approval_is_bound_to_the_exact_diff(tmp_path):
+    engine = ApprovalEngine()
+    request = engine.create_request(
+        task_id="workspace:file_write:diff",
+        agent_role="workspace_operator",
+        operation="file_write",
+        impact_summary="Atualizar arquivo",
+        affected_resources=["/workspace/project/app.py"],
+        proposed_diff="--- original\n+++ approved\n",
+    )
+    engine.approve_request(request.id, decided_by="admin")
+
+    with pytest.raises(ValueError, match="não correspondente"):
+        engine.consume_approved_request(
+            request.id,
+            operation="file_write",
+            task_id="workspace:file_write:diff",
+            resource="/workspace/project/app.py",
+            proposed_diff="--- original\n+++ altered\n",
+        )
+
+    consumed = engine.consume_approved_request(
+        request.id,
+        operation="file_write",
+        task_id="workspace:file_write:diff",
+        resource="/workspace/project/app.py",
+        proposed_diff="--- original\n+++ approved\n",
+    )
+    assert consumed.status == ApprovalStatus.CONSUMED
