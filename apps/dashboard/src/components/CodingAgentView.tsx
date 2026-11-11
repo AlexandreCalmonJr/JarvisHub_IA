@@ -149,6 +149,7 @@ export const CodingAgentView: React.FC = () => {
             timestamp: m.created_at?.slice(11, 16) || '',
           }));
         setEntries(mapped);
+        setHistoryError(null);
       } catch (historyFailure) {
         setHistoryError(historyFailure instanceof Error ? historyFailure.message : 'Falha ao carregar histórico do Coding Agent.');
       }
