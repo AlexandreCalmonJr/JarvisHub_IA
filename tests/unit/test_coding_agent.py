@@ -246,7 +246,7 @@ class TestRuntime:
         )
         return runtime, broker, db, root
 
-    def test_auto_mode_writes_file_and_persists_history(self, tmp_path: Path):
+    def test_auto_mode_still_requires_human_approval_for_writes(self, tmp_path: Path):
         provider = FakeProvider(
             [
                 ProviderReply(
@@ -255,11 +255,11 @@ class TestRuntime:
                         ToolCall(
                             id="call_1",
                             name="write_file",
-                            arguments={"path": "hello.py", "content": "print('oi')\n"},
+                            arguments={"path": "hello.py", "content": "print('oi')\\n"},
                         )
                     ],
                 ),
-                ProviderReply(content="Arquivo hello.py criado com sucesso."),
+                ProviderReply(content="A escrita foi bloqueada até aprovação humana."),
             ]
         )
         runtime, _, db, root = self._runtime(tmp_path, provider)
@@ -268,15 +268,16 @@ class TestRuntime:
             project_id="demo",
             session_id="sess-1",
             mode=AgentMode.AUTO,
+            approval_timeout_seconds=0.01,
         )
         events = _collect(runtime.run(config))
 
-        assert (root / "hello.py").exists()
-        assert [e["type"] for e in events][0] == "start"
-        assert any(e["type"] == "tool_result" and e["success"] for e in events)
+        assert not (root / "hello.py").exists()
+        assert events[0]["type"] == "start"
+        assert any(e["type"] == "approval_required" for e in events)
+        assert any(e["type"] == "tool_result" and not e["success"] for e in events)
         final = [e for e in events if e["type"] == "final"][0]
-        assert final["is_completed"] is True
-        assert "hello.py" in final["changed_files"]
+        assert "hello.py" not in final["changed_files"]
 
         rows = db.list_chat_messages("sess-1")
         roles = [r["role"] for r in rows]
