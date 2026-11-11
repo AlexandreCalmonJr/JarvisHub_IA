@@ -28,6 +28,10 @@ export interface CommandPaletteProps {
   onClose: () => void;
   onNavigate: (tab: string) => void;
   onOpenProfile?: () => void;
+  permissions?: string[];
+  role?: string;
+  principalKind?: string;
+  permissionsLoaded?: boolean;
 }
 
 interface CommandItem {
@@ -46,6 +50,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onClose,
   onNavigate,
   onOpenProfile,
+  permissions = [],
+  role,
+  principalKind,
+  permissionsLoaded = false,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -62,8 +70,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const handleOpenExplorer = async () => {
     try {
       notify('Abrindo diretório de projetos no Windows Explorer...', 'info');
-      const res = await openWorkspaceRoot();
-      notify(`Explorer aberto: ${res?.path || 'workspace/'}`, 'success');
+      await openWorkspaceRoot();
+      notify('Pasta geral do workspace aberta no computador do servidor.', 'success');
       onClose();
     } catch (e: any) {
       notify(`Erro ao abrir Explorer: ${e.message}`, 'error');
@@ -86,7 +94,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       id: 'nav-chat',
       category: 'Navegação',
       title: 'Chat JARVIS Maestro',
-      subtitle: 'Converse com o Maestro e orquestre os 26 especialistas',
+      subtitle: 'Converse com o Maestro e utilize os agentes e ferramentas disponíveis',
       icon: MessageSquare,
       iconColor: 'var(--accent-color)',
       badge: 'Maestro',
@@ -125,11 +133,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'nav-office',
       category: 'Navegação',
-      title: 'Escritório Virtual (26 Agentes)',
-      subtitle: 'Visão viva 2.5D dos 26 especialistas trabalhando nos 6 departamentos',
+      title: 'Escritório Virtual',
+      subtitle: 'Visão 2.5D dos agentes e departamentos registados',
       icon: Building2,
       iconColor: '#eab308',
-      badge: '26 IA',
       action: () => {
         onNavigate('office');
         onClose();
@@ -178,10 +185,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       id: 'nav-agents',
       category: 'Navegação',
       title: 'Centro de Agentes Especialistas',
-      subtitle: 'Catálogo dos 26 perfis, diretrizes de orquestração e permissões de disco',
+      subtitle: 'Catálogo dos perfis registados, diretrizes e permissões de ferramentas',
       icon: Bot,
       iconColor: '#f472b6',
-      badge: '26 Agentes',
+      badge: 'Agentes',
       action: () => {
         onNavigate('agents');
         onClose();
@@ -291,8 +298,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'nav-executive',
       category: 'Navegação',
-      title: 'Inteligência de Engenharia & Métricas',
-      subtitle: 'Cálculo de ROI, telemetria de inferências e métricas de sistema',
+      title: 'Relatório Executivo',
+      subtitle: 'Relatório e análise do projeto selecionado; ROI global para administradores',
       icon: BarChart3,
       iconColor: '#fbbf24',
       badge: 'Métricas',
@@ -306,8 +313,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'act-explorer',
       category: 'Ações Rápidas',
-      title: 'Abrir Diretório Geral no Windows Explorer',
-      subtitle: 'Acessa a pasta física C:\\...\\workspace no Windows',
+      title: 'Abrir Pasta Geral do Workspace',
+      subtitle: 'Abre a pasta no computador que executa o servidor JARVIS',
       icon: FolderOpen,
       iconColor: '#34d399',
       action: handleOpenExplorer,
@@ -372,9 +379,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     },
   ];
 
-  // Filtra itens com base na busca
+  const hasPermission = (permission: string) =>
+    permissionsLoaded && (permissions.includes('*') || permissions.includes(permission));
+  const isAdmin = principalKind === 'human' && role === 'admin';
+  const commandPermissions: Record<string, string> = {
+    'nav-chat': 'chat:read', 'nav-overview': 'system:read', 'nav-approvals': 'approvals:read',
+    'nav-design': 'studios:read', 'nav-office': 'agents:read', 'nav-workspace': 'workspace:read',
+    'nav-models': 'models:read', 'nav-coding': 'coding:read', 'nav-agents': 'agents:read',
+    'nav-vault': 'knowledge:read', 'nav-tasks': 'tasks:read', 'nav-backend-studio': 'studios:read',
+    'nav-quality': 'studios:read', 'nav-skills': 'skills:read', 'nav-security': 'security:read',
+    'nav-executive': 'studios:read', 'act-explorer': 'workspace:write', 'act-debate': 'chat:use',
+    'act-settings': 'profile:read',
+  };
+  const adminOnlyCommands = new Set(['nav-advisor', 'nav-logs', 'pt-senior', 'pt-ultra', 'pt-off']);
+
+  // Filtra comandos pela permissão efetiva e pela pesquisa.
   const filtered = commands.filter((cmd) => {
-    if (!search.trim()) return true;
+    if (!permissionsLoaded) return false;
+    if (adminOnlyCommands.has(cmd.id) && !isAdmin) return false;
+    const requiredPermission = commandPermissions[cmd.id];
+    if (requiredPermission && !hasPermission(requiredPermission)) return false;
     const q = search.toLowerCase();
     return (
       cmd.title.toLowerCase().includes(q) ||

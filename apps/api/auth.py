@@ -245,6 +245,7 @@ class Principal:
             "kind": self.kind,
             "role": self.role,
             "scopes": sorted(self.scopes),
+            "permissions": sorted(self.scopes if self.kind == "device" else ROLE_PERMISSIONS.get(self.role, set())),
             "session_id": self.session_id,
             "device_id": self.device_id,
             "device_name": self.device_name,

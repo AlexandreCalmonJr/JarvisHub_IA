@@ -21,6 +21,7 @@ import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
 import { CommandPalette } from './components/common/CommandPalette';
 import { pathForTab, tabFromLocation } from './router';
 import { getAccountStorageKey } from './services/accountScope';
+import { API_BASE } from './services/api/client';
 
 // Code splitting: cada tela é carregada sob demanda
 const Overview = lazy(() =>
@@ -103,6 +104,24 @@ const NotFoundView: React.FC<{ onGoHome: () => void }> = ({ onGoHome }) => (
 );
 
 const DashboardApp: React.FC = () => {
+  const [authPermissions, setAuthPermissions] = useState<string[]>([]);
+  const [authRole, setAuthRole] = useState<string | null>(null);
+  const [authKind, setAuthKind] = useState<string | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const hasPermission = (permission: string) => authPermissions.includes('*') || authPermissions.includes(permission);
+  const canAccessTab = (tab: string) => {
+    if (tab === 'not_found') return true;
+    if (tab === 'advisor' || tab === 'server_logs') return authKind === 'human' && authRole === 'admin';
+    const required: Record<string, string> = {
+      chat: 'chat:read', overview: 'system:read', approvals: 'approvals:read',
+      design: 'studios:read', office: 'agents:read', workspace: 'workspace:read',
+      models: 'models:read', coding: 'coding:read', agents: 'agents:read',
+      knowledge: 'knowledge:read', tasks: 'tasks:read', backend_studio: 'studios:read',
+      quality: 'studios:read', skills: 'skills:read', security: 'security:read',
+      executive_report: 'studios:read',
+    };
+    return !required[tab] || hasPermission(required[tab]);
+  };
   const [activeTab, setActiveTab] = useState<string>(() =>
     tabFromLocation(window.location.pathname, window.location.search)
   );
@@ -127,6 +146,29 @@ const DashboardApp: React.FC = () => {
     () => tabFromLocation(window.location.pathname, window.location.search) === 'chat'
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        setAuthPermissions(Array.isArray(principal?.permissions) ? principal.permissions : []);
+        setAuthRole(typeof principal?.role === 'string' ? principal.role : null);
+        setAuthKind(typeof principal?.kind === 'string' ? principal.kind : null);
+        setAuthLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuthPermissions([]);
+          setAuthRole(null);
+          setAuthKind(null);
+          setAuthLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const navigate = (tab: string) => {
     const path = pathForTab(tab);
@@ -230,6 +272,10 @@ const DashboardApp: React.FC = () => {
       }}
     >
       <Sidebar
+        permissions={authPermissions}
+        role={authRole || undefined}
+        principalKind={authKind || undefined}
+        permissionsLoaded={authLoaded}
         activeTab={activeTab}
         setActiveTab={navigate}
         pendingApprovalsCount={pendingApprovalsCount}
@@ -577,7 +623,14 @@ const DashboardApp: React.FC = () => {
             backgroundColor: 'var(--bg-primary)',
           }}
         >
-          {activeTab === 'not_found' ? (
+          {!authLoaded ? <ViewFallback /> : !canAccessTab(activeTab) ? (
+            <section role="alert" style={{ minHeight: '55vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <ShieldAlert size={30} color="var(--accent-color)" />
+              <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>Acesso não disponível</h2>
+              <p style={{ maxWidth: '440px', margin: 0, fontSize: '0.86rem' }}>O seu perfil não possui a permissão necessária para abrir este módulo. Se precisar de acesso, contacte o administrador da plataforma.</p>
+              <button type="button" className="btn btn-primary" onClick={() => navigate(hasPermission('system:read') ? 'overview' : 'chat')}>Voltar</button>
+            </section>
+          ) : activeTab === 'not_found' ? (
             <NotFoundView onGoHome={() => navigate('overview')} />
           ) : (
           <Suspense fallback={<ViewFallback />}>
@@ -646,6 +699,10 @@ const DashboardApp: React.FC = () => {
       {/* Paleta Global de Comandos (Ctrl + K) */}
       <CommandPalette
         isOpen={showCommandPalette}
+        permissions={authPermissions}
+        role={authRole || undefined}
+        principalKind={authKind || undefined}
+        permissionsLoaded={authLoaded}
         onClose={() => setShowCommandPalette(false)}
         onNavigate={(tab) => {
           navigate(tab);

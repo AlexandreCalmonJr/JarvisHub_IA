@@ -27,6 +27,10 @@ import { getLocalSessionsCatalog, removeSessionLocally, LocalSessionMeta } from 
 import { getUserProfile } from './common/UserProfileModal';
 
 interface SidebarProps {
+  permissions?: string[];
+  role?: string;
+  principalKind?: string;
+  permissionsLoaded?: boolean;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   pendingApprovalsCount: number;
@@ -41,6 +45,10 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
+  permissions = [],
+  role,
+  principalKind,
+  permissionsLoaded = false,
   activeTab,
   setActiveTab,
   pendingApprovalsCount,
@@ -59,6 +67,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessions, setSessions] = useState<LocalSessionMeta[]>([]);
   const userProfile = getUserProfile();
+  const hasPermission = (permission: string) => permissionsLoaded && (permissions.includes('*') || permissions.includes(permission));
+  const isAdmin = principalKind === 'human' && role === 'admin';
 
   const loadSessions = () => {
     const list = getLocalSessionsCatalog();
@@ -91,28 +101,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const agentItems = [
-    { id: 'agents', label: 'Centro de Agentes (26)', icon: <Bot size={13} color="#c084fc" /> },
-    { id: 'coding', label: 'Coding Agent (Terminal)', icon: <Terminal size={13} color="#38bdf8" /> },
-    { id: 'tasks', label: 'Fila de Tarefas (Tasks)', icon: <ListTodo size={13} color="#fbbf24" /> },
-  ];
+    { id: 'agents', label: 'Centro de Agentes', permission: 'agents:read', icon: <Bot size={13} color="var(--accent-color)" /> },
+    { id: 'coding', label: 'Coding Agent', permission: 'coding:read', icon: <Terminal size={13} color="var(--accent-color)" /> },
+    { id: 'tasks', label: 'Fila de Tarefas', permission: 'tasks:read', icon: <ListTodo size={13} color="var(--accent-color)" /> },
+  ].filter((item) => hasPermission(item.permission));
 
   const engineeringItems = [
-    { id: 'backend_studio', label: 'Backend & APIs (Mock)', icon: <Server size={13} color="#60a5fa" /> },
-    { id: 'quality', label: 'Qualidade & QA (Testes)', icon: <CheckCircle2 size={13} color="#34d399" /> },
-    { id: 'knowledge', label: 'Base de Conhecimento (RAG)', icon: <Database size={13} color="#a78bfa" /> },
-    { id: 'overview', label: 'Visão Geral', icon: <Activity size={13} color="#f43f5e" /> },
-    { id: 'design', label: 'Design Studio', icon: <Sparkles size={13} color="#d97757" /> },
-    { id: 'executive_report', label: 'Relatório Executivo', icon: <FileText size={13} color="#94a3b8" /> },
-    { id: 'advisor', label: 'Hardware Advisor', icon: <Cpu size={13} color="#fbbf24" /> },
-  ];
+    { id: 'backend_studio', label: 'Backend & APIs', permission: 'studios:read', icon: <Server size={13} color="var(--accent-color)" /> },
+    { id: 'quality', label: 'Qualidade & QA', permission: 'studios:read', icon: <CheckCircle2 size={13} color="var(--accent-color)" /> },
+    { id: 'knowledge', label: 'Base de Conhecimento', permission: 'knowledge:read', icon: <Database size={13} color="var(--accent-color)" /> },
+    { id: 'overview', label: 'Visão Geral', permission: 'system:read', icon: <Activity size={13} color="var(--accent-color)" /> },
+    { id: 'design', label: 'Design Studio', permission: 'studios:read', icon: <Sparkles size={13} color="var(--accent-color)" /> },
+    { id: 'executive_report', label: 'Relatório Executivo', permission: 'studios:read', icon: <FileText size={13} color="var(--accent-color)" /> },
+    { id: 'advisor', label: 'Hardware Advisor', adminOnly: true, icon: <Cpu size={13} color="var(--accent-color)" /> },
+  ].filter((item) => item.adminOnly ? isAdmin : hasPermission(item.permission || ''));
+
 
   const settingsItems = [
-    { id: 'models', label: 'Modelos & Chaves (KeyVault)', icon: <Key size={13} color="#fbbf24" /> },
-    { id: 'skills', label: 'Habilidades (Skills ECC)', icon: <Sparkles size={13} color="#a855f7" /> },
-    { id: 'security', label: 'Segurança & Kill Switch', icon: <ShieldAlert size={13} color="#ef4444" /> },
-    { id: 'approvals', label: 'Central de Aprovações', icon: <AlertTriangle size={13} color="#f97316" />, badge: pendingApprovalsCount },
-    { id: 'server_logs', label: 'Logs & Diagnóstico', icon: <FileText size={13} color="#94a3b8" /> },
-  ];
+    { id: 'models', label: 'Modelos & Cofre', permission: 'models:read', icon: <Key size={13} color="var(--accent-color)" /> },
+    { id: 'skills', label: 'Habilidades (Skills)', permission: 'skills:read', icon: <Sparkles size={13} color="var(--accent-color)" /> },
+    { id: 'security', label: 'Segurança', permission: 'security:read', icon: <ShieldAlert size={13} color="var(--danger-color)" /> },
+    { id: 'approvals', label: 'Central de Aprovações', permission: 'approvals:read', icon: <AlertTriangle size={13} color="var(--warning-color)" />, badge: pendingApprovalsCount },
+    { id: 'server_logs', label: 'Logs do Servidor', adminOnly: true, icon: <FileText size={13} color="var(--accent-color)" /> },
+  ].filter((item) => item.adminOnly ? isAdmin : hasPermission(item.permission || ''));
+
 
   return (
     <>
@@ -199,7 +211,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           {/* 1. Chat JARVIS */}
-          <button
+          {hasPermission('chat:read') && <button
             type="button"
             onClick={() => handleSelectTab('chat')}
             className="btn btn-ghost"
@@ -220,10 +232,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <MessageSquare size={16} color="var(--accent-color)" />
             {!isCollapsed && <span>Chat JARVIS</span>}
-          </button>
+          </button>}
 
           {/* 2. Projetos */}
-          <button
+          {hasPermission('workspace:read') && <button
             type="button"
             onClick={() => handleSelectTab('workspace')}
             className="btn btn-ghost"
@@ -244,10 +256,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <FolderGit2 size={16} color="#38bdf8" />
             {!isCollapsed && <span>Projetos</span>}
-          </button>
+          </button>}
 
           {/* 3. Escritório Virtual */}
-          <button
+          {hasPermission('agents:read') && <button
             type="button"
             onClick={() => handleSelectTab('office')}
             className="btn btn-ghost"
@@ -266,26 +278,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-              <Building2 size={16} color="#34d399" />
+              <Building2 size={16} color="var(--accent-color)" />
               {!isCollapsed && <span>Escritório Virtual</span>}
             </div>
-            {!isCollapsed && (
-              <span
-                style={{
-                  fontSize: '0.65rem',
-                  padding: '1px 6px',
-                  borderRadius: '10px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                26
-              </span>
-            )}
-          </button>
+          </button>}
 
           {/* Submenu 1: Especialistas & IA */}
-          <button
+          {agentItems.length > 0 && <button
             type="button"
             onClick={() => {
               if (isCollapsed && onToggleCollapse) onToggleCollapse();
@@ -307,7 +306,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-              <Bot size={16} color="#c084fc" />
+              <Bot size={16} color="var(--accent-color)" />
               {!isCollapsed && <span>Especialistas & IA</span>}
             </div>
             {!isCollapsed && (
@@ -315,9 +314,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {agentsOpen ? '−' : '+'}
               </span>
             )}
-          </button>
+          </button>}
 
-          {!isCollapsed && agentsOpen && (
+          {!isCollapsed && agentsOpen && agentItems.length > 0 && (
             <div
               style={{
                 display: 'flex',
@@ -364,7 +363,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           {/* Submenu 2: Engenharia & Dados */}
-          <button
+          {engineeringItems.length > 0 && <button
             type="button"
             onClick={() => {
               if (isCollapsed && onToggleCollapse) onToggleCollapse();
@@ -385,7 +384,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-              <Cpu size={16} color="#fbbf24" />
+              <Cpu size={16} color="var(--accent-color)" />
               {!isCollapsed && <span>Engenharia & Dados</span>}
             </div>
             {!isCollapsed && (
@@ -395,7 +394,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </button>
 
-          {!isCollapsed && engineeringOpen && (
+          {!isCollapsed && engineeringOpen && engineeringItems.length > 0 && (
             <div
               style={{
                 display: 'flex',
@@ -442,7 +441,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           {/* Submenu 3: Configurações & Governança */}
-          <button
+          {settingsItems.length > 0 && <button
             type="button"
             onClick={() => {
               if (isCollapsed && onToggleCollapse) onToggleCollapse();
@@ -473,7 +472,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </button>
 
-          {!isCollapsed && settingsOpen && (
+          {!isCollapsed && settingsOpen && settingsItems.length > 0 && (
             <div
               style={{
                 display: 'flex',
@@ -720,7 +719,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
               </div>
               <span style={{ fontWeight: 500 }}>
-                {userProfile.displayName || 'Alexandre'}
+                {userProfile.displayName || 'Utilizador'}
               </span>
               <span style={{ fontSize: '0.70rem', color: 'var(--text-muted)' }}>· v3.0.0</span>
             </button>
