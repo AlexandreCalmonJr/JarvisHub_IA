@@ -417,6 +417,7 @@ def create_master_graph(
                         )
                     appr = security_core.approval_engine.create_request(
                         task_id=state["task_id"],
+                        owner_user_id=state.get("owner_user_id"),
                         agent_role=AgentRole.JARVIS_MASTER.value,
                         operation="file_write",
                         impact_summary=(
@@ -861,6 +862,7 @@ def create_master_graph(
             )
             approval = security_core.approval_engine.create_request(
                 task_id=state["task_id"],
+                owner_user_id=state.get("owner_user_id"),
                 agent_role=AgentRole.JARVIS_MASTER.value,
                 operation="project_create",
                 impact_summary=(
