@@ -112,7 +112,10 @@ class KnowledgeVaultService:
             return f"{size_bytes / 1024:.1f} KB"
         return f"{size_bytes / (1024 * 1024):.1f} MB"
 
-    def index_file(self, file_path: Path | str, category: str = "geral") -> dict[str, Any]:
+    def index_file(
+        self, file_path: Path | str, category: str = "geral",
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
         """Processa um arquivo físico e indexa seus blocos na Base de Conhecimento."""
         p = Path(file_path).resolve()
         if not p.exists() or not p.is_file():
@@ -134,6 +137,7 @@ class KnowledgeVaultService:
             chunks=chunks,
             file_size_formatted=file_size_formatted,
             source_path=str(p),
+            owner_user_id=owner_user_id,
         )
 
         return {
@@ -147,7 +151,8 @@ class KnowledgeVaultService:
         }
 
     def index_text_snippet(
-        self, doc_name: str, content: str, category: str = "anotacoes"
+        self, doc_name: str, content: str, category: str = "anotacoes",
+        owner_user_id: str | None = None,
     ) -> dict[str, Any]:
         """Indexa um texto avulso digitado ou colado pelo usuário."""
         chunks = self.chunk_text(content)
@@ -159,6 +164,7 @@ class KnowledgeVaultService:
             chunks=chunks,
             file_size_formatted=file_size_formatted,
             source_path="Entrada Direta do Usuário",
+            owner_user_id=owner_user_id,
         )
         return {
             "status": "indexed",
@@ -167,7 +173,10 @@ class KnowledgeVaultService:
             "file_size": file_size_formatted,
         }
 
-    def index_directory(self, dir_path: Path | str, category: str = "projeto") -> dict[str, Any]:
+    def index_directory(
+        self, dir_path: Path | str, category: str = "projeto",
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
         """Varre e indexa todos os arquivos suportados em um diretório local."""
         root = Path(dir_path).resolve()
         if not root.exists() or not root.is_dir():
@@ -183,7 +192,7 @@ class KnowledgeVaultService:
                 if any(k in parts for k in ("node_modules", ".venv", "__pycache__", ".git", "dist", "build")):
                     continue
                 try:
-                    res = self.index_file(p, category=category)
+                    res = self.index_file(p, category=category, owner_user_id=owner_user_id)
                     indexed_files.append(res)
                 except Exception as exc:
                     skipped_files.append({"file": p.name, "error": str(exc)})
@@ -196,14 +205,24 @@ class KnowledgeVaultService:
             "skipped_count": len(skipped_files),
         }
 
-    def search(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
-        """Realiza busca textual relacional no Vault."""
-        return self.db.search_knowledge_vault(query, limit=limit)
+    def search(
+        self, query: str, limit: int = 4, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Realiza busca textual restrita ao proprietário."""
+        return self.db.search_knowledge_vault(
+            query, limit=limit, owner_user_id=owner_user_id
+        )
 
-    def list_documents(self) -> list[dict[str, Any]]:
-        """Lista inventário de documentos indexados no Vault."""
-        return self.db.list_knowledge_documents()
+    def list_documents(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Lista inventário de documentos do proprietário."""
+        return self.db.list_knowledge_documents(owner_user_id=owner_user_id)
 
-    def delete_document(self, doc_name: str) -> bool:
-        """Exclui documento do Vault."""
-        return self.db.delete_knowledge_document(doc_name)
+    def delete_document(
+        self, doc_name: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Exclui documento apenas do proprietário."""
+        return self.db.delete_knowledge_document(
+            doc_name, owner_user_id=owner_user_id
+        )
