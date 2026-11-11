@@ -587,7 +587,7 @@ const DashboardApp: React.FC = () => {
                 />
               </div>
             )}
-            {activeTab === 'approvals' && <ApprovalCenter approvals={approvals} onRefresh={loadData} />}
+            {activeTab === 'approvals' && <ApprovalCenter approvals={approvals} onRefresh={loadData} loading={approvalsLoading} error={approvalsError} />}
             {activeTab === 'workspace' && (
               <ProjectWorkspaceView
                 onSelectForChat={(id) => {
