@@ -135,3 +135,40 @@ def test_model_performance_requires_minimum_samples_and_owner(tmp_path):
         assert "owner_user_id" in str(exc)
     else:
         raise AssertionError("An owner must be required for performance queries")
+
+
+def test_model_selection_history_is_private_to_owner(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    store.record_model_selection(
+        owner_user_id="user-a",
+        task_id="task-a",
+        agent_role="developer",
+        task_capability="code",
+        selected_model="coder-a",
+        selected_provider="ollama_local",
+        selection_reason="local-first",
+        candidate_count=2,
+    )
+    store.record_model_selection(
+        owner_user_id="user-b",
+        task_id="task-b",
+        agent_role="auditor",
+        task_capability="reasoning",
+        selected_model="cloud-b",
+        selected_provider="online_gateway (openai)",
+        selection_reason="approved",
+        candidate_count=3,
+    )
+
+    rows = store.list_model_selections_for_owner("user-a")
+    assert len(rows) == 1
+    assert rows[0]["selected_model"] == "coder-a"
+    assert rows[0]["task_capability"] == "code"
+    assert store.list_model_selections_for_owner("user-b")[0]["selected_model"] == "cloud-b"
+
+    try:
+        store.list_model_selections_for_owner("")
+    except ValueError as exc:
+        assert "owner_user_id" in str(exc)
+    else:
+        raise AssertionError("An owner must be required for selection history")
