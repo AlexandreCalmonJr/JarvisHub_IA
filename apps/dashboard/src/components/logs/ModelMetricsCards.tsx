@@ -181,10 +181,10 @@ export const ModelMetricsCards: React.FC<ModelMetricsCardsProps> = ({ metrics })
               fontFamily: 'var(--font-mono)',
             }}
           >
-            {metrics?.fastest_model || 'llama3.2:3b'}
+            {metrics?.fastest_model || '—'}
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Taxa de sucesso: {metrics?.success_rate_percent || 100}%
+            Taxa de sucesso: {typeof metrics?.success_rate_percent === 'number' ? `${metrics.success_rate_percent}%` : '—'}
           </div>
         </div>
       </div>
@@ -234,7 +234,7 @@ export const ModelMetricsCards: React.FC<ModelMetricsCardsProps> = ({ metrics })
               fontFamily: 'var(--font-mono)',
             }}
           >
-            ${metrics?.total_savings_usd ? metrics.total_savings_usd.toFixed(3) : '0.000'} USD
+            ${typeof metrics?.total_savings_usd === 'number' ? metrics.total_savings_usd.toFixed(3) : '—'} USD
           </div>
           <div style={{ fontSize: '0.72rem', color: '#10b981', marginTop: '2px' }}>
             100% Grátis (R$ 0,00 gasto)

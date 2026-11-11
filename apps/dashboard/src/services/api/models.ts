@@ -51,7 +51,7 @@ export async function testHybridConnection(payload: {
 }
 
 export async function fetchModelMetrics(): Promise<any> {
-  const res = await fetch(`${API_BASE}/system/model-metrics`);
+  const res = await fetch(`${API_BASE}/system/model-metrics`, { credentials: 'include' });
   if (!res.ok) throw new Error('Falha ao carregar métricas de inferência.');
   return res.json();
 }

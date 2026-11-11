@@ -21,7 +21,7 @@ export async function fetchServerLogs(
   let url = `${API_BASE}/system/server-logs?limit=${limit}`;
   if (level && level !== 'ALL') url += `&level=${encodeURIComponent(level)}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Falha ao carregar logs do servidor" }));
     throw new Error(err.detail || "Falha ao carregar logs do servidor");
@@ -30,7 +30,7 @@ export async function fetchServerLogs(
 }
 
 export async function clearServerLogs(): Promise<void> {
-  const res = await fetch(`${API_BASE}/system/server-logs/clear`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/system/server-logs/clear`, { method: 'POST', credentials: 'include' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Falha ao limpar logs do servidor" }));
     throw new Error(err.detail || "Falha ao limpar logs do servidor");
