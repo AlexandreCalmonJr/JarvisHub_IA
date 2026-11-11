@@ -4,9 +4,10 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
 from fastapi.responses import StreamingResponse
 
-from apps.api.auth import Principal, get_principal, require_admin
+from apps.api.auth import Principal, get_principal, require_admin, require_permission
 from apps.api.deps import (
     AGENT_PROFILES,
     InferenceRequest,
@@ -16,6 +17,7 @@ from apps.api.deps import (
     build_specialist_prompt,
     db_manager,
     model_manager,
+    security_core,
     skills_catalog,
     tool_gateway,
 )
@@ -248,8 +250,10 @@ async def agent_playground_endpoint(
 
 
 @router.get("/api/v1/tools")
-async def list_tools_endpoint():
-    """Lista catálogo de ferramentas seguras catalogadas no Tool Gateway."""
+async def list_tools_endpoint(
+    principal: Principal = Depends(require_permission("coding:read")),
+):
+    """Lista o catálogo compartilhado de ferramentas para utilizadores autenticados."""
     return [
         {
             "name": t.name,
@@ -263,14 +267,33 @@ async def list_tools_endpoint():
 
 
 @router.post("/api/v1/tools/execute")
-async def execute_tool_endpoint(request: ToolExecutionRequest):
-    """Executa ferramenta no sandbox isolado com auditoria e controle de permissões."""
-    try:
-        res = await tool_gateway.execute_tool(request)
-        return res.model_dump()
-    except Exception as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+async def execute_tool_endpoint(
+    request: ToolExecutionRequest,
+    principal: Principal = Depends(require_permission("coding:use")),
+):
+    """Executa ferramentas apenas em projetos pertencentes à conta autenticada."""
+    owner_user_id = _private_owner(principal)
+    project = db_manager.get_project(request.project_id, owner_user_id=owner_user_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
+    project_root = Path(project["root_path"]).resolve()
+    if not project_root.exists() or not project_root.is_dir():
+        raise HTTPException(status_code=404, detail="Diretório do projeto não encontrado.")
+
+    try:
+        security_core.permission_engine.register_project(
+            request.project_id, str(project_root)
+        )
+        result = await tool_gateway.execute_tool(
+            request, owner_user_id=owner_user_id
+        )
+        return result.model_dump()
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Falha na execução de ferramenta para o projeto %s", request.project_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 # ---------------------------------------------------------------------------
 # Especialistas Autônomos (Etapa 5: Streaming SSE, Tarefas Estruturadas & Histórico)
