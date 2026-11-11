@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse
 
 from apps.api.auth import Principal, get_principal
 from apps.api.deps import security_core
-from packages.contracts.approval import ApprovalStatus
 
 from apps.api.schemas import (
     WriteProjectFilePayload,
@@ -42,17 +41,15 @@ def _workspace_approval(
         )
         return request
 
-    request = security_core.approval_engine.get_request(approval_id)
-    if (
-        not request
-        or request.status != ApprovalStatus.APPROVED
-        or request.operation != operation
-        or request.task_id != task_id
-        or resource not in request.affected_resources
-    ):
-        raise PermissionDeniedError(
-            "Aprovação ausente, pendente, expirada ou não correspondente à operação e ao recurso."
+    try:
+        security_core.approval_engine.consume_approved_request(
+            approval_id,
+            operation=operation,
+            task_id=task_id,
+            resource=resource,
         )
+    except ValueError as exc:
+        raise PermissionDeniedError(str(exc)) from exc
     return None
 
 
