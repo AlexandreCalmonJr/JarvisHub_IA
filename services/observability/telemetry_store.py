@@ -7,6 +7,7 @@ são persistidos neste repositório de telemetria.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -30,8 +31,20 @@ class SqliteTelemetryStore:
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
+    @contextmanager
+    def _connection(self):
+        conn = self._connect()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def _initialize(self) -> None:
-        with self._lock, self._connect() as conn:
+        with self._lock, self._connection() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS inference_telemetry (
@@ -81,7 +94,7 @@ class SqliteTelemetryStore:
             raise ValueError("Invalid inference telemetry status")
         record_id = str(uuid.uuid4())
         created_at = datetime.now(UTC).isoformat()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO inference_telemetry (
@@ -111,7 +124,7 @@ class SqliteTelemetryStore:
         if not owner_user_id or not owner_user_id.strip():
             raise ValueError("owner_user_id is required")
         safe_limit = max(1, min(int(limit), 500))
-        with self._lock, self._connect() as conn:
+        with self._lock, self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT id, task_id, agent_role, model_name, provider, status,
@@ -128,7 +141,7 @@ class SqliteTelemetryStore:
     def summary_for_owner(self, owner_user_id: str) -> dict[str, int | float]:
         if not owner_user_id or not owner_user_id.strip():
             raise ValueError("owner_user_id is required")
-        with self._lock, self._connect() as conn:
+        with self._lock, self._connection() as conn:
             row = conn.execute(
                 """
                 SELECT COUNT(*) AS total_inferences,
