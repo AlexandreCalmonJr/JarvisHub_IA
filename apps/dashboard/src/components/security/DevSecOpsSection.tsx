@@ -109,7 +109,7 @@ export const DevSecOpsSection: React.FC = () => {
   };
 
   const handleScanCVEs = async () => {
-    if (!selectedProjectId) return;
+    if (!canRunSecurityActions || !selectedProjectId) return;
     setCveLoading(true);
     setCveReport(null);
     try {
@@ -123,7 +123,7 @@ export const DevSecOpsSection: React.FC = () => {
   };
 
   const handleRunRedTeam = async () => {
-    if (!selectedProjectId) return;
+    if (!canRunSecurityActions || !selectedProjectId) return;
     setRedTeamLoading(true);
     setRedTeamReport(null);
     try {
@@ -137,7 +137,7 @@ export const DevSecOpsSection: React.FC = () => {
   };
 
   const handleApplyPolicy = async (templateId: string, approvalId?: string) => {
-    if (!selectedProjectId) return;
+    if (!canRunSecurityActions || !selectedProjectId) return;
     setApplyingPolicyId(templateId);
     setPolicyMessage(null);
     try {
