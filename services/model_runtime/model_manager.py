@@ -7,6 +7,7 @@ from services.security_core import AuditTrail, KillSwitch
 
 from .adapter import BaseModelAdapter, OllamaAdapter
 from .inference_queue import InferenceQueue
+from .model_selector import ModelSelector
 from .types import InferenceRequest, InferenceResponse, ModelMetadata, ModelRoleMapping
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class ModelManager:
         self.audit_trail = audit_trail
         self.hybrid_router = hybrid_router
         self.telemetry_store = telemetry_store
+        self.model_selector = ModelSelector()
 
     def set_cpu_threads(self, threads: int | None) -> None:
         """Configura dinamicamente o número de threads do Ollama no adaptador ativo."""
@@ -56,14 +58,79 @@ class ModelManager:
 
 
     async def list_available_models(self) -> list[ModelMetadata]:
-        local_models = await self.adapter.list_models()
+        models: list[ModelMetadata] = []
+        try:
+            models.extend(await self.adapter.list_models())
+        except Exception as exc:
+            logger.warning("Catálogo local indisponível durante descoberta: %s", type(exc).__name__)
         if self.hybrid_router and self.hybrid_router.online_config.enabled and self.hybrid_router.online_adapter:
             try:
-                online_models = await self.hybrid_router.online_adapter.list_models()
-                return local_models + online_models
+                models.extend(await self.hybrid_router.online_adapter.list_models())
+            except Exception as exc:
+                logger.warning("Catálogo online indisponível durante descoberta: %s", type(exc).__name__)
+        return models
+
+    async def _prepare_model_selection(
+        self, request: InferenceRequest, has_external_data_approval: bool
+    ) -> InferenceRequest:
+        if request.model_name not in {"auto", "auto_hybrid"}:
+            return request
+        if request.model_name == "auto_hybrid" and not (
+            self.hybrid_router and self.hybrid_router.online_config.enabled
+            and self.hybrid_router.online_adapter
+        ):
+            allow_external = False
+        else:
+            allow_external = bool(
+                self.hybrid_router and self.hybrid_router.online_config.enabled
+                and self.hybrid_router.online_adapter
+            )
+
+        models = await self.list_available_models()
+        selection = self.model_selector.select(
+            models=models,
+            owner_user_id=request.owner_user_id,
+            agent_role=request.agent_role,
+            task_capability=request.task_capability,
+            telemetry_store=self.telemetry_store,
+            allow_external=allow_external,
+            contains_sensitive_data=request.contains_sensitive_data,
+            has_external_data_approval=has_external_data_approval,
+        )
+        selected_request = request.model_copy(deep=True)
+        selected_request.model_name = selection.candidate.model_name
+        selected_request.force_local = selection.candidate.local
+        if request.owner_user_id and self.telemetry_store:
+            try:
+                self.telemetry_store.record_model_selection(
+                    owner_user_id=request.owner_user_id,
+                    task_id=request.task_id,
+                    agent_role=request.agent_role,
+                    task_capability=request.task_capability,
+                    selected_model=selection.candidate.model_name,
+                    selected_provider=selection.candidate.provider,
+                    selection_reason=selection.reason,
+                    candidate_count=len(models),
+                )
             except Exception:
-                pass
-        return local_models
+                logger.exception("Não foi possível persistir a decisão de seleção do modelo.")
+        if self.audit_trail:
+            self.audit_trail.record_event(
+                operation="MODEL_SELECTED",
+                status="SUCCESS",
+                parameters={
+                    "model": selection.candidate.model_name,
+                    "provider": selection.candidate.provider,
+                    "agent_role": request.agent_role,
+                    "task_capability": request.task_capability,
+                    "score": selection.score,
+                    "sample_sufficient": selection.sample_sufficient,
+                    "success_rate": selection.success_rate,
+                },
+                severity=AuditEventSeverity.INFO,
+                reason=selection.reason,
+            )
+        return selected_request
 
     def select_model_for_role(self, role_str: str) -> str:
         """Seleciona o modelo mais adequado conforme a especialização do agente."""
@@ -84,6 +151,8 @@ class ModelManager:
                 raise RuntimeError("Operações suspensas pelo Kill Switch Global.")
             if request.task_id and self.kill_switch.is_task_cancelled(request.task_id):
                 raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
+
+        request = await self._prepare_model_selection(request, has_external_data_approval)
 
         # 2. Execução protegida pela fila de concorrência com suporte a Hybrid Gateway
         used_provider = "ollama_local"
