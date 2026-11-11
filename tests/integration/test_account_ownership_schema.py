@@ -100,3 +100,44 @@ def test_agent_memory_keys_are_independent_between_accounts(tmp_path):
     assert db.delete_agent_memory(memory_a_id, owner_user_id="account-a") is True
     assert db.list_agent_memories(owner_user_id="account-a") == []
     assert len(db.list_agent_memories(owner_user_id="account-b")) == 1
+
+
+def test_agent_memory_rebuild_preserves_legacy_rows_without_owner(tmp_path):
+    import sqlite3
+    from datetime import UTC, datetime
+
+    db_path = tmp_path / "pre-owner.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE agent_memories (
+            id TEXT PRIMARY KEY,
+            agent_role TEXT NOT NULL,
+            category TEXT NOT NULL,
+            key TEXT NOT NULL,
+            content TEXT NOT NULL,
+            context TEXT,
+            importance INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP NOT NULL,
+            updated_at TIMESTAMP NOT NULL,
+            UNIQUE(agent_role, category, key)
+        )
+        """
+    )
+    now = datetime.now(UTC).isoformat()
+    conn.execute(
+        """
+        INSERT INTO agent_memories (
+            id, agent_role, category, key, content, importance, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("legacy-memory", "jarvis_master", "preference", "language", "Português", 3, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    db = DatabaseManager(db_path=str(db_path))
+    legacy = db.list_agent_memories(owner_user_id=None)
+    assert len(legacy) == 1
+    assert legacy[0]["id"] == "legacy-memory"
+    assert legacy[0]["content"] == "Português"
