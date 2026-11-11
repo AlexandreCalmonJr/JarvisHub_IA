@@ -176,7 +176,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               <label style={styles.label}>Palavra-passe inicial (mínimo 12 caracteres)</label>
               <input type="password" autoComplete="new-password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} style={styles.input} minLength={12} required />
               <label style={styles.label}>Perfil de acesso</label>
-              <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'developer' | 'auditor' })} style={styles.input}>
+              <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'admin' | 'developer' | 'auditor' })} style={styles.input}>
                 <option value="admin">Administrador — controlo total</option>
                 <option value="developer">Desenvolvedor — acesso de trabalho</option>
                 <option value="auditor">Auditor — apenas leitura</option>
