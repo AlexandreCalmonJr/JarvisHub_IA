@@ -134,9 +134,13 @@ class KeyVaultService:
             return None
         key = Fernet.generate_key()
         tmp = self._fernet_key_path.with_suffix(self._fernet_key_path.suffix + ".tmp")
-        tmp.write_bytes(key)
-        _chmod_private(tmp)
-        os.replace(tmp, self._fernet_key_path)
+        try:
+            tmp.write_bytes(key)
+            _chmod_private(tmp)
+            os.replace(tmp, self._fernet_key_path)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
         logger.info("Chave de cifra do cofre criada em arquivo restrito: %s", self._fernet_key_path)
         return Fernet(key)
 
@@ -235,6 +239,7 @@ class KeyVaultService:
             os.replace(tmp_path, self.vault_path)
         except Exception as exc:
             logger.error("Falha ao persistir cofre de chaves cifrado: %s", exc)
+            raise RuntimeError("Não foi possível persistir o KeyVault cifrado.") from exc
 
     def list_keys(self) -> list[dict[str, Any]]:
         """Retorna todas as chaves cadastradas, sem nunca expor a chave crua."""
