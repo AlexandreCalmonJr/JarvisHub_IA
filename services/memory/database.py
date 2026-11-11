@@ -456,108 +456,110 @@ class DatabaseManager:
     # --- Mensagens individuais do agente de código (histórico fiel) ---
 
     def add_chat_message(
-        self,
-        session_id: str,
-        role: str,
-        content: str = "",
+        self, session_id: str, role: str, content: str = "",
         project_id: str | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
-        tool_call_id: str | None = None,
-        tool_name: str | None = None,
+        tool_call_id: str | None = None, tool_name: str | None = None,
+        owner_user_id: str | None = None,
     ) -> int:
-        """Persiste uma mensagem individual (user/assistant/tool) da sessão."""
+        """Persiste mensagem vinculada à conta quando owner_user_id é fornecido."""
         now = datetime.now(UTC).isoformat()
         tool_calls_json = json.dumps(tool_calls, default=str) if tool_calls else None
         with self._get_connection() as conn:
+            if owner_user_id is not None and project_id:
+                project = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if not project or project["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Projeto inexistente ou não pertence à conta autenticada.")
             cur = conn.execute(
                 """
                 INSERT INTO chat_messages (
                     session_id, project_id, role, content, tool_calls_json,
-                    tool_call_id, tool_name, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    tool_call_id, tool_name, created_at, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    session_id,
-                    project_id,
-                    role,
-                    content,
-                    tool_calls_json,
-                    tool_call_id,
-                    tool_name,
-                    now,
-                ),
+                (session_id, project_id, role, content, tool_calls_json,
+                 tool_call_id, tool_name, now, owner_user_id),
             )
             return int(cur.lastrowid or 0)
 
     def list_chat_messages(
-        self,
-        session_id: str,
-        limit: int = 200,
-        ascending: bool = True,
+        self, session_id: str, limit: int = 200, ascending: bool = True,
+        owner_user_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Recupera as mensagens de uma sessão em ordem cronológica."""
+        """Recupera mensagens somente da conta solicitante quando informada."""
         limit = max(1, min(limit, 1000))
         order = "ASC" if ascending else "DESC"
+        query = f"""
+            SELECT id, session_id, project_id, role, content, tool_calls_json,
+                   tool_call_id, tool_name, created_at
+            FROM chat_messages WHERE session_id = ?
+        """
+        params: list[Any] = [session_id]
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += f" ORDER BY id {order} LIMIT ?"
+        params.append(limit)
         with self._get_connection() as conn:
-            cur = conn.execute(
-                f"""
-                SELECT id, session_id, project_id, role, content, tool_calls_json,
-                       tool_call_id, tool_name, created_at
-                FROM chat_messages
-                WHERE session_id = ?
-                ORDER BY id {order}
-                LIMIT ?
-                """,
-                (session_id, limit),
-            )
-            rows = []
-            for r in cur.fetchall():
-                d = dict(r)
-                raw_calls = d.pop("tool_calls_json", None)
-                try:
-                    d["tool_calls"] = json.loads(raw_calls) if raw_calls else []
-                except Exception:
-                    d["tool_calls"] = []
-                rows.append(d)
-            return rows
+            rows = conn.execute(query, params).fetchall()
+        result = []
+        for row in rows:
+            data = dict(row)
+            raw_calls = data.pop("tool_calls_json", None)
+            try:
+                data["tool_calls"] = json.loads(raw_calls) if raw_calls else []
+            except Exception:
+                data["tool_calls"] = []
+            result.append(data)
+        return result
 
-    def clear_session_messages(self, session_id: str) -> int:
-        """Remove todo o histórico de mensagens de uma sessão."""
+    def clear_session_messages(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> int:
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "DELETE FROM chat_messages WHERE session_id = ?", (session_id,)
-            )
+            if owner_user_id is None:
+                cur = conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
+            else:
+                cur = conn.execute(
+                    "DELETE FROM chat_messages WHERE session_id = ? AND owner_user_id = ?",
+                    (session_id, owner_user_id),
+                )
             return cur.rowcount
 
-    def search_chat_history(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        """Busca em todas as tarefas e conversas anteriores com filtro por texto."""
+    def search_chat_history(
+        self, query: str, limit: int = 20, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Busca histórico de texto limitado à conta autenticada."""
         if not query or not query.strip():
             return []
         term = f"%{query.strip().lower()}%"
+        sql = """
+            SELECT id, session_id, prompt, intent, project_id, created_at, state_json
+            FROM tasks
+            WHERE (lower(prompt) LIKE ? OR lower(state_json) LIKE ?)
+        """
+        params: list[Any] = [term, term]
+        if owner_user_id is not None:
+            sql += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
         with self._get_connection() as conn:
-            cur = conn.execute(
-                """
-                SELECT id, session_id, prompt, intent, project_id, created_at, state_json
-                FROM tasks
-                WHERE lower(prompt) LIKE ? OR lower(state_json) LIKE ?
-                ORDER BY created_at DESC
-                LIMIT ?
-                """,
-                (term, term, limit),
-            )
-            results = []
-            for r in cur.fetchall():
-                d = dict(r)
-                try:
-                    state = json.loads(d.pop("state_json"))
-                    d["final_summary"] = state.get("final_summary", "")
-                    d["agents"] = state.get("selected_agents", [])
-                except Exception:
-                    d["final_summary"] = ""
-                    d["agents"] = []
-                results.append(d)
-            return results
+            rows = conn.execute(sql, params).fetchall()
+        results = []
+        for row in rows:
+            data = dict(row)
+            try:
+                state = json.loads(data.pop("state_json"))
+                data["final_summary"] = state.get("final_summary", "")
+                data["agents"] = state.get("selected_agents", [])
+            except Exception:
+                data["final_summary"] = ""
+                data["agents"] = []
+            results.append(data)
+        return results
 
     def export_session_markdown(self, session_id: str) -> str:
         """Gera um arquivo Markdown completo e estruturado de toda a sessão de conversa."""
