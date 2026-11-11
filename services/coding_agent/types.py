@@ -26,7 +26,7 @@ class AgentMode(str, Enum):
 
     PLAN = "plan"  # Somente leitura; nunca escreve nem executa comandos.
     ASK = "ask"  # Pede aprovação humana antes de escrever/executar.
-    AUTO = "auto"  # Executa tudo dentro do sandbox, exceto bloqueios duros.
+    AUTO = "auto"  # Autonomia no sandbox; ferramentas protegidas continuam exigindo aprovação humana.
 
 
 class ToolSpec(BaseModel):
