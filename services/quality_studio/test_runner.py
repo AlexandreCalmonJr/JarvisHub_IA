@@ -99,9 +99,9 @@ class QualityStudioService:
                 max_output_chars=100_000,
             ).run_command(command, cwd=proj_dir, timeout_seconds=timeout)
             output = (stdout + "\n" + stderr).strip()
-            passed = len(re.findall(r"\\bPASSED\\b", stdout))
-            failed = len(re.findall(r"\\bFAILED\\b", stdout))
-            skipped = len(re.findall(r"\\bSKIPPED\\b", stdout))
+            passed = len(re.findall(r"\bPASSED\b", stdout))
+            failed = len(re.findall(r"\bFAILED\b", stdout))
+            skipped = len(re.findall(r"\bSKIPPED\b", stdout))
             return {
                 "status": "success" if return_code == 0 else "failure",
                 "is_success": return_code == 0,
@@ -177,7 +177,7 @@ class QualityStudioService:
             "    # Captura de evidência visual",
             f"    page.screenshot(path={json.dumps('screenshot_' + clean_name + '.png')})",
         ])
-        return "\\n".join(code_lines)
+        return "\n".join(code_lines)
 
     def generate_chaos_edge_cases(
         self,
