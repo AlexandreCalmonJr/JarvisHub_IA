@@ -233,7 +233,7 @@ class ModelManager:
                 task_id=request.task_id,
                 agent_role=request.agent_role,
                 model_name=model_name or request.model_name,
-                provider=provider,
+                provider=("ollama_local" if provider.startswith("ollama_local") else provider),
                 status=status,
                 duration_ms=duration_ms,
                 prompt_tokens=prompt_tokens,
