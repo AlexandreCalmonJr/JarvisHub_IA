@@ -48,7 +48,7 @@ async def test_frente_01_workspace_buttons_and_files():
             "/api/v1/workspace/projects/test_frente1_project/files/write",
             json={
                 "path": "main.py",
-                "content": "print('hello updated front 1')\\n",
+                "content": "print('hello updated front 1')\n",
                 "reason": "Teste de comparador e aplicador de diff",
                 "approval_id": write_data["approval_id"],
             },
@@ -56,7 +56,7 @@ async def test_frente_01_workspace_buttons_and_files():
         assert applied.status_code == 200
         assert applied.json()["status"] == "saved"
         assert (test_proj_dir / "main.py.bak").exists()
-        assert (test_proj_dir / "main.py").read_text(encoding="utf-8") == "print('hello updated front 1')\\n"
+        assert (test_proj_dir / "main.py").read_text(encoding="utf-8") == "print('hello updated front 1')\n"
         # Limpeza
         workspace_service.delete_project("test_frente1_project")
 
