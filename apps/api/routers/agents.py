@@ -38,10 +38,10 @@ _agent_session_locks: dict[str, asyncio.Lock] = {}
 
 
 def _private_owner(principal: Principal) -> str:
-    if principal.kind != "human":
+    if principal.kind == "device" and principal.subject_id.startswith("device:"):
         raise HTTPException(
             status_code=403,
-            detail="Dispositivos precisam ser associados a uma conta antes de acessar dados privados.",
+            detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
         )
     return principal.subject_id
 
