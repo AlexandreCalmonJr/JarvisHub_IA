@@ -889,3 +889,22 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Testar Hugging Face com pesquisa vazia, instalação concluída, erro e stream terminado sem evento terminal.
 - Confirmar que developer/auditor não conseguem consultar orçamento, gasto, estado da chave, fila global, KeyVault ou configuração híbrida.
 - Build, lint, testes automatizados e validação visual continuam adiados para a fase final.
+
+
+## 21. Onboarding e Learning Center — implementação adicional
+
+**Implementado nesta etapa na branch de auditoria:**
+
+- A conta administrativa de desenvolvimento que ainda autentica com a credencial inicial conhecida passa a receber o sinal must_change_password em GET /api/v1/auth/me. A verificação é restrita ao utilizador admin e a ambientes não produtivos; não devolve nem regista a credencial.
+- O assistente apresenta um ecrã obrigatório para alterar a credencial inicial. A API exige sessão humana, palavra-passe atual, nova palavra-passe com pelo menos 12 caracteres, rate limit e hash PBKDF2 pelo armazenamento de contas existente. As outras sessões da conta são revogadas; a sessão atual é preservada.
+- O Learning Center passa a oferecer tutoriais para os módulos de overview, chat/Maestro, agentes, escritório, tarefas, workspace, coding, modelos, skills, conhecimento, aprovações, segurança, Backend Studio, Quality Studio, Design Studio, relatórios, hardware, logs e perfil.
+- O tour interativo navega entre as páginas disponíveis ao perfil e apresenta uma explicação por página; não declara execução de operações.
+- O progresso é persistido numa tabela SQLite por owner_user_id, com leitura e escrita autenticadas e permissões profile:read / profile:write. O browser mantém cópia local temporária e reconcilia progresso local pendente com o servidor quando a ligação regressa.
+- Foi adicionada entrada de ajuda contextual no cabeçalho, que abre o Learning Center com referência à página anterior. O tutorial de perfil abre o modal de perfil.
+
+**Limites que permanecem explícitos:**
+
+- A sincronização entre dispositivos depende de ambos utilizarem a mesma instância/armazenamento persistente do JARVIS; esta implementação não constitui replicação entre múltiplos servidores.
+- O tour é guiado por navegação de páginas e explicações, não por destaque geométrico de cada botão/elemento da interface.
+- A credencial inicial conhecida é detetada apenas para o bootstrap de desenvolvimento admin; instalações de produção devem continuar a definir uma credencial inicial própria e protegida.
+- Testes, lint e build não foram executados nesta etapa por decisão do utilizador; a validação local permanece pendente.
