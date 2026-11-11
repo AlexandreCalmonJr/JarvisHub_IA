@@ -30,9 +30,19 @@ logger = logging.getLogger("jarvis.api.security")
 router = APIRouter(tags=["security"])
 
 
+def _approval_owner(principal: Principal) -> str:
+    if principal.kind != "human":
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivos precisam ser associados a uma conta antes de gerir aprovações.",
+        )
+    return principal.subject_id
+
+
 @router.get("/api/v1/approvals")
-async def list_approvals():
-    return security_core.approval_engine.list_pending_requests()
+async def list_approvals(principal: Principal = Depends(get_principal)):
+    owner = _approval_owner(principal)
+    return security_core.approval_engine.list_pending_requests(owner_user_id=owner)
 
 
 @router.post("/api/v1/approvals/{request_id}/decide")
@@ -42,6 +52,13 @@ async def decide_approval(
     principal: Principal = Depends(get_principal),
 ):
     try:
+        owner = _approval_owner(principal)
+        owned_request = security_core.approval_engine.get_request(
+            request_id, owner_user_id=owner
+        )
+        if owned_request is None:
+            raise HTTPException(status_code=404, detail="Aprovação não encontrada.")
+
         # Rejeita imediatamente qualquer tentativa de autoaprovação por agentes
         known_agents = {r.value for r in AgentRole}
         candidate = (payload.decided_by or "").lower().strip()
@@ -80,6 +97,7 @@ async def decide_approval(
                 request_id=request_id,
                 decided_by=actor,
                 decision_reason=payload.reason,
+                owner_user_id=owner,
             )
             # Pedidos de workspace API são retomados pelo próprio cliente após a decisão.
             # Tarefas do Jarvis Master retomam o checkpoint e executam o payload aprovado.
@@ -88,6 +106,7 @@ async def decide_approval(
                     await jarvis_master.resume_after_approval(
                         task_id=decided.task_id,
                         approved_by=actor,
+                        owner_user_id=owner,
                     )
                 except ValueError as ve:
                     logger.debug("JarvisMaster não encontrou checkpoint para '%s': %s", decided.task_id, ve)
@@ -110,6 +129,7 @@ async def decide_approval(
                 request_id=request_id,
                 decided_by=actor,
                 reason=payload.reason or "Rejeitado pelo utilizador",
+                owner_user_id=owner,
             )
             return {"status": "rejected", "request": decided}
         else:
