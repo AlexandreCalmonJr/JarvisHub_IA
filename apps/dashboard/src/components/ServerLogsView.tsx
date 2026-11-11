@@ -82,6 +82,7 @@ export const ServerLogsView: React.FC = () => {
       };
       eventSource.onerror = () => {
         eventSource?.close();
+        setIsStreaming(false);
       };
     } catch (e) {
       console.error('Falha ao iniciar SSE de logs:', e);
