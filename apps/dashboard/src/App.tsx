@@ -699,7 +699,7 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
             {activeTab === 'advisor' && <HardwareAdvisorView />}
             {activeTab === 'server_logs' && <ServerLogsView />}
-            {activeTab === 'learning' && <LearningCenterView activeTab={learningContextTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} />}
+            {activeTab === 'learning' && <LearningCenterView activeTab={learningContextTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} onOpenProfile={() => setShowProfileModal(true)} />}
           </Suspense>
           )}
         </main>
