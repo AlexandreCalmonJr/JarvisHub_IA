@@ -199,6 +199,7 @@ async def test_07_mobile_approval_decision_validated_identity():
         operation="schema_migration",
         impact_summary="Aplicar migration no banco",
         affected_resources=["migrations/001.sql"],
+        owner_user_id="admin",
     )
 
     transport = ASGITransport(app=app)
