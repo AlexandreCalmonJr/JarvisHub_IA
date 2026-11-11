@@ -94,6 +94,29 @@ class UserCredentialStore:
                 )
                 """
             )
+            schema_row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'human_users'"
+            ).fetchone()
+            if schema_row and "'admin'" not in (schema_row[0] or ""):
+                conn.execute("ALTER TABLE human_users RENAME TO human_users_legacy")
+                conn.execute(
+                    """CREATE TABLE human_users (
+                        username TEXT PRIMARY KEY COLLATE NOCASE,
+                        display_name TEXT NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        role TEXT NOT NULL CHECK(role IN ('admin', 'developer', 'auditor')),
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )"""
+                )
+                conn.execute(
+                    """INSERT INTO human_users
+                    (username, display_name, password_hash, role, is_active, created_at, updated_at)
+                    SELECT username, display_name, password_hash, role, is_active, created_at, updated_at
+                    FROM human_users_legacy"""
+                )
+                conn.execute("DROP TABLE human_users_legacy")
 
     @classmethod
     def _hash_password(cls, password: str) -> str:
