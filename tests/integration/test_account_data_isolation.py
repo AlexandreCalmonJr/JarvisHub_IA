@@ -146,3 +146,28 @@ def test_knowledge_vault_is_private_per_account_even_for_same_filename(tmp_path)
     assert db.search_knowledge_vault(
         "private", owner_user_id="account-b"
     )[0]["content"] == "beta private document"
+
+
+def test_project_memory_and_project_listing_are_owner_scoped(tmp_path):
+    db = DatabaseManager(db_path=str(tmp_path / "project-memory.db"))
+    db.register_project(
+        "project-a", "Project A", str(tmp_path / "a"),
+        owner_user_id="account-a",
+    )
+    db.register_project(
+        "project-b", "Project B", str(tmp_path / "b"),
+        owner_user_id="account-b",
+    )
+    db.set_project_memory(
+        "project-a", "decision", "database", "SQLite",
+        owner_user_id="account-a",
+    )
+
+    assert db.get_project("project-a", owner_user_id="account-b") is None
+    assert [p["id"] for p in db.list_projects(owner_user_id="account-a")] == ["project-a"]
+    assert db.list_project_memory(
+        "project-a", owner_user_id="account-b"
+    ) == []
+    assert db.list_project_memory(
+        "project-a", owner_user_id="account-a"
+    )[0]["content"] == "SQLite"
