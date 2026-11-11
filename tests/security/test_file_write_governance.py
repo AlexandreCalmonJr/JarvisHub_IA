@@ -24,6 +24,7 @@ from packages.contracts.approval import ApprovalStatus
 from packages.contracts.security import AuditEventSeverity, ProjectWorkMode
 from services.security_core import PermissionDeniedError
 from services.tool_gateway import ToolExecutionRequest
+from services.orchestration.workspace_actions import execute_workspace_modification
 
 
 @pytest.fixture
@@ -447,3 +448,64 @@ def test_09_external_import_requires_an_explicitly_allowed_root(monkeypatch, tmp
     monkeypatch.setenv("JARVIS_WORKSPACE_IMPORT_ROOTS", str(external_root))
     assert workspace_service.validate_import_root(str(project)) == project.resolve()
 
+
+
+def test_10_orchestrator_workspace_edit_is_preview_only_until_approved(tmp_path):
+    """O caminho antigo do JARVIS Master não pode escrever sem aprovação."""
+    project_id = "test_orchestrator_approval"
+    initial = "<html><head><title>Inicial</title></head><body><h1>Inicial</h1></body></html>"
+    workspace_service.scaffold_project(
+        project_id=project_id,
+        name="Orchestrator Approval Test",
+        project_type="web",
+        files={"index.html": initial},
+    )
+    task_id = "task-orchestrator-approval-test"
+    prompt = "mude o título para Jarvis Seguro"
+
+    try:
+        preview, resources = execute_workspace_modification(
+            workspace_service=workspace_service,
+            user_prompt=prompt,
+            project_id=project_id,
+            preview_only=True,
+        )
+        target = workspace_service.get_project_dir(project_id) / "index.html"
+        assert target.read_text(encoding="utf-8") == initial
+        assert resources == [str(target.resolve())]
+        assert "Jarvis Seguro" in preview
+
+        with pytest.raises(PermissionDeniedError, match="aprovação humana"):
+            execute_workspace_modification(
+                workspace_service=workspace_service,
+                user_prompt=prompt,
+                project_id=project_id,
+                task_id=task_id,
+            )
+        assert target.read_text(encoding="utf-8") == initial
+
+        approval = security_core.approval_engine.create_request(
+            task_id=task_id,
+            agent_role="jarvis_master",
+            operation="file_write",
+            impact_summary="Alterar o título do projeto de teste",
+            affected_resources=resources,
+            proposed_diff=preview,
+        )
+        security_core.approval_engine.approve_request(
+            approval.id,
+            decided_by="admin_test",
+            decision_reason="Aprovado no teste",
+        )
+        message, changed = execute_workspace_modification(
+            workspace_service=workspace_service,
+            user_prompt=prompt,
+            project_id=project_id,
+            approval_id=approval.id,
+            task_id=task_id,
+        )
+        assert "após aprovação humana" in message
+        assert changed == resources
+        assert "Jarvis Seguro" in target.read_text(encoding="utf-8")
+    finally:
+        workspace_service.delete_project(project_id)
