@@ -65,6 +65,28 @@ class SqliteTelemetryStore:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS model_selection_decisions (
+                    id TEXT PRIMARY KEY,
+                    owner_user_id TEXT NOT NULL,
+                    task_id TEXT,
+                    agent_role TEXT,
+                    task_capability TEXT,
+                    selected_model TEXT NOT NULL,
+                    selected_provider TEXT NOT NULL,
+                    selection_reason TEXT NOT NULL,
+                    candidate_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_model_selection_owner_created
+                ON model_selection_decisions(owner_user_id, created_at DESC)
+                """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_inference_telemetry_owner_created
                 ON inference_telemetry(owner_user_id, created_at DESC)
                 """
@@ -193,6 +215,59 @@ class SqliteTelemetryStore:
                 }
             )
         return result
+
+
+    def record_model_selection(
+        self,
+        *,
+        owner_user_id: str,
+        task_id: str | None,
+        agent_role: str | None,
+        task_capability: str | None,
+        selected_model: str,
+        selected_provider: str,
+        selection_reason: str,
+        candidate_count: int,
+    ) -> str:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        record_id = str(uuid.uuid4())
+        with self._lock, self._connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO model_selection_decisions (
+                    id, owner_user_id, task_id, agent_role, task_capability,
+                    selected_model, selected_provider, selection_reason,
+                    candidate_count, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record_id, owner_user_id, task_id, agent_role, task_capability,
+                    selected_model, selected_provider, selection_reason,
+                    max(0, int(candidate_count)), datetime.now(UTC).isoformat(),
+                ),
+            )
+        return record_id
+
+    def list_model_selections_for_owner(
+        self, owner_user_id: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        safe_limit = max(1, min(int(limit), 100))
+        with self._lock, self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, task_id, agent_role, task_capability, selected_model,
+                       selected_provider, selection_reason, candidate_count, created_at
+                FROM model_selection_decisions
+                WHERE owner_user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (owner_user_id, safe_limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def summary_for_owner(self, owner_user_id: str) -> dict[str, int | float]:
         if not owner_user_id or not owner_user_id.strip():
