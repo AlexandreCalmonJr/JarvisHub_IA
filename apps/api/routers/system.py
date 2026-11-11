@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
@@ -21,6 +23,8 @@ from apps.api.deps import (
     hybrid_config,
     save_hybrid_config_to_disk,
     HYBRID_CONFIG_PATH,
+    data_dir,
+    key_vault,
 )
 
 logger = logging.getLogger("jarvis.api.system")
@@ -126,6 +130,62 @@ async def submit_inference_feedback(
             detail="Inferência não encontrada nesta conta ou ainda não concluída com sucesso.",
         )
     return {"status": "recorded", "inference_id": payload.inference_id, "rating": payload.rating}
+
+_ONBOARDING_STATE_PATH = data_dir / "onboarding_state.json"
+
+
+def _read_onboarding_state() -> dict:
+    try:
+        state = json.loads(_ONBOARDING_STATE_PATH.read_text(encoding="utf-8"))
+        return state if isinstance(state, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+@router.get("/api/v1/system/onboarding")
+async def get_onboarding_status(principal: Principal = Depends(require_admin)):
+    """Estado de configuração sem expor credenciais ou segredos."""
+    try:
+        ollama_available = bool(await model_manager.check_health())
+    except Exception:
+        ollama_available = False
+    try:
+        configured_keys = sum(1 for item in key_vault.list_keys() if item.get("is_active") and item.get("has_api_key"))
+        vault_encryption_ready = os.name == "nt" or key_vault._fernet_key_path.exists()
+    except Exception:
+        configured_keys = 0
+        vault_encryption_ready = False
+    return {
+        "completed": bool(_read_onboarding_state().get("completed")),
+        "database_available": Path(db_manager.db_path).exists() if getattr(db_manager, "db_path", None) else True,
+        "local_model_available": ollama_available,
+        "active_provider_keys": configured_keys,
+        "vault_encryption_ready": vault_encryption_ready,
+        "hybrid_provider_enabled": bool(hybrid_config.enabled and hybrid_config.key_id and configured_keys),
+        "environment": os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")),
+    }
+
+
+@router.post("/api/v1/system/onboarding/complete")
+async def complete_onboarding(principal: Principal = Depends(require_admin)):
+    """Regista a conclusão do assistente de instalação sem guardar dados secretos."""
+    state = {
+        "completed": True,
+        "completed_by": principal.subject_id,
+        "completed_at": __import__("datetime").datetime.now(__import__("datetime").UTC).isoformat(),
+    }
+    temporary = _ONBOARDING_STATE_PATH.with_suffix(".tmp")
+    try:
+        temporary.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        if os.name != "nt":
+            os.chmod(temporary, 0o600)
+        os.replace(temporary, _ONBOARDING_STATE_PATH)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        logger.exception("Não foi possível persistir o estado do onboarding.")
+        raise HTTPException(status_code=500, detail="Não foi possível guardar a conclusão da configuração.") from exc
+    return {"status": "completed", "completed": True}
+
 
 @router.get("/api/v1/system/resources")
 async def system_resources(
