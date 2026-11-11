@@ -247,9 +247,12 @@ async def extract_color_palette_endpoint(
     payload: ColorPalettePayload, principal: Principal = Depends(get_principal)
 ):
     _require_human(principal)
-    return design_studio_service.extract_color_palette(
-        hex_primary=payload.hex_primary, name=payload.name
-    )
+    try:
+        return design_studio_service.extract_color_palette(
+            hex_primary=payload.hex_primary, name=payload.name
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/api/v1/design-studio/audit-wcag")
@@ -265,7 +268,10 @@ async def get_component_boilerplate_endpoint(
     component_type: str, principal: Principal = Depends(get_principal)
 ):
     _require_human(principal)
-    return design_studio_service.generate_component_boilerplate(component_type)
+    try:
+        return design_studio_service.generate_component_boilerplate(component_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 # --- ENGINEERING INTELLIGENCE ---
