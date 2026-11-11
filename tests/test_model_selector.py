@@ -154,3 +154,46 @@ def test_selector_uses_owner_historical_cost_when_live_price_is_unknown():
     )
     assert result.candidate.model_name == "model-b"
     assert result.estimated_cost_usd == 0.001
+
+
+def test_selector_uses_human_quality_feedback_after_minimum_samples():
+    class QualityTelemetry:
+        def performance_by_model_for_owner(self, owner):
+            return []
+
+        def quality_by_model_for_owner(self, owner):
+            assert owner == "account-1"
+            return [
+                {
+                    "model_name": "model-low",
+                    "provider": "online_gateway (provider)",
+                    "agent_role": "research_analyst",
+                    "feedback_count": 3,
+                    "average_rating": 2.0,
+                    "sample_sufficient": True,
+                },
+                {
+                    "model_name": "model-high",
+                    "provider": "online_gateway (provider)",
+                    "agent_role": "research_analyst",
+                    "feedback_count": 3,
+                    "average_rating": 5.0,
+                    "sample_sufficient": True,
+                },
+            ]
+
+    result = ModelSelector().select(
+        models=[
+            metadata("model-low", family="provider", cloud=True),
+            metadata("model-high", family="provider", cloud=True),
+        ],
+        owner_user_id="account-1",
+        agent_role="research_analyst",
+        task_capability="general",
+        telemetry_store=QualityTelemetry(),
+        allow_external=True,
+        contains_sensitive_data=False,
+        has_external_data_approval=False,
+    )
+    assert result.candidate.model_name == "model-high"
+    assert "avaliação humana média 5.00/5" in result.reason
