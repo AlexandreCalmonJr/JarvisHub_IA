@@ -1,4 +1,4 @@
-from services.security_core.auth_store import UserCredentialStore
+import pytest\n\nfrom services.security_core.auth_store import UserCredentialStore
 
 
 def test_user_passwords_are_hashed_and_authenticate(tmp_path):
@@ -48,3 +48,35 @@ def test_usernames_are_case_insensitive_and_duplicates_are_rejected(tmp_path):
         assert "Já existe" in str(exc)
     else:
         raise AssertionError("A criação de utilizador duplicado deveria falhar.")
+
+
+@pytest.mark.asyncio
+async def test_password_login_issues_http_only_session_cookie():
+    import uuid
+
+    from httpx import ASGITransport, AsyncClient
+
+    from apps.api.auth import auth_service
+    from apps.api.main import app
+
+    username = "login_" + uuid.uuid4().hex[:10]
+    auth_service.user_store.create_user(
+        username=username,
+        display_name="Login Test",
+        password="test-password-12345",
+        role="developer",
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/password-login",
+            json={"username": username, "password": "test-password-12345"},
+        )
+        assert response.status_code == 200
+        assert response.json()["user_id"] == username
+        assert response.cookies.get("jarvis_session")
+        assert "httponly" in response.headers.get("set-cookie", "").lower()
+
+        me = await client.get("/api/v1/auth/me")
+        assert me.status_code == 200
+        assert me.json()["user_id"] == username
