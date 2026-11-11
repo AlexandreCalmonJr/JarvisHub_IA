@@ -81,6 +81,7 @@ async def test_password_login_issues_http_only_session_cookie():
         assert "httponly" in response.headers.get("set-cookie", "").lower()
 
         # Isola a sessão emitida neste login de qualquer cookie residual do cliente de teste.
+        client.cookies.clear()
         me = await client.get(
             "/api/v1/auth/me",
             headers={
