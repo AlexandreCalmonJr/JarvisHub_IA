@@ -94,7 +94,7 @@ export const TaskManagerView: React.FC = () => {
     setPurging(true);
     try {
       const res = await purgeTasks(30);
-      notify(`${res.purged_count} tarefa(s) antiga(s) expurgada(s) do banco SQLite.`, 'success');
+      notify(`${res.purged_count} tarefa(s) antiga(s) expurgada(s) da sua conta.`, 'success');
       setShowPurgeModal(false);
       await loadTasks();
     } catch (e: any) {
@@ -563,7 +563,7 @@ export const TaskManagerView: React.FC = () => {
             style={{
               maxWidth: '440px',
               width: '100%',
-              backgroundColor: '#0f172a',
+              backgroundColor: 'var(--bg-secondary)',
               border: '1px solid rgba(248, 113, 113, 0.3)',
               borderRadius: '14px',
               padding: '24px',
@@ -592,7 +592,7 @@ export const TaskManagerView: React.FC = () => {
               <button
                 onClick={handlePurgeOldTasks}
                 className="btn btn-danger"
-                style={{ fontSize: '0.80rem', padding: '6px 14px', backgroundColor: '#dc2626', color: '#fff' }}
+                style={{ fontSize: '0.80rem', padding: '6px 14px', backgroundColor: '#dc2626', color: 'var(--text-primary)' }}
                 disabled={purging}
               >
                 {purging ? 'Expurgando...' : 'Confirmar Expurgo'}

@@ -368,31 +368,29 @@ export const AgentCenterView: React.FC = () => {
                 paddingTop: '8px',
               }}
             >
-              {canManageAgents && (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setSelectedModalAgent(agent)}
-                style={{
-                  fontSize: '0.78rem',
-                  padding: '7px 10px',
-                }}
-              >
-                  Configurar
-                </button>
-              )}
-              {canManageAgents && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                onClick={() => setSelectedActionsAgent(agent)}
-                style={{
-                  fontSize: '0.78rem',
-                  padding: '7px 10px',
-                }}
-              >
-                  Ações
-                </button>
+              {canManageAgents ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setSelectedModalAgent(agent)}
+                    style={{ fontSize: '0.78rem', padding: '7px 10px' }}
+                  >
+                    Configurar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setSelectedActionsAgent(agent)}
+                    style={{ fontSize: '0.78rem', padding: '7px 10px' }}
+                  >
+                    Ações
+                  </button>
+                </>
+              ) : (
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', textAlign: 'center' }}>
+                  Consulta disponível · gestão restrita a perfis autorizados
+                </span>
               )}
             </div>
           </div>

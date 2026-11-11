@@ -366,10 +366,10 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                   preferredModel !== 'auto_hybrid' &&
                   !installedLocalModels.some((m) => m.name === preferredModel) &&
                   !onlineModels.some((om) => om.name === preferredModel) &&
-                  !['llama3.2:3b', 'qwen2.5-coder:7b', 'qwen2.5:7b', 'gpt-4o-mini', 'gemini-1.5-flash', 'deepseek-chat'].includes(preferredModel) && (
-                    <optgroup label="⚙️ Modelo Personalizado">
+                  (
+                    <optgroup label="⚙️ Modelo atualmente configurado">
                       <option value={preferredModel}>
-                        ⚙️ {preferredModel} (Personalizado)
+                        ⚙️ {preferredModel} (não confirmado na lista atual)
                       </option>
                     </optgroup>
                 )}
