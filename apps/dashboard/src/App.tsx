@@ -132,7 +132,11 @@ const DashboardApp: React.FC = () => {
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfileData>(getUserProfile);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('jarvis_sidebar_collapsed') === 'true';
+    try {
+      return localStorage.getItem('jarvis_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
   });
   const [attachedProjectId, setAttachedProjectId] = useState<string | null>(null);
   const [targetChatSessionId, setTargetChatSessionId] = useState<string | null>(null);
@@ -194,7 +198,11 @@ const DashboardApp: React.FC = () => {
   const handleToggleSidebar = () => {
     setIsSidebarCollapsed((prev) => {
       const next = !prev;
-      localStorage.setItem('jarvis_sidebar_collapsed', String(next));
+      try {
+        localStorage.setItem('jarvis_sidebar_collapsed', String(next));
+      } catch {
+        // O estado da sidebar permanece funcional nesta sessão.
+      }
       return next;
     });
   };

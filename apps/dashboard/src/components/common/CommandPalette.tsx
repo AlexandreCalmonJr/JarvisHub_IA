@@ -69,12 +69,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   const handleOpenExplorer = async () => {
     try {
-      notify('Abrindo diretório de projetos no Windows Explorer...', 'info');
+      notify('A solicitar a abertura da pasta geral no servidor JARVIS...', 'info');
       await openWorkspaceRoot();
       notify('Pasta geral do workspace aberta no computador do servidor.', 'success');
       onClose();
     } catch (e: any) {
-      notify(`Erro ao abrir Explorer: ${e.message}`, 'error');
+      notify(`Não foi possível abrir a pasta do servidor: ${e.message}`, 'error');
     }
   };
 
@@ -264,7 +264,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Isolamento local 127.0.0.1, políticas de acesso e auditoria OWASP',
       icon: Shield,
       iconColor: '#10b981',
-      badge: 'Blindado',
       action: () => {
         onNavigate('security');
         onClose();
@@ -335,8 +334,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'act-settings',
       category: 'Ações Rápidas',
-      title: 'Perfil & Configurações do Desenvolvedor',
-      subtitle: 'Ajuste preferências de interface, nome e nível técnico',
+      title: 'Perfil e Preferências',
+      subtitle: 'Consulte o perfil e ajuste as preferências locais disponíveis'
       icon: Settings,
       iconColor: '#818cf8',
       action: () => {
