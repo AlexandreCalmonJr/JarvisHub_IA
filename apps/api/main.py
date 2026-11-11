@@ -41,7 +41,6 @@ from apps.api.routers import (
     coding,
     mcp,
     voice,
-    voice,
     learning,
 )
 
