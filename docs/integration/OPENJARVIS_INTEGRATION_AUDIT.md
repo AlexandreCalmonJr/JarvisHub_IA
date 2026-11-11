@@ -549,3 +549,49 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - O gestor de modelos ganhou a aba **Qualidade & Aprendizagem**, com média, número de avaliações e indicação de amostra suficiente.
 - A aba consulta apenas o agregado da conta autenticada; não expõe prompts nem respostas.
 - Inferências de fluxos conversacionais que não geram `task_id` no orquestrador não exibem avaliação nesta versão.
+
+## 14. Auditoria incremental do frontend — navegação, perfil, chat e workspace
+
+**Estado:** correções iniciais gravadas na branch de auditoria; testes de build, lint, integração e responsividade ainda não executados.
+
+### 14.1 Navegação e identidade visual
+
+- A entrada raiz e o alias legado de dashboard passam a abrir a Visão Geral, evitando iniciar automaticamente no chat.
+- Foram registados os deep links de SPA `/logs`, `/backend-studio` e `/executive-report`.
+- A autenticação foi alinhada aos tokens visuais do projeto; o acento laranja existente foi preservado.
+- O assistente de setup, filtros de tarefas, navegação de modelos e estados ativos da sidebar passaram a reutilizar os tokens de acento.
+- O shell do dashboard utiliza altura dinâmica e espaçamentos fluidos para reduzir overflow em ecrãs estreitos.
+
+### 14.2 Perfil e preferências da conta
+
+- A rota de perfil usa `get_principal` e deriva o owner no servidor; o cliente não escolhe o identificador da conta.
+- A interface permite escolher o ícone do perfil e reflete a seleção no cabeçalho e na sidebar.
+- O carregamento do perfil é cancelável ao fechar o modal; o botão de gravação indica estado e impede submissões duplicadas.
+- O modo Essencial/Técnico/Avançado é uma preferência local por conta/navegador; não deve ser descrito como alteração global enquanto os módulos não aplicarem esse modo.
+- O perfil não recolhe nem persiste tokens de providers. A gestão de credenciais é encaminhada para o Gestor de Modelos/Cofre de Chaves, conforme as permissões.
+- O backup do banco é uma operação administrativa validada pela API; a interface não apresenta o caminho físico do servidor.
+- Exportação e limpeza locais foram descritas com o respetivo âmbito. A limpeza percorre também caches locais de sessões, limitando-se ao sufixo da conta ativa.
+- O formulário e as opções de avatar receberam comportamento responsivo e estados visuais do design system.
+
+### 14.3 Chat e seleção de modelos
+
+- A preferência de modelo foi movida para uma chave de armazenamento delimitada pela conta ativa.
+- O seletor deixa de apresentar um catálogo estático de modelos não confirmados. Só apresenta modelos devolvidos pela API.
+- Na ausência de seleção explícita, o chat usa a seleção automática do Maestro; não força um provider cloud como fallback visual.
+- A saudação inicial deixou de afirmar uma quantidade fixa de especialistas e passou a descrever agentes/ferramentas disponíveis e sujeitos a permissões.
+- O histórico, tarefas e sessões do chat continuam a usar owner derivado do principal autenticado nas rotas de backend.
+
+### 14.4 Project Workspace e segurança
+
+- Listagem, leitura, edição, abertura e remoção de projetos validam a propriedade da conta nas rotas correspondentes.
+- O endpoint `POST /api/v1/workspace/open-root` passou a exigir principal humano autenticado.
+- A notificação de abertura da pasta geral deixou de expor o caminho físico do servidor.
+
+### 14.5 Pendências antes de homologação
+
+- Auditar os restantes módulos e componentes partilhados, incluindo onboarding, aprendizagem, agentes, tarefas, aprovações, modelos, segurança, conhecimento, coding e relatórios.
+- Confirmar todas as rotas do React Router, menu/sidebar e fallback SPA, incluindo aliases e páginas não encontradas.
+- Integrar o estado de experiência nos módulos que vierem a suportá-lo; por enquanto é apenas uma preferência local.
+- Verificar permissões de UI para operações administrativas, incluindo backup, sem depender apenas da mensagem de erro do backend.
+- Concluir o onboarding real: criação inicial segura do administrador, configuração da chave mestra, diagnóstico de serviços e recuperação de fluxo interrompido.
+- Executar build, lint, testes unitários, testes de integração, testes de isolamento por conta e verificação visual nos viewports acordados. Nenhum desses testes foi executado durante esta etapa.
