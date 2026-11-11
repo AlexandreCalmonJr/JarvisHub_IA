@@ -51,6 +51,7 @@ class MockServerService:
     @staticmethod
     def _serialize(row: Any) -> dict[str, Any]:
         data = dict(row)
+        data.pop("owner_user_id", None)
         data["enabled"] = bool(data["enabled"])
         try:
             data["response_body"] = json.loads(data["response_body"])
@@ -89,7 +90,6 @@ class MockServerService:
             raise ValueError("Conta proprietária obrigatória para criar mocks.")
         now = datetime.now(UTC).isoformat()
         ep_id = endpoint_data.get("id") or f"mock_{uuid.uuid4().hex}"
-        existing = self.get_endpoint(ep_id, owner_user_id)
         with self.db._get_connection() as conn:
             collision = conn.execute(
                 "SELECT owner_user_id FROM mock_endpoints WHERE id = ?", (ep_id,)
