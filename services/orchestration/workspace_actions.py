@@ -3,7 +3,6 @@ import logging
 import re
 from typing import Any
 
-from packages.contracts.approval import ApprovalStatus
 from services.security_core import PermissionDeniedError
 
 logger = logging.getLogger("jarvis.orchestration.workspace")
@@ -150,18 +149,18 @@ def execute_workspace_modification(
             "Escrita do workspace bloqueada: é obrigatória uma aprovação humana associada à tarefa."
         )
 
-    approval = workspace_service.security_core.approval_engine.get_request(approval_id)
-    if (
-        not approval
-        or approval.status != ApprovalStatus.APPROVED
-        or approval.task_id != task_id
-        or approval.operation != "file_write"
-        or str(target_path) not in approval.affected_resources
-        or approval.proposed_diff != preview
-    ):
-        raise PermissionDeniedError(
-            "Aprovação ausente, pendente ou não correspondente ao ficheiro/diff proposto."
+    try:
+        workspace_service.security_core.approval_engine.consume_approved_request(
+            approval_id,
+            operation="file_write",
+            task_id=task_id,
+            resource=str(target_path),
+            proposed_diff=preview,
         )
+    except ValueError as exc:
+        raise PermissionDeniedError(
+            "Aprovação ausente, já utilizada ou não correspondente ao ficheiro/diff proposto."
+        ) from exc
 
     res = workspace_service.modify_project_file(
         project_id=target_project,
