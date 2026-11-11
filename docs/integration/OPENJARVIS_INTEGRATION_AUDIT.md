@@ -409,8 +409,8 @@ Antes de ligar seleção automática, precisamos validar a origem de `agent_role
 ### 11.1 Seletor e contrato
 
 - Novo `services/model_runtime/model_selector.py` com seleção determinística baseada no inventário real de modelos.
-- A seleção automática é opt-in: `model_name="auto"` ou `model_name="auto_hybrid"`. Nomes de modelos explicitamente configurados continuam respeitados.
-- `task_capability` permite informar `code`, `reasoning`, `vision` ou `general`; quando ausente, usa o papel do especialista.
+- A seleção automática é opt-in no contrato (`model_name="auto"` ou `model_name="auto_hybrid"`) e já foi ligada ao grafo Maestro: perfis com preferência automática delegam a escolha ao ModelManager. Preferências de modelo explicitamente personalizadas continuam respeitadas.
+- `task_capability` permite informar `code`, `reasoning`, `vision` ou `general`; quando ausente, converte o papel do especialista em capacidade (por exemplo, developer → code; architect/security/QA → reasoning).
 - A seleção considera adequação de capacidade, desempenho histórico por owner, latência e preferência local-first.
 - Quando existe candidato com pelo menos cinco amostras e taxa de sucesso mínima de 95%, a comparação prioriza candidatos com histórico elegível.
 - Sem histórico suficiente, não há bônus de latência/sucesso; a decisão inicial usa capacidade e preferência local-first.
@@ -436,3 +436,21 @@ Antes de ligar seleção automática, precisamos validar a origem de `agent_role
 ### 11.4 Critérios para próxima iteração
 
 Antes de habilitar seleção automática como padrão para todos os agentes, validar inventário local/online, capabilities reais, custo por provedor, modelos preferidos dos perfis, histórico por owner e comportamento em indisponibilidade. Não compartilhar dados de desempenho entre contas.
+
+
+### 11.5 Ligação ao Maestro
+
+A resolução inicial do modelo no grafo foi atualizada para não substituir `auto`/`auto_hybrid` por um modelo carregado arbitrariamente. Perfis que usam preferência automática agora passam pelo seletor central. Preferências personalizadas explícitas continuam fixas. As nove chamadas de inferência do grafo propagam owner e papel do especialista para que as decisões e o histórico permaneçam segregados por conta.
+
+### 11.6 Estado de validação
+
+Foram adicionados testes unitários para:
+- adequação por capacidade e preferência local-first;
+- exclusão de modelos externos em conteúdo sensível sem aprovação;
+- inclusão de candidato externo apenas quando permitido pela política;
+- recusa quando não existe candidato visual compatível;
+- inferência de capacidade a partir do papel do especialista;
+- seleção automática pelo ModelManager e persistência da decisão por owner;
+- isolamento do histórico de decisões entre contas.
+
+Os testes **não foram executados** nesta etapa. A consulta ao GitHub não retornou workflows de CI para os caminhos comuns verificados, nem execuções associadas ao commit de integração. A validação deve ocorrer no ambiente local/homologação antes de ativar esta estratégia em produção.
