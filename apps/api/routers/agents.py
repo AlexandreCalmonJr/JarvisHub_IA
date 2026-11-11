@@ -143,7 +143,7 @@ async def list_agent_memories_endpoint(
 ):
     return db_manager.list_agent_memories(
         agent_role=role, category=category, limit=limit,
-        owner_user_id=owner_user_id,
+        owner_user_id=_private_owner(principal),
     )
 
 
@@ -267,7 +267,10 @@ def _resolve_agent_role(role_str: str) -> AgentRole:
 
 
 @router.post("/api/v1/agents/{role}/stream")
-async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRunRequest):
+async def stream_agent_execution_endpoint(
+    role: str, payload: AutonomousAgentRunRequest,
+    principal: Principal = Depends(get_principal),
+):
     """Executa o especialista selecionado em modo ReAct com streaming de eventos SSE em tempo real."""
     agent_role = _resolve_agent_role(role)
     owner_user_id = _private_owner(principal)
@@ -281,7 +284,8 @@ async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRun
         raise HTTPException(status_code=400, detail="Modo inválido. Use 'plan', 'ask' ou 'auto'.")
 
     session_id = payload.session_id or f"ses-{agent_role.value}-{uuid.uuid4().hex[:8]}"
-    lock = _agent_session_locks.setdefault(session_id, asyncio.Lock())
+    lock_key = f"{owner_user_id}:{session_id}"
+    lock = _agent_session_locks.setdefault(lock_key, asyncio.Lock())
     if lock.locked():
         raise HTTPException(status_code=409, detail="Já existe uma execução ativa nesta sessão do especialista.")
 
@@ -290,7 +294,7 @@ async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRun
         prompt=payload.prompt.strip(),
         session_id=session_id,
         project_id=payload.project_id,
-        owner_user_id=_private_owner(principal),
+        owner_user_id=owner_user_id,
         mode=mode,
         max_iterations=payload.max_iterations,
         temperature=payload.temperature,
@@ -350,6 +354,11 @@ async def execute_agent_task_endpoint(
 ):
     """Executa uma tarefa estruturada com o especialista, retornando o AgentOutputContract formal."""
     agent_role = _resolve_agent_role(role)
+    owner_user_id = _private_owner(principal)
+    if payload.project_id and not db_manager.get_project(
+        payload.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         mode = AutonomousAgentMode(payload.mode.lower().strip())
     except ValueError:
@@ -361,6 +370,7 @@ async def execute_agent_task_endpoint(
         prompt=payload.prompt.strip(),
         session_id=session_id,
         project_id=payload.project_id,
+        owner_user_id=owner_user_id,
         mode=mode,
         max_iterations=payload.max_iterations,
         temperature=payload.temperature,
