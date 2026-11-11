@@ -15,6 +15,20 @@ from typing import Any
 
 logger = logging.getLogger("jarvis.tools.specialized")
 
+def _resolve_project_target(project_root: Path, target_path: str) -> Path:
+    """Resolve um caminho relativo sem permitir escapes ou symlinks externos."""
+    root = Path(project_root).resolve()
+    requested = Path(target_path or ".")
+    if requested.is_absolute():
+        raise PermissionError("Caminhos absolutos não são permitidos nesta ferramenta.")
+    resolved = (root / requested).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise PermissionError("O caminho solicitado está fora do projeto autorizado.") from exc
+    return resolved
+
+
 EXCLUDED_SCAN_DIRS = {
     ".git",
     "node_modules",
@@ -114,16 +128,26 @@ def execute_scan_secrets(
     target_path: str = ".",
 ) -> tuple[bool, str, str]:
     """Varre arquivos do projeto em busca de credenciais e segredos em texto claro."""
-    target_dir = (project_root / target_path).resolve()
-    if not target_dir.exists():
+    project_root = Path(project_root).resolve()
+    target_dir = _resolve_project_target(project_root, target_path)
+    if not target_dir.exists() or not target_dir.is_dir():
         return False, "", f"Caminho '{target_path}' não existe no projeto."
 
     findings: list[dict[str, Any]] = []
 
     for root, dirs, files in os.walk(target_dir):
-        dirs[:] = [d for d in dirs if d not in EXCLUDED_SCAN_DIRS]
+        dirs[:] = [
+            d for d in dirs
+            if d not in EXCLUDED_SCAN_DIRS and not (Path(root) / d).is_symlink()
+        ]
         for f in files:
             file_p = Path(root) / f
+            if file_p.is_symlink():
+                continue
+            try:
+                file_p.resolve().relative_to(project_root)
+            except (OSError, ValueError):
+                continue
             if file_p.suffix.lower() in {".pyc", ".png", ".jpg", ".zip", ".exe", ".bin", ".db"}:
                 continue
 
@@ -223,6 +247,12 @@ def execute_scan_sast_patterns(
         dirs[:] = [d for d in dirs if d not in EXCLUDED_SCAN_DIRS]
         for f in files:
             file_p = Path(root) / f
+            if file_p.is_symlink():
+                continue
+            try:
+                file_p.resolve().relative_to(project_root)
+            except (OSError, ValueError):
+                continue
             if file_p.suffix.lower() not in {".py", ".js", ".ts", ".dart", ".go", ".java", ".php"}:
                 continue
 
@@ -383,24 +413,25 @@ def execute_sql_query_explain(
     project_root: Path,
     db_filename: str = "jarvis.db",
 ) -> tuple[bool, str, str]:
-    """Executa EXPLAIN QUERY PLAN em SQLite para auditar custo e uso de índices."""
+    """Executa EXPLAIN QUERY PLAN em SQLite read-only dentro do projeto."""
     import sqlite3
 
-    db_path = project_root / db_filename
-    if not db_path.exists():
-        # Tenta no diretório data/ do hub se não estiver na raiz do projeto
-        db_path = Path("data") / db_filename
-
-    if not db_path.exists():
-        return False, "", f"Banco de dados '{db_filename}' não encontrado para auditoria."
-
+    root = Path(project_root).resolve()
     try:
-        conn = sqlite3.connect(str(db_path))
+        db_path = _resolve_project_target(root, db_filename)
+    except PermissionError as exc:
+        return False, "", str(exc)
+    if db_path.suffix.lower() not in {".db", ".sqlite", ".sqlite3"}:
+        return False, "", "Apenas bancos SQLite dentro do projeto são permitidos."
+    if not db_path.exists() or not db_path.is_file():
+        return False, "", f"Banco de dados '{db_filename}' não encontrado no projeto."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)
         cur = conn.cursor()
-        explain_sql = f"EXPLAIN QUERY PLAN {sql.strip()}"
-        cur.execute(explain_sql)
+        cur.execute(f"EXPLAIN QUERY PLAN {sql.strip()}")
         rows = cur.fetchall()
-        conn.close()
 
         lines = [
             "🔍 **Auditoria de Performance SQL**: `EXPLAIN QUERY PLAN`\n",
@@ -409,21 +440,23 @@ def execute_sql_query_explain(
             "| :-: | :-: | :--- |",
         ]
         has_table_scan = False
-        for r in rows:
-            detail = r[3] if len(r) > 3 else str(r)
+        for row in rows:
+            detail = row[3] if len(row) > 3 else str(row)
             if "SCAN TABLE" in detail.upper():
                 has_table_scan = True
                 detail = f"⚠️ **{detail}**"
-            lines.append(f"| {r[0]} | {r[1]} | {detail} |")
+            lines.append(f"| {row[0]} | {row[1]} | {detail} |")
 
         if has_table_scan:
-            lines.append("\n> [!WARNING]\n> **Full Table Scan Detectado**: A consulta está percorrendo toda a tabela sem utilizar índice. Recomenda-se criar um índice de cobertura nas colunas do filtro `WHERE`.")
+            lines.append("\n> **Full Table Scan Detectado**: avalie índices nas colunas usadas no filtro `WHERE`.")
         else:
-            lines.append("\n> [!NOTE]\n> **Plano Otimizado**: A consulta faz uso adequado de índices ou opera sobre chaves primárias/constantes.")
-
+            lines.append("\n> **Plano otimizado**: não foi detectada varredura completa de tabela.")
         return True, "\n".join(lines), ""
     except Exception as exc:
         return False, "", f"Erro ao auditar SQL: {exc}"
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 # -------------------------------------------------------------------------
