@@ -62,7 +62,10 @@ async def list_agents_endpoint(
             "is_read_only": profile.is_read_only,
             "allowed_tools": profile.allowed_tools,
             **(
-                {"system_prompt": profile.system_prompt}
+                {
+                    "system_prompt": profile.system_prompt,
+                    "assigned_key_id": profile.assigned_key_id,
+                }
                 if principal.kind == "human" and principal.role in {"admin", "developer"}
                 else {}
             ),
@@ -92,7 +95,10 @@ async def get_agent_endpoint(
         "is_read_only": profile.is_read_only,
         "allowed_tools": profile.allowed_tools,
         **(
-            {"system_prompt": profile.system_prompt}
+            {
+                "system_prompt": profile.system_prompt,
+                "assigned_key_id": profile.assigned_key_id,
+            }
             if principal.kind == "human" and principal.role in {"admin", "developer"}
             else {}
         ),

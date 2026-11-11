@@ -506,7 +506,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                         }}
                       >
                         <Key size={8} />
-                        <span>{hasCustomKey ? 'Chave vinculada' : 'Roteamento automático'}</span>
+                        <span>{hasCustomKey ? 'Chave vinculada' : ['auto', 'auto_hybrid'].includes(agent.preferredModel) ? 'Roteamento automático' : 'Modelo fixo'}</span>
                       </div>
                     </button>
                   );
