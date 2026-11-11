@@ -291,3 +291,35 @@ def test_quality_feedback_requires_valid_owner_and_rating(tmp_path):
         assert "rating" in str(exc)
     else:
         raise AssertionError("Ratings above five must be rejected")
+
+
+def test_task_scoped_telemetry_includes_saved_feedback_rating(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    first_id = store.record_inference(
+        owner_user_id="account-a",
+        task_id="task-one",
+        agent_role="developer",
+        model_name="model-one",
+        provider="ollama_local",
+        status="success",
+        duration_ms=10,
+    )
+    store.record_inference(
+        owner_user_id="account-a",
+        task_id="task-two",
+        agent_role="auditor",
+        model_name="model-two",
+        provider="ollama_local",
+        status="success",
+        duration_ms=10,
+    )
+    store.record_quality_feedback(
+        owner_user_id="account-a", inference_id=first_id, rating=5
+    )
+
+    records = store.list_for_owner("account-a", task_id="task-one")
+    assert len(records) == 1
+    assert records[0]["id"] == first_id
+    assert records[0]["feedback_rating"] == 5
+    assert store.list_for_owner("account-a", task_id="task-missing") == []
+    assert len(store.list_for_owner("account-a")) == 2
