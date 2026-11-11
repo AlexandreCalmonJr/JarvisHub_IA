@@ -87,8 +87,10 @@ class ModelSelector:
             try:
                 for row in telemetry_store.performance_by_model_for_owner(owner_user_id):
                     performance[(row["model_name"], row["provider"], row.get("agent_role"))] = row
-                for row in telemetry_store.quality_by_model_for_owner(owner_user_id):
-                    quality[(row["model_name"], row["provider"], row.get("agent_role"))] = row
+                quality_reader = getattr(telemetry_store, "quality_by_model_for_owner", None)
+                if callable(quality_reader):
+                    for row in quality_reader(owner_user_id):
+                        quality[(row["model_name"], row["provider"], row.get("agent_role"))] = row
             except Exception:
                 # A indisponibilidade da telemetria não deve impedir inferência.
                 performance = {}
