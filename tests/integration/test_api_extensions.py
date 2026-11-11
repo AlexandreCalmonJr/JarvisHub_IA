@@ -284,7 +284,22 @@ async def test_api_project_memory():
 
 @pytest.mark.asyncio
 
-async def test_api_chat_stream():
+async def test_api_chat_stream(monkeypatch):
+
+    from types import SimpleNamespace
+    from apps.api.deps import model_manager
+
+    async def fake_generate(request):
+        return SimpleNamespace(
+            content="Resposta simulada do especialista.",
+            prompt_tokens=10,
+            completion_tokens=20,
+            duration_ms=1.0,
+            model_name=request.model_name,
+            cost_usd=0.0,
+        )
+
+    monkeypatch.setattr(model_manager, "generate", fake_generate)
 
     transport = ASGITransport(app=app)
 
