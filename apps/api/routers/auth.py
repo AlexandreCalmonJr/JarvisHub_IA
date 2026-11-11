@@ -33,7 +33,7 @@ class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=48, pattern=r"^[a-zA-Z0-9._-]+$")
     display_name: str = Field(..., min_length=2, max_length=100)
     password: str = Field(..., min_length=12, max_length=256)
-    role: Literal["developer", "auditor"] = "developer"
+    role: Literal["admin", "developer", "auditor"] = "developer"
 
 
 class ResetUserPasswordRequest(BaseModel):
@@ -204,7 +204,11 @@ async def set_user_status(
     payload: SetUserStatusRequest,
     principal: Principal = Depends(require_admin),
 ):
-    if not auth_service.user_store.set_active(username, payload.is_active):
+    try:
+        updated = auth_service.user_store.set_active(username, payload.is_active)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not updated:
         raise HTTPException(status_code=404, detail="Utilizador não encontrado.")
     if not payload.is_active:
         _revoke_user_sessions(username)
