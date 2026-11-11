@@ -166,6 +166,20 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp
         logs_b = await client.get("/api/v1/system/server-logs", headers=headers_b)
         assert logs_b.status_code == 403
 
+        unauth_tools = await client.get("/api/v1/tools")
+        assert unauth_tools.status_code == 401
+        cross_account_tool = await client.post(
+            "/api/v1/tools/execute",
+            json={
+                "tool_name": "list_directory",
+                "agent_role": "software_architect",
+                "project_id": project_id,
+                "arguments": {"path": "."},
+            },
+            headers=headers_b,
+        )
+        assert cross_account_tool.status_code == 404
+
         approvals_b = await client.get("/api/v1/approvals", headers=headers_b)
         assert approvals_b.status_code == 200
         assert approval.id not in {row["id"] for row in approvals_b.json()}
