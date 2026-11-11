@@ -54,15 +54,18 @@ def _set_session_cookie(response: Response, request: Request, session) -> None:
     )
 
 
-def _session_payload(session) -> dict:
-    return {
-        "session_token": session.session_id,
+def _session_payload(session, *, include_token: bool = False) -> dict:
+    payload = {
         "user_id": session.user_id,
         "role": session.role,
         "scopes": list(session.scopes),
         "created_at": session.created_at,
         "expires_at": session.expires_at,
     }
+    # Token só é devolvido no provisionamento administrativo, nunca no login do browser.
+    if include_token:
+        payload["session_token"] = session.session_id
+    return payload
 
 
 @router.post("/login")
@@ -178,7 +181,7 @@ async def create_human_session(
         },
         severity=AuditEventSeverity.INFO,
     )
-    return {"status": "created", **_session_payload(session)}
+    return {"status": "created", **_session_payload(session, include_token=True)}
 
 
 @router.get("/sessions")
