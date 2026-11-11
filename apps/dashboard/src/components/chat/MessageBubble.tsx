@@ -18,7 +18,8 @@ import { CanvasArtifact } from './ArtifactCanvas';
 import { MarkdownMessage } from './MarkdownMessage';
 import { openWorkspaceFolder } from '../../services/api/workspace';
 import { getUserProfile } from '../common/UserProfileModal';
-import { fetchTaskInferenceTelemetry, submitInferenceFeedback, InferenceTelemetryRecord } from '../../services/api/system';
+import { fetchTaskInferenceTelemetry, submitInferenceFeedback } from '../../services/api/system';
+import type { InferenceTelemetryRecord } from '../../services/api/system';
 
 const INTENT_LABELS: Record<string, string> = {
   conversation: 'Conversação & Assistente',
