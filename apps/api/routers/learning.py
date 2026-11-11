@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from apps.api.auth import Principal, get_principal
+from apps.api.auth import Principal, require_permission
 from apps.api.deps import data_dir
 
 router = APIRouter(prefix="/api/v1/learning", tags=["learning"])
@@ -41,7 +41,7 @@ def _connect() -> sqlite3.Connection:
 
 
 @router.get("/progress")
-async def get_learning_progress(principal: Principal = Depends(get_principal)):
+async def get_learning_progress(principal: Principal = Depends(require_permission("profile:read"))):
     if principal.kind != "human":
         raise HTTPException(status_code=403, detail="Aprendizagem disponível apenas para contas humanas.")
     with _connect() as conn:
@@ -61,7 +61,7 @@ async def get_learning_progress(principal: Principal = Depends(get_principal)):
 @router.put("/progress")
 async def save_learning_progress(
     payload: LearningProgressPayload,
-    principal: Principal = Depends(get_principal),
+    principal: Principal = Depends(require_permission("profile:write")),
 ):
     if principal.kind != "human":
         raise HTTPException(status_code=403, detail="Aprendizagem disponível apenas para contas humanas.")
