@@ -205,6 +205,9 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     # Studios
     ({"GET"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:read"),
     ({"POST", "DELETE"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:use"),
+    # Aprendizagem por conta
+    ({"GET"}, re.compile(r"^/api/v1/learning/progress$"), "profile:read"),
+    ({"PUT"}, re.compile(r"^/api/v1/learning/progress$"), "profile:write"),
     # Perfil
     ({"GET"}, re.compile(r"^/api/v1/user/profile$"), "profile:read"),
     ({"POST"}, re.compile(r"^/api/v1/user/profile$"), "profile:write"),
