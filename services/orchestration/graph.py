@@ -1579,9 +1579,15 @@ def create_master_graph(
                 impact = "criação de projeto e gravação dos ficheiros no Workspace"
             else:
                 impact = "alteração de código pendente de revisão"
-            summary = (
-                f"A operação requer aprovação humana prévia. Solicitação '{appr_id}' criada no Approval Center. "
+            prepared_summary = state.get("final_summary")
+            approval_notice = (
+                f"Solicitação '{appr_id}' aguarda aprovação humana no Approval Center. "
                 f"Impacto: {impact}. Nenhum ficheiro foi alterado ainda."
+            )
+            summary = (
+                f"{prepared_summary}\\n\\n{approval_notice}"
+                if prepared_summary
+                else f"A operação requer aprovação humana prévia. {approval_notice}"
             )
             return {"final_summary": summary, "is_completed": False}
 
