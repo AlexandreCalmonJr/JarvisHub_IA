@@ -201,7 +201,7 @@ async def run_project_tests_endpoint(
 ):
     _require_owned_project(payload.project_id, principal)
     try:
-        return quality_studio_service.run_tests(
+        return await quality_studio_service.run_tests(
             project_id=payload.project_id,
             test_file=payload.test_file,
             timeout_seconds=payload.timeout_seconds,
