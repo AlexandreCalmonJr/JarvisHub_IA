@@ -67,3 +67,71 @@ def test_telemetry_does_not_store_prompt_or_response_fields(tmp_path):
     assert "prompt" not in columns
     assert "response" not in columns
     assert "api_key" not in columns
+
+
+def test_model_performance_aggregates_per_owner_and_marks_minimum_samples(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    for _ in range(5):
+        store.record_inference(
+            owner_user_id="user-a",
+            task_id="task-a",
+            agent_role="developer",
+            model_name="coder-model",
+            provider="ollama_local",
+            status="success",
+            duration_ms=100,
+            prompt_tokens=20,
+            completion_tokens=30,
+        )
+    store.record_inference(
+        owner_user_id="user-a",
+        task_id="task-a",
+        agent_role="developer",
+        model_name="coder-model",
+        provider="ollama_local",
+        status="failed",
+        duration_ms=50,
+    )
+    store.record_inference(
+        owner_user_id="user-b",
+        task_id="task-b",
+        agent_role="developer",
+        model_name="private-model",
+        provider="cloud",
+        status="success",
+        duration_ms=1,
+    )
+
+    rows = store.performance_by_model_for_owner("user-a")
+    assert len(rows) == 1
+    assert rows[0]["model_name"] == "coder-model"
+    assert rows[0]["total_inferences"] == 6
+    assert rows[0]["successful"] == 5
+    assert rows[0]["failed"] == 1
+    assert rows[0]["success_rate"] == round(5 / 6, 4)
+    assert rows[0]["sample_sufficient"] is True
+    assert rows[0]["routing_eligible"] is False
+
+
+def test_model_performance_requires_minimum_samples_and_owner(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    store.record_inference(
+        owner_user_id="user-a",
+        task_id="task-a",
+        agent_role="auditor",
+        model_name="new-model",
+        provider="local",
+        status="success",
+        duration_ms=20,
+    )
+
+    row = store.performance_by_model_for_owner("user-a")[0]
+    assert row["sample_sufficient"] is False
+    assert row["routing_eligible"] is False
+
+    try:
+        store.performance_by_model_for_owner("")
+    except ValueError as exc:
+        assert "owner_user_id" in str(exc)
+    else:
+        raise AssertionError("An owner must be required for performance queries")
