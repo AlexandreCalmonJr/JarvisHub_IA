@@ -12,7 +12,7 @@ export async function toggleSkill(skillId: string): Promise<any> {
 }
 
 export async function assignSkillAgents(skillId: string, agentRoles: string[]): Promise<any> {
-  const res = await fetch(`${API_BASE}/skills/${skillId}/assign-agents`, {
+  const res = await fetch(`${API_BASE}/skills/${encodeURIComponent(skillId)}/assign-agents`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -29,6 +29,7 @@ export async function fetchPonytailStatus(): Promise<{ level: string; active: bo
 export async function savePonytailLevel(level: string): Promise<any> {
   const res = await fetch(`${API_BASE}/skills/ponytail`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ level }),
   });
@@ -45,6 +46,7 @@ export async function createUserSkill(skill: {
 }): Promise<any> {
   const res = await fetch(`${API_BASE}/skills/create`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(skill),
   });
@@ -59,6 +61,7 @@ export async function deleteUserSkill(skillId: string): Promise<any> {
 export async function importEccSkill(content: string): Promise<any> {
   const res = await fetch(`${API_BASE}/skills/import-ecc`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
   });
