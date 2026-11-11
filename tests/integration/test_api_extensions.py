@@ -110,7 +110,9 @@ async def test_api_agents_and_skill_assignment():
 
 async def test_api_tasks_and_database_retention_and_export():
 
-    db_manager.register_project("proj_audit", "Audit Project", "workspace/proj_audit")
+    db_manager.register_project(
+        "proj_audit", "Audit Project", "workspace/proj_audit", owner_user_id="admin"
+    )
 
     db_manager.save_task(
 
