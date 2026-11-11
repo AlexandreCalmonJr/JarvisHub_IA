@@ -118,6 +118,7 @@ async def test_frente_03_chat_history_search_and_export_markdown():
                     }
                 ],
             },
+            owner_user_id="admin",
         )
 
         # 1. Busca no histórico de chat
