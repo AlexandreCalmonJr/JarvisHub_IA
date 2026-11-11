@@ -4,6 +4,7 @@ import { FileText, Trash2, BookOpen, Upload, RefreshCw } from 'lucide-react';
 interface DocumentListGridProps {
   documents: any[];
   loading: boolean;
+  error?: string | null;
   onDelete: (docName: string) => void;
   onSelectFileClick: () => void;
 }
@@ -11,6 +12,7 @@ interface DocumentListGridProps {
 export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
   documents,
   loading,
+  error,
   onDelete,
   onSelectFileClick,
 }) => {
@@ -36,6 +38,10 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
           <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px' }} />
           Carregando inventário de documentos...
+        </div>
+      ) : error ? (
+        <div role="alert" style={{ padding: '24px', border: '1px solid var(--danger-color)', borderRadius: '10px', color: 'var(--danger-color)', fontSize: '0.86rem' }}>
+          {error}
         </div>
       ) : documents.length === 0 ? (
         <div
