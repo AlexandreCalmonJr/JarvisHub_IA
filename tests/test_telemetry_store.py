@@ -33,6 +33,7 @@ def test_telemetry_is_isolated_by_owner(tmp_path):
         "successful": 1,
         "failed": 0,
         "total_tokens": 30,
+        "total_cost_usd": 0.0,
         "average_latency_ms": 125.5,
     }
 
@@ -172,3 +173,23 @@ def test_model_selection_history_is_private_to_owner(tmp_path):
         assert "owner_user_id" in str(exc)
     else:
         raise AssertionError("An owner must be required for selection history")
+
+
+def test_telemetry_persists_and_aggregates_actual_cost_per_owner(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    store.record_inference(
+        owner_user_id="user-cost",
+        task_id="task-cost",
+        agent_role="research_analyst",
+        model_name="cloud-model",
+        provider="online_gateway (openai)",
+        status="success",
+        duration_ms=250,
+        prompt_tokens=1000,
+        completion_tokens=500,
+        cost_usd=0.0012,
+    )
+    assert store.list_for_owner("user-cost")[0]["cost_usd"] == 0.0012
+    assert store.summary_for_owner("user-cost")["total_cost_usd"] == 0.0012
+    performance = store.performance_by_model_for_owner("user-cost")[0]
+    assert performance["total_cost_usd"] == 0.0012
