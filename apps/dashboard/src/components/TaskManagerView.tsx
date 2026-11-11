@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { fetchTasks, deleteTask, purgeTasks } from '../api';
 import { notify } from './common/Toast';
+import { Modal } from './common/Modal';
 
 const INTENT_MAP: Record<string, { label: string; color: string }> = {
   multi_agent_consensus: { label: 'Mesa Redonda / Consenso', color: 'badge-purple' },
@@ -38,6 +39,7 @@ export const TaskManagerView: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [purging, setPurging] = useState(false);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -485,7 +487,7 @@ export const TaskManagerView: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
-                    onClick={() => handleDeleteTask(task.id)}
+                    onClick={() => setConfirmDeleteId(task.id)}
                     className="btn btn-ghost"
                     style={{ fontSize: '0.75rem', padding: '6px 10px', color: '#f87171' }}
                     title="Excluir este registro de tarefa"
@@ -500,6 +502,36 @@ export const TaskManagerView: React.FC = () => {
           })}
         </div>
       )}
+
+      <Modal
+        isOpen={!!confirmDeleteId}
+        onClose={() => setConfirmDeleteId(null)}
+        title="Excluir registro de tarefa?"
+        subtitle="Esta ação remove o registro da sua conta e não pode ser desfeita."
+        maxWidth="sm"
+        footer={(
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirmDeleteId(null)}>Cancelar</button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!!deletingId}
+              onClick={async () => {
+                if (!confirmDeleteId) return;
+                const targetId = confirmDeleteId;
+                setConfirmDeleteId(null);
+                await handleDeleteTask(targetId);
+              }}
+            >
+              {deletingId ? 'Removendo…' : 'Excluir tarefa'}
+            </button>
+          </>
+        )}
+      >
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', margin: 0 }}>
+          Confirme a exclusão do registro selecionado. Os dados de outras contas não são afetados.
+        </p>
+      </Modal>
 
       {/* Modal de Confirmação para Expurgar Antigas */}
       {showPurgeModal && (
