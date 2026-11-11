@@ -58,3 +58,9 @@ test('workspace human approvals use the dashboard modal instead of native browse
   assert.match(approvalHost, /Rejeitar operação/);
   assert.match(app, /<ApprovalPromptHost \/>/);
 });
+
+test('project deletion remains retryable after an API failure', () => {
+  assert.match(card, /setDeleting\(false\)/);
+  assert.match(card, /await onDeleteProject\?\.\(project\.id\)/);
+  assert.match(view, /throw e;/);
+});
