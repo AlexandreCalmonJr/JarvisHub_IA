@@ -323,51 +323,70 @@ class AuthService:
     # Bootstrap / admin
     # ------------------------------------------------------------------
     def _ensure_initial_admin_user(self) -> None:
-        """Cria a conta humana admin automaticamente na primeira inicialização.
+        """Garante a conta admin de homologação sem redefinir a senha a cada arranque.
 
-        Em desenvolvimento local, a senha inicial padrão é 'admin 123'.
-        Fora de desenvolvimento, a senha deve ser fornecida por variável de
-        ambiente para impedir a publicação de uma credencial conhecida.
+        Em desenvolvimento, a credencial inicial é admin / jarvishub.
+        A redefinição de uma conta existente ocorre uma única vez, controlada
+        por um marcador local. Em produção, uma senha conhecida nunca é aplicada.
         """
+        environment = os.environ.get(
+            "JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")
+        ).strip().lower()
+        is_production = environment in {"prod", "production"}
+        password = os.environ.get("JARVIS_BOOTSTRAP_ADMIN_PASSWORD")
+        if not password and not is_production:
+            password = "jarvishub"
+        if not password and not is_production:
+            raise RuntimeError("Defina JARVIS_BOOTSTRAP_ADMIN_PASSWORD para inicializar o admin.")
+        if password and len(password) < 8:
+            raise RuntimeError("A senha inicial do administrador deve ter pelo menos 8 caracteres.")
+
+        users = self.user_store.list_users()
+        admin_user = next(
+            (user for user in users
+             if user.get("username", "").casefold() == "admin"
+             and user.get("role") == "admin"),
+            None,
+        )
+
+        if admin_user is None:
+            # Não altera outras contas existentes; cria a conta administrativa
+            # solicitada com username próprio.
+            if password:
+                try:
+                    self.user_store.create_user(
+                        username="admin",
+                        display_name="Administrador",
+                        password=password,
+                        role="admin",
+                    )
+                except ValueError as exc:
+                    raise RuntimeError(
+                        "A conta 'admin' já existe com outro perfil. "
+                        "Ajuste-a pela administração antes de inicializar."
+                    ) from exc
+        elif not is_production:
+            marker = self.auth_dir / ".admin-bootstrap-password-initialized"
+            if not marker.exists():
+                if not self.user_store.set_password("admin", password):
+                    raise RuntimeError("Não foi possível definir a senha inicial da conta admin.")
+                marker.write_text("initialized\\n", encoding="utf-8")
+
+        # Uma conta admin desativada não pode autenticar. Reativa somente a
+        # conta de homologação explicitamente definida acima.
+        admin_user = self.user_store.get_user("admin")
+        if admin_user and not admin_user.get("is_active"):
+            self.user_store.set_active("admin", True)
+
         active_admins = [
             user for user in self.user_store.list_users()
             if user.get("role") == "admin" and user.get("is_active")
         ]
-        if active_admins:
-            return
-
-        environment = os.environ.get(
-            "JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")
-        ).strip().lower()
-        password = os.environ.get("JARVIS_BOOTSTRAP_ADMIN_PASSWORD")
-        if not password and environment not in {"prod", "production"}:
-            password = "admin 123"
-        if not password:
+        if not active_admins:
             raise RuntimeError(
-                "Ainda não existe administrador. Defina JARVIS_BOOTSTRAP_ADMIN_PASSWORD "
-                "para criar a conta admin na primeira inicialização."
+                "Ainda não existe administrador ativo. Defina JARVIS_BOOTSTRAP_ADMIN_PASSWORD "
+                "para criar a conta na primeira inicialização."
             )
-        if len(password) < 8:
-            raise RuntimeError("A senha inicial do administrador deve ter pelo menos 8 caracteres.")
-
-        try:
-            self.user_store.create_user(
-                username=os.environ.get("JARVIS_BOOTSTRAP_ADMIN_USERNAME", "admin").strip() or "admin",
-                display_name="Administrador",
-                password=password,
-                role="admin",
-            )
-        except ValueError as exc:
-            # Se outro worker criou o administrador simultaneamente, a condição
-            # já está satisfeita. Outros conflitos devem interromper o arranque.
-            active_admins = [
-                user for user in self.user_store.list_users()
-                if user.get("role") == "admin" and user.get("is_active")
-            ]
-            if not active_admins:
-                raise RuntimeError(
-                    "Não foi possível criar a conta admin automaticamente: " + str(exc)
-                ) from exc
         logger.info("Conta administrativa inicial verificada/criada automaticamente.")
 
     def _ensure_admin_credential(self) -> None:
