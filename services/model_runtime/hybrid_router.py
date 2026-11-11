@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from packages.contracts.security import AuditEventSeverity
 from services.security_core import ApprovalEngine, AuditTrail, contains_sensitive_data
@@ -97,7 +97,8 @@ class _ExternalPolicyDecision:
 class OnlineProviderConfig(BaseModel):
     provider_name: str = "openai"
     enabled: bool = False
-    api_key: str | None = None
+    api_key: str | None = Field(default=None, exclude=True)
+    key_id: str | None = None
     base_url: str | None = None
     default_model: str = "gpt-4o-mini"
     max_budget_usd: float = 5.0
