@@ -51,6 +51,11 @@ _api_docs_enabled = os.environ.get("JARVIS_ENABLE_API_DOCS", "").strip().lower()
     "yes",
 }
 
+_runtime_environment = os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")).strip().lower()
+if _api_docs_enabled and _runtime_environment in {"prod", "production"}:
+    logger.warning("Documentação OpenAPI foi solicitada, mas permanece desativada em produção.")
+    _api_docs_enabled = False
+
 # Inicialização central do FastAPI
 app = FastAPI(
     title="JARVIS AI HUB 3.0",
