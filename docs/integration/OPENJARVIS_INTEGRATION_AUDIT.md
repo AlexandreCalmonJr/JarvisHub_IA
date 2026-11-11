@@ -628,3 +628,29 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Confirmar com testes que perfis auditor não conseguem alterar agentes nem decidir aprovações, e que developers autorizados conseguem executar as operações previstas.
 - Auditar o módulo de modelos, incluindo catálogo, providers, cofre de chaves e permissões por ação.
 - Não foram executados testes nesta etapa.
+
+## 16. Gestor de Modelos — permissões, catálogo e gateway
+
+**Estado:** correções incrementais gravadas na branch de auditoria. A homologação continua pendente.
+
+### 16.1 Permissões de interface
+
+- A página consulta `/auth/me` antes de apresentar funcionalidades administrativas.
+- O Cofre de Chaves, a configuração do Gateway Híbrido, o assistente de configuração e a instalação de modelos ficam disponíveis apenas para utilizadores humanos com papel `admin`, de acordo com os endpoints que exigem `require_admin`.
+- Perfis sem administração continuam a consultar o inventário local, pesquisar o Hub e consultar o painel de qualidade, respeitando as permissões de leitura.
+- O Hub explica que a instalação no servidor é reservada a administradores e não apresenta o botão de instalação a outros perfis.
+
+### 16.2 Catálogo de modelos e estado do gateway
+
+- A API deixou de misturar presets de provedores com modelos online configurados.
+- `online_models` só inclui o modelo configurado quando o gateway está habilitado, existe uma chave ativa no KeyVault e o adaptador online está operacional.
+- O estado `hybrid_gateway.enabled` e a indicação de chave configurada refletem a disponibilidade operacional, não apenas a configuração persistida.
+- Os valores iniciais do formulário Gemini foram alinhados ao preset atual do seletor de provedores.
+- A página evita que o evento de clique seja interpretado como parâmetro de escopo administrativo ao atualizar os dados.
+
+### 16.3 Identidade visual e pendências
+
+- Os estados ativos do seletor de provedor e a barra de orçamento reutilizam o acento laranja do design system.
+- A lista de presets de provedores continua sendo uma lista de opções de configuração; não é apresentada como disponibilidade operacional.
+- Ainda é necessário validar a experiência de admin, developer e auditor, testar o fluxo de cadastro/teste/remoção de chaves e conferir o comportamento do gateway com chave ativa, inativa, ausente e adaptador indisponível.
+- Build, lint, testes unitários, integração e responsividade não foram executados.
