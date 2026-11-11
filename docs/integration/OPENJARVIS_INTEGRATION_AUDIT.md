@@ -849,3 +849,24 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Testar Office com catálogo vazio, falha de API, cofre indisponível e perfis admin/developer/auditor.
 - Testar listagem, exclusão e expurgo de tarefas com duas contas e retenção de 30 dias.
 - Build, lint, testes e validação visual continuam pendentes para a fase final.
+
+## 23. Segurança, contenção e aprovações humanas
+
+**Estado:** reforços de autorização e correções de interface gravados na branch de auditoria; testes pendentes.
+
+- O endpoint de decisão de aprovação exige agora principal humano; tokens de dispositivo não podem aprovar operações.
+- O Approval Center bloqueia chamadas sem autorização e impede submissões concorrentes enquanto uma decisão está em processamento.
+- A lista de aprovações continua limitada ao owner autenticado; a identidade de quem decide é derivada no servidor.
+- O Kill Switch global e o cancelamento de tarefa têm guardas no handler da interface, além da autorização do backend.
+- O cancelamento de tarefa pede confirmação explícita; a mensagem de erro usa o formato correto do estado de notificação.
+- As ações de scan CVE, red-team e aplicação de políticas verificam `security:scan`/`security:write` no handler, além dos controlos visuais.
+- A trilha de auditoria consultada pela conta é filtrada no backend pela identidade do principal, evitando devolver eventos de outras contas.
+
+### Validação pendente
+
+- Testar decisões approve/reject com admin, developer, auditor e dispositivo; apenas utilizadores humanos com `approvals:decide` devem decidir.
+- Testar duplo clique e submissões concorrentes no Approval Center.
+- Testar Kill Switch e cancelamento de tarefa com admin e perfis sem `security:kill`.
+- Confirmar que auditoria não devolve eventos de outro owner.
+- Testar CVE scan, red-team e políticas com admin/developer/auditor.
+- Build, lint e testes automatizados permanecem adiados para a fase final.
