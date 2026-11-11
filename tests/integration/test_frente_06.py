@@ -3,7 +3,7 @@ Testes de Integração - FRENTE 06: Backend Studio & Mock Server Nativo
 Valida:
 1. Criação, listagem, match e deleção de mock endpoints com status, latência e payloads JSON.
 2. Inspecção de tabelas, colunas e contagem de registros em bancos SQLite de projetos.
-3. Execução de queries (SELECT e DDL/DML) com medição de latência em ms.
+3. Execução somente de SELECT; DDL/DML bloqueados e medição de latência em ms.
 4. Auditoria de performance com EXPLAIN QUERY PLAN e detecção de Full Table Scan com recomendação de índices.
 """
 
