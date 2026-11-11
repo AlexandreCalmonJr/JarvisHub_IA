@@ -171,3 +171,46 @@ def test_project_memory_and_project_listing_are_owner_scoped(tmp_path):
     assert db.list_project_memory(
         "project-a", owner_user_id="account-a"
     )[0]["content"] == "SQLite"
+
+
+def test_agent_memories_custom_skills_and_profiles_are_account_scoped(tmp_path):
+    db = DatabaseManager(db_path=str(tmp_path / "private-settings.db"))
+    db.set_agent_memory(
+        agent_role="software_architect", category="preference", key="style",
+        content="A likes concise answers", owner_user_id="account-a",
+    )
+    db.set_agent_memory(
+        agent_role="software_architect", category="preference", key="style",
+        content="B likes detailed answers", owner_user_id="account-b",
+    )
+    assert db.list_agent_memories(
+        agent_role="software_architect", owner_user_id="account-a"
+    )[0]["content"] == "A likes concise answers"
+    assert db.list_agent_memories(
+        agent_role="software_architect", owner_user_id="account-b"
+    )[0]["content"] == "B likes detailed answers"
+
+    skill = {
+        "id": "private_skill",
+        "name": "Private Skill",
+        "origin": "user_created",
+        "domain": "backend",
+        "instructions": "Only account A should see this",
+        "assigned_agents": ["jarvis_master"],
+    }
+    db.save_user_skill(skill, owner_user_id="account-a")
+    assert [s["id"] for s in db.list_user_skills(
+        owner_user_id="account-a"
+    )] == ["private_skill"]
+    assert db.list_user_skills(owner_user_id="account-b") == []
+    assert db.get_user_skill(
+        "private_skill", owner_user_id="account-b"
+    ) is None
+    assert db.delete_user_skill(
+        "private_skill", owner_user_id="account-b"
+    ) is False
+
+    db.set_user_profile({"displayName": "Account A"}, owner_user_id="account-a")
+    db.set_user_profile({"displayName": "Account B"}, owner_user_id="account-b")
+    assert db.get_user_profile(owner_user_id="account-a")["displayName"] == "Account A"
+    assert db.get_user_profile(owner_user_id="account-b")["displayName"] == "Account B"
