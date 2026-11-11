@@ -30,7 +30,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
           Documentos e Manuais no Vault
         </h3>
         <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-          Privacidade total: arquivos processados localmente sem envio a servidores externos
+          Documentos associados à conta autenticada e processados pelo ambiente JARVIS
         </span>
       </div>
 
