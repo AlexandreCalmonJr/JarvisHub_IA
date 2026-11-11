@@ -19,6 +19,7 @@ from apps.api.deps import (
     UnauthorizedApprovalError,
     coding_broker,
     tool_gateway,
+    db_manager,
 )
 from packages.contracts.agent import AgentRole
 from packages.contracts.approval import ApprovalStatus
