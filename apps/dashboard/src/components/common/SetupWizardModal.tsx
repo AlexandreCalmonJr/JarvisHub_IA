@@ -210,7 +210,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
 
                   <div style={{ fontSize: '0.74rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <CheckCircle2 size={13} />
-                    <span>Redação de privacidade local (DLP) ativada por padrão</span>
+                    <span>Cofre Privado por Conta em implementação</span>
                   </div>
                 </div>
 
