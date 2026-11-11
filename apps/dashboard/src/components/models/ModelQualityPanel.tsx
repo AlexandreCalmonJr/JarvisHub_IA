@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Star, TrendingUp, Info } from 'lucide-react';
-import { fetchModelQualitySummary, ModelQualitySummary } from '../../services/api/system';
+import { fetchModelQualitySummary } from '../../services/api/system';
+import type { ModelQualitySummary } from '../../services/api/system';
 
 export const ModelQualityPanel: React.FC = () => {
   const [rows, setRows] = useState<ModelQualitySummary[]>([]);
