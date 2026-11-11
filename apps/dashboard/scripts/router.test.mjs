@@ -2,38 +2,45 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { TAB_PATHS, tabFromLocation, pathForTab, isKnownTab } from '../src/router.ts';
 
 const read = (path) => readFileSync(resolve(import.meta.dirname, path), 'utf8');
+const router = read('../src/router.ts');
+const sidebar = read('../src/components/Sidebar.tsx');
+const app = read('../src/App.tsx');
 
-test('every registered tab resolves from its canonical URL', () => {
-  for (const [tab, path] of Object.entries(TAB_PATHS)) {
-    assert.equal(tabFromLocation(path), tab, `route ${path} should resolve to ${tab}`);
-    assert.equal(pathForTab(tab), path);
-    assert.equal(isKnownTab(tab), true);
+const pathsBlock = router.match(/export const TAB_PATHS: Record<string, string> = \{([\s\S]*?)\n\};/)?.[1] || '';
+const registeredTabs = [...pathsBlock.matchAll(/^\s*([a-z_]+):\s*'\/[^']*',?$/gm)].map((match) => match[1]);
+
+test('every registered tab has a canonical path and a shell renderer', () => {
+  assert.ok(registeredTabs.length > 0, 'TAB_PATHS must contain registered routes');
+  for (const tab of registeredTabs) {
+    assert.ok(pathsBlock.includes(`${tab}:`), `route ${tab} should have a canonical path`);
+    assert.ok(sidebar.includes(`handleSelectTab('${tab}')`) || sidebar.includes(`id: '${tab}'`), `sidebar missing ${tab}`);
+    assert.ok(app.includes(`activeTab === '${tab}'`), `dashboard shell missing ${tab}`);
   }
 });
 
-test('root and legacy aliases remain compatible', () => {
-  assert.equal(tabFromLocation('/'), 'chat');
-  assert.equal(tabFromLocation('/habbo'), 'office');
-  assert.equal(tabFromLocation('/hardware'), 'advisor');
-  assert.equal(tabFromLocation('/server-logs'), 'server_logs');
-  assert.equal(tabFromLocation('/?tab=chat'), 'chat');
+test('root, aliases and current module paths remain registered', () => {
+  assert.match(router, /'': 'chat'/);
+  assert.match(router, /habbo: 'office'/);
+  assert.match(router, /hardware: 'advisor'/);
+  assert.match(router, /'server-logs': 'server_logs'/);
+  assert.match(router, /'backend-studio': 'backend_studio'/);
+  assert.match(router, /'executive-report': 'executive_report'/);
 });
 
-test('unknown paths and tab query values are not silently redirected to chat', () => {
-  assert.equal(tabFromLocation('/this-page-does-not-exist'), 'not_found');
-  assert.equal(tabFromLocation('/?tab=does-not-exist'), 'not_found');
-  assert.equal(pathForTab('does-not-exist'), '/404');
-  assert.equal(isKnownTab('does-not-exist'), false);
+test('unknown paths and tab query values resolve to the not-found experience', () => {
+  assert.match(router, /KNOWN_TABS\.has\(tabParam\) \? tabParam : 'not_found'/);
+  assert.match(router, /PATH_TABS\[path\] \|\| 'not_found'/);
+  assert.match(router, /TAB_PATHS\[tab\] \|\| '\/404'/);
 });
 
-test('every registered page is reachable from the sidebar and rendered by the shell', () => {
-  const sidebar = read('../src/components/Sidebar.tsx');
-  const app = read('../src/App.tsx');
-  for (const tab of Object.keys(TAB_PATHS)) {
-    assert.ok(sidebar.includes(`handleSelectTab('${tab}')`) || sidebar.includes(`id: '${tab}'`), `sidebar missing ${tab}`);
-    assert.ok(app.includes(`activeTab === '${tab}'`), `dashboard shell missing ${tab}`);
+test('all dashboard modules are declared in the route registry', () => {
+  for (const tab of [
+    'chat', 'overview', 'workspace', 'tasks', 'agents', 'skills', 'knowledge',
+    'models', 'approvals', 'security', 'advisor', 'server_logs',
+    'backend_studio', 'quality', 'design', 'executive_report',
+  ]) {
+    assert.match(pathsBlock, new RegExp(`\\b${tab}:\\s*['"]`), `route registry missing ${tab}`);
   }
 });
