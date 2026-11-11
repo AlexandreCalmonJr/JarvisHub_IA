@@ -53,7 +53,6 @@ def get_agent_label(role: str | AgentRole) -> str:
 
 
 
-from .heuristic_engine import generate_heuristic_technical_response
 from .prompt_builder import build_specialist_prompt, INTENT_DOMAIN_MAP
 from .workspace_actions import execute_workspace_modification
 
@@ -329,9 +328,8 @@ def create_master_graph(
 
         if intent == "conversation":
             steps = [
-                "1. Interpretar mensagem do usuário e contexto da conversa.",
-                "2. Verificar prontidão operacional do hub e dos 26 agentes especializados.",
-                "3. Apresentar opções e capacidades técnicas acionáveis.",
+                "1. Interpretar a mensagem e o contexto da conversa.",
+                "2. Responder diretamente, sem convocar especialistas desnecessariamente.",
             ]
         elif intent == "project_creation":
             p_low = prompt.lower()
@@ -945,15 +943,20 @@ def create_master_graph(
                     conv_resp = await model_manager.generate(conv_req)
                     llm_text = conv_resp.content.strip()
                 except Exception as exc:
-                    logger.warning("Falha na resposta conversacional dinâmica: %s", exc)
-                    llm_text = f"Compreendi perfeitamente sua mensagem: '{user_prompt}'. Como o JARVIS Maestro, estou à disposição para aprofundar qualquer detalhe técnico ou coordenar nossos especialistas."
+                    logger.exception(
+                        "O modelo conversacional não conseguiu responder à tarefa %s",
+                        state.get("task_id"),
+                    )
+                    raise RuntimeError(
+                        f"O JARVIS não conseguiu gerar a resposta porque o provedor de IA falhou: {exc}"
+                    ) from exc
 
             primary_output = AgentOutputContract(
                 agent_role=primary_agent,
                 objective="Interação conversacional e assistência inteligente personalizada",
                 summary=llm_text,
-                evidence=["Inferência dinâmica realizada", "26 agentes operacionais", "Runtime ativo"],
-                actions_taken=state.get("plan_steps", []),
+                evidence=["Resposta conversacional gerada pelo modelo."],
+                actions_taken=[],
                 affected_files=[],
                 tests_executed=[],
                 risks=[],
@@ -1024,106 +1027,94 @@ def create_master_graph(
                 pillar_b = "**Mitigação de Segurança**: Blindagem de portas, sanitização contra injeções e isolamento de dados sensíveis."
                 pillar_c = "**Simplicidade & YAGNI**: Implementação focada nas bibliotecas padrão da plataforma, evitando pacotes desnecessários."
 
-            # 1. Parecer do Especialista 1
-            sys_1 = build_specialist_prompt(
-                agent_role=role_1,
-                agent_registry=agent_registry,
-                skills_catalog=skills_catalog,
-                db_manager=db_manager,
-                owner_user_id=state.get("owner_user_id"),
-                intent="expert_deliberation",
-                user_prompt=clean_prompt,
-                project_id=project_id,
-                domain="research" if is_educational else "backend",
-            )
-            req_1 = InferenceRequest(
-                prompt=prompt_1,
-                system_prompt=sys_1,
-                model_name=model_name,
-                max_tokens=600,
-                temperature=0.3,
-                timeout_seconds=120.0,
-                task_id=state.get("task_id"),
-            )
-            try:
-                resp_1 = await model_manager.generate(req_1)
-                text_1 = resp_1.content.strip()
-            except Exception:
-                text_1 = fallback_1
-
-            # 2. Parecer do Especialista 2
-            sys_2 = build_specialist_prompt(
-                agent_role=role_2,
-                agent_registry=agent_registry,
-                skills_catalog=skills_catalog,
-                db_manager=db_manager,
-                owner_user_id=state.get("owner_user_id"),
-                intent="expert_deliberation",
-                user_prompt=clean_prompt,
-                project_id=project_id,
-                domain="planning" if is_educational else "security",
-                previous_outputs=[{"agent_role": role_1, "summary": text_1}],
-            )
-            req_2 = InferenceRequest(
-                prompt=prompt_2,
-                system_prompt=sys_2,
-                model_name=model_name,
-                max_tokens=600,
-                temperature=0.2,
-                timeout_seconds=120.0,
-                task_id=state.get("task_id"),
-            )
-            try:
-                resp_2 = await model_manager.generate(req_2)
-                text_2 = resp_2.content.strip()
-            except Exception:
-                text_2 = fallback_2
-
-            # 3. Parecer do Especialista 3
-            sys_3 = build_specialist_prompt(
-                agent_role=role_3,
-                agent_registry=agent_registry,
-                skills_catalog=skills_catalog,
-                db_manager=db_manager,
-                owner_user_id=state.get("owner_user_id"),
-                intent="expert_deliberation",
-                user_prompt=clean_prompt,
-                project_id=project_id,
-                domain="qa",
-                previous_outputs=[
-                    {"agent_role": role_1, "summary": text_1},
-                    {"agent_role": role_2, "summary": text_2},
-                ],
-            )
-            req_3 = InferenceRequest(
-                prompt=prompt_3,
-                system_prompt=sys_3,
-                model_name=model_name,
-                max_tokens=600,
-                temperature=0.2,
-                timeout_seconds=120.0,
-                task_id=state.get("task_id"),
-            )
-            try:
-                resp_3 = await model_manager.generate(req_3)
-                text_3 = resp_3.content.strip()
-            except Exception:
-                text_3 = fallback_3
-
-            # O Maestro recebe os três pareceres, incluindo críticas e contrapontos,
-            # e produz uma síntese baseada no conteúdo real, sem presumir unanimidade.
-            peer_outputs = [
-                {"agent_role": role_1, "summary": text_1},
-                {"agent_role": role_2, "summary": text_2},
-                {"agent_role": role_3, "summary": text_3},
+            # Delegação sequencial real: cada especialista recebe os pareceres anteriores.
+            peer_outputs: list[dict[str, Any]] = []
+            peer_contracts: list[dict[str, Any]] = []
+            specialist_specs = [
+                (role_1, prompt_1, "research" if is_educational else "backend"),
+                (role_2, prompt_2, "planning" if is_educational else "security"),
+                (role_3, prompt_3, "qa"),
             ]
+            for specialist_role, specialist_task, specialist_domain in specialist_specs:
+                specialist_system = build_specialist_prompt(
+                    agent_role=specialist_role,
+                    agent_registry=agent_registry,
+                    skills_catalog=skills_catalog,
+                    db_manager=db_manager,
+                    owner_user_id=state.get("owner_user_id"),
+                    intent="expert_deliberation",
+                    user_prompt=clean_prompt,
+                    project_id=project_id,
+                    domain=specialist_domain,
+                    previous_outputs=peer_outputs,
+                )
+                specialist_profile = None
+                if agent_registry:
+                    try:
+                        specialist_profile = agent_registry.get_profile(AgentRole(specialist_role))
+                    except Exception as exc:
+                        logger.debug("Perfil de %s indisponível: %s", specialist_role, exc)
+                specialist_model = (
+                    specialist_profile.preferred_model
+                    if specialist_profile and specialist_profile.preferred_model
+                    else model_name
+                )
+                specialist_request = InferenceRequest(
+                    prompt=specialist_task,
+                    system_prompt=specialist_system,
+                    model_name=specialist_model,
+                    max_tokens=900,
+                    temperature=0.25,
+                    timeout_seconds=120.0,
+                    task_id=state.get("task_id"),
+                    key_id=getattr(specialist_profile, "assigned_key_id", None),
+                )
+                try:
+                    specialist_response = await model_manager.generate(specialist_request)
+                except Exception as exc:
+                    logger.exception("Especialista %s falhou na tarefa %s", specialist_role, state.get("task_id"))
+                    raise RuntimeError(
+                        f"O especialista {specialist_role} não conseguiu executar sua etapa: {exc}"
+                    ) from exc
+                specialist_text = (specialist_response.content or "").strip()
+                if not specialist_text:
+                    raise RuntimeError(
+                        f"O especialista {specialist_role} retornou uma resposta vazia."
+                    )
+                peer_outputs.append({
+                    "agent_role": specialist_role,
+                    "summary": specialist_text,
+                })
+                peer_contracts.append(
+                    AgentOutputContract(
+                        agent_role=specialist_role,
+                        objective=specialist_task,
+                        summary=specialist_text,
+                        evidence=["Resposta produzida por inferência real do especialista."],
+                        actions_taken=["Analisou o pedido e os pareceres anteriores disponíveis."],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[],
+                        resource_usage=ResourceUsage(
+                            model_name=specialist_model,
+                            tokens_prompt=getattr(specialist_response, "prompt_tokens", 0) or 0,
+                            tokens_completion=getattr(specialist_response, "completion_tokens", 0) or 0,
+                            duration_ms=getattr(specialist_response, "duration_ms", 0.0) or 0.0,
+                        ),
+                        next_recommendation="Aguardar a consolidação do JARVIS Maestro.",
+                    ).model_dump()
+                )
+
             master_prompt = (
-                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\n\n"
-                f"Parecer 1 ({role_1}):\n{text_1}\n\n"
-                f"Parecer 2 ({role_2}), que recebeu o parecer 1 e pôde contestá-lo:\n{text_2}\n\n"
-                f"Parecer 3 ({role_3}), que recebeu os dois pareceres anteriores:\n{text_3}\n\n"
-                "Compare as recomendações, resolva divergências com justificativa, destaque riscos "
-                "não resolvidos e apresente um plano final. Não invente consenso nem testes/evidências."
+                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\\n\\n"
+                + "\\n\\n".join(
+                    f"Parecer de {item['agent_role']}:\\n{item['summary']}"
+                    for item in peer_outputs
+                )
+                + "\\n\\nCompare as recomendações, identifique convergências e divergências, "
+                  "resolva conflitos com justificativa e apresente um plano final. "
+                  "Não invente consenso, testes, ferramentas, evidências ou ações que não ocorreram."
             )
             master_system = build_specialist_prompt(
                 agent_role=AgentRole.JARVIS_MASTER.value,
@@ -1143,29 +1134,54 @@ def create_master_graph(
                         prompt=master_prompt,
                         system_prompt=master_system,
                         model_name=model_name,
-                        max_tokens=900,
+                        max_tokens=1200,
                         temperature=0.2,
                         timeout_seconds=120.0,
                         task_id=state.get("task_id"),
                     )
                 )
-                master_summary = master_response.content.strip()
             except Exception as exc:
-                logger.warning("Síntese do Jarvis Maestro indisponível: %s", exc)
-                master_summary = (
-                    "Síntese automática indisponível. Os três pareceres abaixo permanecem separados; "
-                    "não foi declarado consenso. Revise os pontos de divergência antes de executar."
-                )
+                logger.exception("Síntese do JARVIS Maestro falhou na tarefa %s", state.get("task_id"))
+                raise RuntimeError(
+                    f"O JARVIS Maestro não conseguiu consolidar os pareceres: {exc}"
+                ) from exc
+            master_summary = (master_response.content or "").strip()
+            if not master_summary:
+                raise RuntimeError("O JARVIS Maestro retornou uma síntese vazia.")
 
             consensus_summary = (
-                f"# {consensus_title}\n\n"
-                f"### 1. 🔬 {title_1}\n{text_1}\n\n"
-                f"### 2. 📋 {title_2}\n{text_2}\n\n"
-                f"### 3. ✅ {title_3}\n{text_3}\n\n"
-                f"---\n\n"
-                f"### ⚖️ Deliberação do JARVIS Maestro\n\n{master_summary}\n\n"
-                f"### Diretriz de referência\n- {pillar_a}\n- {pillar_b}\n- {pillar_c}"
+                f"# {consensus_title}\\n\\n"
+                + "\\n\\n".join(
+                    f"### {index}. {role}\\n{summary}"
+                    for index, (role, summary) in enumerate(
+                        [(item["agent_role"], item["summary"]) for item in peer_outputs],
+                        start=1,
+                    )
+                )
+                + f"\\n\\n### Deliberação do JARVIS Maestro\\n\\n{master_summary}"
             )
+            agent_outputs.extend(peer_contracts)
+            agent_outputs.append(
+                AgentOutputContract(
+                    agent_role=AgentRole.JARVIS_MASTER,
+                    objective="Consolidação dos pareceres realmente produzidos pelos especialistas.",
+                    summary=master_summary,
+                    evidence=["Síntese gerada após receber os pareceres dos especialistas convocados."],
+                    actions_taken=["Comparou os pareceres e consolidou convergências, divergências e recomendações."],
+                    affected_files=[],
+                    tests_executed=[],
+                    risks=[],
+                    blockers=[],
+                    resource_usage=ResourceUsage(
+                        model_name=model_name,
+                        tokens_prompt=getattr(master_response, "prompt_tokens", 0) or 0,
+                        tokens_completion=getattr(master_response, "completion_tokens", 0) or 0,
+                        duration_ms=getattr(master_response, "duration_ms", 0.0) or 0.0,
+                    ),
+                    next_recommendation="Revisar a síntese e decidir os próximos passos.",
+                ).model_dump()
+            )
+            llm_text = consensus_summary
 
             # Insere contratos de cada especialista no estado para visualização no painel de raciocínio
             agent_outputs.append(
@@ -1267,26 +1283,24 @@ def create_master_graph(
                 comp_tokens = inference_resp.completion_tokens
                 dur_ms = inference_resp.duration_ms
             except Exception as exc:
-                logger.error("Falha na inferencia de %s: %s", model_name, exc, exc_info=True)
-                llm_text = generate_heuristic_technical_response(
-                    user_prompt=user_prompt,
-                    intent=intent,
-                    role=primary_agent,
-                    domain=domain,
+                logger.exception(
+                    "A inferência do especialista primário %s falhou na tarefa %s",
+                    primary_agent,
+                    state.get("task_id"),
                 )
-                prompt_tokens = 40
-                comp_tokens = len(llm_text.split())
-                dur_ms = 5.0
+                raise RuntimeError(
+                    f"O especialista {primary_agent} não conseguiu executar a análise: {exc}"
+                ) from exc
 
             primary_output = AgentOutputContract(
                 agent_role=primary_agent,
                 objective=f"Executar análise técnica para a intenção '{intent}'",
                 summary=llm_text,
-                evidence=["Verificação de escopo e contexto realizada", "Inferência estruturada concluída"],
-                actions_taken=state.get("plan_steps", []),
+                evidence=["Resposta produzida pela inferência do especialista primário."],
+                actions_taken=["Análise do pedido e do contexto fornecido."],
                 affected_files=[],
-                tests_executed=["Verificação estática de regras e políticas"],
-                risks=["Nenhum risco detectado na fase inicial"],
+                tests_executed=[],
+                risks=[],
                 blockers=[],
                 resource_usage=ResourceUsage(
                     model_name=model_name,
@@ -1298,278 +1312,120 @@ def create_master_graph(
             )
             agent_outputs.append(primary_output.model_dump())
 
-        # 4. Execução sequencial dos especialistas secundários (Multi-Agent Pipeline)
-        is_hybrid_active = bool(
-            model_manager.hybrid_router
-            and getattr(model_manager.hybrid_router, "online_config", None)
-            and model_manager.hybrid_router.online_config.enabled
+        # Delegação sequencial real para todos os especialistas selecionados.
+        # Não depende de provedor híbrido: também funciona com modelos locais.
+        secondary_agents = (
+            selected[1:]
+            if intent not in ("project_creation", "multi_agent_consensus")
+            else []
         )
-        # Em modo local CPU (sem GPU), evita sobrecarregar com múltiplas inferências sequenciais desnecessárias
-        secondary_agents = selected[1:] if (is_hybrid_active or intent in ("code_modification", "security_audit")) and intent != "project_creation" else []
+        execution_errors: list[str] = []
+        for secondary_role in secondary_agents:
+            try:
+                role_enum = AgentRole(secondary_role)
+            except Exception:
+                execution_errors.append(
+                    f"Especialista desconhecido no catálogo: {secondary_role}"
+                )
+                continue
 
-        for current_agent in secondary_agents:
-            sec_role = current_agent.value if hasattr(current_agent, "value") else str(current_agent)
-            prev_out = agent_outputs[0] if agent_outputs else {}
-            affected_files = prev_out.get("affected_files", [])
-
-            # Resolução dinâmica do modelo preferencial do especialista secundário
-            sec_profile = None
+            secondary_profile = None
             if agent_registry:
                 try:
-                    sec_profile = agent_registry.get_profile(AgentRole(sec_role))
+                    secondary_profile = agent_registry.get_profile(role_enum)
                 except Exception as exc:
-                    logger.debug("Perfil do agente de segurança indisponível: %s", exc)
-            if is_hybrid_active:
-                sec_pref = sec_profile.preferred_model if sec_profile else "auto_hybrid"
-                if not sec_pref or sec_pref in ("auto", "auto_hybrid", "llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
-                    sec_model = hybrid_default
-                else:
-                    sec_model = sec_pref
-            else:
-                sec_model = sec_profile.preferred_model if sec_profile else model_name
+                    logger.warning("Não foi possível carregar o perfil %s: %s", secondary_role, exc)
 
-            # Evidência real de execução de ferramentas no sandbox via ToolGateway
-            tool_evidence: list[str] = []
-            target_proj = created_slug or project_id
-            if tool_gateway and target_proj:
-                try:
-                    t_req = ToolExecutionRequest(
-                        tool_name="list_directory",
-                        agent_role=sec_role,
-                        project_id=target_proj,
-                        arguments={"path": "."},
-                    )
-                    t_res = await tool_gateway.execute_tool(t_req)
-                    if t_res.success:
-                        tool_evidence.append(f"Inspeção de workspace concluída via ToolGateway ({t_res.duration_ms:.1f}ms)")
-                except Exception as exc:
-                    logger.debug("Inspeção complementar do workspace falhou: %s", exc)
-
-            if sec_role == AgentRole.SOFTWARE_ARCHITECT.value:
-                target_name = created_slug or (project_id or "projeto")
-                sec_summary = (
-                    f"A integridade arquitetural do projeto '{target_name}' foi avaliada e aprovada pelo Software Architect. "
-                    "A hierarquia física e a separação de responsabilidades (Clean Architecture e layout modular) "
-                    "estão em conformidade com as diretrizes do JARVIS AI HUB."
-                )
-                sec_contract = AgentOutputContract(
-                    agent_role=AgentRole.SOFTWARE_ARCHITECT,
-                    objective="Auditoria de conformidade arquitetural e modularidade do projeto",
-                    summary=sec_summary,
-                    evidence=[
-                        f"Arquivos inspecionados: {', '.join(affected_files) if affected_files else 'Workspace'}",
-                        "Padrões de separação de responsabilidades verificados",
-                        "Conformidade com diretrizes de Clean Architecture validada",
-                    ] + tool_evidence,
-                    actions_taken=[
-                        "Inspeção estática da hierarquia de diretórios gerada",
-                        "Validação de modularidade e separação entre apresentação e comportamento",
-                        "Verificação de conformidade com padrões de importação e convenções de projeto",
-                    ],
-                    affected_files=affected_files,
-                    tests_executed=[
-                        "Validação de layout responsivo e meta viewport",
-                        "Verificação estática de estrutura de arquivos",
-                    ],
-                    risks=[
-                        "Manter bibliotecas externas e assets locais versionados",
-                    ],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=sec_model,
-                        tokens_prompt=25,
-                        tokens_completion=65,
-                        duration_ms=5.0,
-                    ),
-                    next_recommendation="Estrutura aprovada. Pronto para receber novos componentes ou estilos no chat.",
-                )
-                agent_outputs.append(sec_contract.model_dump())
-
-            elif sec_role in (AgentRole.QA_ENGINEER.value, AgentRole.CODE_REVIEWER.value):
-                sec_role_enum = (
-                    AgentRole(sec_role)
-                    if sec_role in [r.value for r in AgentRole]
-                    else AgentRole.QA_ENGINEER
-                )
-                sec_summary = (
-                    "Revisão de garantia de qualidade (QA) concluída com sucesso sobre as alterações aplicadas. "
-                    "O diff gravado no disco não introduz quebras de sintaxe, tags órfãs ou regressões estruturais."
-                )
-                sec_contract = AgentOutputContract(
-                    agent_role=sec_role_enum,
-                    objective="Garantia da qualidade de software (QA), cobertura de testes e prevenção de regressão",
-                    summary=sec_summary,
-                    evidence=[
-                        f"Arquivos inspecionados: {', '.join(affected_files) if affected_files else 'Workspace'}",
-                        "Backup de segurança .bak verificado no disco",
-                        "Integridade semântica de marcação e estilos confirmada",
-                    ] + tool_evidence,
-                    actions_taken=[
-                        "Análise de diff das alterações aplicadas",
-                        "Verificação de fechamento de tags e integridade sintática",
-                        "Avaliação de cenários de teste e potenciais casos de borda",
-                    ],
-                    affected_files=affected_files,
-                    tests_executed=[
-                        "Smoke test de integridade sintática e renderização estática",
-                        "Validação de codificação UTF-8 e caracteres especiais",
-                    ],
-                    risks=[
-                        "Certificar conformidade de contraste de cores com diretrizes WCAG AA",
-                    ],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=sec_model,
-                        tokens_prompt=25,
-                        tokens_completion=65,
-                        duration_ms=5.0,
-                    ),
-                    next_recommendation="Recarregue o navegador para confirmar visualmente as alterações.",
-                )
-                agent_outputs.append(sec_contract.model_dump())
-
-            elif sec_role in (
-                AgentRole.CYBERSECURITY_ENGINEER.value,
-                AgentRole.SECURE_CODE_AUDITOR.value,
-            ):
-                sec_role_enum = (
-                    AgentRole(sec_role)
-                    if sec_role in [r.value for r in AgentRole]
-                    else AgentRole.CYBERSECURITY_ENGINEER
-                )
-                sec_summary = (
-                    "Auditoria de segurança defensiva realizada pelo especialista. "
-                    "Nenhum segredo em texto claro, credencial exposta ou vulnerabilidade crítica de injeção foi identificada."
-                )
-                sec_contract = AgentOutputContract(
-                    agent_role=sec_role_enum,
-                    objective="Auditoria de segurança de código, credenciais e superfície de ataque",
-                    summary=sec_summary,
-                    evidence=[
-                        "Varredura por segredos e chaves em texto claro concluída",
-                        "Validação de sanitização contra XSS e Path Traversal ativa",
-                    ] + tool_evidence,
-                    actions_taken=[
-                        "Inspeção estática alinhada às diretrizes OWASP Top 10",
-                        "Auditoria de permissões e privilégio mínimo no sandbox",
-                    ],
-                    affected_files=affected_files,
-                    tests_executed=[
-                        "Scan estático de regex para segredos e tokens",
-                        "Verificação de conformidade com sandbox de permissões",
-                    ],
-                    risks=[
-                        "Garantir uso de Content-Security-Policy (CSP) estrito em produção",
-                    ],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=sec_model,
-                        tokens_prompt=30,
-                        tokens_completion=70,
-                        duration_ms=6.0,
-                    ),
-                    next_recommendation="Manter validação estrita de entrada e sanitização em novos arquivos.",
-                )
-                agent_outputs.append(sec_contract.model_dump())
-
-            elif sec_role == AgentRole.PROJECT_MANAGER.value:
-                sec_summary = (
-                    "Cronograma e marcos de entrega alinhados pelo Project Manager. "
-                    "As dependências e critérios de aceitação foram estruturados para viabilizar as próximas entregas."
-                )
-                sec_contract = AgentOutputContract(
-                    agent_role=AgentRole.PROJECT_MANAGER,
-                    objective="Alinhamento de cronograma, marcos de entrega e critérios de aceitação",
-                    summary=sec_summary,
-                    evidence=[
-                        "Escopo do pedido estruturado em tarefas acionáveis",
-                        "Critérios de aceitação definidos para cada entregável",
-                    ] + tool_evidence,
-                    actions_taken=[
-                        "Mapeamento de dependências e estimativas de esforço",
-                        "Estruturação de marcos técnicos e pontos de validação",
-                    ],
-                    affected_files=affected_files,
-                    tests_executed=[
-                        "Conferência de aderência aos requisitos do pedido original",
-                    ],
-                    risks=[
-                        "Monitorar desvios de escopo durante iterações de desenvolvimento",
-                    ],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=sec_model,
-                        tokens_prompt=25,
-                        tokens_completion=60,
-                        duration_ms=5.0,
-                    ),
-                    next_recommendation="Acompanhar progresso no quadro de tarefas do projeto.",
-                )
-                agent_outputs.append(sec_contract.model_dump())
-
-            elif sec_role == AgentRole.JARVIS_MASTER.value:
-                sec_text = (
-                    f"Supervisão e orquestração multi-agente concluída com sucesso. "
-                    f"O parecer e plano do especialista {primary_agent} foram analisados e aprovados para execução."
-                )
-            else:
-                prompt_str = build_specialist_prompt(
-                    agent_role=sec_role,
-                    agent_registry=agent_registry,
-                    skills_catalog=skills_catalog,
-                    db_manager=db_manager,
+            secondary_model = (
+                secondary_profile.preferred_model
+                if secondary_profile and secondary_profile.preferred_model
+                else model_name
+            )
+            secondary_system = build_specialist_prompt(
+                agent_role=secondary_role,
+                agent_registry=agent_registry,
+                skills_catalog=skills_catalog,
+                db_manager=db_manager,
                 owner_user_id=state.get("owner_user_id"),
-                    intent=intent,
-                    user_prompt=user_prompt,
-                    project_id=project_id,
-                    domain=domain,
-                    previous_outputs=agent_outputs,
-                )
-                try:
-                    inf_req = InferenceRequest(
-                        prompt=user_prompt,
-                        system_prompt=prompt_str,
-                        model_name=sec_model,
-                        max_tokens=1500,
-                        temperature=0.3,
-                        timeout_seconds=180.0,
+                intent=intent,
+                user_prompt=user_prompt,
+                project_id=project_id,
+                domain=domain,
+                previous_outputs=agent_outputs,
+            )
+            secondary_prompt = (
+                f"Execute sua análise como especialista {secondary_role} para o pedido abaixo.\\n"
+                f"Pedido original: {user_prompt}\\n\\n"
+                "Considere criticamente os pareceres anteriores incluídos no contexto. "
+                "Aponte concordâncias, divergências, riscos e recomendações específicas. "
+                "Não afirme que executou ferramentas, testes ou alterações que não realizou."
+            )
+            try:
+                secondary_response = await model_manager.generate(
+                    InferenceRequest(
+                        prompt=secondary_prompt,
+                        system_prompt=secondary_system,
+                        model_name=secondary_model,
+                        max_tokens=1000,
+                        temperature=0.25,
+                        timeout_seconds=120.0,
                         task_id=state.get("task_id"),
-                        key_id=getattr(sec_profile, "assigned_key_id", None),
+                        key_id=getattr(secondary_profile, "assigned_key_id", None),
                     )
-                    inf_resp = await model_manager.generate(inf_req)
-                    sec_text = inf_resp.content.strip()
-                except Exception:
-                    sec_text = f"Parecer técnico estruturado de {sec_role} para: {user_prompt}"
-
-                try:
-                    r_enum = AgentRole(sec_role)
-                except Exception:
-                    r_enum = AgentRole.JARVIS_MASTER
-
-                sec_contract = AgentOutputContract(
-                    agent_role=r_enum,
-                    objective=f"Avaliação técnica complementar como '{sec_role}'",
-                    summary=sec_text,
-                    evidence=["Parecer técnico consolidado em colaboração"] + tool_evidence,
-                    actions_taken=["Análise de escopo e colaboração multi-agente"],
-                    affected_files=affected_files,
-                    tests_executed=["Verificação estática de regras"],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=sec_model,
-                        tokens_prompt=25,
-                        tokens_completion=65,
-                        duration_ms=5.0,
-                    ),
-                    next_recommendation="Especialista concluiu sua avaliação.",
                 )
-                agent_outputs.append(sec_contract.model_dump())
+                secondary_text = (secondary_response.content or "").strip()
+                if not secondary_text:
+                    raise RuntimeError("resposta vazia")
+                agent_outputs.append(
+                    AgentOutputContract(
+                        agent_role=role_enum,
+                        objective=f"Análise complementar de {secondary_role}.",
+                        summary=secondary_text,
+                        evidence=["Resposta produzida por inferência real do especialista."],
+                        actions_taken=["Analisou o pedido e os pareceres anteriores."],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[],
+                        resource_usage=ResourceUsage(
+                            model_name=secondary_model,
+                            tokens_prompt=getattr(secondary_response, "prompt_tokens", 0) or 0,
+                            tokens_completion=getattr(secondary_response, "completion_tokens", 0) or 0,
+                            duration_ms=getattr(secondary_response, "duration_ms", 0.0) or 0.0,
+                        ),
+                        next_recommendation="Aguardar a consolidação do JARVIS Maestro.",
+                    ).model_dump()
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Delegação do especialista %s falhou na tarefa %s",
+                    secondary_role,
+                    state.get("task_id"),
+                )
+                execution_errors.append(f"{secondary_role}: {exc}")
+                agent_outputs.append(
+                    AgentOutputContract(
+                        agent_role=role_enum,
+                        objective=f"Etapa delegada a {secondary_role}.",
+                        summary="Este especialista não concluiu a análise.",
+                        evidence=[],
+                        actions_taken=[],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[str(exc)],
+                        resource_usage=ResourceUsage(model_name=secondary_model),
+                        next_recommendation="Verificar o provedor/modelo e repetir esta etapa.",
+                    ).model_dump()
+                )
 
         res_dict: dict[str, Any] = {
             "agent_outputs": agent_outputs,
             "current_step": len(agent_outputs),
+            "is_completed": not execution_errors,
         }
+        if execution_errors:
+            res_dict["error"] = "Uma ou mais etapas delegadas falharam: " + "; ".join(execution_errors)
         if "llm_text" in locals() and llm_text:
             res_dict["final_summary"] = llm_text
         elif agent_outputs:
@@ -1617,6 +1473,17 @@ def create_master_graph(
         if state.get("policy_violations"):
             summary = f"Execução bloqueada por violação de políticas: {'; '.join(state['policy_violations'])}"
             return {"final_summary": summary, "is_completed": False}
+
+        if state.get("error"):
+            partial = state.get("final_summary") or "A execução multiagente não foi concluída."
+            return {
+                "final_summary": (
+                    partial
+                    + "\\n\\n**Execução parcial:** "
+                    + str(state["error"])
+                ),
+                "is_completed": False,
+            }
 
         if state.get("final_summary"):
             return {"final_summary": state["final_summary"], "is_completed": True}

@@ -3,7 +3,6 @@ import {
   ShieldAlert,
   ChevronDown,
   ChevronRight,
-  CheckCircle2,
   Users,
   Sparkles,
   Volume2,
@@ -329,7 +328,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                   {task.selected_agents && task.selected_agents.length > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <Users size={12} color="var(--text-muted)" />
-                      <span style={{ color: 'var(--text-muted)' }}>Agentes Atuantes:</span>
+                      <span style={{ color: 'var(--text-muted)' }}>Especialistas selecionados:</span>
                       {task.selected_agents.map((ag: string) => (
                         <span
                           key={ag}
@@ -349,11 +348,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                   {task.plan_steps && task.plan_steps.length > 0 && (
                     <div style={{ marginTop: '4px' }}>
                       <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
-                        Plano Executado:
+                        Etapas planejadas:
                       </span>
                       {task.plan_steps.map((st: string, idx: number) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
-                          <CheckCircle2 size={12} color="#10b981" />
+                          <ChevronRight size={12} color="var(--text-muted)" />
                           <span>{st}</span>
                         </div>
                       ))}
@@ -399,6 +398,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                                 <span key={eIdx} style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>
                                   • {ev}
                                 </span>
+                              ))}
+                            </div>
+                          )}
+                          {out.blockers && out.blockers.length > 0 && (
+                            <div style={{ marginTop: '4px', color: 'var(--danger-color, #ef4444)', fontSize: '0.68rem' }}>
+                              {out.blockers.map((blocker: string, bIdx: number) => (
+                                <div key={bIdx}>Bloqueio: {blocker}</div>
                               ))}
                             </div>
                           )}
@@ -463,10 +469,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span style={{ fontSize: '0.84rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                      {message.statusMessage || 'JARVIS Maestro processando com especialistas...'}
+                      {message.statusMessage || 'JARVIS Maestro processando a solicitação...'}
                     </span>
                     <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                      Inferência local em CPU (100% confinada ao 127.0.0.1)
+                      Aguardando o resultado real do processamento.
                     </span>
                   </div>
                 </div>

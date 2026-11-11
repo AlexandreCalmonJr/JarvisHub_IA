@@ -42,6 +42,7 @@ export interface TaskStateResponse {
   agent_outputs?: any[];
   final_summary?: string;
   is_completed: boolean;
+  error?: string | null;
 }
 
 export interface AgentInfo {
