@@ -84,7 +84,7 @@ export async function fetchChatSessions(): Promise<ChatSessionItem[]> {
 }
 
 export async function fetchChatSessionTasks(sessionId: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}`);
+  const res = await fetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar a conversa.' }));
     throw new Error(errorData.detail || 'Falha ao carregar a conversa.');
