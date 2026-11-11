@@ -1,7 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.api.main import app
+from apps.api.main import app, workspace_service
 from packages.contracts.agent import AgentRole
 
 
@@ -43,7 +43,15 @@ async def test_api_chat_analysis_planning():
 async def test_api_chat_code_modification_creates_approval():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        payload = {"prompt": "Alterar o endpoint de autenticação para adicionar novo header"}
+        project_id = "site-auth-approval"
+        workspace_service.delete_project(project_id)
+        workspace_service.scaffold_project(
+            project_id=project_id,
+            name="Site Auth Approval",
+            project_type="web",
+            files={"index.html": "<html><head><title>Antigo</title></head><body>Login</body></html>"},
+        )
+        payload = {"prompt": "Alterar o endpoint de autenticação no projeto site-auth-approval e mudar o título para Login Seguro", "project_id": project_id}
         res = await client.post("/api/v1/chat", json=payload)
         assert res.status_code == 200
         data = res.json()
@@ -77,6 +85,10 @@ async def test_api_chat_code_modification_creates_approval():
         )
         assert valid_res.status_code == 200
         assert valid_res.json()["status"] == "approved"
+        assert "<title>Login Seguro</title>" in (
+            workspace_service.get_project_dir(project_id) / "index.html"
+        ).read_text(encoding="utf-8")
+        workspace_service.delete_project(project_id)
 
 
 @pytest.mark.asyncio
