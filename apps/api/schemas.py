@@ -254,11 +254,13 @@ class WriteProjectFilePayload(BaseModel):
     path: str = Field(..., description="Caminho relativo do arquivo no projeto")
     content: str = Field(..., description="Conteúdo textual a ser gravado")
     reason: str = Field(default="Modificação aplicada via Artifact Canvas", description="Motivo")
+    approval_id: str | None = Field(default=None, description="ID de aprovação humana previamente aprovada")
 
 
 class ImportFolderPayload(BaseModel):
     folder_path: str = Field(..., description="Caminho absoluto da pasta no computador")
     name: str | None = Field(default=None, description="Nome de identificação do projeto")
+    approval_id: str | None = Field(default=None, description="ID de aprovação humana previamente aprovada")
 
 
 class AutonomousAgentRunRequest(BaseModel):
