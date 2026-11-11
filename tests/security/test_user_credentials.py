@@ -80,3 +80,17 @@ async def test_password_login_issues_http_only_session_cookie():
         me = await client.get("/api/v1/auth/me")
         assert me.status_code == 200
         assert me.json()["user_id"] == username
+
+
+def test_named_admin_account_cannot_disable_last_active_admin(tmp_path):
+    store = UserCredentialStore(tmp_path / "users.sqlite3")
+    store.create_user("owner", "Owner", "owner-password-123", "admin")
+
+    try:
+        store.set_active("owner", False)
+    except ValueError as exc:
+        assert "último administrador" in str(exc)
+    else:
+        raise AssertionError("O último administrador ativo não pode ser desativado.")
+
+    assert store.authenticate("owner", "owner-password-123")["role"] == "admin"
