@@ -202,6 +202,11 @@ async def discover_project_tests_endpoint(
 async def run_project_tests_endpoint(
     payload: RunTestsPayload, principal: Principal = Depends(get_principal)
 ):
+    if principal.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Execução de código requer administrador até existir isolamento de processo por conta.",
+        )
     _require_owned_project(payload.project_id, principal)
     try:
         return await quality_studio_service.run_tests(
