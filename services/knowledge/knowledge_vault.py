@@ -15,6 +15,8 @@ from services.memory.database import DatabaseManager
 
 logger = logging.getLogger("jarvis.knowledge")
 
+MAX_INDEX_FILE_BYTES = 25 * 1024 * 1024
+
 SUPPORTED_EXTENSIONS = {
     ".md", ".txt", ".json", ".yaml", ".yml", ".py", ".ts", ".tsx",
     ".js", ".jsx", ".java", ".go", ".cs", ".sql", ".html", ".css", ".pdf", ".docx",
@@ -121,9 +123,12 @@ class KnowledgeVaultService:
         if not p.exists() or not p.is_file():
             raise FileNotFoundError(f"Arquivo não encontrado: {p}")
 
+        file_size = p.stat().st_size
+        if file_size > MAX_INDEX_FILE_BYTES:
+            raise ValueError("O ficheiro excede o limite de indexação de 25 MB.")
         doc_name = p.name
         file_type = p.suffix.lower().replace(".", "").upper() or "TXT"
-        file_size_formatted = self.format_size(p.stat().st_size)
+        file_size_formatted = self.format_size(file_size)
 
         text = self.extract_text_from_file(p)
         if not text.strip():
@@ -186,13 +191,18 @@ class KnowledgeVaultService:
         skipped_files = []
 
         for p in root.rglob("*"):
-            if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS:
-                # Ignora pastas de cache e dependências gigantes
-                parts = p.parts
-                if any(k in parts for k in ("node_modules", ".venv", "__pycache__", ".git", "dist", "build")):
-                    continue
-                try:
-                    res = self.index_file(p, category=category, owner_user_id=owner_user_id)
+            if p.is_symlink() or not p.is_file() or p.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                continue
+            try:
+                p.resolve(strict=True).relative_to(root)
+            except (OSError, RuntimeError, ValueError):
+                continue
+            # Ignora pastas de cache, dependências e arquivos acima do limite.
+            parts = p.parts
+            if any(k in parts for k in ("node_modules", ".venv", "__pycache__", ".git", "dist", "build")):
+                continue
+            try:
+                res = self.index_file(p, category=category, owner_user_id=owner_user_id)
                     indexed_files.append(res)
                 except Exception as exc:
                     skipped_files.append({"file": p.name, "error": str(exc)})
