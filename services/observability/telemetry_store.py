@@ -83,10 +83,18 @@ class SqliteTelemetryStore:
                     selected_provider TEXT NOT NULL,
                     selection_reason TEXT NOT NULL,
                     candidate_count INTEGER NOT NULL DEFAULT 0,
+                    estimated_cost_usd REAL NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL
                 )
                 """
             )
+            selection_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(model_selection_decisions)")
+            }
+            if "estimated_cost_usd" not in selection_columns:
+                conn.execute(
+                    "ALTER TABLE model_selection_decisions ADD COLUMN estimated_cost_usd REAL NOT NULL DEFAULT 0"
+                )
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_model_selection_owner_created
@@ -240,6 +248,7 @@ class SqliteTelemetryStore:
         selected_provider: str,
         selection_reason: str,
         candidate_count: int,
+        estimated_cost_usd: float = 0.0,
     ) -> str:
         if not owner_user_id or not owner_user_id.strip():
             raise ValueError("owner_user_id is required")
@@ -250,13 +259,13 @@ class SqliteTelemetryStore:
                 INSERT INTO model_selection_decisions (
                     id, owner_user_id, task_id, agent_role, task_capability,
                     selected_model, selected_provider, selection_reason,
-                    candidate_count, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    candidate_count, estimated_cost_usd, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id, owner_user_id, task_id, agent_role, task_capability,
                     selected_model, selected_provider, selection_reason,
-                    max(0, int(candidate_count)), datetime.now(UTC).isoformat(),
+                    max(0, int(candidate_count)), max(0.0, float(estimated_cost_usd)), datetime.now(UTC).isoformat(),
                 ),
             )
         return record_id
@@ -271,7 +280,7 @@ class SqliteTelemetryStore:
             rows = conn.execute(
                 """
                 SELECT id, task_id, agent_role, task_capability, selected_model,
-                       selected_provider, selection_reason, candidate_count, created_at
+                       selected_provider, selection_reason, candidate_count, estimated_cost_usd, created_at
                 FROM model_selection_decisions
                 WHERE owner_user_id = ?
                 ORDER BY created_at DESC
