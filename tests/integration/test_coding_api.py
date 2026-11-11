@@ -46,11 +46,13 @@ async def test_coding_session_history_roundtrip(client):
         session_id=session_id,
         role="user",
         content="Analise o projeto.",
+        owner_user_id="admin",
     )
     db_manager.add_chat_message(
         session_id=session_id,
         role="assistant",
         content="Vou começar lendo o README.",
+        owner_user_id="admin",
     )
 
     resp = await client.get(f"/api/v1/coding/sessions/{session_id}/messages")
@@ -76,6 +78,7 @@ async def test_coding_approval_requires_human_decision(client):
         impact_summary="Alterar app.py",
         affected_resources=["app.py"],
         proposed_diff="--- a/app.py\n+++ b/app.py\n",
+        owner_user_id="admin",
     )
 
     pending = await client.get("/api/v1/coding/approvals")
@@ -122,6 +125,7 @@ async def test_coding_approval_forbids_agent_self_approval(client):
         operation="run_command",
         impact_summary="Executar testes",
         affected_resources=["pytest"],
+        owner_user_id="admin",
     )
 
     resp = await client.post(
