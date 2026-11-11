@@ -1,3 +1,5 @@
+import logging
+import time
 from typing import Any
 
 from packages.contracts.security import AuditEventSeverity
@@ -6,6 +8,8 @@ from services.security_core import AuditTrail, KillSwitch
 from .adapter import BaseModelAdapter, OllamaAdapter
 from .inference_queue import InferenceQueue
 from .types import InferenceRequest, InferenceResponse, ModelMetadata, ModelRoleMapping
+
+logger = logging.getLogger(__name__)
 
 
 class ModelManager:
@@ -21,12 +25,14 @@ class ModelManager:
         kill_switch: KillSwitch | None = None,
         audit_trail: AuditTrail | None = None,
         hybrid_router: Any = None,
+        telemetry_store: Any = None,
     ):
         self.adapter = adapter or OllamaAdapter()
         self.queue = InferenceQueue(max_concurrent=max_concurrent_inferences)
         self.kill_switch = kill_switch
         self.audit_trail = audit_trail
         self.hybrid_router = hybrid_router
+        self.telemetry_store = telemetry_store
 
     def set_cpu_threads(self, threads: int | None) -> None:
         """Configura dinamicamente o número de threads do Ollama no adaptador ativo."""
@@ -81,6 +87,7 @@ class ModelManager:
 
         # 2. Execução protegida pela fila de concorrência com suporte a Hybrid Gateway
         used_provider = "ollama_local"
+        started_at = time.perf_counter()
 
         async def _run_inference():
             nonlocal used_provider
@@ -91,10 +98,30 @@ class ModelManager:
                 return res
             return await self.adapter.generate(request)
 
-        response = await self.queue.execute(
-            _run_inference,
-            task_id=request.task_id,
-            timeout_seconds=request.timeout_seconds,
+        try:
+            response = await self.queue.execute(
+                _run_inference,
+                task_id=request.task_id,
+                timeout_seconds=request.timeout_seconds,
+            )
+        except Exception as exc:
+            self._record_telemetry(
+                request=request,
+                provider=used_provider,
+                status="failed",
+                duration_ms=(time.perf_counter() - started_at) * 1000,
+                error_type=type(exc).__name__,
+            )
+            raise
+
+        measured_duration_ms = response.duration_ms or (time.perf_counter() - started_at) * 1000
+        self._record_telemetry(
+            request=request,
+            provider=used_provider,
+            status="success",
+            duration_ms=measured_duration_ms,
+            prompt_tokens=response.prompt_tokens,
+            completion_tokens=response.completion_tokens,
         )
 
         # 3. Registo em auditoria
@@ -114,6 +141,37 @@ class ModelManager:
             )
 
         return response
+
+    def _record_telemetry(
+        self,
+        *,
+        request: InferenceRequest,
+        provider: str,
+        status: str,
+        duration_ms: float,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        error_type: str | None = None,
+    ) -> None:
+        """Persiste somente metadados operacionais, nunca prompts ou respostas."""
+        if not self.telemetry_store:
+            return
+        try:
+            self.telemetry_store.record_inference(
+                owner_user_id=request.owner_user_id,
+                task_id=request.task_id,
+                agent_role=request.agent_role,
+                model_name=request.model_name,
+                provider=provider,
+                status=status,
+                duration_ms=duration_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                error_type=error_type,
+            )
+        except Exception:
+            # Falha de observabilidade não pode derrubar uma inferência válida.
+            logger.exception("Não foi possível persistir a telemetria da inferência.")
 
     async def generate_stream(
         self,
