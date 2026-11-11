@@ -400,3 +400,39 @@ O endpoint `GET /api/v1/system/inference-telemetry` inclui o campo `model_perfor
 ### 10.3 Próxima decisão técnica
 
 Antes de ligar seleção automática, precisamos validar a origem de `agent_role`, a identidade do provedor efetivamente utilizado em todos os caminhos híbridos e a qualidade das métricas de tokens/custo. Em seguida, implementar um avaliador de candidatos que respeite capabilities, políticas de dados, aprovação externa e orçamento. A telemetria isolada por owner não pode virar um canal de aprendizagem compartilhada entre contas.
+
+
+## 11. Terceira etapa — seleção inteligente de modelos
+
+**Estado:** implementação inicial concluída na branch `integration/openjarvis-audit`; testes e validação de runtime pendentes.
+
+### 11.1 Seletor e contrato
+
+- Novo `services/model_runtime/model_selector.py` com seleção determinística baseada no inventário real de modelos.
+- A seleção automática é opt-in: `model_name="auto"` ou `model_name="auto_hybrid"`. Nomes de modelos explicitamente configurados continuam respeitados.
+- `task_capability` permite informar `code`, `reasoning`, `vision` ou `general`; quando ausente, usa o papel do especialista.
+- A seleção considera adequação de capacidade, desempenho histórico por owner, latência e preferência local-first.
+- Quando existe candidato com pelo menos cinco amostras e taxa de sucesso mínima de 95%, a comparação prioriza candidatos com histórico elegível.
+- Sem histórico suficiente, não há bônus de latência/sucesso; a decisão inicial usa capacidade e preferência local-first.
+- Para capacidade visual, o seletor não escolhe modelo sem indício de suporte no catálogo.
+
+### 11.2 Segurança e execução
+
+- Modelos externos só entram na lista quando o gateway está habilitado e disponível.
+- Dados marcados como sensíveis excluem candidatos externos sem aprovação humana expressa.
+- A decisão externa continua sujeita ao HybridModelRouter: aprovação, orçamento, auditoria e fallback local.
+- `force_local` garante que uma escolha local não seja redirecionada silenciosamente ao gateway online.
+- A seleção e seu motivo são persistidos em `model_selection_decisions`, com filtro obrigatório por owner.
+- O endpoint privado de telemetria passa a incluir o histórico de decisões de seleção.
+
+### 11.3 Limites desta versão
+
+- O inventário online atual expõe o modelo padrão do gateway, não uma descoberta abrangente de todos os modelos de cada conta no KeyVault.
+- A classificação de capacidades usa metadados e heurísticas de nomes/família; não é um benchmark semântico nem uma certificação de capabilities.
+- Custos não participam ainda da pontuação do seletor. O HybridModelRouter continua aplicando reserva e limite de orçamento para qualquer execução externa.
+- Os fluxos que recebem modelo explicitamente configurado não são substituídos. A seleção automática atua somente quando o contrato recebe `auto`/ `auto_hybrid`.
+- A telemetria de streaming permanece incompleta, embora a seleção de modelo já seja aplicada antes do streaming.
+
+### 11.4 Critérios para próxima iteração
+
+Antes de habilitar seleção automática como padrão para todos os agentes, validar inventário local/online, capabilities reais, custo por provedor, modelos preferidos dos perfis, histórico por owner e comportamento em indisponibilidade. Não compartilhar dados de desempenho entre contas.
