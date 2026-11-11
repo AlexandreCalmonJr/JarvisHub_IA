@@ -150,7 +150,7 @@ class EngineeringIntelligenceService:
             "cost_saved_usd": cost_saved_usd,
             "cost_saved_brl": round(cost_saved_usd * 5.80, 2),
             "engineering_hours_saved": hours_saved,
-            "cloud_lockin": "0% (Soberania de Dados 100% Local)",
+            "cloud_lockin": "Não calculado",
         }
 
     def generate_executive_report(
@@ -165,20 +165,17 @@ class EngineeringIntelligenceService:
         proj_name = project_id or "Ecossistema Geral"
         debt = None
         if project_id and self.workspace_service:
-            try:
-                p_dir = self.workspace_service.get_project_dir(project_id)
-                debt = self.analyze_technical_debt(p_dir)
-            except Exception:
-                pass
+            p_dir = self.workspace_service.get_project_dir(project_id)
+            debt = self.analyze_technical_debt(p_dir)
 
         md_lines = [
             f"# 📊 JARVIS AI HUB — Relatório Executivo de Engenharia",
             f"**Data de Emissão:** {now} | **Projeto:** {proj_name}",
             "",
             "## 1. Sumário Executivo de Produtividade & ROI",
-            f"- **Tarefas Automatizadas Concluídas:** {roi['total_tasks_completed']}",
-            f"- **Horas de Engenharia Poupadas:** {roi['engineering_hours_saved']} horas",
-            f"- **Economia Direta em APIs de Nuvem:** US$ {roi['cost_saved_usd']} (~R$ {roi['cost_saved_brl']})",
+            f"- **Tarefas Concluídas na Conta:** {roi['total_tasks_completed']}",
+            f"- **Tempo potencialmente poupado (estimativa):** {roi['engineering_hours_saved']} horas (0,42h por tarefa)",
+            f"- **Economia estimada em APIs de Nuvem:** US$ {roi['cost_saved_usd']} (~R$ {roi['cost_saved_brl']}) — 4.500 tokens/tarefa a US$ 10 por milhão",
             f"- **Escopo dos dados:** {'Conta proprietária do projeto' if project_id else 'Relatório global administrativo'}",
             "",
             "## 2. Indicadores de Qualidade e Saúde do Código",
