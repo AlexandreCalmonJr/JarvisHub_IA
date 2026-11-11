@@ -167,3 +167,26 @@ async def test_multi_agent_sequential_execution_in_jarvis_master():
     assert completed["is_completed"] is True
     assert completed["pending_project"] is None
     assert "criado após aprovação humana" in completed["final_summary"]
+
+
+@pytest.mark.asyncio
+async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
+    from services.model_runtime import MockAdapter, ModelManager
+    from services.orchestration import JarvisMaster
+    from services.security_core import SecurityCore
+
+    security = SecurityCore()
+    model_mgr = ModelManager(adapter=MockAdapter(default_response="Parecer simulado com análise e riscos."), audit_trail=security.audit)
+    master = JarvisMaster(security_core=security, model_manager=model_mgr)
+
+    result = await master.execute_task(
+        user_prompt="/debate Avaliar arquitetura segura para um serviço local multiagente"
+    )
+
+    assert result["classified_intent"] == "multi_agent_consensus"
+    roles = [output["agent_role"] for output in result["agent_outputs"]]
+    assert AgentRole.SOFTWARE_ARCHITECT.value in roles
+    assert AgentRole.CYBERSECURITY_ENGINEER.value in roles
+    assert AgentRole.CODE_REVIEWER.value in roles
+    assert roles[-1] == AgentRole.JARVIS_MASTER.value
+    assert "Deliberação do JARVIS Maestro" in result["final_summary"]
