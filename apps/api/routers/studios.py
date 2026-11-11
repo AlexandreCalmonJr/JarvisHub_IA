@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
@@ -226,11 +227,12 @@ async def generate_playwright_test_endpoint(
         scenario_name=payload.scenario_name,
         steps=payload.steps,
     )
+    safe_scenario = re.sub(r"[^A-Za-z0-9_]", "_", payload.scenario_name) or "cenario"
     return {
         "status": "generated",
-        "scenario": payload.scenario_name,
+        "scenario": safe_scenario,
         "code": code,
-        "filename": f"test_{payload.scenario_name}_e2e.py",
+        "filename": f"test_{safe_scenario}_e2e.py",
     }
 
 
