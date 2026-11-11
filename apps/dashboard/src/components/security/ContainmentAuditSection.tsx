@@ -61,6 +61,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   }, [severityFilter]);
 
   const handleGlobalKill = async () => {
+    if (!canKill) return;
     if (
       !window.confirm(
         'ATENÇÃO: Deseja suspender imediatamente todas as operações e ferramentas do JARVIS HUB?'
@@ -82,7 +83,8 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   };
 
   const handleCancelTask = async () => {
-    if (!taskIdInput.trim()) return;
+    if (!canKill || !taskIdInput.trim()) return;
+    if (!window.confirm(`Cancelar a tarefa '${taskIdInput.trim()}'? Esta ação não pode ser desfeita.`)) return;
     setKillLoading(true);
     try {
       await triggerKillSwitch('task', taskIdInput.trim());
@@ -91,7 +93,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
       onRefresh();
       loadAuditLogs();
     } catch (err: any) {
-      setMessage(`Erro: ${err.message}`);
+      setMessage({ type: 'error', text: `Erro: ${err.message}` });
     } finally {
       setKillLoading(false);
     }
