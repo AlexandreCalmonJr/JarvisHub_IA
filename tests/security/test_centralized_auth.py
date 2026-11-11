@@ -101,6 +101,7 @@ async def test_06_authorized_device_access():
         device_name="Tablet de Teste",
         scopes=["approvals:read", "approvals:decide"],
         created_by="admin_test",
+        owner_user_id="admin",
     )
     device_token = device_reg.device_token
 
