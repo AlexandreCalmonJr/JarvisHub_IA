@@ -380,7 +380,6 @@ async def apply_security_policy_endpoint(
                 "status": "approval_required",
                 "approval_id": approval.id,
                 "file": tmpl["filename"],
-                "path": str(target_file),
                 "impact_summary": approval.impact_summary,
                 "diff": diff,
             }
@@ -418,7 +417,6 @@ async def apply_security_policy_endpoint(
         return {
             "status": "applied",
             "file": tmpl["filename"],
-            "path": str(target_file),
             "message": f"Política '{tmpl['title']}' aplicada com sucesso.",
         }
     except HTTPException:

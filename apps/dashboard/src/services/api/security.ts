@@ -68,7 +68,7 @@ export async function toggleNetworkIsolation(isolated: boolean, reason?: string)
 }
 
 export async function scanProjectCVEs(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/security/scan-cves/${projectId}`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/security/scan-cves/${encodeURIComponent(projectId)}`, { method: 'POST' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Erro ao escanear CVEs' }));
     throw new Error(err.detail || 'Falha no escaneamento de dependências');
@@ -77,7 +77,7 @@ export async function scanProjectCVEs(projectId: string): Promise<any> {
 }
 
 export async function runRedTeamAudit(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/security/red-team/${projectId}`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/security/red-team/${encodeURIComponent(projectId)}`, { method: 'POST' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Erro no Red Team' }));
     throw new Error(err.detail || 'Falha na auditoria de segurança');
@@ -94,11 +94,11 @@ export async function fetchSecurityPolicyTemplates(): Promise<any[]> {
   return res.json();
 }
 
-export async function applySecurityPolicy(projectId: string, templateId: string): Promise<any> {
+export async function applySecurityPolicy(projectId: string, templateId: string, approvalId?: string): Promise<any> {
   const res = await fetch(`${API_BASE}/security/apply-policy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project_id: projectId, template_id: templateId }),
+    body: JSON.stringify({ project_id: projectId, template_id: templateId, approval_id: approvalId }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Erro ao aplicar política' }));

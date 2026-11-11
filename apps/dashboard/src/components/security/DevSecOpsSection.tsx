@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../../services/api/client';
+import { getAccountStorageKey } from '../../services/accountScope';
 import {
   Bug,
   Flame,
@@ -16,6 +18,9 @@ import {
 
 export const DevSecOpsSection: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
+  const [canRunSecurityActions, setCanRunSecurityActions] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   // Scanner CVEs
@@ -30,17 +35,19 @@ export const DevSecOpsSection: React.FC = () => {
   const [policyTemplates, setPolicyTemplates] = useState<any[]>([]);
   const [applyingPolicyId, setApplyingPolicyId] = useState<string | null>(null);
   const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
-  const [policyMessage, setPolicyMessage] = useState<string | null>(null);
+  const [policyMessage, setPolicyMessage] = useState<{ text: string; type: 'success' | 'error' | 'pending' } | null>(null);
+  const [pendingPolicies, setPendingPolicies] = useState<Array<{ projectId: string; templateId: string; approvalId: string }>>([]);
 
   const loadProjects = async () => {
     try {
       const projs = await fetchWorkspaceProjects();
       setProjects(projs || []);
+      setLoadError(null);
       if (projs && projs.length > 0 && !selectedProjectId) {
         setSelectedProjectId(projs[0].id);
       }
     } catch (e) {
-      console.error(e);
+      setLoadError(e instanceof Error ? e.message : 'Falha ao carregar projetos.');
     }
   };
 
@@ -49,14 +56,57 @@ export const DevSecOpsSection: React.FC = () => {
       const tmpls = await fetchSecurityPolicyTemplates();
       setPolicyTemplates(tmpls || []);
     } catch (e) {
-      console.error(e);
+      setLoadError(e instanceof Error ? e.message : 'Falha ao carregar modelos de política.');
     }
   };
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) {
+          setCanRunSecurityActions(
+            principal?.kind === 'human' &&
+            (principal?.role === 'admin' || principal?.role === 'developer')
+          );
+          setRoleLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanRunSecurityActions(false);
+          setRoleLoaded(true);
+        }
+      });
+    try {
+      const raw = localStorage.getItem(getAccountStorageKey('jarvis_security_policy_pending_v1'));
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        setPendingPolicies(parsed.filter((item) =>
+          item && typeof item.projectId === 'string' &&
+          typeof item.templateId === 'string' &&
+          typeof item.approvalId === 'string'
+        ));
+      }
+    } catch {
+      // A lista de continuações é apenas uma conveniência local.
+    }
     loadProjects();
     loadPolicyTemplates();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const persistPendingPolicies = (items: Array<{ projectId: string; templateId: string; approvalId: string }>) => {
+    setPendingPolicies(items);
+    try {
+      localStorage.setItem(getAccountStorageKey('jarvis_security_policy_pending_v1'), JSON.stringify(items));
+    } catch {
+      // A operação no servidor não depende da persistência local.
+    }
+  };
 
   const handleScanCVEs = async () => {
     if (!selectedProjectId) return;
@@ -66,7 +116,7 @@ export const DevSecOpsSection: React.FC = () => {
       const res = await scanProjectCVEs(selectedProjectId);
       setCveReport(res);
     } catch (err: any) {
-      alert(`Falha ao varrer CVEs: ${err.message}`);
+      setLoadError(`Falha ao varrer CVEs: ${err.message}`);
     } finally {
       setCveLoading(false);
     }
@@ -80,21 +130,41 @@ export const DevSecOpsSection: React.FC = () => {
       const res = await runRedTeamAudit(selectedProjectId);
       setRedTeamReport(res);
     } catch (err: any) {
-      alert(`Falha na auditoria Red Team: ${err.message}`);
+      setLoadError(`Falha na auditoria Red Team: ${err.message}`);
     } finally {
       setRedTeamLoading(false);
     }
   };
 
-  const handleApplyPolicy = async (templateId: string) => {
+  const handleApplyPolicy = async (templateId: string, approvalId?: string) => {
     if (!selectedProjectId) return;
     setApplyingPolicyId(templateId);
     setPolicyMessage(null);
     try {
-      const res = await applySecurityPolicy(selectedProjectId, templateId);
-      setPolicyMessage(`Sucesso: ${res.message} Arquivo criado: ${res.file}`);
+      const res = await applySecurityPolicy(selectedProjectId, templateId, approvalId);
+      if (res.status === 'approval_required' && res.approval_id) {
+        const next = [
+          ...pendingPolicies.filter((item) => !(item.projectId === selectedProjectId && item.templateId === templateId)),
+          { projectId: selectedProjectId, templateId, approvalId: res.approval_id },
+        ];
+        persistPendingPolicies(next);
+        setPolicyMessage({
+          type: 'pending',
+          text: `Pedido de aprovação criado (${res.approval_id}). Aprove-o no Centro de Aprovações e depois volte aqui para concluir a aplicação.`,
+        });
+      } else if (res.status === 'applied') {
+        persistPendingPolicies(pendingPolicies.filter((item) => !(item.projectId === selectedProjectId && item.templateId === templateId)));
+        setPolicyMessage({ type: 'success', text: res.message || `Política aplicada ao ficheiro ${res.file || ''}.` });
+      } else {
+        setPolicyMessage({ type: 'error', text: 'O servidor não confirmou a aplicação da política.' });
+      }
     } catch (err: any) {
-      setPolicyMessage(`Erro: ${err.message}`);
+      setPolicyMessage({
+        type: 'error',
+        text: approvalId
+          ? 'A aprovação ainda não foi concluída, expirou ou não corresponde a este pedido. Verifique o Centro de Aprovações e tente novamente.'
+          : (err.message || 'Falha ao solicitar aprovação da política.'),
+      });
     } finally {
       setApplyingPolicyId(null);
     }
@@ -102,6 +172,8 @@ export const DevSecOpsSection: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>A verificar permissões de segurança…</div>}
+      {loadError && <div role="alert" className="glass-card" style={{ padding: '12px 16px', color: 'var(--danger-color)' }}>{loadError}</div>}
       {/* Seletor de Projeto Ativo para Auditoria */}
       <div
         style={{
@@ -139,7 +211,8 @@ export const DevSecOpsSection: React.FC = () => {
           </select>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignSelf: 'flex-end', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: '10px', alignSelf: 'flex-end', marginLeft: 'auto', flexWrap: 'wrap' }}>
+          {canRunSecurityActions && <>
           <button
             onClick={handleScanCVEs}
             disabled={cveLoading || !selectedProjectId}
@@ -165,6 +238,12 @@ export const DevSecOpsSection: React.FC = () => {
             <Flame size={15} />
             {redTeamLoading ? 'Auditando...' : 'Auditoria Red Team (Código)'}
           </button>
+          </>}
+          {!canRunSecurityActions && (
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              Varreduras e alterações estão reservadas a perfis autorizados.
+            </span>
+          )}
         </div>
       </div>
 
@@ -435,16 +514,17 @@ export const DevSecOpsSection: React.FC = () => {
 
         {policyMessage && (
           <div
+            role={policyMessage.type === 'error' ? 'alert' : 'status'}
             style={{
               padding: '10px 14px',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
+              backgroundColor: policyMessage.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : policyMessage.type === 'pending' ? 'var(--accent-glow)' : 'rgba(239, 68, 68, 0.1)',
+              border: `1px solid ${policyMessage.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : policyMessage.type === 'pending' ? 'var(--border-accent)' : 'rgba(239, 68, 68, 0.3)'}`,
               borderRadius: '8px',
-              color: '#34d399',
+              color: policyMessage.type === 'success' ? 'var(--success-color)' : policyMessage.type === 'pending' ? 'var(--accent-color)' : 'var(--danger-color)',
               fontSize: '0.85rem',
             }}
           >
-            {policyMessage}
+            {policyMessage.text}
           </div>
         )}
 
@@ -505,9 +585,16 @@ export const DevSecOpsSection: React.FC = () => {
               <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(tmpl.code);
-                    setCopiedTemplateId(tmpl.id);
-                    setTimeout(() => setCopiedTemplateId(null), 2000);
+                    if (!navigator.clipboard?.writeText) {
+                      setLoadError('A cópia não está disponível neste navegador.');
+                      return;
+                    }
+                    navigator.clipboard.writeText(tmpl.code)
+                      .then(() => {
+                        setCopiedTemplateId(tmpl.id);
+                        window.setTimeout(() => setCopiedTemplateId(null), 2000);
+                      })
+                      .catch(() => setLoadError('Não foi possível copiar o template. Verifique as permissões do navegador.'));
                   }}
                   className="btn btn-ghost"
                   style={{
@@ -526,22 +613,29 @@ export const DevSecOpsSection: React.FC = () => {
                   )}
                   Copiar Código
                 </button>
-                <button
-                  onClick={() => handleApplyPolicy(tmpl.id)}
-                  disabled={applyingPolicyId === tmpl.id || !selectedProjectId}
-                  className="btn btn-primary"
-                  style={{
-                    flex: 1,
-                    fontSize: '0.78rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <Lock size={14} />
-                  {applyingPolicyId === tmpl.id ? 'Aplicando...' : 'Aplicar no Projeto'}
-                </button>
+                {canRunSecurityActions ? (
+                  <button
+                    onClick={() => {
+                      const pending = pendingPolicies.find((item) => item.projectId === selectedProjectId && item.templateId === tmpl.id);
+                      void handleApplyPolicy(tmpl.id, pending?.approvalId);
+                    }}
+                    disabled={applyingPolicyId === tmpl.id || !selectedProjectId || !roleLoaded}
+                    className="btn btn-primary"
+                    style={{
+                      flex: 1,
+                      fontSize: '0.78rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Lock size={14} />
+                    {applyingPolicyId === tmpl.id ? 'A processar…' : pendingPolicies.some((item) => item.projectId === selectedProjectId && item.templateId === tmpl.id) ? 'Concluir após aprovação' : 'Solicitar aprovação'}
+                  </button>
+                ) : (
+                  <small style={{ color: 'var(--text-muted)', alignSelf: 'center' }}>Aplicação reservada a perfis autorizados.</small>
+                )}
               </div>
             </div>
           ))}

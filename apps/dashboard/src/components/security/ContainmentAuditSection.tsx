@@ -8,6 +8,7 @@ import {
   Info,
 } from 'lucide-react';
 import { triggerKillSwitch, fetchAuditLogs } from '../../api';
+import { API_BASE } from '../../services/api/client';
 
 interface ContainmentAuditSectionProps {
   onRefresh: () => void;
@@ -17,6 +18,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   onRefresh,
 }) => {
   const [killLoading, setKillLoading] = useState(false);
+  const [canKill, setCanKill] = useState(false);
   const [taskIdInput, setTaskIdInput] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
@@ -38,6 +40,21 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
       setLogsLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) setCanKill(principal?.kind === 'human' && principal?.role === 'admin');
+      })
+      .catch(() => {
+        if (!cancelled) setCanKill(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     loadAuditLogs();
@@ -88,10 +105,10 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
         <div
           style={{
             padding: '12px 16px',
-            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
+            backgroundColor: 'var(--accent-glow)',
+            border: '1px solid var(--border-accent)',
             borderRadius: '8px',
-            color: '#818cf8',
+            color: 'var(--accent-color)',
             fontSize: '0.875rem',
           }}
         >
@@ -100,6 +117,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
       )}
 
       {/* Kill Switch Card */}
+      {canKill ? (
       <div
         style={{
           backgroundColor: 'var(--bg-secondary)',
@@ -169,6 +187,11 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
           </div>
         </div>
       </div>
+      ) : (
+        <div className="glass-card" style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+          Os comandos de contenção global estão reservados ao administrador. A trilha de auditoria permanece disponível conforme as permissões da conta.
+        </div>
+      )}
 
       {/* Trilha de Auditoria */}
       <div
