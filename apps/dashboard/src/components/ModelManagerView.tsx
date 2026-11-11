@@ -122,6 +122,7 @@ export const ModelManagerView: React.FC = () => {
   };
 
   const handleTestConnection = async () => {
+    if (!isAdmin) return;
     setTestLoading(true);
     setTestResult(null);
     try {
@@ -157,6 +158,7 @@ export const ModelManagerView: React.FC = () => {
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) return;
     setSaveLoading(true);
     setSaveMessage(null);
     try {
@@ -207,11 +209,12 @@ export const ModelManagerView: React.FC = () => {
     const cleanTag = tag.toLowerCase().replace(/^hf\.co\//, '');
     return data.models.some((m: any) => {
       const mName = (m.name || '').toLowerCase();
-      return mName.includes(cleanTag) || cleanTag.includes(mName);
+      return Boolean(mName) && (mName.includes(cleanTag) || cleanTag.includes(mName));
     });
   };
 
   const handleInstallModel = async (modelTag: string, displayName: string) => {
+    if (!isAdmin) return;
     if (downloadingModelId) {
       notify('Já existe uma instalação em andamento', 'warning');
       return;
@@ -225,6 +228,7 @@ export const ModelManagerView: React.FC = () => {
       const response = await fetch(`${API_BASE}/models/huggingface/install`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ model_tag: modelTag, display_name: displayName }),
       });
 
@@ -235,47 +239,57 @@ export const ModelManagerView: React.FC = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let terminalEventReceived = false;
+
+      const processEventLine = async (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) return;
+        try {
+          const eventData = JSON.parse(trimmed.slice(6));
+          if (eventData.status === 'downloading') {
+            if (eventData.total && eventData.completed) {
+              const pct = Math.min(99, Math.round((eventData.completed / eventData.total) * 100));
+              setDownloadProgress(pct);
+              setDownloadStatusText(`A descarregar camadas: ${pct}% concluído`);
+            } else if (typeof eventData.percent === 'number') {
+              setDownloadProgress(eventData.percent);
+              setDownloadStatusText(`A descarregar: ${eventData.percent}%`);
+            }
+          } else if (eventData.status === 'success') {
+            terminalEventReceived = true;
+            setDownloadProgress(100);
+            setDownloadStatusText('Modelo instalado e confirmado pelo servidor.');
+            notify(`Modelo ${displayName} instalado com sucesso!`, 'success');
+            await loadData();
+          } else if (eventData.status === 'error') {
+            terminalEventReceived = true;
+            const message = eventData.message || 'Erro durante a instalação do modelo.';
+            setDownloadStatusText(message);
+            notify(message, 'error');
+          }
+        } catch {
+          // Ignora heartbeats e linhas SSE incompletas que não contenham JSON válido.
+        }
+      };
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
+        const lines = buffer.split('\\n');
         buffer = lines.pop() || '';
+        for (const line of lines) await processEventLine(line);
+      }
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const eventData = JSON.parse(trimmed.slice(6));
-              if (eventData.status === 'downloading') {
-                if (eventData.total && eventData.completed) {
-                  const pct = Math.min(99, Math.round((eventData.completed / eventData.total) * 100));
-                  setDownloadProgress(pct);
-                  setDownloadStatusText(`Baixando camadas: ${pct}% concluído`);
-                } else if (eventData.percent) {
-                  setDownloadProgress(eventData.percent);
-                  setDownloadStatusText(`Baixando: ${eventData.percent}%`);
-                }
-              } else if (eventData.status === 'success') {
-                setDownloadProgress(100);
-                setDownloadStatusText('Modelo pronto e instalado com sucesso!');
-                notify(`Modelo ${displayName} instalado com sucesso!`, 'success');
-                await loadData();
-              } else if (eventData.status === 'error') {
-                notify(eventData.message || 'Erro durante download do modelo', 'error');
-              }
-            } catch {
-              // Ignora parse de heartbeats
-            }
-          }
-        }
+      buffer += decoder.decode();
+      if (buffer.trim()) await processEventLine(buffer);
+      if (!terminalEventReceived) {
+        throw new Error('O stream terminou sem confirmar a instalação do modelo.');
       }
     } catch (err: any) {
       notify(`Falha ao instalar modelo: ${err.message}`, 'error');
     } finally {
-      setTimeout(() => {
+      window.setTimeout(() => {
         setDownloadingModelId(null);
         setDownloadProgress(0);
         setDownloadStatusText('');
