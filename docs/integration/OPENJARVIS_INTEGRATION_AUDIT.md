@@ -786,3 +786,37 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Testar Logs e Hardware Advisor com admin, developer e auditor; confirmar que perfis sem administração não recebem dados globais nem executam alterações.
 - Rever a visibilidade desses módulos no menu lateral por perfil, além do bloqueio já aplicado dentro das páginas.
 - Build, lint, testes e validação visual permanecem pendentes para a fase final.
+
+## 21. Navegação global, permissões efetivas e primeiro acesso
+
+**Estado:** navegação e superfícies globais ajustadas; build, testes e validação visual continuam pendentes.
+
+### 21.1 Principal autenticado e rotas
+
+- `GET /auth/me` passa a expor as permissões efetivas do principal: permissões do papel humano ou scopes do dispositivo.
+- O App aplica uma verificação central antes de renderizar cada rota, inclusive em deep links e navegação voltar/avançar do browser.
+- A rota Hardware Advisor e a página de Logs do Servidor exigem explicitamente principal humano administrador, pois as APIs correspondentes são administrativas.
+- As restantes rotas usam a permissão de leitura do módulo; páginas com ações de escrita mantêm as verificações específicas implementadas em cada componente e no backend.
+
+### 21.2 Sidebar e Command Palette
+
+- Os grupos e itens da sidebar são filtrados pelas permissões efetivas; grupos sem itens autorizados não são apresentados.
+- A Command Palette aplica o mesmo filtro e deixa de oferecer ações de workspace, consenso e Ponytail a perfis sem as permissões correspondentes.
+- Hardware Advisor, Logs e alterações globais de Ponytail ficam reservados a administradores.
+- A ação de abrir o workspace informa corretamente que a pasta é aberta no computador do servidor, sem expor o caminho físico.
+- Foram removidas referências a quantidades fixas de agentes e rótulos que sugeriam capacidades não garantidas.
+- Os ícones da paleta de comandos reutilizam o acento laranja do design system.
+
+### 21.3 Perfil e assistente de configuração
+
+- O primeiro acesso não abre o Setup Wizard para developers, auditores ou dispositivos; a abertura automática e manual fica reservada a administradores humanos.
+- O perfil e as instruções personalizadas são editáveis apenas para admin/developer, de acordo com `profile:write`; o auditor consulta os dados sem receber botões de gravação.
+- A preferência de experiência continua local e pode ser alterada sem permissão de escrita no perfil.
+- O backup do sistema permanece admin-only; exportação e limpeza do histórico local mantêm o âmbito da conta ativa.
+
+### 21.4 Pendências
+
+- Confirmar a matriz de navegação para admin, developer, auditor e dispositivos pareados, incluindo acesso direto a cada deep link e comandos.
+- Validar o comportamento do primeiro acesso em instalação limpa e com armazenamento local indisponível.
+- Confirmar o estado read-only do perfil auditor e a sincronização de perfil para developer/admin.
+- Build, lint, testes e validação visual permanecem reservados para a fase final de homologação.
