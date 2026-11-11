@@ -1,7 +1,33 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jarvis_mobile/main.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const secureStorageChannel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  final secureStorageData = <String, String>{};
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(secureStorageChannel, (call) async {
+    final args = Map<String, dynamic>.from(call.arguments as Map? ?? const {});
+    switch (call.method) {
+      case 'write':
+        secureStorageData[args['key'] as String] = args['value'] as String;
+        return null;
+      case 'read':
+        return secureStorageData[args['key'] as String];
+      case 'delete':
+        secureStorageData.remove(args['key'] as String);
+        return null;
+      case 'readAll':
+        return Map<String, String>.from(secureStorageData);
+      case 'deleteAll':
+        secureStorageData.clear();
+        return null;
+      default:
+        return null;
+    }
+  });
   group('NetworkEnvironment and URL Validation Tests', () {
     test('Todos os 5 ambientes de rede estão declarados com suas políticas', () {
       expect(NetworkEnvironment.values.length, 5);
