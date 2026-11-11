@@ -168,7 +168,6 @@ export const DesignStudioView: React.FC = () => {
                 value={primaryHex}
                 onChange={(e) => {
                   setPrimaryHex(e.target.value);
-                  loadPalette(e.target.value, paletteName);
                 }}
                 style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)', width: '100px' }}
               />
@@ -386,9 +385,7 @@ export const DesignStudioView: React.FC = () => {
                 {comp.label}
               </button>
             ))}
-            {componentLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando componente...</div>}
-          {componentError && <div role="alert" style={{ color: '#f87171', fontSize: '0.82rem' }}>{componentError}</div>}
-          {componentCode && (
+            {componentCode && (
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(componentCode);
@@ -403,6 +400,8 @@ export const DesignStudioView: React.FC = () => {
               </button>
             )}
           </div>
+          {componentLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando componente...</div>}
+          {componentError && <div role="alert" style={{ color: '#f87171', fontSize: '0.82rem' }}>{componentError}</div>}
 
           {componentCode && (
             <pre
