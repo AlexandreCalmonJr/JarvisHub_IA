@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useState } from 'react';
+import { clearActiveAccountScope, setActiveAccountScope } from '../services/accountScope';
 
 type LoginMode = 'account' | 'admin' | 'bootstrap';
 
@@ -32,10 +33,23 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const verifySession = async () => {
     try {
       const response = await fetch('/api/v1/auth/me', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-      if (!response.ok) { setStatus('anonymous'); setSession(null); return; }
-      setSession(await response.json());
+      if (!response.ok) {
+        clearActiveAccountScope();
+        setStatus('anonymous');
+        setSession(null);
+        return;
+      }
+      const nextSession = await response.json() as SessionInfo;
+      const accountId = nextSession.user_id || nextSession.subject_id;
+      if (!accountId) throw new Error('A sessão não identificou a conta autenticada.');
+      setActiveAccountScope(accountId);
+      setSession(nextSession);
       setStatus('authenticated');
-    } catch { setStatus('anonymous'); }
+    } catch {
+      clearActiveAccountScope();
+      setStatus('anonymous');
+      setSession(null);
+    }
   };
 
   useEffect(() => { void verifySession(); }, []);
@@ -64,7 +78,11 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 
   const logout = async () => {
     try { await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
-    finally { setSession(null); setStatus('anonymous'); }
+    finally {
+      clearActiveAccountScope();
+      setSession(null);
+      setStatus('anonymous');
+    }
   };
 
   const loadUsers = async () => {
