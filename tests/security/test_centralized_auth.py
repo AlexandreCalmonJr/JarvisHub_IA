@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.api.auth import auth_service
+from apps.api.auth import AuthService, auth_service
 from apps.api.main import app
 from packages.contracts.agent import AgentRole
 
@@ -222,3 +222,13 @@ async def test_10_dashboard_and_public_routes_accessible_without_auth():
         # Rota de frontend SPA / dashboard estático
         res_dash = await client.get("/", headers={"x-no-auth": "1"})
         assert res_dash.status_code == 200
+
+
+def test_11_rate_limit_persists_across_auth_service_instances(monkeypatch, tmp_path):
+    """Tentativas de login permanecem limitadas após recriar o serviço."""
+    monkeypatch.setenv("JARVIS_ISSUE_BOOTSTRAP", "0")
+    first = AuthService(auth_service.security, tmp_path / "auth")
+    assert first.check_rate_limit("login:127.0.0.77", limit=1, window_seconds=60)
+
+    restarted = AuthService(auth_service.security, tmp_path / "auth")
+    assert restarted.check_rate_limit("login:127.0.0.77", limit=1, window_seconds=60) is False
