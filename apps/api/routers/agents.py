@@ -27,6 +27,7 @@ from apps.api.schemas import (
     AgentPlaygroundRequest,
     AutonomousAgentRunRequest,
 )
+from packages.contracts.security import ProjectWorkMode
 from packages.contracts.agent import (
     AgentRole,
     AutonomousAgentMode,
@@ -282,8 +283,12 @@ async def execute_tool_endpoint(
         raise HTTPException(status_code=404, detail="Diretório do projeto não encontrado.")
 
     try:
+        try:
+            project_mode = ProjectWorkMode(project.get("mode", "read_only"))
+        except ValueError:
+            project_mode = ProjectWorkMode.READ_ONLY
         security_core.permission_engine.register_project(
-            request.project_id, str(project_root)
+            request.project_id, str(project_root), mode=project_mode
         )
         result = await tool_gateway.execute_tool(
             request, owner_user_id=owner_user_id
