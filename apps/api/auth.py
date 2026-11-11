@@ -72,6 +72,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "agents:read",
         "agents:write",
         "agents:use",
+        "mobile:pair",
         "models:read",
         "models:write",
         "skills:read",
