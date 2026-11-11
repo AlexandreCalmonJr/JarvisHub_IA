@@ -468,7 +468,7 @@ class AuthService:
         except PermissionError:
             return None
         return Principal(
-            subject_id=f"device:{device.device_id}",
+            subject_id=device.owner_user_id or f"device:{device.device_id}",
             kind="device",
             role="device",
             scopes=frozenset(device.scopes),
