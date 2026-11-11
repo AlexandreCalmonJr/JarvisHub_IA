@@ -165,12 +165,13 @@ export function getProjectExportZipUrl(projectId: string): string {
 }
 
 export async function dockerizeWorkspaceProject(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/dockerize`, { method: 'POST' });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro ao dockerizar' }));
-    throw new Error(err.detail || 'Falha ao dockerizar projeto');
-  }
-  return res.json();
+  const url = `${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/dockerize`;
+  return requestWithHumanApproval(
+    url,
+    { method: 'POST' },
+    (approvalId) => ({ url: `${url}?approval_id=${encodeURIComponent(approvalId)}`, init: { method: 'POST' } }),
+    `Gerar Dockerfile e configuração Docker no projeto "${projectId}".`,
+  );
 }
 
 export async function fetchWebhooksConfig(): Promise<any> {
