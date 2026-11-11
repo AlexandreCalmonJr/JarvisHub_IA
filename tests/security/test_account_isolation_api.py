@@ -11,7 +11,7 @@ from apps.api.main import app
 
 
 @pytest.mark.asyncio
-async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b():
+async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp_path):
     suffix = uuid.uuid4().hex[:10]
     owner_a = f"account-a-{suffix}"
     owner_b = f"account-b-{suffix}"
@@ -26,6 +26,8 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b():
 
     project_dir = workspace_service.get_project_dir(project_id)
     project_dir.mkdir(parents=True, exist_ok=True)
+    indexed_file = project_dir / "project-private.txt"
+    indexed_file.write_text("Documento exclusivo do projeto da conta A.", encoding="utf-8")
     db_manager.register_project(
         project_id, "Projeto privado A", str(project_dir), owner_user_id=owner_a
     )
@@ -82,6 +84,31 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b():
     headers_a = {"Authorization": f"Bearer {session_a.session_id}"}
     headers_b = {"Authorization": f"Bearer {session_b.session_id}"}
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        indexed_a = await client.post(
+            "/api/v1/knowledge/index-folder",
+            json={"folder_path": str(project_dir), "category": "projeto"},
+            headers=headers_a,
+        )
+        assert indexed_a.status_code == 200
+        assert indexed_a.json()["indexed_count"] >= 1
+
+        denied_b = await client.post(
+            "/api/v1/knowledge/index-folder",
+            json={"folder_path": str(project_dir), "category": "projeto"},
+            headers=headers_b,
+        )
+        assert denied_b.status_code == 403
+
+        outside_folder = tmp_path / "outside-owned-roots"
+        outside_folder.mkdir()
+        (outside_folder / "secret.txt").write_text("não indexar", encoding="utf-8")
+        denied_outside = await client.post(
+            "/api/v1/knowledge/index-folder",
+            json={"folder_path": str(outside_folder), "category": "privado"},
+            headers=headers_a,
+        )
+        assert denied_outside.status_code == 403
+
         tasks_b = await client.get("/api/v1/tasks", headers=headers_b)
         assert tasks_b.status_code == 200
         assert task_id not in {row["id"] for row in tasks_b.json()}
@@ -147,6 +174,7 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b():
     db_manager.delete_session(session_id, owner_user_id=owner_a)
     db_manager.delete_task(task_id, owner_user_id=owner_a)
     db_manager.delete_knowledge_document(doc_name, owner_user_id=owner_a)
+    db_manager.delete_knowledge_document("project-private.txt", owner_user_id=owner_a)
     db_manager.delete_agent_memory(memory_id, owner_user_id=owner_a)
     db_manager.delete_user_skill(skill_id, owner_user_id=owner_a)
     security_core.approval_engine.reject_request(
