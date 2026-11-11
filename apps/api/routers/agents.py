@@ -177,7 +177,10 @@ async def delete_agent_memory_endpoint(
 
 
 @router.post("/api/v1/agents/{role}/playground")
-async def agent_playground_endpoint(role: str, payload: AgentPlaygroundRequest):
+async def agent_playground_endpoint(
+    role: str, payload: AgentPlaygroundRequest,
+    principal: Principal = Depends(get_principal),
+):
     """Execução isolada de um especialista no playground interativo."""
     clean_role = role.lower().strip()
     profile = None
@@ -189,11 +192,18 @@ async def agent_playground_endpoint(role: str, payload: AgentPlaygroundRequest):
     if not profile:
         raise HTTPException(status_code=404, detail=f"Agente '{role}' não encontrado.")
 
+    owner_user_id = _private_owner(principal)
+    if payload.project_id and not db_manager.get_project(
+        payload.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
     prompt = build_specialist_prompt(
         agent_role=clean_role,
         agent_registry=agent_registry,
         skills_catalog=skills_catalog,
         db_manager=db_manager,
+        owner_user_id=owner_user_id,
         intent="general_planning",
         user_prompt=payload.prompt,
         project_id=payload.project_id,
