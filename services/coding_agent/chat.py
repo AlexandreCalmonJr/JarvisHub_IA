@@ -76,6 +76,7 @@ class ChatRunConfig(BaseModel):
 
     prompt: str
     session_id: str
+    owner_user_id: str | None = None
     project_id: str | None = None
     model: str | None = None
     system_prompt: str | None = None
@@ -115,7 +116,7 @@ class ChatAgentRuntime:
         model = provider.resolve_model(config.model)
 
         turns = await self._build_turns(config, session_id, prompt)
-        self._persist(session_id, config.project_id, "user", prompt)
+        self._persist(session_id, config.project_id, "user", prompt, config.owner_user_id)
 
         yield {
             "type": "start",
@@ -144,7 +145,7 @@ class ChatAgentRuntime:
             logger.warning("Falha do provedor no chat (%s): %s", provider.name, message)
             if collected:
                 self._persist(
-                    session_id, config.project_id, "assistant", "".join(collected)
+                    session_id, config.project_id, "assistant", "".join(collected), config.owner_user_id
                 )
             yield {
                 "type": "error",
@@ -164,7 +165,7 @@ class ChatAgentRuntime:
 
         content = "".join(collected).strip()
         if content:
-            self._persist(session_id, config.project_id, "assistant", content)
+            self._persist(session_id, config.project_id, "assistant", content, config.owner_user_id)
 
         yield {
             "type": "done",
@@ -181,7 +182,7 @@ class ChatAgentRuntime:
         session_id = config.session_id or f"chat-{uuid.uuid4().hex[:10]}"
         provider = self.provider_factory()
         turns = await self._build_turns(config, session_id, config.prompt)
-        self._persist(session_id, config.project_id, "user", config.prompt)
+        self._persist(session_id, config.project_id, "user", config.prompt, config.owner_user_id)
         reply = await provider.complete(
             turns=turns,
             tools=[],
@@ -192,7 +193,7 @@ class ChatAgentRuntime:
         )
         content = (reply.content or "").strip()
         if content:
-            self._persist(session_id, config.project_id, "assistant", content)
+            self._persist(session_id, config.project_id, "assistant", content, config.owner_user_id)
         return {
             "engine": "agent",
             "session_id": session_id,
@@ -241,7 +242,8 @@ class ChatAgentRuntime:
         if config.include_history and self.db_manager is not None:
             try:
                 history = self.db_manager.list_chat_messages(
-                    session_id, limit=self.max_history_messages
+                    session_id, limit=self.max_history_messages,
+                    owner_user_id=config.owner_user_id,
                 )
                 for row in history:
                     if row.get("role") not in {"user", "assistant"}:
@@ -262,6 +264,7 @@ class ChatAgentRuntime:
         project_id: str | None,
         role: str,
         content: str,
+        owner_user_id: str | None = None,
     ) -> None:
         if self.db_manager is None or not content:
             return
@@ -271,6 +274,7 @@ class ChatAgentRuntime:
                 role=role,
                 content=content,
                 project_id=project_id,
+                owner_user_id=owner_user_id,
             )
         except Exception as exc:  # pragma: no cover - defensivo
             logger.warning("Falha ao persistir mensagem do chat: %s", exc)
