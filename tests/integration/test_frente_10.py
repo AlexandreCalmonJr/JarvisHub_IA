@@ -64,23 +64,23 @@ def test_engineering_intelligence_productivity_roi():
     service = EngineeringIntelligenceService()
     roi = service.calculate_productivity_and_roi()
 
-    assert roi["total_tasks_completed"] >= 1
-    assert roi["estimated_local_tokens"] > 0
+    assert roi["total_tasks_completed"] == 0
+    assert roi["estimated_local_tokens"] == 0
     assert roi["cost_saved_usd"] >= 0
     assert roi["cost_saved_brl"] >= 0
     assert roi["engineering_hours_saved"] >= 0
-    assert "100% Local" in roi["cloud_lockin"]
+    assert roi["cloud_lockin"] == "Não calculado"
 
 
 def test_engineering_intelligence_executive_report(tmp_path: Path, sample_code_project):
     ws = MockWorkspace(tmp_path)
     service = EngineeringIntelligenceService(workspace_service=ws)
 
-    report = service.generate_executive_report(project_id="sample_system")
+    report = service.generate_executive_report(project_id="sample_system", owner_user_id="integration-account")
     assert report["status"] == "generated"
     assert "sample_system" in report["project"]
     assert "Relatório Executivo de Engenharia" in report["markdown"]
-    assert "Horas de Engenharia Poupadas" in report["markdown"]
-    assert "Economia Direta em APIs de Nuvem" in report["markdown"]
+    assert "Tempo potencialmente poupado (estimativa)" in report["markdown"]
+    assert "Economia estimada em APIs de Nuvem" in report["markdown"]
     assert report["technical_debt"] is not None
     assert report["technical_debt"]["metrics"]["total_files"] == 2
