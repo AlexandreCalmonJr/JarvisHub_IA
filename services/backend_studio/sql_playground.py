@@ -156,7 +156,7 @@ class SQLPlaygroundService:
             for row in cursor.fetchall():
                 detail = row[3] if len(row) > 3 else str(row)
                 plan_steps.append(detail)
-                match = re.search(r"\\bSCAN\\s+(?:TABLE\\s+)?([a-zA-Z0-9_]+)", detail)
+                match = re.search(r"\bSCAN\s+(?:TABLE\s+)?([a-zA-Z0-9_]+)", detail)
                 if match:
                     is_table_scan = True
                     table_name = match.group(1)
