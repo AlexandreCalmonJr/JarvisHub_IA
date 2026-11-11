@@ -25,8 +25,9 @@ def _workspace_approval(
     summary: str,
     resource: str,
     proposed_diff: str | None = None,
+    owner_user_id: str | None = None,
 ):
-    """Cria pedido pendente ou valida aprovação humana vinculada ao alvo exato."""
+    """Cria pedido pendente ou valida aprovação humana vinculada ao alvo e conta."""
     if security_core.kill_switch.is_global_killed():
         raise PermissionDeniedError("Operação bloqueada pelo Kill Switch Global.")
     if not approval_id:
@@ -38,6 +39,7 @@ def _workspace_approval(
             affected_resources=[resource],
             proposed_diff=proposed_diff,
             reversible=operation != "project_delete",
+            owner_user_id=owner_user_id,
         )
         return request
 
@@ -47,6 +49,7 @@ def _workspace_approval(
             operation=operation,
             task_id=task_id,
             resource=resource,
+            owner_user_id=owner_user_id,
         )
     except ValueError as exc:
         raise PermissionDeniedError(str(exc)) from exc
@@ -59,14 +62,34 @@ def _require_human(principal: Principal) -> None:
 
 
 
+def _require_owned_project(project_id: str, principal: Principal) -> dict:
+    _require_human(principal)
+    project = db_manager.get_project(
+        project_id, owner_user_id=principal.subject_id
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+    return project
+
+
 @router.get("/api/v1/workspace/projects")
-async def list_workspace_projects_endpoint():
-    return workspace_service.list_available_projects()
+async def list_workspace_projects_endpoint(
+    principal: Principal = Depends(get_principal),
+):
+    _require_human(principal)
+    owned = {p["id"] for p in db_manager.list_projects(owner_user_id=principal.subject_id)}
+    return [
+        project for project in workspace_service.list_available_projects()
+        if project.get("id") in owned or project.get("project_id") in owned
+    ]
 
 
 @router.get("/api/v1/workspace/projects/{project_id}/file")
-async def read_project_file_endpoint(project_id: str, path: str):
-    """Lê o conteúdo físico de um arquivo de projeto em workspace/."""
+async def read_project_file_endpoint(
+    project_id: str, path: str, principal: Principal = Depends(get_principal)
+):
+    """Lê um arquivo pertencente à conta autenticada."""
+    _require_owned_project(project_id, principal)
     try:
         content = workspace_service.read_project_file(project_id, path)
         return {"project_id": project_id, "path": path, "content": content}
@@ -85,7 +108,7 @@ async def write_project_file_endpoint(
     principal: Principal = Depends(get_principal),
 ):
     """Solicita aprovação vinculada ao arquivo/diff e só grava após decisão humana."""
-    _require_human(principal)
+    _require_owned_project(project_id, principal)
     try:
         project_dir = workspace_service.get_project_dir(project_id).resolve()
         if not project_dir.is_dir():
@@ -159,7 +182,7 @@ async def rollback_project_endpoint(
     principal: Principal = Depends(get_principal),
 ):
     """Solicita aprovação explícita antes de executar git reset --hard."""
-    _require_human(principal)
+    _require_owned_project(project_id, principal)
     try:
         project_dir = workspace_service.get_project_dir(project_id).resolve()
         history = workspace_service.get_git_history(project_id, max_count=1)
@@ -194,8 +217,11 @@ async def rollback_project_endpoint(
         raise HTTPException(status_code=500, detail="Falha ao executar rollback.") from exc
 
 @router.get("/api/v1/workspace/projects/{project_id}/git-history")
-async def get_project_git_history_endpoint(project_id: str):
-    """Retorna os últimos commits Git semânticos locais do projeto."""
+async def get_project_git_history_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Retorna histórico Git apenas do projeto pertencente à conta."""
+    _require_owned_project(project_id, principal)
     try:
         history = workspace_service.get_git_history(project_id)
         return history
@@ -243,8 +269,11 @@ async def delete_workspace_project_endpoint(
         raise HTTPException(status_code=500, detail="Falha ao excluir projeto.") from exc
 
 @router.get("/api/v1/workspace/projects/{project_id}/export-zip")
-async def export_project_zip_endpoint(project_id: str):
-    """Exporta o projeto em um pacote ZIP limpo (sem node_modules, .venv, .git)."""
+async def export_project_zip_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Exporta apenas projetos pertencentes à conta autenticada."""
+    _require_owned_project(project_id, principal)
     try:
         zip_bytes, filename = workspace_service.export_clean_project_zip(project_id)
         return Response(
@@ -307,8 +336,11 @@ async def dockerize_project_endpoint(
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/open-folder")
-async def open_workspace_folder_endpoint(project_id: str):
-    """Abre o explorador de arquivos nativo do sistema operacional na pasta do projeto."""
+async def open_workspace_folder_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Abre apenas pastas de projetos da conta autenticada."""
+    _require_owned_project(project_id, principal)
     try:
         path = workspace_service.open_project_folder(project_id)
         return {"status": "opened", "path": path}
@@ -329,8 +361,11 @@ async def open_workspace_root_endpoint():
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/open-code")
-async def open_project_code_endpoint(project_id: str):
-    """Abre o projeto no Visual Studio Code (se instalado)."""
+async def open_project_code_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Abre no editor apenas projetos pertencentes à conta."""
+    _require_owned_project(project_id, principal)
     try:
         path = workspace_service.open_project_in_editor(project_id)
         return {"status": "opened", "path": path}
@@ -341,8 +376,11 @@ async def open_project_code_endpoint(project_id: str):
 
 
 @router.get("/api/v1/workspace/projects/{project_id}/preview")
-async def get_project_preview_endpoint(project_id: str):
-    """Retorna o HTML principal do projeto para exibição segura em sandbox/Sparkpages."""
+async def get_project_preview_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Retorna preview apenas de projetos pertencentes à conta."""
+    _require_owned_project(project_id, principal)
     try:
         content = workspace_service.read_project_file(project_id, "index.html")
         return HTMLResponse(content=content)
