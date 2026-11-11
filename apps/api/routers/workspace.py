@@ -62,6 +62,15 @@ def _require_human(principal: Principal) -> None:
 
 
 
+def _account_owner(principal: Principal) -> str:
+    if principal.kind == "device" and principal.subject_id.startswith("device:"):
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivo sem associação a uma conta.",
+        )
+    return principal.subject_id
+
+
 def _require_owned_project(project_id: str, principal: Principal) -> dict:
     _require_human(principal)
     project = db_manager.get_project(
@@ -76,8 +85,8 @@ def _require_owned_project(project_id: str, principal: Principal) -> dict:
 async def list_workspace_projects_endpoint(
     principal: Principal = Depends(get_principal),
 ):
-    _require_human(principal)
-    owned = {p["id"] for p in db_manager.list_projects(owner_user_id=principal.subject_id)}
+    owner = _account_owner(principal)
+    owned = {p["id"] for p in db_manager.list_projects(owner_user_id=owner)}
     return [
         project for project in workspace_service.list_available_projects()
         if project.get("id") in owned or project.get("project_id") in owned
