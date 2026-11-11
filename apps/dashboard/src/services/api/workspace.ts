@@ -1,4 +1,4 @@
-import { API_BASE } from './client';
+import { API_BASE, handleApiResponse } from './client';
 
 async function requestWithHumanApproval<T>(
   url: string,
@@ -42,8 +42,7 @@ async function requestWithHumanApproval<T>(
 
 export async function fetchWorkspaceProjects(): Promise<any[]> {
   const res = await fetch(`${API_BASE}/workspace/projects`);
-  if (!res.ok) return [];
-  return res.json();
+  return handleApiResponse<any[]>(res, 'Falha ao carregar os projetos do workspace.');
 }
 
 export async function deleteWorkspaceProject(projectId: string): Promise<any> {
@@ -113,8 +112,7 @@ export async function writeProjectFile(
 
 export async function fetchProjectMemory(projectId: string): Promise<any[]> {
   const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/memory`);
-  if (!res.ok) return [];
-  return res.json();
+  return handleApiResponse<any[]>(res, 'Falha ao carregar a memória do projeto.');
 }
 
 export async function saveProjectMemory(
@@ -154,8 +152,7 @@ export async function rollbackWorkspaceProject(projectId: string): Promise<any> 
 
 export async function fetchGitHistory(projectId: string): Promise<any[]> {
   const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/git-history`);
-  if (!res.ok) return [];
-  return res.json();
+  return handleApiResponse<any[]>(res, 'Falha ao carregar o histórico Git do projeto.');
 }
 
 export function getProjectPreviewUrl(projectId: string): string {
@@ -178,8 +175,7 @@ export async function dockerizeWorkspaceProject(projectId: string): Promise<any>
 
 export async function fetchWebhooksConfig(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/webhooks`);
-  if (!res.ok) return { enabled: false };
-  return res.json();
+  return handleApiResponse<any>(res, 'Falha ao carregar as configurações de webhook.');
 }
 
 export async function saveWebhooksConfig(config: any): Promise<any> {
@@ -194,5 +190,5 @@ export async function saveWebhooksConfig(config: any): Promise<any> {
 
 export async function testWebhooksNotification(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/webhooks/test`, { method: 'POST' });
-  return res.json();
+  return handleApiResponse<any>(res, 'Falha ao enviar notificação de teste.');
 }
