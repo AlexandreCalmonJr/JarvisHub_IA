@@ -126,10 +126,9 @@ export const CodingAgentView: React.FC = () => {
       .then((principal) => {
         if (cancelled) return;
         const human = principal?.kind === 'human';
-        const scopes = Array.isArray(principal?.scopes) ? principal.scopes : [];
         const admin = human && principal?.role === 'admin';
         const developer = human && principal?.role === 'developer';
-        setCanUseCoding((admin || developer) || (principal?.kind === 'device' && scopes.includes('coding:use')));
+        setCanUseCoding(admin || developer);
         setCanClearHistory(admin || developer);
         setCanDecideApproval((admin || developer) || (principal?.kind === 'device' && scopes.includes('approvals:decide')));
         setCanReloadMcp(admin);
