@@ -20,7 +20,7 @@ test('palette colors and CSS variable names are validated server-side', () => {
 test('unsupported component templates return a real error instead of a fallback', () => {
   assert.match(backend, /if clean_type not in templates/);
   assert.match(backend, /Tipo de componente não suportado/);
-  assert.match(router, /generate_component_boilerplate_endpoint[\s\S]*?except ValueError/);
+  assert.match(router, /get_component_boilerplate_endpoint[\s\S]*?except ValueError/);
 });
 
 test('WCAG audit input is bounded and authenticated', () => {
