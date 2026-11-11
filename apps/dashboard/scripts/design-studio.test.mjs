@@ -11,8 +11,8 @@ const api = read('../src/services/api/studios.ts');
 const view = read('../src/components/DesignStudioView.tsx');
 
 test('palette colors and CSS variable names are validated server-side', () => {
-  assert.match(backend, /re\.fullmatch\(r"#\(\?:\[0-9a-fA-F\]\{3\}/);
-  assert.match(backend, /re\.fullmatch\(r"\[A-Za-z0-9_-\]\{1,40\}"/);
+  assert.match(backend, /re\.fullmatch\(r\"#\(\?:\[0-9a-fA-F\]\{3\}/);
+  assert.match(backend, /re\.fullmatch\(r\"\[A-Za-z0-9_-\]\{1,40\}\"/);
   assert.match(schema, /hex_primary: str = Field\([\s\S]*?pattern=/);
   assert.match(schema, /name: str = Field\([\s\S]*?pattern=/);
 });
@@ -20,7 +20,7 @@ test('palette colors and CSS variable names are validated server-side', () => {
 test('unsupported component templates return a real error instead of a fallback', () => {
   assert.match(backend, /if clean_type not in templates/);
   assert.match(backend, /Tipo de componente não suportado/);
-  assert.match(router, /generate_component_boilerplate_endpoint[\\s\\S]*?except ValueError/);
+  assert.match(router, /generate_component_boilerplate_endpoint[\s\S]*?except ValueError/);
 });
 
 test('WCAG audit input is bounded and authenticated', () => {
