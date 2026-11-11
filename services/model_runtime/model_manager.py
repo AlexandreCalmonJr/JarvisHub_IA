@@ -132,6 +132,7 @@ class ModelManager:
                     "score": selection.score,
                     "sample_sufficient": selection.sample_sufficient,
                     "success_rate": selection.success_rate,
+                    "estimated_cost_usd": selection.estimated_cost_usd,
                 },
                 severity=AuditEventSeverity.INFO,
                 reason=selection.reason,
