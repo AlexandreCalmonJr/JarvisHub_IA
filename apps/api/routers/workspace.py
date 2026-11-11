@@ -403,6 +403,11 @@ async def import_external_folder_endpoint(
         target = workspace_service.validate_import_root(payload.folder_path)
         name = payload.name or target.name
         project_id = name.lower().replace(" ", "-").replace("_", "-")
+        if db_manager.get_project(project_id) is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Já existe um projeto com este identificador; escolha outro nome.",
+            )
         task_id = f"workspace:import:{project_id}:{target}"
         pending = _workspace_approval(
             approval_id=payload.approval_id,
