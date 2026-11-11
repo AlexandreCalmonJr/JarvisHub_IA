@@ -81,9 +81,13 @@ async def test_password_login_issues_http_only_session_cookie():
         assert "httponly" in response.headers.get("set-cookie", "").lower()
 
         # Isola a sessão emitida neste login de qualquer cookie residual do cliente de teste.
-        client.cookies.clear()
-        client.cookies.set("jarvis_session", session_cookie, domain="test", path="/")
-        me = await client.get("/api/v1/auth/me", headers={"x-no-auth": "1"})
+        me = await client.get(
+            "/api/v1/auth/me",
+            headers={
+                "x-no-auth": "1",
+                "Cookie": f"jarvis_session={session_cookie}",
+            },
+        )
         assert me.status_code == 200
         assert me.json()["user_id"] == username
 
