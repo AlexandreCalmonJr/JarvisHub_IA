@@ -3,7 +3,6 @@ import {
   ShieldAlert,
   ChevronDown,
   ChevronRight,
-  CheckCircle2,
   Users,
   Sparkles,
   Volume2,
