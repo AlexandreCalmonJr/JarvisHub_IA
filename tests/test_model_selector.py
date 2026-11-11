@@ -85,3 +85,28 @@ def test_selector_maps_developer_role_to_code_capability():
     )
     assert result.candidate.model_name == "deepseek-coder"
     assert "especialização em código" in result.reason
+
+
+def test_selector_prefers_lower_estimated_cost_between_external_candidates():
+    result = ModelSelector().select(
+        models=[
+            metadata("model-openai", family="openai", cloud=True),
+            metadata("model-gemini", family="gemini", cloud=True),
+        ],
+        owner_user_id="account-1",
+        agent_role="research_analyst",
+        task_capability="general",
+        telemetry_store=EmptyTelemetry(),
+        allow_external=True,
+        contains_sensitive_data=False,
+        has_external_data_approval=False,
+        pricing_by_provider={
+            "openai": (0.001, 0.002),
+            "gemini": (0.0001, 0.0002),
+        },
+        prompt_text="x" * 4000,
+        max_tokens=1000,
+    )
+    assert result.candidate.model_name == "model-gemini"
+    assert result.estimated_cost_usd < 0.001
+    assert "custo estimado" in result.reason
