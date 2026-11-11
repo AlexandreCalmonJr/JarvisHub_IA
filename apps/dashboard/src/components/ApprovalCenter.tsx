@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ApprovalRequestItem, getAgentLabel, getToolLabel } from '../types';
 import { decideApproval } from '../api';
 import { ShieldAlert, Check, X, FileDiff } from 'lucide-react';
+import { API_BASE } from '../services/api/client';
 
 interface ApprovalCenterProps {
   approvals: ApprovalRequestItem[];
@@ -13,6 +14,27 @@ interface ApprovalCenterProps {
 export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRefresh, loading = false, error = null }) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [canDecide, setCanDecide] = useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) {
+          setCanDecide(
+            principal?.kind === 'human' &&
+            (principal?.role === 'admin' || principal?.role === 'developer')
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCanDecide(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pendingList = approvals.filter(a => a.status === 'pending');
 
@@ -144,7 +166,8 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
                   ID: #{appr.id.slice(0, 8)} • Agente: <strong style={{ color: 'var(--accent-color)' }}>{getAgentLabel(appr.agent_role)}</strong> • Ação: <strong style={{ color: 'var(--text-primary)' }}>{getToolLabel(appr.operation)}</strong>
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              {canDecide ? (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                   onClick={() => handleDecision(appr.id, 'reject')}
                   disabled={actionLoading === appr.id}
@@ -168,9 +191,14 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
                   }}
                 >
                   <Check size={15} />
-                  <span>Aprovar Operação</span>
+                  <span>{actionLoading === appr.id ? 'A processar…' : 'Aprovar Operação'}</span>
                 </button>
-              </div>
+                </div>
+              ) : (
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                  Perfil de consulta — decisão reservada a utilizadores autorizados
+                </span>
+              )}
             </div>
 
             <div>
@@ -178,7 +206,7 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
                 Recursos Afetados:
               </span>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {appr.affected_resources.map((res, i) => (
+                {(Array.isArray(appr.affected_resources) ? appr.affected_resources : []).map((res, i) => (
                   <code key={i} style={{ padding: '4px 10px', backgroundColor: 'var(--bg-primary)', borderRadius: '6px', fontSize: '0.78rem', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     {res}
                   </code>
@@ -198,6 +226,7 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
                   borderRadius: '10px',
                   fontSize: '0.80rem',
                   overflowX: 'auto',
+                  maxHeight: '420px',
                   border: '1px solid var(--border-color)',
                   color: 'var(--text-primary)',
                   fontFamily: 'var(--font-mono)',

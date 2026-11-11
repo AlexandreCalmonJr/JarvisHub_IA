@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 from fastapi.responses import StreamingResponse
 
-from apps.api.auth import Principal, get_principal, require_admin, require_permission
+from apps.api.auth import Principal, get_principal, require_permission
 from apps.api.deps import (
     AGENT_PROFILES,
     InferenceRequest,

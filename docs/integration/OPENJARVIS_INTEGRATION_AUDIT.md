@@ -595,3 +595,36 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Verificar permissões de UI para operações administrativas, incluindo backup, sem depender apenas da mensagem de erro do backend.
 - Concluir o onboarding real: criação inicial segura do administrador, configuração da chave mestra, diagnóstico de serviços e recuperação de fluxo interrompido.
 - Executar build, lint, testes unitários, testes de integração, testes de isolamento por conta e verificação visual nos viewports acordados. Nenhum desses testes foi executado durante esta etapa.
+
+## 15. Centro de Agentes e Gestor de Tarefas — auditoria incremental
+
+**Estado:** correções gravadas na branch de auditoria; build, lint e testes permanecem adiados para a fase de homologação.
+
+### 15.1 Centro de Agentes
+
+- O cabeçalho deixou de afirmar um número fixo de especialistas e a descrição não promete capacidades sem confirmação do runtime.
+- O catálogo continua visível em modo de consulta; ações de gestão só aparecem para sessões humanas com perfil `admin` ou `developer`.
+- O endpoint de configuração passou a exigir a permissão `agents:write`, coerente com a matriz de permissões (administrador ou developer).
+- Os endpoints de listagem e detalhe deixam de devolver `assigned_key_id`; o `system_prompt` só é devolvido a perfis humanos autorizados para gestão de agentes.
+- O seletor deixou de inventar modelos locais ou online quando a API não os devolve. O modelo atualmente configurado pode continuar visível, mas fica identificado como não confirmado na lista atual.
+- Os diálogos passaram a usar tokens de acento do design system em vez de uma paleta azul/índigo paralela.
+
+### 15.2 Gestor de Tarefas
+
+- A cópia para a área de transferência trata ausência de suporte e falhas de permissão sem deixar a interface em estado de sucesso falso.
+- A confirmação e a notificação de expurgo deixam claro que a operação atua apenas sobre tarefas da conta autenticada.
+- As datas passaram a usar formatação `pt-PT`.
+
+### 15.3 Centro de Aprovações
+
+- A listagem permanece disponível conforme as permissões de leitura.
+- Os controlos de aprovar/recusar só são apresentados a sessões humanas com perfil `admin` ou `developer`; os restantes perfis mantêm consulta sem botões de decisão.
+- O backend continua a derivar a identidade decisora do principal autenticado e a validar a propriedade da aprovação.
+- A área do diff tem altura máxima e rolagem para não expandir indefinidamente o cartão; recursos afetados são tratados defensivamente quando ausentes.
+
+### 15.4 Pendências específicas
+
+- Validar visualmente as três páginas em desktop, tablet e mobile.
+- Confirmar com testes que perfis auditor não conseguem alterar agentes nem decidir aprovações, e que developers autorizados conseguem executar as operações previstas.
+- Auditar o módulo de modelos, incluindo catálogo, providers, cofre de chaves e permissões por ação.
+- Não foram executados testes nesta etapa.
