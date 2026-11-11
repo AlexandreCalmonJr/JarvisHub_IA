@@ -10,9 +10,9 @@ from apps.api.main import app
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_exchange_creates_authenticated_session_across_services():
+async def test_bootstrap_exchange_creates_authenticated_session_across_services(monkeypatch):
     # Simula a CLI emitindo o token num processo/instância diferente do servidor.
-    os.environ["JARVIS_ISSUE_BOOTSTRAP"] = "0"
+    monkeypatch.setenv("JARVIS_ISSUE_BOOTSTRAP", "0")
     issuer = AuthService(auth_service.security, auth_service.auth_dir)
     token = issuer.issue_bootstrap_token(ttl_seconds=60, persist=True)
 
