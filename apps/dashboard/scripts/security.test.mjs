@@ -9,6 +9,25 @@ const backend = read('../../api/routers/security.py');
 const api = read('../src/services/api/security.ts');
 const auditView = read('../src/components/security/ContainmentAuditSection.tsx');
 
+const agentsRouter = read('../../api/routers/agents.py');
+const toolGateway = read('../../../services/tool_gateway/gateway.py');
+const auth = read('../../api/auth.py');
+
+test('tool execution is authenticated, permission-checked and owner-scoped', () => {
+  assert.match(agentsRouter, /execute_tool_endpoint[\\s\\S]*?Depends\(require_permission\("coding:use"\)\)/);
+  assert.match(agentsRouter, /get_project\(request\.project_id, owner_user_id=owner_user_id\)/);
+  assert.match(agentsRouter, /owner_user_id=owner_user_id, actor_role=principal\.role/);
+  assert.match(auth, /\/api\/v1\/tools\/execute.*coding:use/);
+  assert.match(toolGateway, /get_request\(request\.approval_id, owner_user_id=owner_user_id\)/);
+  assert.match(toolGateway, /owner_user_id=owner_user_id/);
+});
+
+test('global vector indexes and unsandboxed code execution are not exposed to regular accounts', () => {
+  assert.match(toolGateway, /Busca vetorial indisponível até a conclusão do isolamento/);
+  assert.match(toolGateway, /request\.tool_name in \{"run_tests", "run_linter", "duckdb_query"\}/);
+  assert.match(toolGateway, /actor_role != "admin"/);
+});
+
 test('developer and auditor roles can read only their own audit trail', () => {
   assert.match(auth, /"audit:read"/);
   assert.match(backend, /Depends\(require_permission\("audit:read"\)\)/);
