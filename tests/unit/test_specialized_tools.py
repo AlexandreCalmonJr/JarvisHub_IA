@@ -151,7 +151,7 @@ async def test_tool_gateway_dispatches_specialized_tools(tmp_path: Path):
         arguments={"sql": "SELECT mes, faturamento FROM read_csv_auto('relatorio.csv') WHERE faturamento > 60000;"},
         project_id="proj_spec",
     )
-    res = await gateway.execute_tool(req)
+    res = await gateway.execute_tool(req, owner_user_id="test-owner", actor_role="admin")
     assert res.success is True
     assert "Fev" in res.stdout
     assert "Jan" not in res.stdout
