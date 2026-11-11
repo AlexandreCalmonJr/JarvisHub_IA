@@ -103,8 +103,9 @@ async def test_sandbox_timeout_terminates_subprocess(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_vector_search_is_blocked_until_private_account_indexes_exist(gateway_and_project):
+async def test_vector_search_is_blocked_until_private_account_indexes_exist(gateway_and_project, monkeypatch):
     gw, _, _ = gateway_and_project
+    monkeypatch.setattr(gw.agent_registry, "get_allowed_tools", lambda _role: ["vector_search"])
     req = ToolExecutionRequest(
         tool_name="vector_search",
         arguments={"table": "project_vectors", "vector": [0.0] * 128},
