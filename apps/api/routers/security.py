@@ -270,8 +270,13 @@ async def list_audit_logs_endpoint(limit: int = 50, offset: int = 0, severity: s
 
 
 @router.post("/api/v1/security/scan-cves/{project_id}")
-async def scan_project_cves_endpoint(project_id: str):
-    """Varre dependências locais do projeto procurando por CVEs conhecidas sem acesso externo."""
+async def scan_project_cves_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Varre dependências apenas de projetos pertencentes à conta."""
+    owner = _approval_owner(principal)
+    if not db_manager.get_project(project_id, owner_user_id=owner):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         proj_dir = workspace_service.get_project_dir(project_id)
         return security_core.cve_scanner.scan_project_dependencies(proj_dir)
@@ -280,8 +285,13 @@ async def scan_project_cves_endpoint(project_id: str):
 
 
 @router.post("/api/v1/security/red-team/{project_id}")
-async def red_team_audit_endpoint(project_id: str):
-    """Executa varredura estática de Red Team no código procurando SQLi, XSS, Path Traversal e Secrets."""
+async def red_team_audit_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Executa auditoria apenas em projetos pertencentes à conta."""
+    owner = _approval_owner(principal)
+    if not db_manager.get_project(project_id, owner_user_id=owner):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         proj_dir = workspace_service.get_project_dir(project_id)
         return security_core.red_team.run_security_audit(proj_dir)
@@ -302,6 +312,9 @@ async def apply_security_policy_endpoint(
 ):
     """Aplica o template de política de segurança diretamente no diretório do projeto com governança de aprovação."""
     try:
+        owner = _approval_owner(principal)
+        if not db_manager.get_project(payload.project_id, owner_user_id=owner):
+            raise HTTPException(status_code=404, detail="Projeto não encontrado.")
         proj_dir = workspace_service.get_project_dir(payload.project_id)
         if not proj_dir.exists() or not proj_dir.is_dir():
             raise HTTPException(status_code=404, detail=f"Projeto '{payload.project_id}' não encontrado.")
