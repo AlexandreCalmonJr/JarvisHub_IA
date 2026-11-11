@@ -1158,28 +1158,35 @@ class DatabaseManager:
         decided_at: str | datetime | None = None,
         decided_by: str | None = None,
         decision_reason: str | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         req_at = (
             requested_at.isoformat()
             if isinstance(requested_at, datetime)
             else (requested_at or datetime.now(UTC).isoformat())
         )
-        dec_at = (
-            decided_at.isoformat()
-            if isinstance(decided_at, datetime)
-            else decided_at
-        )
+        dec_at = decided_at.isoformat() if isinstance(decided_at, datetime) else decided_at
         resources_json = json.dumps(affected_resources or [])
         rev_int = 1 if reversible else 0
         with self._get_connection() as conn:
+            if owner_user_id is not None:
+                task = conn.execute(
+                    "SELECT owner_user_id FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                if not task or task["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Aprovação sem tarefa pertencente à conta autenticada.")
+                existing = conn.execute(
+                    "SELECT owner_user_id FROM approvals WHERE id = ?", (id,)
+                ).fetchone()
+                if existing and existing["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Aprovação pertence a outra conta.")
             conn.execute(
                 """
                 INSERT INTO approvals (
                     id, task_id, agent_role, operation, impact_summary,
                     affected_resources_json, proposed_diff, reversible, status,
-                    requested_at, decided_at, decided_by, decision_reason
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    requested_at, decided_at, decided_by, decision_reason, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     task_id=excluded.task_id,
                     agent_role=excluded.agent_role,
@@ -1192,72 +1199,84 @@ class DatabaseManager:
                     decided_at=excluded.decided_at,
                     decided_by=excluded.decided_by,
                     decision_reason=excluded.decision_reason
+                WHERE approvals.owner_user_id IS excluded.owner_user_id
                 """,
                 (
-                    id,
-                    task_id,
-                    agent_role,
-                    operation,
-                    impact_summary,
-                    resources_json,
-                    proposed_diff,
-                    rev_int,
-                    status,
-                    req_at,
-                    dec_at,
-                    decided_by,
-                    decision_reason,
+                    id, task_id, agent_role, operation, impact_summary, resources_json,
+                    proposed_diff, rev_int, status, req_at, dec_at, decided_by,
+                    decision_reason, owner_user_id,
                 ),
             )
 
-    def get_approval(self, approval_id: str) -> dict[str, Any] | None:
+    def get_approval(
+        self, approval_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,))
-            row = cur.fetchone()
-            if not row:
-                return None
-            res = dict(row)
-            try:
-                res["affected_resources"] = json.loads(res.get("affected_resources_json") or "[]")
-            except Exception:
-                res["affected_resources"] = []
-            res["reversible"] = bool(res.get("reversible", 1))
-            return res
+            if owner_user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM approvals WHERE id = ?", (approval_id,)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM approvals WHERE id = ? AND owner_user_id = ?",
+                    (approval_id, owner_user_id),
+                ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        try:
+            result["affected_resources"] = json.loads(
+                result.get("affected_resources_json") or "[]"
+            )
+        except Exception:
+            result["affected_resources"] = []
+        result["reversible"] = bool(result.get("reversible", 1))
+        return result
 
-    def list_approvals(self, status: str | None = None) -> list[dict[str, Any]]:
+    def list_approvals(
+        self, status: str | None = None, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM approvals WHERE 1=1"
+        params: list[Any] = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " ORDER BY requested_at DESC"
         with self._get_connection() as conn:
-            if status:
+            rows = conn.execute(query, params).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["affected_resources"] = json.loads(
+                    item.get("affected_resources_json") or "[]"
+                )
+            except Exception:
+                item["affected_resources"] = []
+            item["reversible"] = bool(item.get("reversible", 1))
+            result.append(item)
+        return result
+
+    def consume_approved_approval(
+        self, approval_id: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Consome atomicamente uma aprovação da conta solicitante."""
+        with self._get_connection() as conn:
+            if owner_user_id is None:
                 cur = conn.execute(
-                    "SELECT * FROM approvals WHERE status = ? ORDER BY requested_at DESC",
-                    (status,),
+                    "UPDATE approvals SET status = 'consumed' "
+                    "WHERE id = ? AND status = 'approved'",
+                    (approval_id,),
                 )
             else:
-                cur = conn.execute("SELECT * FROM approvals ORDER BY requested_at DESC")
-            rows = cur.fetchall()
-            result = []
-            for r in rows:
-                item = dict(r)
-                try:
-                    item["affected_resources"] = json.loads(
-                        item.get("affected_resources_json") or "[]"
-                    )
-                except Exception:
-                    item["affected_resources"] = []
-                item["reversible"] = bool(item.get("reversible", 1))
-                result.append(item)
-            return result
-
-    def consume_approved_approval(self, approval_id: str) -> bool:
-        """Consome atomicamente uma aprovação, impedindo replay entre processos."""
-        with self._get_connection() as conn:
-            cur = conn.execute(
-                """
-                UPDATE approvals
-                SET status = 'consumed'
-                WHERE id = ? AND status = 'approved'
-                """,
-                (approval_id,),
-            )
+                cur = conn.execute(
+                    "UPDATE approvals SET status = 'consumed' "
+                    "WHERE id = ? AND status = 'approved' AND owner_user_id = ?",
+                    (approval_id, owner_user_id),
+                )
             return cur.rowcount == 1
 
     def update_approval_decision(
