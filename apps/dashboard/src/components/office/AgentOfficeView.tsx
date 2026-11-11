@@ -8,7 +8,7 @@ import {
   Key,
 } from 'lucide-react';
 import { fetchAgents, updateAgentConfig, fetchKeyVault, KeyVaultItem } from '../../api';
-import { AgentInfo } from '../../types';
+import type { AgentInfo } from '../../types';
 import { notify } from '../common/Toast';
 import { AgentOfficeCanvas } from './AgentOfficeCanvas';
 
@@ -21,20 +21,10 @@ export interface OfficeAgent {
   mission: string;
   tools: string[];
   isReadOnly: boolean;
-  status: 'idle' | 'thinking' | 'coding' | 'meeting';
   preferredModel: string;
   assignedKeyId?: string;
   color: string;
 }
-
-const DEPARTMENTS = [
-  { id: 'command', name: 'Comando Central & Orquestrador', color: '#eab308', bg: 'rgba(234, 179, 8, 0.08)', border: 'rgba(234, 179, 8, 0.25)' },
-  { id: 'dev', name: 'Engenharia de Software', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.08)', border: 'rgba(99, 102, 241, 0.25)' },
-  { id: 'design', name: 'Design, UX & Produto', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.08)', border: 'rgba(236, 72, 153, 0.25)' },
-  { id: 'infra', name: 'DevOps & Automação', color: '#f97316', bg: 'rgba(249, 115, 22, 0.08)', border: 'rgba(249, 115, 22, 0.25)' },
-  { id: 'data', name: 'Dados & Inteligência', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.08)', border: 'rgba(6, 182, 212, 0.25)' },
-  { id: 'security', name: 'Cybersecurity Shield', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.25)' },
-];
 
 const DEPARTMENTS: Array<{
   id: OfficeAgent['department'];
@@ -73,7 +63,6 @@ const toOfficeAgent = (agent: AgentInfo): OfficeAgent => {
     mission: agent.mission || 'Missão não descrita no catálogo.',
     tools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools : [],
     isReadOnly: agent.is_read_only !== false,
-    status: 'idle',
     preferredModel: agent.preferred_model || 'auto_hybrid',
     assignedKeyId: agent.assigned_key_id,
     color: departmentInfo.color,
@@ -182,6 +171,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '20px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões do Escritório Virtual…</div>}
       {/* Topo: Cabeçalho Clean & Filtros Rápidos */}
       <div
         style={{
@@ -404,7 +394,6 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        textAlign: 'center',
                         position: 'relative',
                         transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
                       }}
