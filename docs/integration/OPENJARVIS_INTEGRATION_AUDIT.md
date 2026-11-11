@@ -371,3 +371,32 @@ Concluir a Fase 1 com a leitura dos módulos pendentes e, em seguida, executar a
 ### 9.4 Validação
 
 Foram adicionados testes em `tests/test_telemetry_store.py`. **Não foram executados neste ambiente**; a homologação local continua pendente. Nenhum resultado de teste ou build é declarado como aprovado.
+
+
+## 10. Segunda etapa — avaliação de desempenho por modelo
+
+**Estado:** implementada na branch `integration/openjarvis-audit`; validação local pendente.
+
+### 10.1 Métricas agregadas
+
+O store agora agrega, por conta autenticada, a combinação de modelo, provedor e papel do especialista:
+- total de inferências, sucessos e falhas;
+- taxa de sucesso;
+- latência média apenas das inferências bem-sucedidas;
+- média de tokens por inferência bem-sucedida;
+- indicador de amostra suficiente;
+- indicador de elegibilidade preliminar para futura avaliação de roteamento.
+
+O endpoint `GET /api/v1/system/inference-telemetry` inclui o campo `model_performance`, sem expor dados de outras contas.
+
+### 10.2 Guardrails para futuro roteamento adaptativo
+
+- O padrão exige pelo menos cinco amostras por combinação modelo/provedor/especialista.
+- A taxa de sucesso mínima preliminar é 95%.
+- `routing_eligible` é somente um sinal de avaliação; não altera a seleção de modelos.
+- Nenhum modelo é recomendado apenas por ser mais rápido: capacidade, qualidade, custo, privacidade, disponibilidade e permissões ainda precisam entrar na decisão.
+- O nome do modelo efetivamente retornado pela inferência é usado na telemetria de sucesso, evitando atribuir métricas ao alias solicitado quando o roteador resolveu outro modelo.
+
+### 10.3 Próxima decisão técnica
+
+Antes de ligar seleção automática, precisamos validar a origem de `agent_role`, a identidade do provedor efetivamente utilizado em todos os caminhos híbridos e a qualidade das métricas de tokens/custo. Em seguida, implementar um avaliador de candidatos que respeite capabilities, políticas de dados, aprovação externa e orçamento. A telemetria isolada por owner não pode virar um canal de aprendizagem compartilhada entre contas.
