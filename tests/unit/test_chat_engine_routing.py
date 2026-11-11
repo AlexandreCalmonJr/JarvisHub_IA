@@ -10,6 +10,7 @@ import json
 
 import httpx
 import pytest
+from apps.api.auth import Principal
 
 from apps.api.routers import chat
 from apps.api.schemas import ChatRequest
@@ -254,7 +255,7 @@ async def test_auto_falls_back_to_orchestrator_when_provider_unavailable(monkeyp
     _provider_available(monkeypatch, False)
 
     engine = await chat._resolve_engine(
-        ChatRequest(prompt="Qual é a capital da França?", engine="auto")
+        ChatRequest(prompt="Qual é a capital da França?", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
 
     assert engine == "orchestrator"
@@ -275,7 +276,7 @@ async def test_explicit_orchestrator_wins_over_reachable_provider(monkeypatch):
     calls = _provider_available(monkeypatch, True)
 
     engine = await chat._resolve_engine(
-        ChatRequest(prompt="Qual é a capital da França?", engine="orchestrator")
+        ChatRequest(prompt="Qual é a capital da França?", engine="orchestrator"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
 
     assert engine == "orchestrator"
@@ -395,7 +396,7 @@ async def test_json_endpoint_explicit_agent_persists_once_and_falls_back(monkeyp
     _provider_available(monkeypatch, False)
 
     result = await chat.chat_endpoint(
-        ChatRequest(prompt="Qual é a capital da França?", engine="agent")
+        ChatRequest(prompt="Qual é a capital da França?", engine="agent"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
 
     assert result["final_summary"] == "resposta do maestro"
@@ -441,7 +442,7 @@ async def test_stream_endpoint_auto_conversation_streams_agent(monkeypatch):
     _provider_available(monkeypatch, True)
 
     response = await chat.chat_stream_endpoint(
-        ChatRequest(prompt="Explique o que é SSE.", engine="auto")
+        ChatRequest(prompt="Explique o que é SSE.", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
     events = await _read_sse(response)
 
@@ -463,7 +464,7 @@ async def test_stream_endpoint_auto_action_uses_orchestrator(monkeypatch):
     _provider_available(monkeypatch, True)
 
     response = await chat.chat_stream_endpoint(
-        ChatRequest(prompt="Altere o arquivo main.py.", engine="auto")
+        ChatRequest(prompt="Altere o arquivo main.py.", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
     events = await _read_sse(response)
 
@@ -484,7 +485,7 @@ async def test_stream_endpoint_fallback_keeps_single_user_turn(monkeypatch):
     _provider_available(monkeypatch, False)
 
     response = await chat.chat_stream_endpoint(
-        ChatRequest(prompt="Explique o que é SSE.", engine="agent")
+        ChatRequest(prompt="Explique o que é SSE.", engine="agent"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
     events = await _read_sse(response)
 
