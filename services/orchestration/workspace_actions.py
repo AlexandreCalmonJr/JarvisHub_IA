@@ -40,14 +40,18 @@ def execute_workspace_modification(
                 best_match = prj["id"]
         if best_match and best_score > 0:
             target_project = best_match
-        elif projects:
-            target_project = projects[-1]["id"]
 
     if not target_project:
         return ("Nenhum projeto encontrado em workspace/ para aplicar a alteração.", [])
 
     target_file = "index.html"
-    if any(k in p_lower for k in ("style", "css", "cor", "fundo", "background", "tema", "estilo")):
+    explicit_file = re.search(
+        r"(?<![\\w.-])([\\w./-]+\\.(?:py|html|css|js|ts|tsx|dart|md|json|ya?ml))\\b",
+        p_lower,
+    )
+    if explicit_file:
+        target_file = explicit_file.group(1)
+    elif any(k in p_lower for k in ("style", "css", "cor", "fundo", "background", "tema", "estilo")):
         target_file = "style.css"
     elif any(k in p_lower for k in ("app.js", "script", "js", "alerta", "interação")):
         target_file = "app.js"
