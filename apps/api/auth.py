@@ -118,6 +118,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 # A ordem importa: regras específicas primeiro.
 PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     # Segurança / operações críticas
+    ({"GET"}, re.compile(r"^/api/v1/tools$"), "coding:read"),
+    ({"POST"}, re.compile(r"^/api/v1/tools/execute$"), "coding:use"),
     ({"POST"}, re.compile(r"^/api/v1/system/kill-switch$"), "security:kill"),
     ({"POST"}, re.compile(r"^/api/v1/mobile/pair$"), "mobile:pair"),
     ({"GET", "POST", "DELETE"}, re.compile(r"^/api/v1/mobile/.*$"), "mobile:manage"),
