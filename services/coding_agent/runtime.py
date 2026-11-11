@@ -349,7 +349,7 @@ class CodingAgentRuntime:
             return
 
         # Aprovação humana
-        if spec.requires_approval and config.mode == AgentMode.ASK:
+        if spec.requires_approval:
             try:
                 preview = self.tools.preview(call, config.project_id)
             except PermissionDeniedError as exc:
