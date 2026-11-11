@@ -242,12 +242,18 @@ class GeneratePlaywrightPayload(BaseModel):
 
 
 class ColorPalettePayload(BaseModel):
-    hex_primary: str = Field(..., description="Cor primária em formato hexadecimal (ex: #6366f1)")
-    name: str = Field(default="custom", description="Nome da paleta")
+    hex_primary: str = Field(
+        ..., pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+        description="Cor primária em formato hexadecimal (#RGB ou #RRGGBB)",
+    )
+    name: str = Field(
+        default="custom", min_length=1, max_length=40,
+        pattern=r"^[A-Za-z0-9_-]+$", description="Identificador seguro da paleta",
+    )
 
 
 class WcagAuditPayload(BaseModel):
-    markup: str = Field(..., description="Código HTML ou JSX para auditoria de acessibilidade")
+    markup: str = Field(..., min_length=1, max_length=100000, description="Código HTML ou JSX para auditoria de acessibilidade")
 
 
 class WriteProjectFilePayload(BaseModel):
