@@ -65,31 +65,38 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
             borderRadius: '999px',
             fontSize: '0.78rem',
             fontWeight: 600,
-            backgroundColor: perfProfile?.power?.power_plugged
+            backgroundColor: perfProfile?.power?.power_plugged === true
               ? 'rgba(16, 185, 129, 0.15)'
-              : 'rgba(245, 158, 11, 0.15)',
+              : typeof perfProfile?.power?.percent === 'number'
+                ? 'rgba(245, 158, 11, 0.15)'
+                : 'var(--bg-tertiary)',
             border: `1px solid ${
-              perfProfile?.power?.power_plugged
+              perfProfile?.power?.power_plugged === true
                 ? 'rgba(16, 185, 129, 0.3)'
-                : 'rgba(245, 158, 11, 0.3)'
+                : typeof perfProfile?.power?.percent === 'number'
+                  ? 'rgba(245, 158, 11, 0.3)'
+                  : 'var(--border-color)'
             }`,
-            color: perfProfile?.power?.power_plugged ? '#34d399' : '#fbbf24',
+            color: perfProfile?.power?.power_plugged === true ? '#34d399' : typeof perfProfile?.power?.percent === 'number' ? '#fbbf24' : 'var(--text-muted)',
           }}
         >
-          {perfProfile?.power?.power_plugged ? (
+          {perfProfile?.power?.power_plugged === true ? (
             <>
               <BatteryCharging size={15} />
-              <span>Conectado à Tomada ({perfProfile?.power?.percent || 100}%)</span>
+              <span>Ligado à corrente{typeof perfProfile?.power?.percent === 'number' ? ` (${perfProfile.power.percent}%)` : ''}</span>
+            </>
+          ) : typeof perfProfile?.power?.percent === 'number' ? (
+            <>
+              <Battery size={15} />
+              <span>
+                Bateria: {perfProfile.power.percent}%{' '}
+                {perfProfile.power.secs_left ? `(~${Math.round(perfProfile.power.secs_left / 60)} min)` : ''}
+              </span>
             </>
           ) : (
             <>
               <Battery size={15} />
-              <span>
-                Bateria: {perfProfile?.power?.percent}%{' '}
-                {perfProfile?.power?.secs_left
-                  ? `(~${Math.round(perfProfile.power.secs_left / 60)} min)`
-                  : ''}
-              </span>
+              <span>Estado de energia indisponível</span>
             </>
           )}
         </div>
@@ -224,7 +231,7 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
           }}
         >
           <span>1 Thread (Ultraleve)</span>
-          <span>Recomendado: 4 a 6 Threads</span>
+          <span>Ajuste conforme a capacidade do equipamento</span>
           <span>{perfProfile?.logical_cores || '—'} Threads disponíveis</span>
         </div>
 

@@ -35,7 +35,6 @@ export const HardwareAdvisorView: React.FC = () => {
   const [perfSaving, setPerfSaving] = useState<boolean>(false);
 
   const loadProfile = async () => {
-    if (!isAdmin) return;
     setLoading(true);
     const [hardwareResult, performanceResult] = await Promise.allSettled([
       fetchHardwareProfile(),
@@ -110,7 +109,7 @@ export const HardwareAdvisorView: React.FC = () => {
     setActionError(null);
     try {
       const res = await applyHardwareOptimizations();
-      setApplySuccess(res.message || 'Configuração recomendada aplicada aos especialistas!');
+      setApplySuccess(res.message || 'O servidor confirmou a aplicação das recomendações.');
       await loadProfile();
     } catch (e: any) {
       setActionError(e?.message || 'Falha ao aplicar otimizações.');
