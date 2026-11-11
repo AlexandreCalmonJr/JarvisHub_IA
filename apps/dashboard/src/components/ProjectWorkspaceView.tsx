@@ -84,9 +84,11 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
   const handleDeleteProject = async (projectId: string) => {
     try {
       await deleteWorkspaceProject(projectId);
+      setProjects((current) => current.filter((project) => project.id !== projectId));
       await loadProjects();
     } catch (e: any) {
       notify(`Erro ao excluir workspace: ${e.message}`, 'error');
+      throw e;
     }
   };
 
