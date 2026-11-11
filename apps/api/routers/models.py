@@ -59,8 +59,8 @@ async def list_models_endpoint():
                 "status": "ready",
                 "parameter_size": rm.parameter_size,
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Não foi possível atualizar o inventário local de modelos: %s", exc)
 
     if not installed_local:
         installed_local = [
