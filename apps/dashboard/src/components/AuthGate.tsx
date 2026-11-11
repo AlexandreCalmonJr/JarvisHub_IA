@@ -26,6 +26,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const [newUser, setNewUser] = useState({ username: '', display_name: '', password: '', role: 'developer' as 'admin' | 'developer' | 'auditor' });
   const [accessBusy, setAccessBusy] = useState(false);
   const [accessMessage, setAccessMessage] = useState('');
+  const [resetTarget, setResetTarget] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
 
   const verifySession = async () => {
     try {
@@ -98,23 +100,30 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   };
 
 
-  const resetUserPassword = async (user: UserRecord) => {
-    const nextPassword = window.prompt(`Nova palavra-passe para ${user.username} (mínimo 12 caracteres):`);
-    if (nextPassword === null) return;
-    if (nextPassword.length < 12) {
+  const resetUserPassword = (user: UserRecord) => {
+    setResetTarget(user.username);
+    setResetPassword('');
+    setAccessMessage('');
+  };
+
+  const submitPasswordReset = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!resetTarget || resetPassword.length < 12) {
       setAccessMessage('A palavra-passe precisa de pelo menos 12 caracteres.');
       return;
     }
     setAccessBusy(true); setAccessMessage('');
     try {
-      const response = await fetch(`/api/v1/auth/users/${encodeURIComponent(user.username)}/password`, {
+      const response = await fetch(`/api/v1/auth/users/${encodeURIComponent(resetTarget)}/password`, {
         method: 'PUT', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: nextPassword }),
+        body: JSON.stringify({ password: resetPassword }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.detail || 'Não foi possível redefinir a palavra-passe.');
-      setAccessMessage(`Palavra-passe de @${user.username} atualizada. As sessões anteriores foram encerradas.`);
+      setAccessMessage(`Palavra-passe de @${resetTarget} atualizada. As sessões anteriores foram encerradas.`);
+      setResetTarget(null);
+      setResetPassword('');
     } catch (cause) {
       setAccessMessage(cause instanceof Error ? cause.message : 'Erro ao redefinir palavra-passe.');
     } finally { setAccessBusy(false); }
@@ -206,6 +215,16 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               </select>
               <button type="submit" disabled={accessBusy} style={styles.button}>{accessBusy ? 'A criar...' : 'Criar conta'}</button>
             </form>
+            {resetTarget && (
+              <form onSubmit={submitPasswordReset} style={styles.resetForm}>
+                <b style={styles.resetHeading}>Nova palavra-passe para @{resetTarget}</b>
+                <input type="password" autoComplete="new-password" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} style={styles.input} minLength={12} placeholder="Mínimo de 12 caracteres" required />
+                <div style={styles.resetActions}>
+                  <button type="button" onClick={() => { setResetTarget(null); setResetPassword(''); }} style={styles.cancelButton}>Cancelar</button>
+                  <button type="submit" disabled={accessBusy} style={styles.resetConfirmButton}>{accessBusy ? 'A guardar...' : 'Guardar palavra-passe'}</button>
+                </div>
+              </form>
+            )}
             {accessMessage && <p role="status" style={styles.accessMessage}>{accessMessage}</p>}
             <h3 style={styles.listTitle}>Contas registadas</h3>
             <div style={styles.userList}>
@@ -259,6 +278,11 @@ const styles: Record<string, React.CSSProperties> = {
   userList: { display: 'grid', gap: 8 },
   userRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 11, borderRadius: 9, background: '#172033', border: '1px solid #293548' },
   userMeta: { display: 'block', marginTop: 3, color: '#94a3b8', fontSize: 10 },
+  resetForm: { display: 'grid', gap: 9, marginTop: 14, padding: 13, borderRadius: 10, border: '1px solid #334155', background: '#111c30' },
+  resetHeading: { fontSize: 12, color: '#e2e8f0' },
+  resetActions: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' },
+  cancelButton: { border: '1px solid #334155', background: 'transparent', color: '#cbd5e1', borderRadius: 7, padding: '8px 11px', cursor: 'pointer', fontSize: 11 },
+  resetConfirmButton: { border: 0, background: '#2563eb', color: '#fff', borderRadius: 7, padding: '8px 11px', cursor: 'pointer', fontSize: 11, fontWeight: 650 },
   userActions: { display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
   resetButton: { border: '1px solid #334155', background: '#1e293b', color: '#cbd5e1', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontSize: 11 },
   disableButton: { border: '1px solid #7f1d1d', background: 'rgba(127,29,29,.2)', color: '#fecaca', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontSize: 11 },
