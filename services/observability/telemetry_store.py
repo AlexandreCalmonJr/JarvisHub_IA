@@ -201,7 +201,8 @@ class SqliteTelemetryStore:
                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
                        COALESCE(AVG(CASE WHEN status = 'success' THEN duration_ms END), 0) AS average_latency_ms,
                        COALESCE(AVG(CASE WHEN status = 'success' THEN prompt_tokens + completion_tokens END), 0) AS average_tokens,
-                       COALESCE(SUM(cost_usd), 0) AS total_cost_usd
+                       COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+                       COALESCE(AVG(CASE WHEN status = 'success' THEN cost_usd END), 0) AS average_cost_usd
                 FROM inference_telemetry
                 WHERE owner_user_id = ?
                 GROUP BY model_name, provider, agent_role
@@ -227,7 +228,7 @@ class SqliteTelemetryStore:
                     "average_latency_ms": round(float(row["average_latency_ms"] or 0), 2),
                     "average_tokens": round(float(row["average_tokens"] or 0), 2),
                     "total_cost_usd": round(float(row["total_cost_usd"] or 0), 6),
-                    "average_cost_usd": round(float(row["total_cost_usd"] or 0) / total, 6) if total else 0.0,
+                    "average_cost_usd": round(float(row["average_cost_usd"] or 0), 6),
                     "sample_sufficient": total >= safe_minimum_samples,
                     "routing_eligible": (
                         total >= safe_minimum_samples
