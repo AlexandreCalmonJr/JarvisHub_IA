@@ -571,22 +571,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       {/* Conteúdo Aba: Dados & Backup */}
       {activeTab === 'data' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div
-            style={{
-              padding: '16px',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-            }}
-          >
-            {isAdmin && (\n            <div>
-                <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Backup do sistema (apenas administradores)</strong>
+          {isAdmin && (
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Backup do sistema</strong>
                 <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Gera uma cópia do banco de dados do servidor. A API valida a permissão administrativa antes de executar a operação.
+                  Gera uma cópia do banco de dados do servidor. Disponível apenas para administradores.
                 </span>
               </div>
               <button
@@ -599,22 +601,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <Database size={14} color="var(--accent-color)" />
                 <span>{backingUp ? 'Gerando Backup...' : 'Criar Backup SQLite'}</span>
               </button>
-            </div>\n          )}\n
+            </div>
+          )}
 
           <div
             style={{
               padding: '16px',
               borderRadius: '10px',
               backgroundColor: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              border: '1px solid var(--border-color)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              flexWrap: 'wrap',
               gap: '12px',
             }}
           >
             <div>
-              <strong style={{ fontSize: '0.90rem', color: '#f8fafc', display: 'block' }}>Exportar Conversa Atual</strong>
+              <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Exportar Conversa Atual</strong>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 Exporta as mensagens da conversa atual guardadas neste navegador em formato JSON.
               </span>
@@ -639,6 +643,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              flexWrap: 'wrap',
               gap: '12px',
             }}
           >
