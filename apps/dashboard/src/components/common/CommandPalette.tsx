@@ -160,7 +160,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       title: 'Modelos & Cofre de Chaves (KeyVault)',
       subtitle: 'Cadastre múltiplas chaves (Groq, Gemini, DeepSeek, OpenAI) e gerencie modelos',
       icon: Cpu,
-      iconColor: '#818cf8',
+      iconColor: 'var(--accent-color)',
       badge: 'KeyVault',
       action: () => {
         onNavigate('models');
@@ -199,7 +199,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       title: 'Base de Conhecimento & RAG',
       subtitle: 'Indexe manuais, PDFs e código com busca semântica local',
       icon: Database,
-      iconColor: '#38bdf8',
+      iconColor: 'var(--accent-color)',
       badge: 'RAG',
       action: () => {
         onNavigate('knowledge');
@@ -212,7 +212,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       title: 'Fila de Tarefas (Tasks)',
       subtitle: 'Fila autônoma de execução e acompanhamento de planos multi-etapas',
       icon: CheckSquare,
-      iconColor: '#a78bfa',
+      iconColor: 'var(--accent-color)',
       action: () => {
         onNavigate('tasks');
         onClose();
@@ -224,7 +224,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       title: 'Backend & APIs Mock',
       subtitle: 'Simulador de endpoints HTTP com latência e playground SQL',
       icon: Server,
-      iconColor: '#a78bfa',
+      iconColor: 'var(--accent-color)',
       badge: 'Mock',
       action: () => {
         onNavigate('backend_studio');
@@ -337,7 +337,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       title: 'Perfil e Preferências',
       subtitle: 'Consulte o perfil e ajuste as preferências locais disponíveis'
       icon: Settings,
-      iconColor: '#818cf8',
+      iconColor: 'var(--accent-color)',
       action: () => {
         if (onOpenProfile) onOpenProfile();
         onClose();
