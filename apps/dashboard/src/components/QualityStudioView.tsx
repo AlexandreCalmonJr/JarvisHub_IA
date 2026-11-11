@@ -221,7 +221,7 @@ export const QualityStudioView: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', borderRadius: '8px' }}
             >
               <Play size={15} />
-              {runningTests ? 'Executando Suíte...' : 'Executar Testes em Sandbox'}
+              {runningTests ? 'Executando Suíte...' : 'Executar Testes'}
             </button>
           </div>
         </div>
