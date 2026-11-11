@@ -11,7 +11,6 @@ from langgraph.graph import END, START, StateGraph
 from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
 from services.model_runtime import InferenceRequest, ModelManager
 from services.security_core import PermissionDeniedError, SecurityCore
-from services.tool_gateway import ToolExecutionRequest
 
 from .state import TaskState
 from .self_correction import SelfCorrectionEngine
@@ -1186,74 +1185,7 @@ def create_master_graph(
             )
             llm_text = consensus_summary
 
-            # Insere contratos de cada especialista no estado para visualização no painel de raciocínio
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=role_1,
-                    objective=title_1,
-                    summary=text_1,
-                    evidence=["Mesa Redonda Multi-Agente", "Deliberação de Especialista"],
-                    actions_taken=["Análise de Metodologia"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=50, tokens_completion=200, duration_ms=15.0),
-                    next_recommendation="Integrar diretriz com plano executivo",
-                ).model_dump()
-            )
-
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=role_2,
-                    objective=title_2,
-                    summary=text_2,
-                    evidence=["Mesa Redonda Multi-Agente", "Planejamento Estratégico"],
-                    actions_taken=["Análise do contexto", "Revisão do parecer do primeiro especialista", "Proposta de contrapontos e recomendações"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=50, tokens_completion=200, duration_ms=15.0),
-                    next_recommendation="Acompanhar execução dos ciclos semanais",
-                ).model_dump()
-            )
-
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=role_3,
-                    objective=title_3,
-                    summary=text_3,
-                    evidence=["Mesa Redonda Multi-Agente", "Garantia de Qualidade"],
-                    actions_taken=["Revisão dos dois pareceres anteriores", "Identificação de lacunas e riscos", "Validação de critérios de aceitação"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=50, tokens_completion=200, duration_ms=15.0),
-                    next_recommendation="Validar retenção com prática no chat",
-                ).model_dump()
-            )
-
-            # 4. Parecer e Deliberação Consensual do JARVIS Maestro
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=AgentRole.JARVIS_MASTER,
-                    objective="Consolidação e Deliberação da Mesa Redonda Técnica",
-                    summary=consensus_summary,
-                    evidence=["Deliberação Consensual", "Mesa Redonda Multi-Agente", consensus_title],
-                    actions_taken=["Mediação entre especialistas", "Comparação de divergências", "Síntese executiva baseada nos pareceres recebidos"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=150, tokens_completion=300, duration_ms=25.0),
-                    next_recommendation="Apresentar síntese consensual ao utilizador",
-                ).model_dump()
-            )
-            llm_text = consensus_summary
-
-        # 5. Demais intenções (arquitetura, análise, qa, planejamento): inferência com contexto enriquecido
+            # 5. Demais intenções (arquitetura, análise, qa, planejamento): inferência com contexto enriquecido
         else:
             system_prompt = build_specialist_prompt(
                 agent_role=primary_agent,
