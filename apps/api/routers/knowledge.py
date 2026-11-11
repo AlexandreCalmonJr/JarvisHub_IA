@@ -1,7 +1,9 @@
+import hashlib
 import logging
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 
+from apps.api.auth import Principal, get_principal
 from apps.api.schemas import (
     KnowledgeIndexFolderRequest,
     KnowledgeIndexTextRequest,
@@ -16,42 +18,78 @@ logger = logging.getLogger("jarvis.api.knowledge")
 router = APIRouter(tags=["knowledge"])
 
 
+def _private_owner(principal: Principal) -> str:
+    if principal.kind != "human":
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivos precisam ser associados a uma conta antes de acessar dados privados.",
+        )
+    return principal.subject_id
+
+
 @router.get("/api/v1/knowledge/documents")
-async def list_knowledge_documents_endpoint():
-    return knowledge_vault_service.list_documents()
+async def list_knowledge_documents_endpoint(
+    principal: Principal = Depends(get_principal),
+):
+    return knowledge_vault_service.list_documents(
+        owner_user_id=_private_owner(principal)
+    )
 
 
 @router.post("/api/v1/knowledge/upload")
 async def upload_knowledge_document_endpoint(
     file: UploadFile = File(...),
     category: str = Form("geral"),
+    principal: Principal = Depends(get_principal),
 ):
-    upload_dir = resolve_data_dir() / "knowledge_uploads"
+    owner = _private_owner(principal)
+    upload_dir = resolve_data_dir() / "knowledge_uploads" / hashlib.sha256(owner.encode("utf-8")).hexdigest()[:16]
     upload_dir.mkdir(parents=True, exist_ok=True)
     safe_name = Path(file.filename or "upload.bin").name
     target_path = upload_dir / safe_name
     content_bytes = await file.read()
     target_path.write_bytes(content_bytes)
-    result = knowledge_vault_service.index_file(target_path, category=category)
+    result = knowledge_vault_service.index_file(
+        target_path, category=category, owner_user_id=owner
+    )
     return result
 
 
 @router.post("/api/v1/knowledge/index-folder")
-async def index_knowledge_folder_endpoint(payload: KnowledgeIndexFolderRequest):
-    return knowledge_vault_service.index_directory(payload.folder_path, category=payload.category)
+async def index_knowledge_folder_endpoint(
+    payload: KnowledgeIndexFolderRequest, principal: Principal = Depends(get_principal)
+):
+    return knowledge_vault_service.index_directory(
+        payload.folder_path, category=payload.category,
+        owner_user_id=_private_owner(principal),
+    )
 
 
 @router.post("/api/v1/knowledge/index-text")
-async def index_knowledge_text_endpoint(payload: KnowledgeIndexTextRequest):
-    return knowledge_vault_service.index_text_snippet(payload.doc_name, payload.content, category=payload.category)
+async def index_knowledge_text_endpoint(
+    payload: KnowledgeIndexTextRequest, principal: Principal = Depends(get_principal)
+):
+    return knowledge_vault_service.index_text_snippet(
+        payload.doc_name, payload.content, category=payload.category,
+        owner_user_id=_private_owner(principal),
+    )
 
 
 @router.post("/api/v1/knowledge/search")
-async def search_knowledge_endpoint(payload: KnowledgeSearchRequest):
-    return knowledge_vault_service.search(payload.query, limit=payload.limit)
+async def search_knowledge_endpoint(
+    payload: KnowledgeSearchRequest, principal: Principal = Depends(get_principal)
+):
+    return knowledge_vault_service.search(
+        payload.query, limit=payload.limit,
+        owner_user_id=_private_owner(principal),
+    )
 
 
 @router.delete("/api/v1/knowledge/documents/{doc_name}")
-async def delete_knowledge_document_endpoint(doc_name: str):
-    deleted = knowledge_vault_service.delete_document(doc_name)
+async def delete_knowledge_document_endpoint(
+    doc_name: str, principal: Principal = Depends(get_principal)
+):
+    deleted = knowledge_vault_service.delete_document(
+        doc_name, owner_user_id=_private_owner(principal)
+    )
     return {"status": "deleted" if deleted else "not_found", "doc_name": doc_name}
