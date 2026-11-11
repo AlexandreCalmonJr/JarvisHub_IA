@@ -561,9 +561,11 @@ class DatabaseManager:
             results.append(data)
         return results
 
-    def export_session_markdown(self, session_id: str) -> str:
-        """Gera um arquivo Markdown completo e estruturado de toda a sessão de conversa."""
-        tasks = self.get_session_tasks(session_id)
+    def export_session_markdown(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> str:
+        """Exporta somente tarefas pertencentes à conta solicitante."""
+        tasks = self.get_session_tasks(session_id, owner_user_id=owner_user_id)
         if not tasks:
             return f"# Sessão {session_id}\n\nNenhuma interação encontrada para esta sessão."
 
@@ -610,15 +612,31 @@ class DatabaseManager:
 
         return "\n".join(lines)
 
-    def purge_old_tasks(self, days_retention: int = 30) -> int:
+    def purge_old_tasks(
+        self, days_retention: int = 30, owner_user_id: str | None = None
+    ) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=days_retention)).isoformat()
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
+            if owner_user_id is None:
+                cur = conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
+            else:
+                cur = conn.execute(
+                    "DELETE FROM tasks WHERE created_at < ? AND owner_user_id = ?",
+                    (cutoff, owner_user_id),
+                )
             return cur.rowcount
 
-    def delete_task(self, task_id: str) -> bool:
+    def delete_task(
+        self, task_id: str, owner_user_id: str | None = None
+    ) -> bool:
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            if owner_user_id is None:
+                cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            else:
+                cur = conn.execute(
+                    "DELETE FROM tasks WHERE id = ? AND owner_user_id = ?",
+                    (task_id, owner_user_id),
+                )
             return cur.rowcount > 0
 
     def export_project_data(self, project_id: str) -> dict[str, Any]:
