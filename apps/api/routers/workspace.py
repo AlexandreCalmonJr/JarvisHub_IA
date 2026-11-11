@@ -407,13 +407,15 @@ async def save_project_memory_endpoint(
     project_id: str, payload: ProjectMemoryRequest,
     principal: Principal = Depends(get_principal),
 ):
-    """Salva uma nova diretriz ou decisão arquitetural na memória persistente do projeto."""
+    """Salva uma diretriz privada da conta no projeto."""
+    if principal.kind != "human":
+        raise HTTPException(status_code=403, detail="Conta humana necessária.")
     db_manager.set_project_memory(
         project_id=project_id,
         category=payload.category,
         key=payload.key,
         content=payload.content,
         sources=payload.sources,
-        owner_user_id=principal.subject_id if principal.kind == "human" else None,
+        owner_user_id=principal.subject_id,
     )
     return {"status": "saved", "project_id": project_id, "key": payload.key}
