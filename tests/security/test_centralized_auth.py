@@ -162,6 +162,7 @@ async def test_09_approval_spoofed_identity_ignored():
         operation="file_write",
         impact_summary="Teste de falsificação de identidade",
         affected_resources=["config.py"],
+        owner_user_id="legit_developer",
     )
 
     # Usuário desenvolvedor autenticado
@@ -194,6 +195,7 @@ async def test_09_approval_spoofed_identity_ignored():
             operation="file_write",
             impact_summary="Tentativa com papel de agente",
             affected_resources=["main.py"],
+            owner_user_id="legit_developer",
         )
         res_agent = await client.post(
             f"/api/v1/approvals/{ticket_agent.request.id}/decide",
