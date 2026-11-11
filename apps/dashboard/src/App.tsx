@@ -288,6 +288,11 @@ const DashboardApp: React.FC = () => {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (window.matchMedia('(max-width: 900px)').matches) {
+                    setMobileOpen((prev) => !prev);
+                    setDesktopMenuOpen(false);
+                    return;
+                  }
                   setDesktopMenuOpen((prev) => !prev);
                 }}
                 className="btn btn-ghost"
@@ -297,7 +302,7 @@ const DashboardApp: React.FC = () => {
                 <Menu size={18} />
               </button>
 
-              {/* Menu Cascata do Topo (Arquivo, Editar, Visualizar, Ir, Ajuda) */}
+              {/* Menu de navegação e ações rápidas */}
               {desktopMenuOpen && (
                 <div
                   onClick={(e) => e.stopPropagation()}
@@ -459,7 +464,7 @@ const DashboardApp: React.FC = () => {
             JARVIS <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>3.0</span>
           </div>
 
-          {/* Lado Direito: Busca, Status de Blindagem, Avatar e Controles Desktop ─ □ ✕ */}
+          {/* Lado Direito: Busca, aprovações, perfil e ecrã inteiro */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {/* Paleta de Comandos */}
             <button
@@ -534,7 +539,7 @@ const DashboardApp: React.FC = () => {
               {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
             </button>
 
-            {/* Controles Nativos Desktop da Janela (─ □ ✕) */}
+            {/* Controlo de ecrã inteiro disponível no navegador */}
             <div
               style={{
                 display: 'flex',
