@@ -396,7 +396,7 @@ async def test_json_endpoint_explicit_agent_persists_once_and_falls_back(monkeyp
     _provider_available(monkeypatch, False)
 
     result = await chat.chat_endpoint(
-        ChatRequest(prompt="Qual é a capital da França?", engine="agent"), principal=Principal(subject_id="test-user", kind="human", role="developer"), principal=Principal(subject_id="test-user", kind="human", role="developer")
+        ChatRequest(prompt="Qual é a capital da França?", engine="agent"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
 
     assert result["final_summary"] == "resposta do maestro"
@@ -442,7 +442,7 @@ async def test_stream_endpoint_auto_conversation_streams_agent(monkeypatch):
     _provider_available(monkeypatch, True)
 
     response = await chat.chat_stream_endpoint(
-        ChatRequest(prompt="Explique o que é SSE.", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer"), principal=Principal(subject_id="test-user", kind="human", role="developer")
+        ChatRequest(prompt="Explique o que é SSE.", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
     events = await _read_sse(response)
 
@@ -464,7 +464,7 @@ async def test_stream_endpoint_auto_action_uses_orchestrator(monkeypatch):
     _provider_available(monkeypatch, True)
 
     response = await chat.chat_stream_endpoint(
-        ChatRequest(prompt="Altere o arquivo main.py.", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer"), principal=Principal(subject_id="test-user", kind="human", role="developer")
+        ChatRequest(prompt="Altere o arquivo main.py.", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
     events = await _read_sse(response)
 
@@ -485,7 +485,7 @@ async def test_stream_endpoint_fallback_keeps_single_user_turn(monkeypatch):
     _provider_available(monkeypatch, False)
 
     response = await chat.chat_stream_endpoint(
-        ChatRequest(prompt="Explique o que é SSE.", engine="agent"), principal=Principal(subject_id="test-user", kind="human", role="developer"), principal=Principal(subject_id="test-user", kind="human", role="developer")
+        ChatRequest(prompt="Explique o que é SSE.", engine="agent"), principal=Principal(subject_id="test-user", kind="human", role="developer")
     )
     events = await _read_sse(response)
 
