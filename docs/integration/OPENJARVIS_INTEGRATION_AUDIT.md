@@ -712,3 +712,39 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Verificar compatibilidade de Skills privadas já existentes no SQLite e comportamento de importações sem licença declarada.
 - Validar os perfis admin, developer e auditor nas duas páginas.
 - Executar build, lint, testes de autorização, RAG/owner scope e responsividade apenas na fase final de homologação.
+
+## 19. Coding Agent, Backend Studio, Quality Studio e Design Studio
+
+**Estado:** correções incrementais gravadas na branch de auditoria. A homologação técnica e visual permanece pendente.
+
+### 19.1 Coding Agent e MCP
+
+- O cliente do Coding Agent envia cookies de sessão nas operações de ferramentas, histórico, decisões e streaming.
+- O parser SSE processa também o último evento quando o stream termina sem separador final.
+- Preferências locais de sessão, modo, projeto e modelo usam chaves por conta e toleram armazenamento do navegador indisponível.
+- O projeto selecionado é reconciliado com a lista atual da conta; carregamentos de histórico antigos não substituem a sessão atual.
+- Execução fica restrita a perfis humanos `admin` e `developer`; limpeza de histórico exige `coding:write`; decisão de aprovação respeita `approvals:decide`.
+- A recarga de servidores MCP é apresentada apenas ao administrador e o endpoint declara explicitamente essa dependência.
+
+### 19.2 Backend Studio
+
+- O SQL Playground mantém o vínculo obrigatório ao projeto pertencente à conta autenticada.
+- A conexão SQLite ativa `PRAGMA query_only` e a execução aceita apenas instruções iniciadas por `SELECT` ou `WITH`; alterações, `ATTACH` e comandos administrativos não são aceites.
+- Inspeção, consulta e auditoria SQL são operações de leitura; os respetivos POST foram mapeados para `studios:read`, permitindo consulta a auditores sem conceder escrita.
+- Criação, exclusão e teste de endpoints simulados ficam disponíveis apenas para perfis humanos `admin` e `developer`; perfis de consulta continuam a ver os mocks da própria conta.
+- A interface do Mock Server trata submissões duplicadas, limites de status HTTP e erros de execução sem indicar sucesso falso.
+
+### 19.3 Quality Studio e Design Studio
+
+- Execução de testes de projeto aparece apenas para administradores, conforme a proteção atual do backend até existir isolamento de processo por conta.
+- Geração de scripts Playwright aparece para `admin` e `developer`; descoberta de testes e casos de borda continuam disponíveis em leitura.
+- Paletas e auditorias WCAG exigem `studios:use`; por isso, ficam disponíveis para `admin` e `developer`. O catálogo de componentes permanece em leitura para perfis autorizados.
+- As ações de cópia tratam ausência de Clipboard API e falhas de permissão.
+
+### 19.4 Pendências específicas
+
+- Validar o SQL Playground com tentativas de `UPDATE`, `DELETE`, `PRAGMA`, `ATTACH`, CTE de escrita e consulta válida.
+- Testar Mock Server e Coding Agent com admin, developer e auditor, incluindo execução de mock, aprovação e recarga MCP.
+- Validar Quality Studio com projetos sem testes, falha de execução, timeout e execução autorizada por administrador.
+- Confirmar os estados de leitura do Design Studio para auditor e as ações de developer/admin.
+- Build, lint, testes automatizados e verificação visual ainda não foram executados.
