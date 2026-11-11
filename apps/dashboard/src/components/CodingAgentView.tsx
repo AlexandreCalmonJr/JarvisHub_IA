@@ -101,7 +101,7 @@ export const CodingAgentView: React.FC = () => {
   }, [projectId]);
   useEffect(() => {
     if (model) localStorage.setItem(getAccountStorageKey('jarvis_coding_model'), model);
-    else localStorage.removeItem('jarvis_coding_model');
+    else localStorage.removeItem(getAccountStorageKey('jarvis_coding_model'));
   }, [model]);
 
   useEffect(() => {
