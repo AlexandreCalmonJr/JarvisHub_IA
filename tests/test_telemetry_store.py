@@ -1,0 +1,69 @@
+from services.observability.telemetry_store import SqliteTelemetryStore
+
+
+def test_telemetry_is_isolated_by_owner(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    store.record_inference(
+        owner_user_id="user-a",
+        task_id="task-a",
+        agent_role="developer",
+        model_name="model-a",
+        provider="ollama_local",
+        status="success",
+        duration_ms=125.5,
+        prompt_tokens=10,
+        completion_tokens=20,
+    )
+    store.record_inference(
+        owner_user_id="user-b",
+        task_id="task-b",
+        agent_role="auditor",
+        model_name="model-b",
+        provider="cloud",
+        status="failed",
+        duration_ms=50,
+        error_type="TimeoutError",
+    )
+
+    assert len(store.list_for_owner("user-a")) == 1
+    assert store.list_for_owner("user-a")[0]["task_id"] == "task-a"
+    assert store.list_for_owner("user-b")[0]["task_id"] == "task-b"
+    assert store.summary_for_owner("user-a") == {
+        "total_inferences": 1,
+        "successful": 1,
+        "failed": 0,
+        "total_tokens": 30,
+        "average_latency_ms": 125.5,
+    }
+
+
+def test_telemetry_requires_owner_for_queries(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+
+    try:
+        store.list_for_owner("")
+    except ValueError as exc:
+        assert "owner_user_id" in str(exc)
+    else:
+        raise AssertionError("An owner must be required for telemetry queries")
+
+
+def test_telemetry_does_not_store_prompt_or_response_fields(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    store.record_inference(
+        owner_user_id="user-a",
+        task_id="task-a",
+        agent_role="developer",
+        model_name="model-a",
+        provider="ollama_local",
+        status="success",
+        duration_ms=10,
+    )
+
+    import sqlite3
+
+    with sqlite3.connect(store.db_path) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(inference_telemetry)")}
+    assert "prompt" not in columns
+    assert "response" not in columns
+    assert "api_key" not in columns
