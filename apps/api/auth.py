@@ -91,6 +91,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "mcp:read",
         "mcp:reload",
         "voice:use",
+        "mock:serve",
         "profile:read",
         "profile:write",
     },
