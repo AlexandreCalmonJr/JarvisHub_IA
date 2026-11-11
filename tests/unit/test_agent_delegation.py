@@ -178,12 +178,21 @@ async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
     security = SecurityCore()
     model_mgr = ModelManager(adapter=MockAdapter(default_response="Parecer simulado com análise e riscos."), audit_trail=security.audit)
     master = JarvisMaster(security_core=security, model_manager=model_mgr)
+    captured_system_prompts = []
+    original_generate = model_mgr.generate
+
+    async def capture_generate(request):
+        captured_system_prompts.append(request.system_prompt)
+        return await original_generate(request)
+
+    model_mgr.generate = capture_generate
 
     result = await master.execute_task(
         user_prompt="Analise criticamente o problema de arquitetura segura para um serviço local multiagente"
     )
 
     assert result["classified_intent"] == "multi_agent_consensus"
+    assert any("Parecer simulado com análise e riscos." in prompt for prompt in captured_system_prompts)
     roles = [output["agent_role"] for output in result["agent_outputs"]]
     assert AgentRole.SOFTWARE_ARCHITECT.value in roles
     assert AgentRole.CYBERSECURITY_ENGINEER.value in roles
