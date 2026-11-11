@@ -52,25 +52,25 @@ export async function testHybridConnection(payload: {
 
 export async function fetchModelMetrics(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/model-metrics`);
-  if (!res.ok) return { total_inferences: 0, avg_latency_ms: 0, avg_tokens_per_sec: 0, total_tokens: 0 };
+  if (!res.ok) throw new Error('Falha ao carregar métricas de inferência.');
   return res.json();
 }
 
 export async function fetchCuratedHuggingFaceModels(): Promise<any[]> {
   const res = await fetch(`${API_BASE}/models/huggingface/curated`);
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error('Falha ao carregar modelos curados do Hugging Face.');
   return res.json();
 }
 
 export async function searchHuggingFaceModels(q: string = '', limit: number = 10): Promise<any[]> {
   const res = await fetch(`${API_BASE}/models/huggingface/search?q=${encodeURIComponent(q)}&limit=${limit}`);
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error('Falha ao pesquisar modelos no Hugging Face.');
   return res.json();
 }
 
 export async function fetchAgentModelRecommendations(): Promise<Record<string, { model: string; reason: string }>> {
   const res = await fetch(`${API_BASE}/models/agent-recommendations`);
-  if (!res.ok) return {};
+  if (!res.ok) throw new Error('Falha ao carregar recomendações de modelos dos agentes.');
   return res.json();
 }
 
@@ -89,11 +89,14 @@ export interface KeyVaultItem {
 
 export async function fetchKeyVault(): Promise<KeyVaultItem[]> {
   const res = await fetch(`${API_BASE}/models/vault`);
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao carregar o KeyVault.' }));
+    throw new Error(err.detail || 'Falha ao carregar o KeyVault.');
+  }
   const data = await res.json();
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.keys)) return data.keys;
-  return [];
+  throw new Error('Resposta inválida recebida do KeyVault.');
 }
 
 export async function registerVaultKey(payload: {
