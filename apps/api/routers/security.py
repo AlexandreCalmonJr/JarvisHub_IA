@@ -395,14 +395,18 @@ async def apply_security_policy_endpoint(
             or str(target_file) not in approval.affected_resources
         ):
             raise PermissionDeniedError("Aprovação não correspondente ou não aprovada.")
-        await tool_gateway.execute_tool(ToolExecutionRequest(
-            tool_name="write_file",
-            arguments={"path": tmpl["filename"], "content": tmpl["code"]},
-            agent_role=AgentRole.API_SECURITY_SPECIALIST.value,
-            project_id=payload.project_id,
-            task_id=task_id,
-            approval_id=payload.approval_id,
-        ))
+        await tool_gateway.execute_tool(
+            ToolExecutionRequest(
+                tool_name="write_file",
+                arguments={"path": tmpl["filename"], "content": tmpl["code"]},
+                agent_role=AgentRole.API_SECURITY_SPECIALIST.value,
+                project_id=payload.project_id,
+                task_id=task_id,
+                approval_id=payload.approval_id,
+            ),
+            owner_user_id=owner,
+            actor_role=principal.role,
+        )
         security_core.audit.record_event(
             operation="APPLY_SECURITY_POLICY",
             user_id=principal.display_id,
