@@ -120,6 +120,12 @@ async def login(payload: AuthLoginRequest, request: Request, response: Response)
 
 
 
+def _revoke_user_sessions(username: str) -> None:
+    for session in auth_service.security.sessions.list_sessions(include_revoked=False):
+        if session.user_id.casefold() == username.casefold():
+            auth_service.security.sessions.revoke_session(session.session_id)
+
+
 @router.post("/password-login")
 async def password_login(payload: PasswordLoginRequest, request: Request, response: Response):
     client = AuthService.client_key(request)
@@ -181,6 +187,7 @@ async def reset_user_password(
 ):
     if not auth_service.user_store.set_password(username, payload.password):
         raise HTTPException(status_code=404, detail="Utilizador não encontrado.")
+    _revoke_user_sessions(username)
     auth_service.security.audit.record_event(
         operation="AUTH_USER_PASSWORD_RESET",
         status="SUCCESS",
@@ -199,6 +206,8 @@ async def set_user_status(
 ):
     if not auth_service.user_store.set_active(username, payload.is_active):
         raise HTTPException(status_code=404, detail="Utilizador não encontrado.")
+    if not payload.is_active:
+        _revoke_user_sessions(username)
     auth_service.security.audit.record_event(
         operation="AUTH_USER_STATUS_CHANGED",
         status="SUCCESS",
