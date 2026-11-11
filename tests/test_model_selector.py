@@ -70,3 +70,18 @@ def test_selector_allows_external_candidate_only_when_policy_inputs_allow_it():
 def test_selector_refuses_vision_when_no_candidate_has_visual_capability():
     with pytest.raises(RuntimeError, match="Nenhum modelo disponível"):
         select([metadata("llama-general")], capability="vision")
+
+
+def test_selector_maps_developer_role_to_code_capability():
+    result = ModelSelector().select(
+        models=[metadata("general-llama"), metadata("deepseek-coder", family="deepseek")],
+        owner_user_id="account-1",
+        agent_role="developer",
+        task_capability=None,
+        telemetry_store=EmptyTelemetry(),
+        allow_external=False,
+        contains_sensitive_data=False,
+        has_external_data_approval=False,
+    )
+    assert result.candidate.model_name == "deepseek-coder"
+    assert "especialização em código" in result.reason
