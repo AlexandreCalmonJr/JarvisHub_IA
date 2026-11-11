@@ -54,12 +54,14 @@ class JarvisMaster:
         session_id: str | None = None,
         project_id: str | None = None,
         task_id: str | None = None,
+        owner_user_id: str | None = None,
     ) -> TaskState:
         actual_task_id = task_id or f"tsk-{uuid.uuid4().hex[:8]}"
         actual_session_id = session_id or f"ses-{uuid.uuid4().hex[:8]}"
 
         initial_state: TaskState = {
             "task_id": actual_task_id,
+            "owner_user_id": owner_user_id,
             "session_id": actual_session_id,
             "user_prompt": user_prompt,
             "project_id": project_id,
@@ -83,7 +85,9 @@ class JarvisMaster:
         result_state = await self.graph.ainvoke(initial_state, config=config)
         return result_state
 
-    async def resume_after_approval(self, task_id: str, approved_by: str) -> TaskState:
+    async def resume_after_approval(
+        self, task_id: str, approved_by: str, owner_user_id: str | None = None
+    ) -> TaskState:
         """Retoma uma tarefa que estava pausada aguardando aprovação humana e aplica alterações se aplicável."""
         config = {"configurable": {"thread_id": task_id}}
         checkpoint = await self.graph.aget_state(config)
@@ -93,7 +97,12 @@ class JarvisMaster:
         current_values = dict(checkpoint.values)
         approval_id = current_values.get("approval_id")
         intent = current_values.get("classified_intent")
-        approval = self.security_core.approval_engine.get_request(approval_id) if approval_id else None
+        approval = (
+            self.security_core.approval_engine.get_request(
+                approval_id, owner_user_id=owner_user_id
+            )
+            if approval_id else None
+        )
 
         if intent == "code_modification":
             if (
