@@ -596,6 +596,7 @@ def create_master_graph(
                 temperature=0.3,
                 timeout_seconds=20.0,
                 task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
             )
             arch_p_tokens = 35
             arch_c_tokens = 110
@@ -653,6 +654,7 @@ def create_master_graph(
                     temperature=0.3,
                     timeout_seconds=20.0,
                     task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                 )
                 try:
                     sec_resp = await model_manager.generate(sec_req)
@@ -718,6 +720,7 @@ def create_master_graph(
                         temperature=0.3,
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                     )
                 )
                 dev_summary = dev_resp.content.strip()
@@ -756,6 +759,7 @@ def create_master_graph(
                         temperature=0.2,
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                     )
                 )
                 qa_summary = qa_resp.content.strip()
@@ -938,6 +942,7 @@ def create_master_graph(
                     temperature=0.7,
                     timeout_seconds=45.0,
                     task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                 )
                 try:
                     conv_resp = await model_manager.generate(conv_req)
@@ -1067,6 +1072,7 @@ def create_master_graph(
                     temperature=0.25,
                     timeout_seconds=120.0,
                     task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                     key_id=getattr(specialist_profile, "assigned_key_id", None),
                 )
                 try:
@@ -1138,6 +1144,7 @@ def create_master_graph(
                         temperature=0.2,
                         timeout_seconds=120.0,
                         task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                     )
                 )
             except Exception as exc:
@@ -1273,6 +1280,7 @@ def create_master_graph(
                 temperature=0.3,
                 timeout_seconds=90.0,
                 task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                 key_id=getattr(prim_profile, "assigned_key_id", None),
             )
 
@@ -1370,6 +1378,7 @@ def create_master_graph(
                         temperature=0.25,
                         timeout_seconds=120.0,
                         task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
                         key_id=getattr(secondary_profile, "assigned_key_id", None),
                     )
                 )
