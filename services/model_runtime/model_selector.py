@@ -82,13 +82,17 @@ class ModelSelector:
     ) -> ModelSelection:
         capability = self._normalize_capability(task_capability, agent_role)
         performance: dict[tuple[str, str, str | None], dict[str, Any]] = {}
+        quality: dict[tuple[str, str, str | None], dict[str, Any]] = {}
         if telemetry_store and owner_user_id:
             try:
                 for row in telemetry_store.performance_by_model_for_owner(owner_user_id):
                     performance[(row["model_name"], row["provider"], row.get("agent_role"))] = row
+                for row in telemetry_store.quality_by_model_for_owner(owner_user_id):
+                    quality[(row["model_name"], row["provider"], row.get("agent_role"))] = row
             except Exception:
                 # A indisponibilidade da telemetria não deve impedir inferência.
                 performance = {}
+                quality = {}
 
         candidates: list[tuple[ModelCandidate, dict[str, Any] | None, int, str]] = []
         pricing = pricing_by_provider or {}
@@ -109,6 +113,9 @@ class ModelSelector:
             stats = performance.get((metadata.name, provider, agent_role))
             if stats is None:
                 stats = performance.get((metadata.name, provider, None))
+            quality_stats = quality.get((metadata.name, provider, agent_role))
+            if quality_stats is None:
+                quality_stats = quality.get((metadata.name, provider, None))
             if estimated_cost <= 0 and stats and int(stats.get("total_inferences", 0)) > 0:
                 estimated_cost = float(stats.get("average_cost_usd") or 0.0)
             candidate = ModelCandidate(
@@ -150,6 +157,23 @@ class ModelSelector:
                 reasons.append(f"latência média {latency:.0f} ms")
             else:
                 reasons.append("sem histórico suficiente; sem bônus de desempenho")
+            feedback = quality.get((candidate.model_name, candidate.provider, agent_role))
+            if feedback is None:
+                feedback = quality.get((candidate.model_name, candidate.provider, None))
+            if feedback and feedback.get("sample_sufficient"):
+                average_rating = min(5.0, max(1.0, float(feedback.get("average_rating", 3.0))))
+                quality_bonus = (average_rating - 3.0) * 5.0
+                score += quality_bonus
+                reasons.append(
+                    f"avaliação humana média {average_rating:.2f}/5 "
+                    f"({feedback.get('feedback_count', 0)} avaliações; ajuste {quality_bonus:+.1f})"
+                )
+            elif feedback:
+                reasons.append(
+                    f"avaliação humana ainda insuficiente ({feedback.get('feedback_count', 0)} amostras)"
+                )
+            else:
+                reasons.append("sem avaliações humanas suficientes")
             if candidate.local:
                 score += 10
                 reasons.append("preferência local-first")
