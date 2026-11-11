@@ -230,9 +230,9 @@ class ApplySecurityPolicyPayload(BaseModel):
 
 
 class RunTestsPayload(BaseModel):
-    project_id: str = Field(..., description="ID do projeto para execução dos testes")
-    test_file: str | None = Field(default=None, description="Arquivo de teste específico opcional")
-    timeout_seconds: int = Field(default=45, description="Timeout em segundos para conclusão")
+    project_id: str = Field(..., min_length=1, max_length=128, description="ID do projeto para execução dos testes")
+    test_file: str | None = Field(default=None, max_length=512, description="Arquivo de teste relativo ao projeto")
+    timeout_seconds: int = Field(default=45, ge=5, le=300, description="Timeout em segundos (5 a 300)")
 
 
 class GeneratePlaywrightPayload(BaseModel):
