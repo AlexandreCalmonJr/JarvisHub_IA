@@ -15,7 +15,9 @@
     "test:agents": "node --experimental-strip-types --test scripts/agents.test.mjs",
     "test:tasks": "node --experimental-strip-types --test scripts/tasks.test.mjs",
     "test:models": "node --experimental-strip-types --test scripts/models.test.mjs",
-    "test:approvals": "node --experimental-strip-types --test scripts/approvals.test.mjs"
+    "test:approvals": "node --experimental-strip-types --test scripts/approvals.test.mjs",
+    "test:security": "node --experimental-strip-types --test scripts/security.test.mjs",
+    "test:logs": "node --experimental-strip-types --test scripts/logs.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
