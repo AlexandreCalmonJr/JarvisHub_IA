@@ -193,3 +193,42 @@ def test_telemetry_persists_and_aggregates_actual_cost_per_owner(tmp_path):
     assert store.summary_for_owner("user-cost")["total_cost_usd"] == 0.0012
     performance = store.performance_by_model_for_owner("user-cost")[0]
     assert performance["total_cost_usd"] == 0.0012
+
+
+def test_existing_telemetry_database_is_migrated_without_losing_rows(tmp_path):
+    import sqlite3
+
+    db_path = tmp_path / "telemetry.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE inference_telemetry (
+                id TEXT PRIMARY KEY,
+                owner_user_id TEXT,
+                task_id TEXT,
+                agent_role TEXT,
+                model_name TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                status TEXT NOT NULL,
+                duration_ms REAL NOT NULL DEFAULT 0,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                error_type TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO inference_telemetry (
+                id, owner_user_id, model_name, provider, status, duration_ms, created_at
+            ) VALUES ('legacy-1', 'account-legacy', 'old-model', 'ollama_local',
+                      'success', 12, '2026-01-01T00:00:00+00:00')
+            """
+        )
+
+    store = SqliteTelemetryStore(db_path)
+    rows = store.list_for_owner("account-legacy")
+    assert len(rows) == 1
+    assert rows[0]["id"] == "legacy-1"
+    assert rows[0]["cost_usd"] == 0.0
