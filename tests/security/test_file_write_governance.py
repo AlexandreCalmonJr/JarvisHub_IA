@@ -228,7 +228,7 @@ async def test_05_read_only_agents_cannot_write(test_project_id):
         project_id=test_project_id,
     )
     with pytest.raises(PermissionDeniedError, match="Somente Leitura"):
-        await tool_gateway.execute_tool(req_write)
+        await tool_gateway.execute_tool(req_write, owner_user_id="admin", actor_role="admin")
 
     # 2. Tentativa de edit_file com RESEARCH_ANALYST
     req_edit = ToolExecutionRequest(
@@ -238,7 +238,7 @@ async def test_05_read_only_agents_cannot_write(test_project_id):
         project_id=test_project_id,
     )
     with pytest.raises(PermissionDeniedError, match="Somente Leitura"):
-        await tool_gateway.execute_tool(req_edit)
+        await tool_gateway.execute_tool(req_edit, owner_user_id="admin", actor_role="admin")
 
     # 3. Tentativa de delete_file com RESEARCH_ANALYST
     req_delete = ToolExecutionRequest(
@@ -248,7 +248,7 @@ async def test_05_read_only_agents_cannot_write(test_project_id):
         project_id=test_project_id,
     )
     with pytest.raises(PermissionDeniedError, match="Somente Leitura"):
-        await tool_gateway.execute_tool(req_delete)
+        await tool_gateway.execute_tool(req_delete, owner_user_id="admin", actor_role="admin")
 
     # 4. Agente read-only PODE executar ferramentas seguras de leitura
     req_read = ToolExecutionRequest(
@@ -257,7 +257,7 @@ async def test_05_read_only_agents_cannot_write(test_project_id):
         agent_role=AgentRole.RESEARCH_ANALYST.value,
         project_id=test_project_id,
     )
-    read_result = await tool_gateway.execute_tool(req_read)
+    read_result = await tool_gateway.execute_tool(req_read, owner_user_id="admin", actor_role="admin")
     assert read_result.success is True
     assert "initial content" in read_result.stdout
 
@@ -287,7 +287,7 @@ async def test_06_kill_switch_blocks_file_operations(test_project_id):
             project_id=test_project_id,
         )
         with pytest.raises(PermissionDeniedError, match="Kill Switch"):
-            await tool_gateway.execute_tool(req)
+            await tool_gateway.execute_tool(req, owner_user_id="admin", actor_role="admin")
 
         # 4. API apply-policy bloqueada mesmo se houvesse aprovação
         transport = ASGITransport(app=app)
