@@ -391,13 +391,22 @@ async def import_external_folder_endpoint(
         raise HTTPException(status_code=400, detail="Falha ao importar diretório.") from exc
 
 @router.get("/api/v1/workspace/projects/{project_id}/memory")
-async def get_project_memory_endpoint(project_id: str):
-    """Recupera memórias, decisões e diretrizes persistidas de um projeto."""
-    return db_manager.list_project_memory(project_id)
+async def get_project_memory_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Recupera somente memórias do projeto pertencentes à conta."""
+    if principal.kind != "human":
+        raise HTTPException(status_code=403, detail="Conta humana necessária.")
+    return db_manager.list_project_memory(
+        project_id, owner_user_id=principal.subject_id
+    )
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/memory")
-async def save_project_memory_endpoint(project_id: str, payload: ProjectMemoryRequest):
+async def save_project_memory_endpoint(
+    project_id: str, payload: ProjectMemoryRequest,
+    principal: Principal = Depends(get_principal),
+):
     """Salva uma nova diretriz ou decisão arquitetural na memória persistente do projeto."""
     db_manager.set_project_memory(
         project_id=project_id,
@@ -405,5 +414,6 @@ async def save_project_memory_endpoint(project_id: str, payload: ProjectMemoryRe
         key=payload.key,
         content=payload.content,
         sources=payload.sources,
+        owner_user_id=principal.subject_id if principal.kind == "human" else None,
     )
     return {"status": "saved", "project_id": project_id, "key": payload.key}
