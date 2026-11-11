@@ -109,7 +109,7 @@ export const QualityStudioView: React.FC = () => {
         is_success: false,
         status: 'error',
         duration_seconds: 0,
-        summary: { total: 0, passed: 0, failed: 1, skipped: 0 },
+        summary: { total: 0, passed: 0, failed: 0, skipped: 0 },
         raw_output: err.message,
       });
     } finally {
@@ -271,7 +271,7 @@ export const QualityStudioView: React.FC = () => {
                 {testResult.is_success ? <CheckCircle size={22} color="#34d399" /> : <XCircle size={22} color="#f87171" />}
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '0.95rem', color: testResult.is_success ? '#34d399' : '#f87171' }}>
-                    {testResult.is_success ? 'Todos os Testes Foram Aprovados' : 'Falha Detectada nos Testes'}
+                    {testResult.is_success ? 'Todos os Testes Foram Aprovados' : testResult.status === 'error' ? 'Não foi possível iniciar os testes' : testResult.status === 'timeout' ? 'Tempo limite da execução atingido' : 'Falha Detectada nos Testes'}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Clock size={12} /> Duração: {testResult.duration_seconds} segundos
