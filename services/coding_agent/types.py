@@ -126,6 +126,7 @@ class AgentRunConfig(BaseModel):
     prompt: str
     project_id: str
     session_id: str
+    owner_user_id: str | None = None
     task_id: str | None = None
     mode: AgentMode = AgentMode.ASK
     model: str | None = None
