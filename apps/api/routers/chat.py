@@ -366,7 +366,7 @@ async def chat_stream_endpoint(
             init_json = json.dumps({
                 "type": "status",
                 "stage": "starting",
-                "message": "JARVIS Maestro iniciando processamento local e coordenando especialistas...",
+                "message": "JARVIS Maestro analisando a solicitação e preparando a execução...",
             })
             yield f"data: {init_json}\n\n"
 
@@ -414,7 +414,12 @@ async def chat_stream_endpoint(
                 "intent": intent,
                 "selected_agents": agents,
                 "plan_steps": steps,
-            })
+                "agent_outputs": result.get("agent_outputs", []),
+                "is_completed": result.get("is_completed", False),
+                "approval_required": result.get("approval_required", False),
+                "approval_id": result.get("approval_id"),
+                "error": result.get("error"),
+            }, ensure_ascii=False, default=str)
             yield f"data: {meta_json}\n\n"
 
             words = summary.split(" ")
