@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from datetime import UTC, datetime
@@ -31,6 +32,11 @@ def _connect() -> sqlite3.Connection:
             updated_at TEXT NOT NULL
         )"""
     )
+    if os.name != "nt":
+        try:
+            os.chmod(_STORE, 0o600)
+        except OSError:
+            pass
     return conn
 
 
