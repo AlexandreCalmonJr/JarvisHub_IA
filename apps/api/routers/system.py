@@ -91,6 +91,9 @@ async def get_inference_telemetry(
     return {
         "summary": telemetry_store.summary_for_owner(principal.subject_id),
         "records": telemetry_store.list_for_owner(principal.subject_id, limit=limit),
+        "model_performance": telemetry_store.performance_by_model_for_owner(
+            principal.subject_id
+        ),
     }
 
 
