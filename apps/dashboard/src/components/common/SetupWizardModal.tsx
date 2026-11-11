@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Zap,
   ShieldCheck,
@@ -6,16 +6,13 @@ import {
   ArrowLeft,
   CheckCircle2,
   RefreshCw,
-  Key,
-  Eye,
-  EyeOff,
-  Globe,
+  AlertCircle,
   Cpu,
   AlertCircle,
   X,
   Server,
 } from 'lucide-react';
-import { fetchHybridConfig, saveHybridConfig, testHybridConnection } from '../../api';
+import { getAccountStorageKey } from '../../services/accountScope';
 
 interface SetupWizardModalProps {
   isOpen: boolean;
@@ -23,145 +20,25 @@ interface SetupWizardModalProps {
   onCompleted?: () => void;
 }
 
-interface ProviderOption {
-  id: string;
-  name: string;
-  badge: string;
-  defaultModel: string;
-  baseUrl: string;
-  description: string;
-  isPopular?: boolean;
-}
-
-const PROVIDERS: ProviderOption[] = [
-  {
-    id: 'gemini',
-    name: 'Google Gemini',
-    badge: 'Recomendado Gratuito',
-    defaultModel: 'gemini-1.5-flash',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    description: 'Ultra-rápido, cota gratuita generosa e contexto de 1 milhão de tokens.',
-    isPopular: true,
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI (GPT-4o)',
-    badge: 'Alta Precisão',
-    defaultModel: 'gpt-4o-mini',
-    baseUrl: 'https://api.openai.com/v1',
-    description: 'Padrão da indústria para raciocínio complexo e geração de código.',
-  },
-  {
-    id: 'groq',
-    name: 'Groq Cloud',
-    badge: 'Ultra-Velocidade',
-    defaultModel: 'llama-3.3-70b-versatile',
-    baseUrl: 'https://api.groq.com/openai/v1',
-    description: 'Inferência em LPU com velocidade extrema (>250 tokens/segundo).',
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic Claude',
-    badge: 'Arquitetura & Código',
-    defaultModel: 'claude-3-5-sonnet-20241022',
-    baseUrl: 'https://api.anthropic.com/v1',
-    description: 'Especialista em lógica rigorosa, refatorações e testes unitários.',
-  },
-];
-
 export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onClose, onCompleted }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [mode, setMode] = useState<'cloud' | 'local'>('cloud');
-  const [selectedProvider, setSelectedProvider] = useState<string>('gemini');
-  const [apiKey, setApiKey] = useState<string>('');
-  const [showKey, setShowKey] = useState<boolean>(false);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
-  const [baseUrl, setBaseUrl] = useState<string>('https://generativelanguage.googleapis.com/v1beta/openai');
-  const [maxBudget, setMaxBudget] = useState<number>(5.0);
+  const [mode] = useState<'cloud' | 'local'>('local');
 
-  // Status dos testes
-  const [testLoading, setTestLoading] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // Inicializa dados com configuração salva no servidor se existir
-  useEffect(() => {
-    if (isOpen) {
-      fetchHybridConfig()
-        .then((cfg) => {
-          if (cfg) {
-            if (cfg.provider_name) setSelectedProvider(cfg.provider_name);
-            if (cfg.default_model) setSelectedModel(cfg.default_model);
-            if (cfg.base_url) setBaseUrl(cfg.base_url);
-            if (cfg.max_budget_usd) setMaxBudget(cfg.max_budget_usd);
-            if (cfg.enabled) setMode('cloud');
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isOpen]);
-
-  const handleProviderSelect = (p: ProviderOption) => {
-    setSelectedProvider(p.id);
-    setSelectedModel(p.defaultModel);
-    setBaseUrl(p.baseUrl);
-    setTestResult(null);
-  };
-
-  const handleTestConnection = async () => {
-    setTestLoading(true);
-    setTestResult(null);
-    try {
-      const payload: any = {
-        provider_name: selectedProvider,
-        default_model: selectedModel,
-        base_url: baseUrl || undefined,
-      };
-      if (apiKey && apiKey.trim()) {
-        payload.api_key = apiKey.trim();
-      }
-      const res = await testHybridConnection(payload);
-      if (res.success) {
-        setTestResult({
-          success: true,
-          message: `Conexão bem-sucedida! Latência: ${res.latency_ms}ms`,
-        });
-      } else {
-        setTestResult({
-          success: false,
-          error: res.error || 'Falha ao validar chave ou endpoint.',
-        });
-      }
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        error: err.message || 'Erro de rede ou endpoint inacessível.',
-      });
-    } finally {
-      setTestLoading(false);
-    }
-  };
+  const [finishError, setFinishError] = useState<string | null>(null);
 
   const handleFinish = async () => {
     setSaving(true);
+    setFinishError(null);
     try {
-      const payload: any = {
-        provider_name: selectedProvider,
-        enabled: mode === 'cloud',
-        default_model: selectedModel,
-        base_url: baseUrl,
-        max_budget_usd: maxBudget,
-      };
-      if (apiKey && apiKey.trim()) {
-        payload.api_key = apiKey.trim();
+      if (mode !== 'local') {
+        throw new Error('A configuração de provedores na nuvem ficará disponível após a implantação do Cofre Privado por Conta.');
       }
-
-      await saveHybridConfig(payload);
-      localStorage.setItem('jarvis_setup_completed', 'true');
+      localStorage.setItem(getAccountStorageKey('jarvis_setup_completed'), 'true');
       if (onCompleted) onCompleted();
       onClose();
     } catch (e: any) {
-      alert(`Erro ao salvar configurações: ${e.message}`);
+      setFinishError(e?.message || 'Não foi possível concluir a configuração.');
     } finally {
       setSaving(false);
     }
@@ -288,11 +165,12 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                 {/* Opção Nuvem Híbrida */}
                 <div
-                  onClick={() => setMode('cloud')}
+                  aria-disabled={true}
                   style={{
                     padding: '18px 20px',
                     borderRadius: '14px',
-                    cursor: 'pointer',
+                    cursor: 'not-allowed',
+                    opacity: 0.55,
                     backgroundColor: mode === 'cloud' ? 'rgba(99, 102, 241, 0.14)' : 'rgba(255, 255, 255, 0.03)',
                     border: mode === 'cloud' ? '2px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.08)',
                     boxShadow: mode === 'cloud' ? '0 8px 24px rgba(99, 102, 241, 0.25)' : 'none',
@@ -318,7 +196,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                       <Zap size={20} />
                     </div>
                     <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>
-                      Início Rápido
+                      Em implementação
                     </span>
                   </div>
 
@@ -327,7 +205,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                       Modo Nuvem Híbrido
                     </h4>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.45', margin: 0 }}>
-                      Conecta com Gemini, OpenAI, Groq ou Claude. Funciona instantaneamente sem sobrecarregar sua máquina e sem baixar modelos pesados.
+                      A configuração de provedores e credenciais ficará disponível após a implantação do Cofre Privado por Conta. Não insira chaves nesta etapa.
                     </p>
                   </div>
 
@@ -408,109 +286,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
               </div>
 
               {mode === 'cloud' ? (
-                <>
-                  {/* Grid de Provedores */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-                    {PROVIDERS.map((p) => {
-                      const isSel = selectedProvider === p.id;
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => handleProviderSelect(p)}
-                          style={{
-                            padding: '12px 14px',
-                            borderRadius: '10px',
-                            cursor: 'pointer',
-                            backgroundColor: isSel ? 'rgba(99, 102, 241, 0.18)' : 'rgba(255, 255, 255, 0.03)',
-                            border: isSel ? '1px solid #818cf8' : '1px solid rgba(255, 255, 255, 0.08)',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          <div style={{ fontSize: '0.88rem', fontWeight: 600, color: isSel ? '#f8fafc' : 'var(--text-primary)' }}>
-                            {p.name}
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: '#818cf8', marginTop: '2px' }}>
-                            {p.badge}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Campo Chave de API */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                      Chave de API ({PROVIDERS.find((p) => p.id === selectedProvider)?.name || selectedProvider}):
-                    </label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        backgroundColor: '#070a12',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        padding: '8px 12px',
-                        gap: '8px',
-                      }}
-                    >
-                      <Key size={15} color="var(--text-muted)" />
-                      <input
-                        type={showKey ? 'text' : 'password'}
-                        value={apiKey}
-                        onChange={(e) => {
-                          setApiKey(e.target.value);
-                          setTestResult(null);
-                        }}
-                        placeholder="Cole sua API Key aqui (ex: AIzaSy... ou sk-...)"
-                        style={{
-                          flex: 1,
-                          backgroundColor: 'transparent',
-                          border: 'none',
-                          outline: 'none',
-                          color: '#fff',
-                          fontSize: '0.86rem',
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowKey(!showKey)}
-                        className="btn btn-ghost"
-                        style={{ padding: '4px', color: 'var(--text-muted)' }}
-                      >
-                        {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Botão de Testar Conexão */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={handleTestConnection}
-                      disabled={testLoading}
-                      className="btn btn-secondary"
-                      style={{ fontSize: '0.82rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                    >
-                      {testLoading ? <RefreshCw size={14} className="spin" /> : <Globe size={14} color="#818cf8" />}
-                      <span>{testLoading ? 'Testando Conexão...' : 'Testar Conexão com o Provedor'}</span>
-                    </button>
-
-                    {testResult && (
-                      <div
-                        style={{
-                          fontSize: '0.8rem',
-                          color: testResult.success ? '#34d399' : '#f87171',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                      >
-                        {testResult.success ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-                        <span>{testResult.message || testResult.error}</span>
-                      </div>
-                    )}
-                  </div>
-                </>
+                <div role="status" style={{ padding: '18px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+                  O Cofre Privado por Conta está em implementação. A configuração global de APIs permanece bloqueada neste assistente para impedir que uma conta altere ou utilize credenciais compartilhadas.
+                </div>
               ) : (
                 /* Modo Local: Instruções e Verificação */
                 <div
@@ -550,7 +328,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                   </div>
 
                   <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    O sistema utilizará fallback automático caso o Ollama esteja temporariamente desligado.
+                    A disponibilidade do provedor local deve ser confirmada no painel de modelos.
                   </span>
                 </div>
               )}
@@ -592,35 +370,6 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 </div>
               </div>
 
-              {/* Teto de Gastos */}
-              {mode === 'cloud' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Teto Máximo de Gastos Mensal ($ USD):
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    step="1"
-                    value={maxBudget}
-                    onChange={(e) => setMaxBudget(Number(e.target.value) || 5.0)}
-                    style={{
-                      width: '120px',
-                      backgroundColor: '#070a12',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      borderRadius: '8px',
-                      padding: '8px 12px',
-                      color: '#fff',
-                      fontSize: '0.88rem',
-                    }}
-                  />
-                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    O sistema interrompe chamadas à nuvem caso o consumo atinja este valor.
-                  </span>
-                </div>
-              )}
-
               {/* Resumo */}
               <div
                 style={{
@@ -640,7 +389,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     Modo Configurado:
                   </span>
                   <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc' }}>
-                    {mode === 'cloud' ? `Nuvem Híbrida (${selectedProvider.toUpperCase()})` : '100% Offline (Ollama)'}
+                    '100% Offline (Ollama)'
                   </span>
                 </div>
 
@@ -649,7 +398,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     Especialistas Ativos:
                   </span>
                   <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#818cf8' }}>
-                    26 Agentes Locais Prontos
+                    Agentes disponíveis no servidor
                   </span>
                 </div>
               </div>
@@ -657,7 +406,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
           )}
         </div>
 
-        {/* Footer do Wizard: Botões de Navegação */}
+        {finishError && <div role="alert" style={{ padding: '10px 20px', color: '#f87171', fontSize: '0.82rem' }}>{finishError}</div>}
+                {/* Footer do Wizard: Botões de Navegação */}
         <div
           style={{
             padding: '16px 26px',
