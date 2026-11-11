@@ -116,7 +116,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (saving) return;
     setSaving(true);
     try {
-      localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
+      try {
+        localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
+      } catch {
+        // A preferência local é opcional; a gravação no servidor deve continuar.
+      }
       await saveUserProfileApi(profile);
       saveUserProfile(profile);
       setSavedSuccess(true);
@@ -319,7 +323,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', className: 'user-profile-grid' }}>
+          <div className="user-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
             <div>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                 Nome de Exibição:
@@ -351,7 +355,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="user-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
             <div>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                 Nível de Senioridade:
@@ -481,7 +485,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="badge badge-success">Local-First Ativo</span>
+                <span className="badge">Configuração centralizada</span>
                 <strong style={{ fontSize: '0.94rem', color: 'var(--text-primary)' }}>Preferências de execução e modelos</strong>
               </div>
               <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', margin: '6px 0 0 0' }}>
