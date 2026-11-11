@@ -23,7 +23,8 @@ interface ProjectWorkspaceViewProps {
 
 export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSelectForChat }) => {
   const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
   const [techFilter, setTechFilter] = useState('ALL');
   const [openingRoot, setOpeningRoot] = useState(false);
@@ -59,8 +60,9 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
     try {
       const data = await fetchWorkspaceProjects();
       setProjects(data);
+      setLoadError(null);
     } catch (e) {
-      console.error('Falha ao listar projetos:', e);
+      setLoadError(e instanceof Error ? e.message : 'Falha ao listar projetos.');
     } finally {
       setLoading(false);
     }
@@ -75,7 +77,7 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
       const content = await fetchProjectFile(projectId, filePath);
       setFileModal({ projectId, filePath, content });
     } catch (e: any) {
-      alert(`Erro ao ler arquivo: ${e.message}`);
+      notify(`Erro ao ler arquivo: ${e.message}`, 'error');
     }
   };
 
@@ -84,7 +86,7 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
       await deleteWorkspaceProject(projectId);
       await loadProjects();
     } catch (e: any) {
-      alert(`Erro ao excluir workspace: ${e.message}`);
+      notify(`Erro ao excluir workspace: ${e.message}`, 'error');
     }
   };
 
@@ -157,6 +159,12 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+          Não foi possível carregar os projetos: {loadError}
+        </div>
+      )}
 
       {/* Barra de Busca e Filtros Rápidos por Stack */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -260,6 +268,7 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
               onOpenFile={handleOpenFile}
               onDeleteProject={handleDeleteProject}
               onSelectForChat={onSelectForChat}
+              onOpenMemory={(projectId) => setMemoryProjectId(projectId)}
             />
           ))}
         </div>
