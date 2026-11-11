@@ -59,8 +59,7 @@ async def test_agent_config_and_memories_api():
             "prompt": "Explique o padrão Arrange-Act-Assert em uma frase.",
         }
         play_resp = await ac.post("/api/v1/agents/qa_engineer/playground", json=play_payload)
-        assert play_resp.status_code == 200
-        play_data = play_resp.json()
-        assert play_data["agent_role"] == "qa_engineer"
-        assert "response" in play_data
-        assert len(play_data["response"]) > 0
+        # Sem provedor configurado no CI, o endpoint deve falhar explicitamente.
+        # Nunca deve fabricar uma resposta de sucesso para o playground.
+        assert play_resp.status_code == 503
+        assert "provedor de IA está indisponível" in play_resp.json()["detail"]
