@@ -360,6 +360,10 @@ class AuthService:
                         password=password,
                         role="admin",
                     )
+                    if not is_production:
+                        (self.auth_dir / ".admin-bootstrap-password-initialized").write_text(
+                            "initialized\\n", encoding="utf-8"
+                        )
                 except ValueError as exc:
                     raise RuntimeError(
                         "A conta 'admin' já existe com outro perfil. "
