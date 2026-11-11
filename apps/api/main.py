@@ -41,8 +41,8 @@ from apps.api.routers import (
     coding,
     mcp,
     voice,
+    voice,
     learning,
-)    voice,
 )
 
 # Documentação interativa é opt-in explícito. Em produção (padrão) os endpoints
