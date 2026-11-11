@@ -1173,8 +1173,11 @@ class DatabaseManager:
                 task = conn.execute(
                     "SELECT owner_user_id FROM tasks WHERE id = ?", (task_id,)
                 ).fetchone()
-                if not task or task["owner_user_id"] != owner_user_id:
-                    raise PermissionError("Aprovação sem tarefa pertencente à conta autenticada.")
+                # O grafo cria a aprovação antes de persistir o resultado da tarefa.
+                # Se a tarefa já existir, a propriedade tem de coincidir; se ainda
+                # não existir, o owner vem do principal autenticado no servidor.
+                if task and task["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Tarefa pertence a outra conta ou é um registo legado.")
                 existing = conn.execute(
                     "SELECT owner_user_id FROM approvals WHERE id = ?", (id,)
                 ).fetchone()
