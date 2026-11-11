@@ -27,7 +27,7 @@ jobs:
       - name: Install backend and development dependencies
         run: python -m pip install -e ".[dev]"
       - name: Critical lint rules (no automatic fixes)
-        run: ruff check apps/api/auth.py tests/security/test_bootstrap_exchange_e2e.py --select F821,F401,S110,S112
+        run: ruff check apps/api/auth.py apps/api/routers/workspace.py services/project_workspace/workspace_service.py services/model_runtime/key_vault.py services/orchestration/graph.py services/orchestration/master.py services/orchestration/workspace_actions.py tests/security/test_bootstrap_exchange_e2e.py tests/security/test_file_write_governance.py tests/security/test_agent_evidence.py --select F821,F401,S110,S112
       - name: Complete Python test suite
         run: python -m pytest -q
 
