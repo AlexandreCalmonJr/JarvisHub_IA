@@ -280,3 +280,20 @@ code, pre {
     display: none !important;
   }
 }
+
+/* Sidebar responsiva: drawer fora do fluxo em ecrãs estreitos */
+@media (max-width: 900px) {
+  .jarvis-sidebar {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    width: 260px !important;
+    max-width: min(86vw, 320px);
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    z-index: 999;
+  }
+
+  .jarvis-sidebar.is-mobile-open {
+    transform: translateX(0);
+  }
+}
