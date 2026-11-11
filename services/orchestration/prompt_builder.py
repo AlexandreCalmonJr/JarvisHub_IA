@@ -55,7 +55,7 @@ def build_specialist_prompt(
         user_inst = ""
         if db_manager and hasattr(db_manager, "get_user_profile"):
             try:
-                prof = db_manager.get_user_profile() if owner_user_id is None else {}
+                prof = db_manager.get_user_profile(owner_user_id=owner_user_id)
                 c_inst = prof.get("custom_instructions") or prof.get("customInstructions")
                 if c_inst and str(c_inst).strip():
                     user_inst = f"\n\nInstruções do Desenvolvedor: {str(c_inst).strip()}"
@@ -140,7 +140,7 @@ def build_specialist_prompt(
     user_instructions_section = ""
     if db_manager and hasattr(db_manager, "get_user_profile"):
         try:
-            user_prof = db_manager.get_user_profile() if owner_user_id is None else {}
+            user_prof = db_manager.get_user_profile(owner_user_id=owner_user_id)
             custom_inst = user_prof.get("custom_instructions") or user_prof.get("customInstructions")
             seniority = user_prof.get("seniority_level") or user_prof.get("seniorityLevel")
             role_title = user_prof.get("role_title") or user_prof.get("roleTitle")
