@@ -23,6 +23,7 @@ async def test_bootstrap_exchange_creates_authenticated_session_across_services(
         )
         assert exchange.status_code == 200
         assert exchange.json()["status"] == "authenticated"
+        assert "session_token" not in exchange.json()
         assert "jarvis_session" in client.cookies
 
         # A sessão criada pelo bootstrap deve autenticar uma rota protegida.
