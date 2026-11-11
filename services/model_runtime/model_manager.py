@@ -120,6 +120,7 @@ class ModelManager:
                     selected_provider=selection.candidate.provider,
                     selection_reason=selection.reason,
                     candidate_count=len(models),
+                    estimated_cost_usd=selection.estimated_cost_usd,
                 )
             except Exception:
                 logger.exception("Não foi possível persistir a decisão de seleção do modelo.")
