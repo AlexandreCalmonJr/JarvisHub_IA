@@ -86,12 +86,15 @@ async def health_details(
 @router.get("/api/v1/system/inference-telemetry")
 async def get_inference_telemetry(
     limit: int = 50,
+    task_id: str | None = None,
     principal: Principal = Depends(require_permission("system:read")),
 ):
     """Retorna métricas de inferência exclusivamente da conta autenticada."""
     return {
         "summary": telemetry_store.summary_for_owner(principal.subject_id),
-        "records": telemetry_store.list_for_owner(principal.subject_id, limit=limit),
+        "records": telemetry_store.list_for_owner(
+            principal.subject_id, limit=limit, task_id=task_id
+        ),
         "model_performance": telemetry_store.performance_by_model_for_owner(
             principal.subject_id
         ),
