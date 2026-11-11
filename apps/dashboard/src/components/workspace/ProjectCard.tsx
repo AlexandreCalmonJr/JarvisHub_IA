@@ -82,6 +82,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   onSelectForChat,
 
+  onOpenMemory,
+
 }) => {
 
   const [openingFolder, setOpeningFolder] = useState(false);
