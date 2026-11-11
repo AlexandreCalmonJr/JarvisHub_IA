@@ -149,7 +149,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Gerencie pastas e códigos criados fisicamente no disco do seu PC',
       icon: FolderOpen,
       iconColor: '#34d399',
-      badge: 'Físico',
       action: () => {
         onNavigate('workspace');
         onClose();

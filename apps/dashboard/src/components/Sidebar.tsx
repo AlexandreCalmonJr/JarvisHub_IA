@@ -254,7 +254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               gap: '9px',
             }}
           >
-            <FolderGit2 size={16} color="#38bdf8" />
+            <FolderGit2 size={16} color="var(--accent-color)" />
             {!isCollapsed && <span>Projetos</span>}
           </button>}
 
@@ -392,7 +392,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {engineeringOpen ? '−' : '+'}
               </span>
             )}
-          </button>
+          </button>}
 
           {!isCollapsed && engineeringOpen && engineeringItems.length > 0 && (
             <div
@@ -462,7 +462,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-              <Settings size={16} color="#94a3b8" />
+              <Settings size={16} color="var(--accent-color)" />
               {!isCollapsed && <span>Configurações</span>}
             </div>
             {!isCollapsed && (
@@ -470,7 +470,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {settingsOpen ? '−' : '+'}
               </span>
             )}
-          </button>
+          </button>}
 
           {!isCollapsed && settingsOpen && settingsItems.length > 0 && (
             <div
