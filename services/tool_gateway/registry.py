@@ -33,13 +33,13 @@ PERMITTED_TOOLS: dict[str, ToolDefinition] = {
     ),
     "run_tests": ToolDefinition(
         name="run_tests",
-        description="Executa suíte de testes (ex: pytest ou flutter test) em sandbox isolada.",
+        description="Executa suíte de testes com timeout e ambiente sanitizado; disponível apenas para administrador até isolamento de SO.",
         category=ToolCategory.TEST_RUNNER,
         requires_approval=False,
     ),
     "run_linter": ToolDefinition(
         name="run_linter",
-        description="Executa linter de código (ex: ruff ou flutter analyze) em sandbox.",
+        description="Executa linter com timeout e ambiente sanitizado; disponível apenas para administrador até isolamento de SO.",
         category=ToolCategory.LINTER,
         requires_approval=False,
     ),
@@ -87,7 +87,7 @@ PERMITTED_TOOLS: dict[str, ToolDefinition] = {
     ),
     "vector_search": ToolDefinition(
         name="vector_search",
-        description="Realiza busca semântica vetorial por similaridade no banco vetorial LanceDB embutido.",
+        description="Busca vetorial temporariamente indisponível até existir índice privado por conta.",
         category=ToolCategory.SEARCH,
         requires_approval=False,
     ),
@@ -111,7 +111,7 @@ PERMITTED_TOOLS: dict[str, ToolDefinition] = {
     ),
     "execute_command": ToolDefinition(
         name="execute_command",
-        description="Executa um comando de sistema seguro e confinado no projeto autorizado sob aprovação humana.",
+        description="Executa comando de sistema sob aprovação humana; disponível apenas para administrador até isolamento de SO.",
         category=ToolCategory.MUTATION,
         requires_approval=True,
     ),

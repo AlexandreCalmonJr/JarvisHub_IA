@@ -6,6 +6,7 @@ import {
   Sparkles,
   Check,
   Copy,
+  AlertCircle,
 } from 'lucide-react';
 import {
   fetchWorkspaceProjects,
@@ -17,6 +18,11 @@ import {
 
 export const SqlPlaygroundSection: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [databasesError, setDatabasesError] = useState<string | null>(null);
+  const [inspectionError, setInspectionError] = useState<string | null>(null);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [databasesLoading, setDatabasesLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [projectDatabases, setProjectDatabases] = useState<any[]>([]);
   const [selectedDbPath, setSelectedDbPath] = useState<string>('');
@@ -29,30 +35,38 @@ export const SqlPlaygroundSection: React.FC = () => {
   const [copiedIndex, setCopiedIndex] = useState(false);
 
   const loadProjects = async () => {
+    setProjectsLoading(true);
     try {
       const projs = await fetchWorkspaceProjects();
       setProjects(projs || []);
+      setProjectsError(null);
       if (projs && projs.length > 0 && !selectedProjectId) {
         setSelectedProjectId(projs[0].id);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setProjectsError(e?.message || 'Falha ao carregar projetos.');
+    } finally {
+      setProjectsLoading(false);
     }
   };
 
   const loadDatabasesForProject = async (projId: string) => {
     if (!projId) return;
+    setDatabasesLoading(true);
     try {
       const dbs = await fetchProjectDatabases(projId);
       setProjectDatabases(dbs || []);
+      setDatabasesError(null);
       if (dbs && dbs.length > 0) {
         setSelectedDbPath(dbs[0].relative_path || dbs[0].absolute_path);
       } else {
         setSelectedDbPath('');
         setDbInspection(null);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setDatabasesError(e?.message || 'Falha ao carregar bancos de dados do projeto.');
+    } finally {
+      setDatabasesLoading(false);
     }
   };
 
@@ -68,9 +82,13 @@ export const SqlPlaygroundSection: React.FC = () => {
 
   useEffect(() => {
     if (selectedDbPath && selectedProjectId) {
+      setInspectionError(null);
       inspectSqlDatabase(selectedDbPath, selectedProjectId)
         .then((res) => setDbInspection(res))
-        .catch(() => setDbInspection(null));
+        .catch((err: any) => {
+          setDbInspection(null);
+          setInspectionError(err?.message || 'Falha ao inspecionar o banco.');
+        });
     }
   }, [selectedDbPath, selectedProjectId]);
 
@@ -81,9 +99,8 @@ export const SqlPlaygroundSection: React.FC = () => {
     try {
       const res = await executeSqlQuery(selectedDbPath, sqlQuery.trim(), selectedProjectId);
       setQueryResult(res);
-      if (!res.is_select) {
-        const insp = await inspectSqlDatabase(selectedDbPath, selectedProjectId);
-        setDbInspection(insp);
+      if (!res.success) {
+        setQueryResult(res);
       }
     } catch (err: any) {
       setQueryResult({ success: false, error: err.message, duration_ms: 0 });
@@ -108,6 +125,16 @@ export const SqlPlaygroundSection: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+        Modo seguro: consultas SQLite somente leitura. O acesso é limitado aos bancos dentro de projetos da sua conta.
+      </div>
+      {(projectsError || databasesError || inspectionError) && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--text-primary)' }}>
+          <AlertCircle size={16} color="#f87171" />
+          <span style={{ fontSize: '0.84rem' }}>{projectsError || databasesError || inspectionError}</span>
+          <button className="btn btn-ghost" onClick={() => selectedProjectId ? loadDatabasesForProject(selectedProjectId) : loadProjects()}>Tentar novamente</button>
+        </div>
+      )}
       {/* Barra de Seleção de Banco de Dados */}
       <div
         style={{
@@ -126,6 +153,7 @@ export const SqlPlaygroundSection: React.FC = () => {
             PROJETO ATIVO
           </label>
           <select
+            disabled={projectsLoading || projects.length === 0}
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
             style={{
@@ -149,7 +177,9 @@ export const SqlPlaygroundSection: React.FC = () => {
           <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
             ARQUIVO SQLITE
           </label>
-          {projectDatabases.length > 0 ? (
+          {databasesLoading ? (
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', padding: '8px' }}>Carregando bancos...</div>
+          ) : projectDatabases.length > 0 ? (
             <select
               value={selectedDbPath}
               onChange={(e) => setSelectedDbPath(e.target.value)}

@@ -16,6 +16,9 @@ export const SkillsManagerView: React.FC = () => {
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
+  const [ponytailError, setPonytailError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryTab, setCategoryTab] = useState<'all' | 'arch' | 'sec' | 'qa' | 'custom'>('all');
   const [domainFilter, setDomainFilter] = useState('all');
@@ -29,20 +32,30 @@ export const SkillsManagerView: React.FC = () => {
 
   const loadData = async () => {
     setLoading(true);
-    try {
-      const [skillsData, agentsData, ponyData] = await Promise.all([
-        fetchSkills(),
-        fetchAgents(),
-        fetchPonytailStatus().catch(() => ({ level: 'senior', active: true, description: '' })),
-      ]);
-      setSkills(skillsData);
-      setAgents(agentsData);
-      if (ponyData?.level) setPonytailLevel(ponyData.level);
-    } catch (e) {
-      console.error('Falha ao carregar catálogo ou agentes:', e);
-    } finally {
-      setLoading(false);
+    const [skillsResult, agentsResult, ponytailResult] = await Promise.allSettled([
+      fetchSkills(),
+      fetchAgents(),
+      fetchPonytailStatus(),
+    ]);
+    if (skillsResult.status === 'fulfilled') {
+      setSkills(skillsResult.value);
+      setCatalogError(null);
+    } else {
+      setCatalogError(skillsResult.reason instanceof Error ? skillsResult.reason.message : 'Falha ao carregar catálogo de habilidades.');
     }
+    if (agentsResult.status === 'fulfilled') {
+      setAgents(agentsResult.value);
+      setAgentsError(null);
+    } else {
+      setAgentsError(agentsResult.reason instanceof Error ? agentsResult.reason.message : 'Falha ao carregar agentes disponíveis.');
+    }
+    if (ponytailResult.status === 'fulfilled') {
+      setPonytailLevel(ponytailResult.value.level);
+      setPonytailError(null);
+    } else {
+      setPonytailError(ponytailResult.reason instanceof Error ? ponytailResult.reason.message : 'Falha ao carregar política Ponytail.');
+    }
+    setLoading(false);
   };
 
   const handleDeleteSkill = async (skillId: string, skillName: string) => {
@@ -50,7 +63,8 @@ export const SkillsManagerView: React.FC = () => {
       return;
     }
     try {
-      await deleteUserSkill(skillId);
+      const result = await deleteUserSkill(skillId);
+      if (result?.status !== 'deleted') throw new Error('A habilidade não foi encontrada na sua conta.');
       notify(`Habilidade "${skillName}" excluída com sucesso!`, 'success');
       await loadData();
     } catch (err: any) {
@@ -80,7 +94,7 @@ export const SkillsManagerView: React.FC = () => {
       await toggleSkill(skillId);
       await loadData();
     } catch (e) {
-      console.error('Erro ao alternar status da skill:', e);
+      notify(`Não foi possível alterar a habilidade: ${e instanceof Error ? e.message : 'erro desconhecido'}`, 'error');
     }
   };
 
@@ -119,7 +133,7 @@ export const SkillsManagerView: React.FC = () => {
 
       return matchSearch && matchDomain && matchStatus && matchCategory;
     });
-  }, [skills, searchQuery, domainFilter, statusFilter]);
+  }, [skills, searchQuery, domainFilter, statusFilter, categoryTab]);
 
   const activeCount = skills.filter((s) => s.is_approved && !s.is_revoked).length;
 
@@ -163,6 +177,10 @@ export const SkillsManagerView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {catalogError && <div role="alert" style={{ padding: '12px 14px', border: '1px solid var(--danger-color)', borderRadius: '8px', color: 'var(--danger-color)', fontSize: '0.84rem' }}>{catalogError}</div>}
+      {agentsError && <div role="alert" style={{ padding: '12px 14px', border: '1px solid var(--warning-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Agentes indisponíveis: {agentsError}</div>}
+      {ponytailError && <div role="alert" style={{ padding: '12px 14px', border: '1px solid var(--warning-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Política Ponytail indisponível: {ponytailError}</div>}
 
       {/* Banner de Controle do Modo Ponytail (Senior YAGNI & Clean Code) */}
       <div
@@ -430,6 +448,10 @@ export const SkillsManagerView: React.FC = () => {
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
           <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px' }} />
           Carregando catálogo de skills e vinculações...
+        </div>
+      ) : catalogError ? (
+        <div role="alert" style={{ padding: '24px', border: '1px solid var(--danger-color)', borderRadius: '10px', color: 'var(--danger-color)', fontSize: '0.86rem' }}>
+          O catálogo não pôde ser carregado. Atualize a página ou tente novamente.
         </div>
       ) : filteredSkills.length === 0 ? (
         <div

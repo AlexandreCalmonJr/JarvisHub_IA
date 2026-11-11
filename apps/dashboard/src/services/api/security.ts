@@ -30,6 +30,10 @@ export async function triggerKillSwitch(target: 'global' | 'task', taskId?: stri
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target, task_id: taskId, reason: 'Acionado pelo painel web' }),
   });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Falha ao acionar o mecanismo de contenção" }));
+    throw new Error(err.detail || "Operação de contenção negada");
+  }
   return res.json();
 }
 
@@ -37,13 +41,19 @@ export async function fetchAuditLogs(limit: number = 50, offset: number = 0, sev
   let url = `${API_BASE}/audit/logs?limit=${limit}&offset=${offset}`;
   if (severity) url += `&severity=${severity}`;
   const res = await fetch(url);
-  if (!res.ok) return { total: 0, events: [] };
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Falha ao carregar trilha de auditoria" }));
+    throw new Error(err.detail || "Falha ao carregar trilha de auditoria");
+  }
   return res.json();
 }
 
 export async function fetchCyberShieldStatus(): Promise<any> {
   const res = await fetch(`${API_BASE}/security/cyber-shield-status`);
-  if (!res.ok) return { score: 95, level: 'MAXIMA_BLINDAGEM', active_protections: [] };
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao consultar estado de segurança' }));
+    throw new Error(err.detail || 'Falha ao consultar estado de segurança');
+  }
   return res.json();
 }
 
@@ -77,7 +87,10 @@ export async function runRedTeamAudit(projectId: string): Promise<any> {
 
 export async function fetchSecurityPolicyTemplates(): Promise<any[]> {
   const res = await fetch(`${API_BASE}/security/policy-templates`);
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Falha ao carregar templates de segurança" }));
+    throw new Error(err.detail || "Falha ao carregar templates de segurança");
+  }
   return res.json();
 }
 

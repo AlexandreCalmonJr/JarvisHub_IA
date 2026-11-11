@@ -19,7 +19,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from apps.api.deps import security_core, tool_gateway, workspace_service
-from apps.api.main import app
+from apps.api.main import app, db_manager
 from packages.contracts.agent import AgentRole
 from packages.contracts.security import AuditEventSeverity
 from services.security_core import PermissionDeniedError
@@ -35,6 +35,10 @@ def test_project_id():
         name="Gov Write Test Project",
         project_type="python",
         files={"main.py": "print('initial content')\n"},
+    )
+    project_dir = workspace_service.get_project_dir(pid)
+    db_manager.register_project(
+        pid, "Gov Write Test Project", str(project_dir), owner_user_id="admin"
     )
     yield pid
     # Cleanup

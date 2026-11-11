@@ -1,4 +1,4 @@
-import { API_BASE } from './client';
+import { API_BASE, handleApiResponse } from './client';
 
 async function requestWithHumanApproval<T>(
   url: string,
@@ -21,9 +21,11 @@ async function requestWithHumanApproval<T>(
 
   const previewValue = firstData.diff || firstData.path || firstData.current_head || firstData.project_id || '';
   const previewText = String(previewValue).slice(0, 3500);
-  const approved = window.confirm(
-    `${impactLabel}\n\nPré-visualização:\n${previewText || 'Consulte o pedido no Approval Center.'}\n\nO pedido foi registado no Approval Center. Deseja aprovar e executar agora?`,
-  );
+  const approved = await new Promise<boolean>((resolve) => {
+    window.dispatchEvent(new CustomEvent('jarvis:approval-prompt', {
+      detail: { impactLabel, previewText, resolve },
+    }));
+  });
   const decision = await fetch(`${API_BASE}/approvals/${encodeURIComponent(approvalId)}/decide`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -42,8 +44,7 @@ async function requestWithHumanApproval<T>(
 
 export async function fetchWorkspaceProjects(): Promise<any[]> {
   const res = await fetch(`${API_BASE}/workspace/projects`);
-  if (!res.ok) return [];
-  return res.json();
+  return handleApiResponse<any[]>(res, 'Falha ao carregar os projetos do workspace.');
 }
 
 export async function deleteWorkspaceProject(projectId: string): Promise<any> {
@@ -57,7 +58,7 @@ export async function deleteWorkspaceProject(projectId: string): Promise<any> {
 }
 
 export async function openWorkspaceFolder(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/open-folder`, {
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/open-folder`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error('Falha ao abrir pasta local');
@@ -84,7 +85,7 @@ export async function importExternalFolder(folderPath: string, name?: string): P
 }
 
 export async function fetchProjectFile(projectId: string, path: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/file?path=${encodeURIComponent(path)}`);
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}`);
   if (!res.ok) throw new Error('Não foi possível ler o arquivo.');
   const data = await res.json();
   return data.content || '';
@@ -112,9 +113,8 @@ export async function writeProjectFile(
 }
 
 export async function fetchProjectMemory(projectId: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/memory`);
-  if (!res.ok) return [];
-  return res.json();
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/memory`);
+  return handleApiResponse<any[]>(res, 'Falha ao carregar a memória do projeto.');
 }
 
 export async function saveProjectMemory(
@@ -137,7 +137,7 @@ export async function openWorkspaceRoot(): Promise<any> {
 }
 
 export async function openProjectInCode(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/open-code`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/open-code`, { method: 'POST' });
   if (!res.ok) throw new Error('Falha ao abrir projeto no VS Code');
   return res.json();
 }
@@ -153,9 +153,8 @@ export async function rollbackWorkspaceProject(projectId: string): Promise<any> 
 }
 
 export async function fetchGitHistory(projectId: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/git-history`);
-  if (!res.ok) return [];
-  return res.json();
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/git-history`);
+  return handleApiResponse<any[]>(res, 'Falha ao carregar o histórico Git do projeto.');
 }
 
 export function getProjectPreviewUrl(projectId: string): string {
@@ -178,8 +177,7 @@ export async function dockerizeWorkspaceProject(projectId: string): Promise<any>
 
 export async function fetchWebhooksConfig(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/webhooks`);
-  if (!res.ok) return { enabled: false };
-  return res.json();
+  return handleApiResponse<any>(res, 'Falha ao carregar as configurações de webhook.');
 }
 
 export async function saveWebhooksConfig(config: any): Promise<any> {
@@ -194,5 +192,5 @@ export async function saveWebhooksConfig(config: any): Promise<any> {
 
 export async function testWebhooksNotification(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/webhooks/test`, { method: 'POST' });
-  return res.json();
+  return handleApiResponse<any>(res, 'Falha ao enviar notificação de teste.');
 }

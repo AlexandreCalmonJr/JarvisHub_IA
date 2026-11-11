@@ -5,11 +5,10 @@ import {
   Save,
   Trash2,
   Download,
-  Eye,
-  EyeOff,
   Database,
 } from 'lucide-react';
 import { fetchUserProfileApi, saveUserProfileApi, createSystemBackup } from '../../api';
+import { getAccountStorageKey } from '../../services/accountScope';
 import { notify } from './Toast';
 
 export interface UserProfileData {
@@ -42,7 +41,7 @@ export const USER_PROFILE_STORAGE_KEY = 'jarvis_user_profile_v1';
 
 export function getUserProfile(): UserProfileData {
   try {
-    const raw = localStorage.getItem(USER_PROFILE_STORAGE_KEY);
+    const raw = localStorage.getItem(getAccountStorageKey(USER_PROFILE_STORAGE_KEY));
     if (raw) {
       return { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
     }
@@ -52,7 +51,13 @@ export function getUserProfile(): UserProfileData {
 
 export function saveUserProfile(data: UserProfileData): void {
   try {
-    localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(data));
+    const safeProfile = {
+      ...data,
+      huggingfaceToken: '',
+      groqApiKey: '',
+      geminiApiKey: '',
+    };
+    localStorage.setItem(getAccountStorageKey(USER_PROFILE_STORAGE_KEY), JSON.stringify(safeProfile));
   } catch {}
 }
 
@@ -72,12 +77,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'profile' | 'instructions' | 'keys' | 'engine' | 'data'>('profile');
   const [profile, setProfile] = useState<UserProfileData>(getUserProfile);
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [showHfKey, setShowHfKey] = useState(false);
-  const [showGroqKey, setShowGroqKey] = useState(false);
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
-    return (localStorage.getItem('jarvis_experience_mode') as any) || 'technical';
+    return (localStorage.getItem(getAccountStorageKey('jarvis_experience_mode')) as any) || 'technical';
   });
 
   useEffect(() => {
@@ -100,18 +102,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    localStorage.setItem('jarvis_experience_mode', experienceMode);
-    saveUserProfile(profile);
+    localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
     try {
       await saveUserProfileApi(profile);
-    } catch {}
-
-    setSavedSuccess(true);
-    notify('Perfil e configurações salvos com sucesso!', 'success');
-    if (onProfileUpdated) {
-      onProfileUpdated(profile);
+      saveUserProfile(profile);
+      setSavedSuccess(true);
+      notify('Perfil e configurações da conta salvos com sucesso!', 'success');
+      if (onProfileUpdated) onProfileUpdated(profile);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch {
+      saveUserProfile(profile);
+      setSavedSuccess(false);
+      notify(
+        'Não foi possível sincronizar com o servidor. As preferências não secretas ficaram guardadas apenas neste navegador.',
+        'error',
+      );
     }
-    setTimeout(() => setSavedSuccess(false), 2500);
   };
 
   const handleBackupDatabase = async () => {
@@ -128,8 +134,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleClearHistory = () => {
     if (window.confirm('Tem certeza de que deseja apagar todo o histórico de conversas locais? Esta ação não pode ser desfeita.')) {
-      localStorage.removeItem('jarvis_chat_messages_v1');
-      localStorage.removeItem('jarvis_sessions_catalog_v1');
+      localStorage.removeItem(getAccountStorageKey('jarvis_chat_messages_v1'));
+      localStorage.removeItem(getAccountStorageKey('jarvis_sessions_catalog_v1'));
       notify('Histórico de conversas limpo com sucesso.', 'info');
       setTimeout(() => window.location.reload(), 600);
     }
@@ -137,7 +143,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleExportData = () => {
     try {
-      const messages = localStorage.getItem('jarvis_chat_messages_v1') || '[]';
+      const messages = localStorage.getItem(getAccountStorageKey('jarvis_chat_messages_v1')) || '[]';
       const blob = new Blob([messages], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -155,7 +161,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Perfil do Desenvolvedor & Preferências Globais"
+      title="Perfil e Preferências da Conta"
       maxWidth="lg"
     >
       {/* Navegação entre Abas do Perfil */}
@@ -401,142 +407,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
       {/* Conteúdo Aba: Cofre de Chaves & Hugging Face */}
       {activeTab === 'keys' && (
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div
+            role="status"
             style={{
-              padding: '12px 14px',
-              borderRadius: '8px',
+              padding: '14px 16px',
+              borderRadius: '10px',
               backgroundColor: 'rgba(245, 158, 11, 0.08)',
               border: '1px solid rgba(245, 158, 11, 0.25)',
-              fontSize: '0.80rem',
-              color: '#fbbf24',
-              lineHeight: 1.4,
+              color: 'var(--text-secondary)',
+              fontSize: '0.84rem',
+              lineHeight: 1.5,
             }}
           >
-            🛡️ <strong>Cofre Protegido:</strong> Suas chaves são salvas localmente no computador. O Núcleo de Blindagem Cibernética impede que qualquer segredo vaze para conexões externas.
+            <strong style={{ color: 'var(--text-primary)' }}>Cofre privado por conta em implementação</strong>
+            <p style={{ margin: '8px 0 0' }}>
+              A gravação segura de credenciais ainda não está disponível. Para proteger suas chaves, esta tela não envia nem armazena tokens de API. Aguarde a entrega do Cofre de Credenciais individual, com criptografia e isolamento entre contas.
+            </p>
           </div>
-
-          {/* Hugging Face Token */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <label style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Token Pessoal do Hugging Face (hf_...):
-              </label>
-              <a
-                href="https://huggingface.co/settings/tokens"
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: '0.74rem', color: '#818cf8', textDecoration: 'none' }}
-              >
-                Obter Token Grátis no Hugging Face ↗
-              </a>
-            </div>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                type={showHfKey ? 'text' : 'password'}
-                value={profile.huggingfaceToken || ''}
-                onChange={(e) => setProfile({ ...profile, huggingfaceToken: e.target.value })}
-                className="input"
-                style={{ width: '100%', padding: '9px 40px 9px 12px', fontSize: '0.86rem', fontFamily: "'JetBrains Mono', monospace" }}
-                placeholder="Ex: hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              />
-              <button
-                type="button"
-                onClick={() => setShowHfKey(!showHfKey)}
-                className="btn btn-ghost"
-                style={{ position: 'absolute', right: '8px', padding: '4px', color: 'var(--text-muted)' }}
-              >
-                {showHfKey ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
-              Permite baixar modelos restritos e utilizar a API Serverless gratuita do Hugging Face.
-            </span>
-          </div>
-
-          {/* Groq Cloud API Key */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <label style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Chave da Groq Cloud (gsk_...):
-              </label>
-              <a
-                href="https://console.groq.com/keys"
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: '0.74rem', color: '#818cf8', textDecoration: 'none' }}
-              >
-                Obter Chave Groq Grátis ↗
-              </a>
-            </div>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                type={showGroqKey ? 'text' : 'password'}
-                value={profile.groqApiKey || ''}
-                onChange={(e) => setProfile({ ...profile, groqApiKey: e.target.value })}
-                className="input"
-                style={{ width: '100%', padding: '9px 40px 9px 12px', fontSize: '0.86rem', fontFamily: "'JetBrains Mono', monospace" }}
-                placeholder="Ex: gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              />
-              <button
-                type="button"
-                onClick={() => setShowGroqKey(!showGroqKey)}
-                className="btn btn-ghost"
-                style={{ position: 'absolute', right: '8px', padding: '4px', color: 'var(--text-muted)' }}
-              >
-                {showGroqKey ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
-              Aceleração em nuvem ultra-rápida (~300 tokens/s) no tier gratuito para Llama 3.3 70B.
-            </span>
-          </div>
-
-          {/* Google Gemini API Key */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <label style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Chave Google Gemini (AIza...):
-              </label>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: '0.74rem', color: '#818cf8', textDecoration: 'none' }}
-              >
-                Obter Chave Gemini Grátis ↗
-              </a>
-            </div>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                type={showGeminiKey ? 'text' : 'password'}
-                value={profile.geminiApiKey || ''}
-                onChange={(e) => setProfile({ ...profile, geminiApiKey: e.target.value })}
-                className="input"
-                style={{ width: '100%', padding: '9px 40px 9px 12px', fontSize: '0.86rem', fontFamily: "'JetBrains Mono', monospace" }}
-                placeholder="Ex: AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              />
-              <button
-                type="button"
-                onClick={() => setShowGeminiKey(!showGeminiKey)}
-                className="btn btn-ghost"
-                style={{ position: 'absolute', right: '8px', padding: '4px', color: 'var(--text-muted)' }}
-              >
-                {showGeminiKey ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
-              Janela colossal de 1 Milhão de tokens no tier gratuito para análise de projetos inteiros.
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <button type="submit" className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Save size={15} />
-              <span>Salvar Chaves no Cofre</span>
-            </button>
-          </div>
-        </form>
+        </section>
       )}
 
       {/* Conteúdo Aba: Motor & Setup */}

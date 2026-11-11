@@ -13,6 +13,7 @@ import {
   MessageSquare,
   FolderOpen,
   Settings,
+  BookOpen,
 } from 'lucide-react';
 
 import {
@@ -64,9 +65,10 @@ interface ProjectCardProps {
 
   onOpenFile: (projectId: string, filePath: string) => void;
 
-  onDeleteProject?: (projectId: string) => void;
+  onDeleteProject?: (projectId: string) => Promise<void> | void;
 
   onSelectForChat?: (projectId: string) => void;
+  onOpenMemory?: (projectId: string) => void;
 
 }
 
@@ -79,6 +81,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onDeleteProject,
 
   onSelectForChat,
+
+  onOpenMemory,
 
 }) => {
 
@@ -314,18 +318,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   };
 
-  const confirmDeleteAction = () => {
-
+  const confirmDeleteAction = async () => {
     setDeleting(true);
-
     setShowConfirmDelete(false);
-
-    if (onDeleteProject) {
-
-      onDeleteProject(project.id);
-
+    try {
+      await onDeleteProject?.(project.id);
+    } catch {
+      setDeleting(false);
     }
-
   };
 
   return (
@@ -579,6 +579,19 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             >
               <MessageSquare size={14} color="#818cf8" />
               <span>Tratar no Chat</span>
+            </button>
+          )}
+
+          {onOpenMemory && (
+            <button
+              type="button"
+              onClick={() => onOpenMemory(project.id)}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.76rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="Consultar e editar as regras e decisões privadas deste projeto"
+            >
+              <BookOpen size={13} />
+              <span>Memória</span>
             </button>
           )}
 

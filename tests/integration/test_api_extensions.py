@@ -42,11 +42,12 @@ async def test_api_models_endpoint():
 
         data = resp.json()
 
-        assert len(data["models"]) >= 3
-
+        # Apenas modelos confirmados pelo runtime local podem aparecer aqui.
+        assert isinstance(data["models"], list)
+        assert all(model["status"] == "ready" for model in data["models"])
         assert data["concurrency_limit"] == 1
-
-        assert any(m["name"] == "llama3.2:3b" for m in data["models"])
+        assert "online_models" in data
+        assert "hybrid_gateway" in data
 
 @pytest.mark.asyncio
 
@@ -110,7 +111,9 @@ async def test_api_agents_and_skill_assignment():
 
 async def test_api_tasks_and_database_retention_and_export():
 
-    db_manager.register_project("proj_audit", "Audit Project", "workspace/proj_audit")
+    db_manager.register_project(
+        "proj_audit", "Audit Project", "workspace/proj_audit", owner_user_id="admin"
+    )
 
     db_manager.save_task(
 
@@ -123,6 +126,7 @@ async def test_api_tasks_and_database_retention_and_export():
         state_dict={"classified_intent": "audit", "is_completed": True},
 
         project_id="proj_audit",
+        owner_user_id="admin",
 
     )
 
@@ -140,7 +144,7 @@ async def test_api_tasks_and_database_retention_and_export():
 
     # Test export
 
-    exported = db_manager.export_project_data("proj_audit")
+    exported = db_manager.export_project_data("proj_audit", owner_user_id="admin")
 
     assert exported["project"]["id"] == "proj_audit"
 
@@ -148,7 +152,7 @@ async def test_api_tasks_and_database_retention_and_export():
 
     # Test retention purge (purging with days_retention = 999 should delete 0 items from today)
 
-    purged = db_manager.purge_old_tasks(days_retention=999)
+    purged = db_manager.purge_old_tasks(days_retention=999, owner_user_id="admin")
 
     assert purged == 0
 
@@ -176,9 +180,13 @@ async def test_api_audit_logs():
 
 async def test_api_tools_catalog_and_execution():
 
+    from apps.api.auth import auth_service
+
+    session = auth_service.create_session("admin", "admin", scopes=["*"])
+    headers = {"Authorization": f"Bearer {session.session_id}"}
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as ac:
 
         # 1. Catálogo de ferramentas
 
@@ -204,6 +212,10 @@ async def test_api_tools_catalog_and_execution():
 
         demo_dir.mkdir(parents=True, exist_ok=True)
 
+        db_manager.register_project(
+            "demo_flutter_app", "Demo Flutter App", str(demo_dir.resolve()),
+            owner_user_id="admin",
+        )
         security_core.permission_engine.register_project("demo_flutter_app", str(demo_dir.resolve()))
 
         payload = {
@@ -234,6 +246,10 @@ async def test_api_project_memory():
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
 
+        db_manager.register_project(
+            "proj_mem_test", "Project Memory Test", "workspace/proj_mem_test",
+            owner_user_id="admin",
+        )
         # 1. Salvar diretriz de memória
 
         save_payload = {

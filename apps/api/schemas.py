@@ -230,9 +230,9 @@ class ApplySecurityPolicyPayload(BaseModel):
 
 
 class RunTestsPayload(BaseModel):
-    project_id: str = Field(..., description="ID do projeto para execução dos testes")
-    test_file: str | None = Field(default=None, description="Arquivo de teste específico opcional")
-    timeout_seconds: int = Field(default=45, description="Timeout em segundos para conclusão")
+    project_id: str = Field(..., min_length=1, max_length=128, description="ID do projeto para execução dos testes")
+    test_file: str | None = Field(default=None, max_length=512, description="Arquivo de teste relativo ao projeto")
+    timeout_seconds: int = Field(default=45, ge=5, le=300, description="Timeout em segundos (5 a 300)")
 
 
 class GeneratePlaywrightPayload(BaseModel):
@@ -242,12 +242,18 @@ class GeneratePlaywrightPayload(BaseModel):
 
 
 class ColorPalettePayload(BaseModel):
-    hex_primary: str = Field(..., description="Cor primária em formato hexadecimal (ex: #6366f1)")
-    name: str = Field(default="custom", description="Nome da paleta")
+    hex_primary: str = Field(
+        ..., pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+        description="Cor primária em formato hexadecimal (#RGB ou #RRGGBB)",
+    )
+    name: str = Field(
+        default="custom", min_length=1, max_length=40,
+        pattern=r"^[A-Za-z0-9_-]+$", description="Identificador seguro da paleta",
+    )
 
 
 class WcagAuditPayload(BaseModel):
-    markup: str = Field(..., description="Código HTML ou JSX para auditoria de acessibilidade")
+    markup: str = Field(..., min_length=1, max_length=100000, description="Código HTML ou JSX para auditoria de acessibilidade")
 
 
 class WriteProjectFilePayload(BaseModel):

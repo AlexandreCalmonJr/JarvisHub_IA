@@ -1,9 +1,7 @@
 """
-JARVIS AI HUB - Backend Studio: Playground SQL Embutido & Auditor de Performance
-Permite inspecionar tabelas SQLite dos projetos, executar queries com segurança,
-analisar planos de execução (EXPLAIN QUERY PLAN) e sugerir índices de alta performance.
+JARVIS AI HUB - Backend Studio: SQLite Playground somente leitura.
+O banco deve ser um arquivo relativo dentro do projeto pertencente à conta.
 """
-
 import logging
 import re
 import sqlite3
@@ -19,206 +17,170 @@ class SQLPlaygroundService:
         self.workspace_service = workspace_service
 
     def _resolve_db_path(self, db_path: str, project_id: str | None = None) -> Path:
-        """Resolve e valida o caminho físico do banco de dados no computador."""
-        p = Path(db_path)
-        if not p.is_absolute() and project_id and self.workspace_service:
-            proj_dir = self.workspace_service.get_project_dir(project_id)
-            p = (proj_dir / db_path).resolve()
-        else:
-            p = p.resolve()
+        """Resolve apenas caminhos relativos contidos na raiz do projeto."""
+        if not project_id or not self.workspace_service:
+            raise PermissionError("Um projeto autorizado é obrigatório.")
+        requested = Path(db_path)
+        if requested.is_absolute():
+            raise PermissionError("Caminhos absolutos não são permitidos no SQL Playground.")
+        project_dir = self.workspace_service.get_project_dir(project_id).resolve()
+        target = (project_dir / requested).resolve()
+        try:
+            target.relative_to(project_dir)
+        except ValueError as exc:
+            raise PermissionError("O banco deve permanecer dentro da pasta do projeto.") from exc
+        if target == project_dir or not target.exists() or not target.is_file():
+            raise FileNotFoundError("Arquivo SQLite não encontrado no projeto.")
+        if target.suffix.lower() not in {".db", ".sqlite", ".sqlite3"}:
+            raise ValueError("Apenas arquivos SQLite (.db, .sqlite, .sqlite3) são permitidos.")
+        return target
 
-        if not p.exists() or not p.is_file():
-            raise FileNotFoundError(f"Arquivo de banco de dados SQLite não encontrado: '{p}'")
-        return p
+    @staticmethod
+    def _connect_readonly(target: Path) -> sqlite3.Connection:
+        conn = sqlite3.connect(f"{target.as_uri()}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        # Evita que uma consulta exploratória monopolize o processo da API.
+        conn.set_progress_handler(lambda: 1, 250000)
+        return conn
 
     def find_project_databases(self, project_id: str) -> list[dict[str, Any]]:
-        """Descobre todos os arquivos SQLite dentro da pasta do projeto."""
         if not self.workspace_service:
             return []
-        proj_dir = self.workspace_service.get_project_dir(project_id)
-        if not proj_dir.exists():
+        project_dir = self.workspace_service.get_project_dir(project_id).resolve()
+        if not project_dir.exists():
             return []
-
         databases = []
-        for ext in ("*.db", "*.sqlite", "*.sqlite3"):
-            for f in proj_dir.rglob(ext):
-                rel = f.relative_to(proj_dir).as_posix()
-                size_kb = round(f.stat().st_size / 1024, 1)
-                databases.append({
-                    "name": f.name,
-                    "relative_path": rel,
-                    "absolute_path": str(f.resolve()),
-                    "size_kb": size_kb,
-                })
-        return databases
+        for pattern in ("*.db", "*.sqlite", "*.sqlite3"):
+            for file_path in project_dir.rglob(pattern):
+                try:
+                    resolved = file_path.resolve()
+                    resolved.relative_to(project_dir)
+                    if not resolved.is_file():
+                        continue
+                    databases.append({
+                        "name": file_path.name,
+                        "relative_path": file_path.relative_to(project_dir).as_posix(),
+                        "size_kb": round(resolved.stat().st_size / 1024, 1),
+                    })
+                except (OSError, ValueError):
+                    # Symlinks que escapem da pasta do projeto são ignorados.
+                    continue
+        return sorted(databases, key=lambda item: item["relative_path"].lower())
 
     def inspect_database(self, db_path: str, project_id: str | None = None) -> dict[str, Any]:
-        """Inspeciona tabelas, colunas, chaves primárias e contagem de registros do SQLite."""
         target = self._resolve_db_path(db_path, project_id)
-
         tables = []
-        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
+        conn = self._connect_readonly(target)
         try:
             cur = conn.cursor()
             cur.execute(
-                "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC"
+                "SELECT name, sql FROM sqlite_master WHERE type='table' "
+                "AND name NOT LIKE 'sqlite_%' ORDER BY name ASC"
             )
-            table_rows = cur.fetchall()
-
-            for t_row in table_rows:
-                t_name = t_row["name"]
-                t_sql = t_row["sql"] or ""
-
-                # Colunas
-                cur.execute(f"PRAGMA table_info('{t_name}')")
-                col_rows = cur.fetchall()
-                cols = []
-                for c in col_rows:
-                    cols.append({
-                        "cid": c["cid"],
-                        "name": c["name"],
-                        "type": c["type"] or "TEXT",
-                        "notnull": bool(c["notnull"]),
-                        "pk": bool(c["pk"]),
-                    })
-
-                # Contagem de linhas
-                try:
-                    cur.execute(f"SELECT COUNT(*) FROM '{t_name}'")
-                    row_count = cur.fetchone()[0]
-                except Exception:
-                    row_count = 0
-
-                # Índices existentes
-                cur.execute(f"PRAGMA index_list('{t_name}')")
-                idx_rows = cur.fetchall()
-                indexes = [i["name"] for i in idx_rows]
-
+            for table in cur.fetchall():
+                table_name = table["name"]
+                quoted = '"' + table_name.replace('"', '""') + '"'
+                cur.execute(f"PRAGMA table_info({quoted})")
+                columns = [{
+                    "cid": col["cid"], "name": col["name"],
+                    "type": col["type"] or "TEXT",
+                    "notnull": bool(col["notnull"]), "pk": bool(col["pk"]),
+                } for col in cur.fetchall()]
+                cur.execute(f"SELECT COUNT(*) FROM {quoted}")
+                row_count = cur.fetchone()[0]
+                cur.execute(f"PRAGMA index_list({quoted})")
+                indexes = [index["name"] for index in cur.fetchall()]
                 tables.append({
-                    "name": t_name,
-                    "row_count": row_count,
-                    "columns": cols,
-                    "indexes": indexes,
-                    "schema_sql": t_sql,
+                    "name": table_name, "row_count": row_count,
+                    "columns": columns, "indexes": indexes,
+                    "schema_sql": table["sql"] or "",
                 })
         finally:
             conn.close()
-
-        return {
-            "database": target.name,
-            "path": str(target),
-            "tables_count": len(tables),
-            "tables": tables,
-        }
+        return {"database": target.name, "path": db_path, "tables_count": len(tables), "tables": tables}
 
     def execute_query(
-        self,
-        db_path: str,
-        query: str,
-        project_id: str | None = None,
-        limit: int = 200,
+        self, db_path: str, query: str, project_id: str | None = None, limit: int = 200
     ) -> dict[str, Any]:
-        """Executa uma instrução SQL com medição precisa de tempo e limitação de paginação."""
         target = self._resolve_db_path(db_path, project_id)
-        clean_q = query.strip()
-        is_select = clean_q.upper().startswith(("SELECT", "PRAGMA", "EXPLAIN"))
-
-        start_time = time.perf_counter()
-        conn = sqlite3.connect(str(target))
-        conn.row_factory = sqlite3.Row
+        clean_query = query.strip()
+        if not clean_query:
+            raise ValueError("Informe uma consulta SQL.")
+        safe_limit = max(1, min(int(limit), 1000))
+        started = time.perf_counter()
+        conn = self._connect_readonly(target)
         try:
-            cur = conn.cursor()
-            cur.execute(clean_q)
-
-            if is_select:
-                rows_raw = cur.fetchmany(limit)
-                columns = [col[0] for col in cur.description] if cur.description else []
-                rows = [dict(r) for r in rows_raw]
-                affected_rows = len(rows)
-            else:
-                conn.commit()
-                columns = []
-                rows = []
-                affected_rows = cur.rowcount
-
-            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
+            cursor = conn.cursor()
+            cursor.execute(clean_query)
+            has_rows = cursor.description is not None
+            rows_raw = cursor.fetchmany(safe_limit) if has_rows else []
+            columns = [column[0] for column in cursor.description] if has_rows else []
+            rows = [dict(row) for row in rows_raw]
             return {
                 "success": True,
-                "is_select": is_select,
+                "is_select": has_rows,
                 "columns": columns,
                 "rows": rows,
                 "row_count": len(rows),
-                "affected_rows": affected_rows,
-                "duration_ms": duration_ms,
+                "affected_rows": 0,
+                "duration_ms": round((time.perf_counter() - started) * 1000.0, 2),
+                "read_only": True,
             }
         except Exception as exc:
-            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
             return {
-                "success": False,
-                "error": str(exc),
-                "duration_ms": duration_ms,
+                "success": False, "error": str(exc),
+                "duration_ms": round((time.perf_counter() - started) * 1000.0, 2),
+                "read_only": True,
             }
         finally:
             conn.close()
 
     def audit_query_performance(
-        self,
-        db_path: str,
-        query: str,
-        project_id: str | None = None,
+        self, db_path: str, query: str, project_id: str | None = None
     ) -> dict[str, Any]:
-        """Analisa o plano de execução da query (EXPLAIN QUERY PLAN) e sugere índices compostos."""
         target = self._resolve_db_path(db_path, project_id)
-        clean_q = query.strip()
-
-        if not clean_q.upper().startswith("SELECT"):
+        clean_query = query.strip()
+        if not clean_query.upper().startswith(("SELECT", "WITH")):
             return {
                 "status": "skipped",
-                "message": "Auditoria de performance suporta consultas SELECT.",
+                "message": "Auditoria de performance suporta consultas de leitura SELECT.",
                 "suggestions": [],
             }
-
         plan_steps = []
         suggestions = []
         is_table_scan = False
-
-        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        conn = self._connect_readonly(target)
         try:
-            cur = conn.cursor()
-            cur.execute(f"EXPLAIN QUERY PLAN {clean_q}")
-            for row in cur.fetchall():
-                # Formato: (id, parent, notused, detail)
+            cursor = conn.cursor()
+            cursor.execute(f"EXPLAIN QUERY PLAN {clean_query}")
+            for row in cursor.fetchall():
                 detail = row[3] if len(row) > 3 else str(row)
                 plan_steps.append(detail)
-                m_scan = re.search(r"\bSCAN\s+(?:TABLE\s+)?([a-zA-Z0-9_]+)", detail)
-                if m_scan:
+                match = re.search(r"\bSCAN\s+(?:TABLE\s+)?([a-zA-Z0-9_]+)", detail)
+                if match:
                     is_table_scan = True
-                    table_name = m_scan.group(1)
+                    table_name = match.group(1)
                     suggestions.append({
-                        "type": "MISSING_INDEX",
-                        "table": table_name,
+                        "type": "MISSING_INDEX", "table": table_name,
                         "severity": "WARNING",
-                        "recommendation": f"A query está executando varredura completa ('SCAN') na tabela '{table_name}'. Recomenda-se criar um índice para as colunas do WHERE/JOIN.",
+                        "recommendation": (
+                            f"A consulta faz varredura completa na tabela '{table_name}'. "
+                            "Avalie índices nas colunas usadas em WHERE/JOIN."
+                        ),
                         "example_sql": f"CREATE INDEX idx_{table_name}_perf ON {table_name}(coluna_aqui);",
                     })
         except Exception as exc:
             return {"status": "error", "error": str(exc), "plan": [], "suggestions": []}
         finally:
             conn.close()
-
         score = 60 if is_table_scan else 95
-        verdict = (
-            "Atenção: Consulta com varredura completa (Full Table Scan). Adicione índices para acelerar a leitura."
-            if is_table_scan
-            else "Excelente: A consulta utiliza índices eficientes e não realiza varredura total de tabela."
-        )
-
         return {
-            "status": "audited",
-            "score": score,
-            "verdict": verdict,
+            "status": "audited", "score": score,
+            "verdict": (
+                "Atenção: consulta com varredura completa. Avalie índices."
+                if is_table_scan else
+                "A consulta não apresentou varredura completa de tabela."
+            ),
             "is_table_scan": is_table_scan,
-            "plan_steps": plan_steps,
-            "suggestions": suggestions,
+            "plan_steps": plan_steps, "suggestions": suggestions,
         }

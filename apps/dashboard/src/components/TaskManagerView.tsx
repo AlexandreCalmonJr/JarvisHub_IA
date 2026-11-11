@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { fetchTasks, deleteTask, purgeTasks } from '../api';
 import { notify } from './common/Toast';
+import { Modal } from './common/Modal';
 
 const INTENT_MAP: Record<string, { label: string; color: string }> = {
   multi_agent_consensus: { label: 'Mesa Redonda / Consenso', color: 'badge-purple' },
@@ -29,7 +30,8 @@ const INTENT_MAP: Record<string, { label: string; color: string }> = {
 
 export const TaskManagerView: React.FC = () => {
   const [tasks, setTasks] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'COMPLETED' | 'PENDING'>('ALL');
   const [intentFilter, setIntentFilter] = useState('ALL');
@@ -37,14 +39,16 @@ export const TaskManagerView: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [purging, setPurging] = useState(false);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const loadTasks = async () => {
     setLoading(true);
     try {
       const data = await fetchTasks();
       setTasks(data || []);
+      setLoadError(null);
     } catch (e: any) {
-      console.error('Falha ao carregar tarefas:', e);
+      setLoadError(e.message || 'Falha ao carregar tarefas.');
       notify(`Erro ao carregar tarefas: ${e.message}`, 'error');
     } finally {
       setLoading(false);
@@ -121,7 +125,7 @@ export const TaskManagerView: React.FC = () => {
   const totalCount = tasks.length;
   const completedCount = tasks.filter((t) => t.is_completed).length;
   const pendingCount = totalCount - completedCount;
-  const successRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100;
+  const successRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : null;
 
   const uniqueIntents = useMemo(() => {
     const set = new Set<string>();
@@ -183,6 +187,12 @@ export const TaskManagerView: React.FC = () => {
         </div>
       </div>
 
+      {loadError && (
+        <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+          Não foi possível carregar as tarefas: {loadError}
+        </div>
+      )}
+
       {/* Cards de Métricas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
         <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: '12px' }}>
@@ -229,7 +239,7 @@ export const TaskManagerView: React.FC = () => {
             <Sparkles size={18} color="#06b6d4" />
           </div>
           <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '8px', color: '#38bdf8' }}>
-            {successRate}%
+            {successRate === null ? '—' : `${successRate}%`}
           </div>
         </div>
       </div>
@@ -359,6 +369,10 @@ export const TaskManagerView: React.FC = () => {
           <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px' }} />
           Carregando tarefas do banco de dados...
         </div>
+      ) : loadError && tasks.length === 0 ? (
+        <div role="status" className="glass-panel" style={{ textAlign: 'center', padding: '36px 24px', color: 'var(--text-secondary)' }}>
+          A lista não está disponível. Tente atualizar após verificar a comunicação com o servidor.
+        </div>
       ) : filteredTasks.length === 0 ? (
         <div
           className="glass-panel"
@@ -473,7 +487,7 @@ export const TaskManagerView: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
-                    onClick={() => handleDeleteTask(task.id)}
+                    onClick={() => setConfirmDeleteId(task.id)}
                     className="btn btn-ghost"
                     style={{ fontSize: '0.75rem', padding: '6px 10px', color: '#f87171' }}
                     title="Excluir este registro de tarefa"
@@ -488,6 +502,36 @@ export const TaskManagerView: React.FC = () => {
           })}
         </div>
       )}
+
+      <Modal
+        isOpen={!!confirmDeleteId}
+        onClose={() => setConfirmDeleteId(null)}
+        title="Excluir registro de tarefa?"
+        subtitle="Esta ação remove o registro da sua conta e não pode ser desfeita."
+        maxWidth="sm"
+        footer={(
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirmDeleteId(null)}>Cancelar</button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!!deletingId}
+              onClick={async () => {
+                if (!confirmDeleteId) return;
+                const targetId = confirmDeleteId;
+                setConfirmDeleteId(null);
+                await handleDeleteTask(targetId);
+              }}
+            >
+              {deletingId ? 'Removendo…' : 'Excluir tarefa'}
+            </button>
+          </>
+        )}
+      >
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', margin: 0 }}>
+          Confirme a exclusão do registro selecionado. Os dados de outras contas não são afetados.
+        </p>
+      </Modal>
 
       {/* Modal de Confirmação para Expurgar Antigas */}
       {showPurgeModal && (

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
@@ -230,24 +231,201 @@ class DatabaseManager:
                 conn.execute("ALTER TABLE agent_configs ADD COLUMN assigned_key_id TEXT;")
             except Exception:
                 pass
+            self._apply_migrations(conn)
+
+    @staticmethod
+    def _apply_migrations(conn: sqlite3.Connection) -> None:
+        """Aplica migrações sequenciais, mantendo registos legados sem proprietário."""
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at TEXT NOT NULL
+            )
+            """
+        )
+
+        version_one = conn.execute(
+            "SELECT 1 FROM schema_migrations WHERE version = 1"
+        ).fetchone()
+        if not version_one:
+            private_tables = (
+                "projects", "tasks", "chat_messages", "approvals",
+                "project_memory", "agent_memories", "user_skills", "knowledge_vault",
+            )
+            conn.execute("SAVEPOINT account_ownership_migration")
+            try:
+                for table in private_tables:
+                    columns = {
+                        row["name"]
+                        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+                    }
+                    if "owner_user_id" not in columns:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN owner_user_id TEXT")
+                    conn.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{table}_owner_user "
+                        f"ON {table}(owner_user_id)"
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO schema_migrations (version, name, applied_at)
+                    VALUES (1, 'account_ownership_columns', ?)
+                    """,
+                    (datetime.now(UTC).isoformat(),),
+                )
+                conn.execute("RELEASE SAVEPOINT account_ownership_migration")
+            except Exception:
+                conn.execute("ROLLBACK TO SAVEPOINT account_ownership_migration")
+                conn.execute("RELEASE SAVEPOINT account_ownership_migration")
+                raise
+
+        version_two = conn.execute(
+            "SELECT 1 FROM schema_migrations WHERE version = 2"
+        ).fetchone()
+        if not version_two:
+            # A antiga UNIQUE(agent_role, category, key) misturava todas as contas.
+            # Reconstruímos a tabela para permitir a mesma chave em contas distintas,
+            # mantendo uma regra de unicidade separada para dados legados sem dono.
+            conn.execute("SAVEPOINT agent_memory_owner_migration")
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE agent_memories_new (
+                        id TEXT PRIMARY KEY,
+                        agent_role TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        key TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        context TEXT,
+                        importance INTEGER NOT NULL DEFAULT 1,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        owner_user_id TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO agent_memories_new (
+                        id, agent_role, category, key, content, context,
+                        importance, created_at, updated_at, owner_user_id
+                    )
+                    SELECT id, agent_role, category, key, content, context,
+                           importance, created_at, updated_at, owner_user_id
+                    FROM agent_memories
+                    """
+                )
+                conn.execute("DROP TABLE agent_memories")
+                conn.execute(
+                    "ALTER TABLE agent_memories_new RENAME TO agent_memories"
+                )
+                conn.execute(
+                    "CREATE INDEX idx_agent_memories_role ON agent_memories(agent_role)"
+                )
+                conn.execute(
+                    "CREATE INDEX idx_agent_memories_owner_user "
+                    "ON agent_memories(owner_user_id)"
+                )
+                conn.execute(
+                    """
+                    CREATE UNIQUE INDEX uq_agent_memories_legacy
+                    ON agent_memories(agent_role, category, key)
+                    WHERE owner_user_id IS NULL
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE UNIQUE INDEX uq_agent_memories_owner
+                    ON agent_memories(owner_user_id, agent_role, category, key)
+                    WHERE owner_user_id IS NOT NULL
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO schema_migrations (version, name, applied_at)
+                    VALUES (2, 'agent_memory_owner_scoped_uniqueness', ?)
+                    """,
+                    (datetime.now(UTC).isoformat(),),
+                )
+                conn.execute("RELEASE SAVEPOINT agent_memory_owner_migration")
+            except Exception:
+                conn.execute("ROLLBACK TO SAVEPOINT agent_memory_owner_migration")
+                conn.execute("RELEASE SAVEPOINT agent_memory_owner_migration")
+                raise
+
+        version_three = conn.execute(
+            "SELECT 1 FROM schema_migrations WHERE version = 3"
+        ).fetchone()
+        if not version_three:
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(mobile_devices)").fetchall()
+            }
+            if "owner_user_id" not in columns:
+                conn.execute("ALTER TABLE mobile_devices ADD COLUMN owner_user_id TEXT")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_devices_owner_user "
+                "ON mobile_devices(owner_user_id)"
+            )
+            conn.execute(
+                """
+                INSERT INTO schema_migrations (version, name, applied_at)
+                VALUES (3, 'mobile_device_account_owner', ?)
+                """,
+                (datetime.now(UTC).isoformat(),),
+            )
 
     def register_project(
-        self, project_id: str, name: str, root_path: str, mode: str = "read_only"
+        self, project_id: str, name: str, root_path: str, mode: str = "read_only",
+        owner_user_id: str | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         with self._get_connection() as conn:
+            if owner_user_id is not None:
+                existing = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if existing and existing["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Projeto pertence a outra conta ou é um registo legado sem proprietário.")
             conn.execute(
                 """
-            INSERT INTO projects (id, name, root_path, mode, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name=excluded.name,
-                root_path=excluded.root_path,
-                mode=excluded.mode,
-                updated_at=excluded.updated_at
-            """,
-                (project_id, name, root_path, mode, now, now),
+                INSERT INTO projects (id, name, root_path, mode, created_at, updated_at, owner_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    root_path=excluded.root_path,
+                    mode=excluded.mode,
+                    updated_at=excluded.updated_at
+                WHERE projects.owner_user_id IS excluded.owner_user_id
+                """,
+                (project_id, name, root_path, mode, now, now, owner_user_id),
             )
+
+    def get_project(
+        self, project_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
+        with self._get_connection() as conn:
+            if owner_user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM projects WHERE id = ? AND owner_user_id = ?",
+                    (project_id, owner_user_id),
+                ).fetchone()
+            return dict(row) if row else None
+
+    def list_projects(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM projects WHERE owner_user_id IS ? ORDER BY updated_at DESC",
+                (owner_user_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
 
     def save_task(
         self,
@@ -256,6 +434,7 @@ class DatabaseManager:
         prompt: str,
         state_dict: dict[str, Any],
         project_id: str | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         state_json = json.dumps(state_dict, default=str)
@@ -263,203 +442,239 @@ class DatabaseManager:
         is_completed = 1 if state_dict.get("is_completed") else 0
 
         with self._get_connection() as conn:
+            if owner_user_id is not None:
+                existing = conn.execute(
+                    "SELECT owner_user_id FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                if existing and existing["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Tarefa pertence a outra conta ou é um registo legado sem proprietário.")
+                if project_id:
+                    project = conn.execute(
+                        "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                    ).fetchone()
+                    if not project or project["owner_user_id"] != owner_user_id:
+                        raise PermissionError("Projeto inexistente ou não pertence à conta autenticada.")
             conn.execute(
                 """
-            INSERT INTO tasks (id, session_id, project_id, prompt, intent, state_json, is_completed, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                prompt=excluded.prompt,
-                intent=excluded.intent,
-                state_json=excluded.state_json,
-                is_completed=excluded.is_completed,
-                created_at=excluded.created_at,
-                updated_at=excluded.updated_at
-            """,
+                INSERT INTO tasks (
+                    id, session_id, project_id, prompt, intent, state_json,
+                    is_completed, created_at, updated_at, owner_user_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    prompt=excluded.prompt,
+                    intent=excluded.intent,
+                    state_json=excluded.state_json,
+                    is_completed=excluded.is_completed,
+                    updated_at=excluded.updated_at
+                WHERE tasks.owner_user_id IS excluded.owner_user_id
+                """,
                 (
-                    task_id,
-                    session_id,
-                    project_id,
-                    prompt,
-                    intent,
-                    state_json,
-                    is_completed,
-                    now,
-                    now,
+                    task_id, session_id, project_id, prompt, intent, state_json,
+                    is_completed, now, now, owner_user_id,
                 ),
             )
 
-    def get_task(self, task_id: str) -> dict[str, Any] | None:
-        with self._get_connection() as conn:
-            cur = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
-            row = cur.fetchone()
-            if not row:
-                return None
-            data = dict(row)
-            data["state"] = json.loads(data["state_json"])
-            return data
+    @staticmethod
+    def _decode_task_row(row: sqlite3.Row) -> dict[str, Any]:
+        data = dict(row)
+        data["state"] = json.loads(data["state_json"])
+        return data
 
-    def list_tasks(self, limit: int = 50) -> list[dict[str, Any]]:
+    def get_task(
+        self, task_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT id, session_id, project_id, prompt, intent, is_completed, created_at FROM tasks ORDER BY created_at DESC LIMIT ?",
-                (limit,),
+            if owner_user_id is None:
+                row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM tasks WHERE id = ? AND owner_user_id = ?",
+                    (task_id, owner_user_id),
+                ).fetchone()
+            return self._decode_task_row(row) if row else None
+
+    def list_tasks(
+        self, limit: int = 50, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            query = "SELECT id, session_id, project_id, prompt, intent, is_completed, created_at FROM tasks"
+            params: list[Any] = []
+            if owner_user_id is not None:
+                query += " WHERE owner_user_id = ?"
+                params.append(owner_user_id)
+            query += " ORDER BY created_at DESC LIMIT ?"
+            params.append(max(1, min(limit, 500)))
+            return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def list_chat_sessions(
+        self, limit: int = 50, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT session_id, MIN(prompt) as first_prompt, COUNT(*) as task_count,
+                   MAX(created_at) as last_activity, MIN(intent) as first_intent
+            FROM tasks
+            WHERE session_id IS NOT NULL AND session_id != ''
+        """
+        params: list[Any] = []
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " GROUP BY session_id ORDER BY last_activity DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            result = []
+            for row in rows:
+                data = dict(row)
+                prompt = data.get("first_prompt") or "Conversa sem título"
+                data["title"] = (prompt[:55] + "...") if len(prompt) > 55 else prompt
+                result.append(data)
+            return result
+
+    def get_session_tasks(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM tasks WHERE session_id = ?"
+        params: list[Any] = [session_id]
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " ORDER BY created_at ASC"
+        with self._get_connection() as conn:
+            return [self._decode_task_row(r) for r in conn.execute(query, params).fetchall()]
+
+    def delete_session(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> int:
+        with self._get_connection() as conn:
+            if owner_user_id is None:
+                conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
+                cur = conn.execute("DELETE FROM tasks WHERE session_id = ?", (session_id,))
+                return cur.rowcount
+            conn.execute(
+                "DELETE FROM chat_messages WHERE session_id = ? AND owner_user_id = ?",
+                (session_id, owner_user_id),
             )
-            return [dict(r) for r in cur.fetchall()]
-
-    def list_chat_sessions(self, limit: int = 50) -> list[dict[str, Any]]:
-        with self._get_connection() as conn:
             cur = conn.execute(
-                """
-                SELECT 
-                    session_id,
-                    MIN(prompt) as first_prompt,
-                    COUNT(*) as task_count,
-                    MAX(created_at) as last_activity,
-                    MIN(intent) as first_intent
-                FROM tasks
-                WHERE session_id IS NOT NULL AND session_id != ''
-                GROUP BY session_id
-                ORDER BY last_activity DESC
-                LIMIT ?
-                """,
-                (limit,),
+                "DELETE FROM tasks WHERE session_id = ? AND owner_user_id = ?",
+                (session_id, owner_user_id),
             )
-            rows = []
-            for r in cur.fetchall():
-                d = dict(r)
-                p = d.get("first_prompt") or "Conversa sem título"
-                d["title"] = (p[:55] + "...") if len(p) > 55 else p
-                rows.append(d)
-            return rows
-
-    def get_session_tasks(self, session_id: str) -> list[dict[str, Any]]:
-        with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT * FROM tasks WHERE session_id = ? ORDER BY created_at ASC",
-                (session_id,),
-            )
-            tasks = []
-            for r in cur.fetchall():
-                d = dict(r)
-                d["state"] = json.loads(d["state_json"])
-                tasks.append(d)
-            return tasks
-
-    def delete_session(self, session_id: str) -> int:
-        with self._get_connection() as conn:
-            conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
-            cur = conn.execute("DELETE FROM tasks WHERE session_id = ?", (session_id,))
             return cur.rowcount
 
     # --- Mensagens individuais do agente de código (histórico fiel) ---
 
     def add_chat_message(
-        self,
-        session_id: str,
-        role: str,
-        content: str = "",
+        self, session_id: str, role: str, content: str = "",
         project_id: str | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
-        tool_call_id: str | None = None,
-        tool_name: str | None = None,
+        tool_call_id: str | None = None, tool_name: str | None = None,
+        owner_user_id: str | None = None,
     ) -> int:
-        """Persiste uma mensagem individual (user/assistant/tool) da sessão."""
+        """Persiste mensagem vinculada à conta quando owner_user_id é fornecido."""
         now = datetime.now(UTC).isoformat()
         tool_calls_json = json.dumps(tool_calls, default=str) if tool_calls else None
         with self._get_connection() as conn:
+            if owner_user_id is not None and project_id:
+                project = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if not project or project["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Projeto inexistente ou não pertence à conta autenticada.")
             cur = conn.execute(
                 """
                 INSERT INTO chat_messages (
                     session_id, project_id, role, content, tool_calls_json,
-                    tool_call_id, tool_name, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    tool_call_id, tool_name, created_at, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    session_id,
-                    project_id,
-                    role,
-                    content,
-                    tool_calls_json,
-                    tool_call_id,
-                    tool_name,
-                    now,
-                ),
+                (session_id, project_id, role, content, tool_calls_json,
+                 tool_call_id, tool_name, now, owner_user_id),
             )
             return int(cur.lastrowid or 0)
 
     def list_chat_messages(
-        self,
-        session_id: str,
-        limit: int = 200,
-        ascending: bool = True,
+        self, session_id: str, limit: int = 200, ascending: bool = True,
+        owner_user_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Recupera as mensagens de uma sessão em ordem cronológica."""
+        """Recupera mensagens somente da conta solicitante quando informada."""
         limit = max(1, min(limit, 1000))
         order = "ASC" if ascending else "DESC"
+        query = f"""
+            SELECT id, session_id, project_id, role, content, tool_calls_json,
+                   tool_call_id, tool_name, created_at
+            FROM chat_messages WHERE session_id = ?
+        """
+        params: list[Any] = [session_id]
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += f" ORDER BY id {order} LIMIT ?"
+        params.append(limit)
         with self._get_connection() as conn:
-            cur = conn.execute(
-                f"""
-                SELECT id, session_id, project_id, role, content, tool_calls_json,
-                       tool_call_id, tool_name, created_at
-                FROM chat_messages
-                WHERE session_id = ?
-                ORDER BY id {order}
-                LIMIT ?
-                """,
-                (session_id, limit),
-            )
-            rows = []
-            for r in cur.fetchall():
-                d = dict(r)
-                raw_calls = d.pop("tool_calls_json", None)
-                try:
-                    d["tool_calls"] = json.loads(raw_calls) if raw_calls else []
-                except Exception:
-                    d["tool_calls"] = []
-                rows.append(d)
-            return rows
+            rows = conn.execute(query, params).fetchall()
+        result = []
+        for row in rows:
+            data = dict(row)
+            raw_calls = data.pop("tool_calls_json", None)
+            try:
+                data["tool_calls"] = json.loads(raw_calls) if raw_calls else []
+            except Exception:
+                data["tool_calls"] = []
+            result.append(data)
+        return result
 
-    def clear_session_messages(self, session_id: str) -> int:
-        """Remove todo o histórico de mensagens de uma sessão."""
+    def clear_session_messages(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> int:
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "DELETE FROM chat_messages WHERE session_id = ?", (session_id,)
-            )
+            if owner_user_id is None:
+                cur = conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
+            else:
+                cur = conn.execute(
+                    "DELETE FROM chat_messages WHERE session_id = ? AND owner_user_id = ?",
+                    (session_id, owner_user_id),
+                )
             return cur.rowcount
 
-    def search_chat_history(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        """Busca em todas as tarefas e conversas anteriores com filtro por texto."""
+    def search_chat_history(
+        self, query: str, limit: int = 20, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Busca histórico de texto limitado à conta autenticada."""
         if not query or not query.strip():
             return []
         term = f"%{query.strip().lower()}%"
+        sql = """
+            SELECT id, session_id, prompt, intent, project_id, created_at, state_json
+            FROM tasks
+            WHERE (lower(prompt) LIKE ? OR lower(state_json) LIKE ?)
+        """
+        params: list[Any] = [term, term]
+        if owner_user_id is not None:
+            sql += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
         with self._get_connection() as conn:
-            cur = conn.execute(
-                """
-                SELECT id, session_id, prompt, intent, project_id, created_at, state_json
-                FROM tasks
-                WHERE lower(prompt) LIKE ? OR lower(state_json) LIKE ?
-                ORDER BY created_at DESC
-                LIMIT ?
-                """,
-                (term, term, limit),
-            )
-            results = []
-            for r in cur.fetchall():
-                d = dict(r)
-                try:
-                    state = json.loads(d.pop("state_json"))
-                    d["final_summary"] = state.get("final_summary", "")
-                    d["agents"] = state.get("selected_agents", [])
-                except Exception:
-                    d["final_summary"] = ""
-                    d["agents"] = []
-                results.append(d)
-            return results
+            rows = conn.execute(sql, params).fetchall()
+        results = []
+        for row in rows:
+            data = dict(row)
+            try:
+                state = json.loads(data.pop("state_json"))
+                data["final_summary"] = state.get("final_summary", "")
+                data["agents"] = state.get("selected_agents", [])
+            except Exception:
+                data["final_summary"] = ""
+                data["agents"] = []
+            results.append(data)
+        return results
 
-    def export_session_markdown(self, session_id: str) -> str:
-        """Gera um arquivo Markdown completo e estruturado de toda a sessão de conversa."""
-        tasks = self.get_session_tasks(session_id)
+    def export_session_markdown(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> str:
+        """Exporta somente tarefas pertencentes à conta solicitante."""
+        tasks = self.get_session_tasks(session_id, owner_user_id=owner_user_id)
         if not tasks:
             return f"# Sessão {session_id}\n\nNenhuma interação encontrada para esta sessão."
 
@@ -506,29 +721,61 @@ class DatabaseManager:
 
         return "\n".join(lines)
 
-    def purge_old_tasks(self, days_retention: int = 30) -> int:
+    def purge_old_tasks(
+        self, days_retention: int = 30, owner_user_id: str | None = None
+    ) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=days_retention)).isoformat()
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
+            if owner_user_id is None:
+                cur = conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
+            else:
+                cur = conn.execute(
+                    "DELETE FROM tasks WHERE created_at < ? AND owner_user_id = ?",
+                    (cutoff, owner_user_id),
+                )
             return cur.rowcount
 
-    def delete_task(self, task_id: str) -> bool:
+    def delete_task(
+        self, task_id: str, owner_user_id: str | None = None
+    ) -> bool:
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            if owner_user_id is None:
+                cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            else:
+                cur = conn.execute(
+                    "DELETE FROM tasks WHERE id = ? AND owner_user_id = ?",
+                    (task_id, owner_user_id),
+                )
             return cur.rowcount > 0
 
-    def export_project_data(self, project_id: str) -> dict[str, Any]:
+    def export_project_data(
+        self, project_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any]:
         with self._get_connection() as conn:
-            proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+            if owner_user_id is None:
+                proj = conn.execute(
+                    "SELECT * FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                owner_filter = ""
+                params: tuple[Any, ...] = (project_id,)
+            else:
+                proj = conn.execute(
+                    "SELECT * FROM projects WHERE id = ? AND owner_user_id = ?",
+                    (project_id, owner_user_id),
+                ).fetchone()
+                owner_filter = " AND owner_user_id = ?"
+                params = (project_id, owner_user_id)
             if not proj:
                 raise ValueError(f"Projeto '{project_id}' não encontrado.")
             tasks = conn.execute(
-                "SELECT id, session_id, prompt, intent, is_completed, created_at FROM tasks WHERE project_id = ?",
-                (project_id,),
+                "SELECT id, session_id, prompt, intent, is_completed, created_at "
+                "FROM tasks WHERE project_id = ?" + owner_filter,
+                params,
             ).fetchall()
             memory = conn.execute(
-                "SELECT category, key, content, sources_json, updated_at FROM project_memory WHERE project_id = ?",
-                (project_id,),
+                "SELECT category, key, content, sources_json, updated_at "
+                "FROM project_memory WHERE project_id = ?" + owner_filter,
+                params,
             ).fetchall()
             return {
                 "project": dict(proj),
@@ -544,38 +791,71 @@ class DatabaseManager:
         key: str,
         content: str,
         sources: list[str] | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         import uuid
         now = datetime.now(UTC).isoformat()
         mem_id = f"mem-{uuid.uuid4().hex[:8]}"
         sources_json = json.dumps(sources or [])
-        # Garante que o projeto está registrado para integridade referencial
-        self.register_project(project_id, project_id, f"workspace/{project_id}")
         with self._get_connection() as conn:
+            if owner_user_id is None:
+                project = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if project is None:
+                    conn.execute(
+                        """
+                        INSERT INTO projects (
+                            id, name, root_path, mode, created_at, updated_at, owner_user_id
+                        ) VALUES (?, ?, ?, 'read_only', ?, ?, NULL)
+                        """,
+                        (project_id, project_id, f"workspace/{project_id}", now, now),
+                    )
+                    project = {"owner_user_id": None}
+                elif project["owner_user_id"] is not None:
+                    raise PermissionError("É necessário informar o proprietário do projeto.")
+            else:
+                project = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ? AND owner_user_id = ?",
+                    (project_id, owner_user_id),
+                ).fetchone()
+            if not project:
+                raise ValueError("Projeto não encontrado para a conta autenticada.")
             conn.execute(
                 """
-                INSERT INTO project_memory (id, project_id, category, key, content, sources_json, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO project_memory (
+                    id, project_id, category, key, content, sources_json,
+                    updated_at, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(project_id, category, key) DO UPDATE SET
                     content=excluded.content,
                     sources_json=excluded.sources_json,
                     updated_at=excluded.updated_at
+                WHERE project_memory.owner_user_id IS excluded.owner_user_id
                 """,
-                (mem_id, project_id, category, key, content, sources_json, now),
+                (mem_id, project_id, category, key, content, sources_json, now, owner_user_id),
             )
 
-    def list_project_memory(self, project_id: str) -> list[dict[str, Any]]:
+    def list_project_memory(
+        self, project_id: str, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = (
+            "SELECT id, project_id, category, key, content, sources_json, updated_at "
+            "FROM project_memory WHERE project_id = ?"
+        )
+        params: list[Any] = [project_id]
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " ORDER BY updated_at DESC"
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT id, project_id, category, key, content, sources_json, updated_at FROM project_memory WHERE project_id = ? ORDER BY updated_at DESC",
-                (project_id,),
-            )
-            rows = []
-            for r in cur.fetchall():
-                d = dict(r)
-                d["sources"] = json.loads(d["sources_json"])
-                rows.append(d)
-            return rows
+            rows = conn.execute(query, params).fetchall()
+        result = []
+        for row in rows:
+            data = dict(row)
+            data["sources"] = json.loads(data["sources_json"])
+            result.append(data)
+        return result
 
     def set_agent_memory(
         self,
@@ -585,25 +865,51 @@ class DatabaseManager:
         content: str,
         context: str | None = None,
         importance: int = 1,
+        owner_user_id: str | None = None,
     ) -> str:
-        """Salva ou atualiza uma memória episódica transversal para um especialista específico."""
+        """Guarda memória do agente no espaço privado da conta ou no legado."""
         import uuid
         now = datetime.now(UTC).isoformat()
         mem_id = f"amem-{uuid.uuid4().hex[:8]}"
         clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
+        values = (
+            mem_id, clean_role, category.lower(), key.strip(), content.strip(),
+            context, max(1, min(5, importance)), now, now, owner_user_id,
+        )
         with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO agent_memories (id, agent_role, category, key, content, context, importance, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(agent_role, category, key) DO UPDATE SET
-                    content=excluded.content,
-                    context=coalesce(excluded.context, agent_memories.context),
-                    importance=excluded.importance,
-                    updated_at=excluded.updated_at
-                """,
-                (mem_id, clean_role, category.lower(), key.strip(), content.strip(), context, max(1, min(5, importance)), now, now),
-            )
+            if owner_user_id is None:
+                conn.execute(
+                    """
+                    INSERT INTO agent_memories (
+                        id, agent_role, category, key, content, context,
+                        importance, created_at, updated_at, owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                    ON CONFLICT(agent_role, category, key) WHERE owner_user_id IS NULL
+                    DO UPDATE SET
+                        content=excluded.content,
+                        context=coalesce(excluded.context, agent_memories.context),
+                        importance=excluded.importance,
+                        updated_at=excluded.updated_at
+                    """,
+                    values[:9],
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO agent_memories (
+                        id, agent_role, category, key, content, context,
+                        importance, created_at, updated_at, owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(owner_user_id, agent_role, category, key)
+                    WHERE owner_user_id IS NOT NULL
+                    DO UPDATE SET
+                        content=excluded.content,
+                        context=coalesce(excluded.context, agent_memories.context),
+                        importance=excluded.importance,
+                        updated_at=excluded.updated_at
+                    """,
+                    values,
+                )
         return mem_id
 
     def list_agent_memories(
@@ -611,10 +917,11 @@ class DatabaseManager:
         agent_role: str | None = None,
         category: str | None = None,
         limit: int = 20,
+        owner_user_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Lista memórias episódicas filtradas por papel de especialista e/ou categoria."""
-        query = "SELECT id, agent_role, category, key, content, context, importance, created_at, updated_at FROM agent_memories WHERE 1=1"
-        params: list[Any] = []
+        """Lista memórias apenas do proprietário informado."""
+        query = "SELECT id, agent_role, category, key, content, context, importance, created_at, updated_at FROM agent_memories WHERE owner_user_id IS ?"
+        params: list[Any] = [owner_user_id]
         if agent_role:
             clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
             query += " AND agent_role = ?"
@@ -623,23 +930,29 @@ class DatabaseManager:
             query += " AND category = ?"
             params.append(category.lower())
         query += " ORDER BY importance DESC, updated_at DESC LIMIT ?"
-        params.append(limit)
-
+        params.append(max(1, min(limit, 500)))
         with self._get_connection() as conn:
-            cur = conn.execute(query, params)
-            return [dict(r) for r in cur.fetchall()]
+            return [dict(row) for row in conn.execute(query, params).fetchall()]
 
-    def delete_agent_memory(self, memory_id: str) -> bool:
-        """Remove uma memória episódica específica por ID."""
+    def delete_agent_memory(
+        self, memory_id: str, owner_user_id: str | None = None
+    ) -> bool:
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM agent_memories WHERE id = ?", (memory_id,))
+            cur = conn.execute(
+                "DELETE FROM agent_memories WHERE id = ? AND owner_user_id IS ?",
+                (memory_id, owner_user_id),
+            )
             return cur.rowcount > 0
 
-    def clear_agent_memories(self, agent_role: str) -> int:
-        """Limpa todas as memórias acumuladas de um especialista específico."""
+    def clear_agent_memories(
+        self, agent_role: str, owner_user_id: str | None = None
+    ) -> int:
         clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM agent_memories WHERE agent_role = ?", (clean_role,))
+            cur = conn.execute(
+                "DELETE FROM agent_memories WHERE agent_role = ? AND owner_user_id IS ?",
+                (clean_role, owner_user_id),
+            )
             return cur.rowcount
 
     def set_agent_config(
@@ -698,10 +1011,22 @@ class DatabaseManager:
                 configs[r_dict["role"]] = r_dict
             return configs
 
-    def get_user_profile(self) -> dict[str, Any]:
-        """Recupera dados de perfil do desenvolvedor persistidos no SQLite."""
+    @staticmethod
+    def _account_setting_key(key: str, owner_user_id: str | None) -> str:
+        if owner_user_id is None:
+            return key
+        owner_hash = hashlib.sha256(owner_user_id.encode("utf-8")).hexdigest()[:20]
+        return f"account:{owner_hash}:{key}"
+
+    def get_user_profile(
+        self, owner_user_id: str | None = None
+    ) -> dict[str, Any]:
+        """Recupera perfil privado da conta, sem recorrer a valores globais legados."""
+        setting_key = self._account_setting_key("developer_profile", owner_user_id)
         with self._get_connection() as conn:
-            row = conn.execute("SELECT value_json FROM user_settings WHERE key = 'developer_profile'").fetchone()
+            row = conn.execute(
+                "SELECT value_json FROM user_settings WHERE key = ?", (setting_key,)
+            ).fetchone()
             if row:
                 try:
                     return json.loads(row["value_json"])
@@ -719,18 +1044,21 @@ class DatabaseManager:
             "geminiApiKey": "",
         }
 
-    def set_user_profile(self, profile: dict[str, Any]) -> None:
-        """Salva configurações e preferências do desenvolvedor no banco SQLite."""
+    def set_user_profile(
+        self, profile: dict[str, Any], owner_user_id: str | None = None
+    ) -> None:
+        """Salva preferências no espaço privado da conta autenticada."""
         now = datetime.now(UTC).isoformat()
         val_str = json.dumps(profile)
+        setting_key = self._account_setting_key("developer_profile", owner_user_id)
         with self._get_connection() as conn:
             conn.execute(
                 """
                 INSERT INTO user_settings (key, value_json, updated_at)
-                VALUES ('developer_profile', ?, ?)
+                VALUES (?, ?, ?)
                 ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
                 """,
-                (val_str, now),
+                (setting_key, val_str, now),
             )
 
     def get_cached_inference(self, prompt_hash: str) -> str | None:
@@ -825,18 +1153,25 @@ class DatabaseManager:
 
     # --- Métodos de Gerenciamento de Skills ECC Customizadas ---
 
-    def save_user_skill(self, skill: dict[str, Any]) -> dict[str, Any]:
-        """Salva ou atualiza uma skill personalizada do ECC no SQLite."""
+    def save_user_skill(
+        self, skill: dict[str, Any], owner_user_id: str | None = None
+    ) -> dict[str, Any]:
+        """Salva uma skill personalizada sem permitir sobrescrita entre contas."""
         now = datetime.now(UTC).isoformat()
         agents_json = json.dumps(skill.get("assigned_agents", ["jarvis_master"]))
         with self._get_connection() as conn:
+            existing = conn.execute(
+                "SELECT owner_user_id FROM user_skills WHERE id = ?", (skill["id"],)
+            ).fetchone()
+            if existing and existing["owner_user_id"] != owner_user_id:
+                raise PermissionError("Skill pertence a outra conta ou é um registo legado sem proprietário.")
             conn.execute(
                 """
                 INSERT INTO user_skills (
                     id, name, version, origin, domain, description, instructions,
-                    assigned_agents_json, is_approved, created_at, updated_at
+                    assigned_agents_json, is_approved, created_at, updated_at, owner_user_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     version = excluded.version,
@@ -847,6 +1182,7 @@ class DatabaseManager:
                     assigned_agents_json = excluded.assigned_agents_json,
                     is_approved = excluded.is_approved,
                     updated_at = excluded.updated_at
+                WHERE user_skills.owner_user_id IS excluded.owner_user_id
                 """,
                 (
                     skill["id"],
@@ -860,14 +1196,20 @@ class DatabaseManager:
                     1 if skill.get("is_approved", True) else 0,
                     now,
                     now,
+                    owner_user_id,
                 ),
             )
         return skill
 
-    def list_user_skills(self) -> list[dict[str, Any]]:
-        """Retorna todas as skills adicionadas pelo usuário."""
+    def list_user_skills(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Retorna apenas skills da conta solicitante."""
         with self._get_connection() as conn:
-            rows = conn.execute("SELECT * FROM user_skills ORDER BY created_at DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM user_skills WHERE owner_user_id IS ? ORDER BY created_at DESC",
+                (owner_user_id,),
+            ).fetchall()
             skills = []
             for r in rows:
                 s = dict(r)
@@ -879,10 +1221,25 @@ class DatabaseManager:
                 skills.append(s)
             return skills
 
-    def delete_user_skill(self, skill_id: str) -> bool:
-        """Remove uma skill customizada do banco de dados."""
+    def get_user_skill(
+        self, skill_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM user_skills WHERE id = ?", (skill_id,))
+            row = conn.execute(
+                "SELECT * FROM user_skills WHERE id = ? AND owner_user_id IS ?",
+                (skill_id, owner_user_id),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def delete_user_skill(
+        self, skill_id: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Remove uma skill apenas da conta proprietária."""
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM user_skills WHERE id = ? AND owner_user_id IS ?",
+                (skill_id, owner_user_id),
+            )
             return cur.rowcount > 0
 
     # --- Métodos da Base de Conhecimento RAG Local (Knowledge Vault) ---
@@ -895,78 +1252,92 @@ class DatabaseManager:
         chunks: list[str],
         file_size_formatted: str = "",
         source_path: str = "",
+        owner_user_id: str | None = None,
     ) -> int:
-        """Insere trechos de um documento processado na Base de Conhecimento."""
+        """Substitui chunks apenas do mesmo documento e proprietário."""
         now = datetime.now(UTC).isoformat()
         inserted_count = 0
+        owner_key = owner_user_id or "legacy"
+        doc_hash = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:10]
         with self._get_connection() as conn:
-            # Remove versão anterior do documento se já existia
-            conn.execute("DELETE FROM knowledge_vault WHERE doc_name = ?", (doc_name,))
+            if owner_user_id is None:
+                conn.execute(
+                    "DELETE FROM knowledge_vault WHERE doc_name = ? AND owner_user_id IS NULL",
+                    (doc_name,),
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM knowledge_vault WHERE doc_name = ? AND owner_user_id = ?",
+                    (doc_name, owner_user_id),
+                )
             for idx, chunk in enumerate(chunks):
-                chunk_id = f"{doc_name}_{idx}_{now[:10]}"
+                chunk_id = f"{doc_hash}_{doc_name}_{idx}_{now[:10]}"
                 conn.execute(
                     """
                     INSERT INTO knowledge_vault (
                         id, doc_name, file_type, category, chunk_index,
-                        content, file_size_formatted, source_path, created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        content, file_size_formatted, source_path, created_at, owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        chunk_id,
-                        doc_name,
-                        file_type,
-                        category,
-                        idx,
-                        chunk.strip(),
-                        file_size_formatted,
-                        source_path,
-                        now,
+                        chunk_id, doc_name, file_type, category, idx, chunk.strip(),
+                        file_size_formatted, source_path, now, owner_user_id,
                     ),
                 )
                 inserted_count += 1
         return inserted_count
 
-    def list_knowledge_documents(self) -> list[dict[str, Any]]:
-        """Lista resumos dos documentos indexados na Base de Conhecimento."""
+    def list_knowledge_documents(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Lista somente documentos do proprietário informado."""
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
                 SELECT doc_name, file_type, category, file_size_formatted, source_path,
                        count(*) as total_chunks, max(created_at) as created_at
                 FROM knowledge_vault
+                WHERE owner_user_id IS ?
                 GROUP BY doc_name, file_type, category, file_size_formatted, source_path
                 ORDER BY created_at DESC
-                """
+                """,
+                (owner_user_id,),
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [dict(row) for row in rows]
 
-    def delete_knowledge_document(self, doc_name: str) -> bool:
-        """Exclui um documento e todos os seus chunks da Base de Conhecimento."""
+    def delete_knowledge_document(
+        self, doc_name: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Exclui chunks somente do documento pertencente à conta."""
         with self._get_connection() as conn:
-            cur = conn.execute("DELETE FROM knowledge_vault WHERE doc_name = ?", (doc_name,))
+            cur = conn.execute(
+                "DELETE FROM knowledge_vault WHERE doc_name = ? AND owner_user_id IS ?",
+                (doc_name, owner_user_id),
+            )
             return cur.rowcount > 0
 
-    def search_knowledge_vault(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
-        """Realiza busca textual relacional de alta precisão na Base de Conhecimento."""
+    def search_knowledge_vault(
+        self, query: str, limit: int = 4, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Busca textual restrita ao proprietário informado."""
         if not query or not query.strip():
             return []
-        keywords = [k.lower().strip() for k in query.split() if len(k) > 2]
+        keywords = [word.lower().strip() for word in query.split() if len(word) > 2]
         if not keywords:
             keywords = [query.lower().strip()]
-
+        conditions = " OR ".join(["lower(content) LIKE ?" for _ in keywords])
+        params: list[Any] = [f"%{word}%" for word in keywords]
+        params.append(owner_user_id)
+        params.append(max(1, min(limit, 100)))
+        sql = f"""
+            SELECT doc_name, category, chunk_index, content, source_path
+            FROM knowledge_vault
+            WHERE ({conditions}) AND owner_user_id IS ?
+            LIMIT ?
+        """
         with self._get_connection() as conn:
-            # Query com LIKE múltiplo por termos de busca
-            conditions = " OR ".join(["lower(content) LIKE ?" for _ in keywords])
-            params = [f"%{k}%" for k in keywords]
-            sql = f"""
-                SELECT doc_name, category, chunk_index, content, source_path
-                FROM knowledge_vault
-                WHERE {conditions}
-                LIMIT ?
-            """
-            rows = conn.execute(sql, (*params, limit)).fetchall()
-            return [dict(r) for r in rows]
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
 
     # =========================================================================
     # SecurityCore Persistence Methods (Approvals, Devices, Sessions, Audit)
@@ -987,28 +1358,38 @@ class DatabaseManager:
         decided_at: str | datetime | None = None,
         decided_by: str | None = None,
         decision_reason: str | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         req_at = (
             requested_at.isoformat()
             if isinstance(requested_at, datetime)
             else (requested_at or datetime.now(UTC).isoformat())
         )
-        dec_at = (
-            decided_at.isoformat()
-            if isinstance(decided_at, datetime)
-            else decided_at
-        )
+        dec_at = decided_at.isoformat() if isinstance(decided_at, datetime) else decided_at
         resources_json = json.dumps(affected_resources or [])
         rev_int = 1 if reversible else 0
         with self._get_connection() as conn:
+            if owner_user_id is not None:
+                task = conn.execute(
+                    "SELECT owner_user_id FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                # O grafo cria a aprovação antes de persistir o resultado da tarefa.
+                # Se a tarefa já existir, a propriedade tem de coincidir; se ainda
+                # não existir, o owner vem do principal autenticado no servidor.
+                if task and task["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Tarefa pertence a outra conta ou é um registo legado.")
+                existing = conn.execute(
+                    "SELECT owner_user_id FROM approvals WHERE id = ?", (id,)
+                ).fetchone()
+                if existing and existing["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Aprovação pertence a outra conta.")
             conn.execute(
                 """
                 INSERT INTO approvals (
                     id, task_id, agent_role, operation, impact_summary,
                     affected_resources_json, proposed_diff, reversible, status,
-                    requested_at, decided_at, decided_by, decision_reason
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    requested_at, decided_at, decided_by, decision_reason, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     task_id=excluded.task_id,
                     agent_role=excluded.agent_role,
@@ -1021,72 +1402,84 @@ class DatabaseManager:
                     decided_at=excluded.decided_at,
                     decided_by=excluded.decided_by,
                     decision_reason=excluded.decision_reason
+                WHERE approvals.owner_user_id IS excluded.owner_user_id
                 """,
                 (
-                    id,
-                    task_id,
-                    agent_role,
-                    operation,
-                    impact_summary,
-                    resources_json,
-                    proposed_diff,
-                    rev_int,
-                    status,
-                    req_at,
-                    dec_at,
-                    decided_by,
-                    decision_reason,
+                    id, task_id, agent_role, operation, impact_summary, resources_json,
+                    proposed_diff, rev_int, status, req_at, dec_at, decided_by,
+                    decision_reason, owner_user_id,
                 ),
             )
 
-    def get_approval(self, approval_id: str) -> dict[str, Any] | None:
+    def get_approval(
+        self, approval_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,))
-            row = cur.fetchone()
-            if not row:
-                return None
-            res = dict(row)
-            try:
-                res["affected_resources"] = json.loads(res.get("affected_resources_json") or "[]")
-            except Exception:
-                res["affected_resources"] = []
-            res["reversible"] = bool(res.get("reversible", 1))
-            return res
+            if owner_user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM approvals WHERE id = ?", (approval_id,)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM approvals WHERE id = ? AND owner_user_id = ?",
+                    (approval_id, owner_user_id),
+                ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        try:
+            result["affected_resources"] = json.loads(
+                result.get("affected_resources_json") or "[]"
+            )
+        except Exception:
+            result["affected_resources"] = []
+        result["reversible"] = bool(result.get("reversible", 1))
+        return result
 
-    def list_approvals(self, status: str | None = None) -> list[dict[str, Any]]:
+    def list_approvals(
+        self, status: str | None = None, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM approvals WHERE 1=1"
+        params: list[Any] = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " ORDER BY requested_at DESC"
         with self._get_connection() as conn:
-            if status:
+            rows = conn.execute(query, params).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["affected_resources"] = json.loads(
+                    item.get("affected_resources_json") or "[]"
+                )
+            except Exception:
+                item["affected_resources"] = []
+            item["reversible"] = bool(item.get("reversible", 1))
+            result.append(item)
+        return result
+
+    def consume_approved_approval(
+        self, approval_id: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Consome atomicamente uma aprovação da conta solicitante."""
+        with self._get_connection() as conn:
+            if owner_user_id is None:
                 cur = conn.execute(
-                    "SELECT * FROM approvals WHERE status = ? ORDER BY requested_at DESC",
-                    (status,),
+                    "UPDATE approvals SET status = 'consumed' "
+                    "WHERE id = ? AND status = 'approved'",
+                    (approval_id,),
                 )
             else:
-                cur = conn.execute("SELECT * FROM approvals ORDER BY requested_at DESC")
-            rows = cur.fetchall()
-            result = []
-            for r in rows:
-                item = dict(r)
-                try:
-                    item["affected_resources"] = json.loads(
-                        item.get("affected_resources_json") or "[]"
-                    )
-                except Exception:
-                    item["affected_resources"] = []
-                item["reversible"] = bool(item.get("reversible", 1))
-                result.append(item)
-            return result
-
-    def consume_approved_approval(self, approval_id: str) -> bool:
-        """Consome atomicamente uma aprovação, impedindo replay entre processos."""
-        with self._get_connection() as conn:
-            cur = conn.execute(
-                """
-                UPDATE approvals
-                SET status = 'consumed'
-                WHERE id = ? AND status = 'approved'
-                """,
-                (approval_id,),
-            )
+                cur = conn.execute(
+                    "UPDATE approvals SET status = 'consumed' "
+                    "WHERE id = ? AND status = 'approved' AND owner_user_id = ?",
+                    (approval_id, owner_user_id),
+                )
             return cur.rowcount == 1
 
     def update_approval_decision(
@@ -1122,6 +1515,7 @@ class DatabaseManager:
         is_revoked: bool = False,
         paired_at: str | datetime | None = None,
         last_seen_at: str | datetime | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         p_at = (
             paired_at.isoformat()
@@ -1140,17 +1534,18 @@ class DatabaseManager:
                 """
                 INSERT INTO mobile_devices (
                     device_id, device_name, token_hash, scopes_json,
-                    is_revoked, paired_at, last_seen_at
+                    is_revoked, paired_at, last_seen_at, owner_user_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(device_id) DO UPDATE SET
                     device_name=excluded.device_name,
                     token_hash=excluded.token_hash,
                     scopes_json=excluded.scopes_json,
                     is_revoked=excluded.is_revoked,
-                    last_seen_at=excluded.last_seen_at
+                    last_seen_at=excluded.last_seen_at,
+                    owner_user_id=COALESCE(mobile_devices.owner_user_id, excluded.owner_user_id)
                 """,
-                (device_id, device_name, token_hash, scopes_json, rev_int, p_at, ls_at),
+                (device_id, device_name, token_hash, scopes_json, rev_int, p_at, ls_at, owner_user_id),
             )
 
     def get_device(self, device_id: str) -> dict[str, Any] | None:

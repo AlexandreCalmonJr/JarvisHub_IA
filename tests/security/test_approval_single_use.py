@@ -99,3 +99,36 @@ def test_approval_is_bound_to_the_exact_diff(tmp_path):
         proposed_diff="--- original\n+++ approved\n",
     )
     assert consumed.status == ApprovalStatus.CONSUMED
+
+
+def test_approval_engine_rejects_cross_account_lookup_and_decision(tmp_path):
+    database = DatabaseManager(str(tmp_path / "approval-owners.db"))
+    engine = ApprovalEngine(db_manager=database)
+    request = engine.create_request(
+        task_id="task-a",
+        owner_user_id="account-a",
+        agent_role="jarvis_master",
+        operation="file_write",
+        impact_summary="Private account A operation",
+        affected_resources=["/workspace/a/file.txt"],
+    )
+
+    assert engine.get_request(
+        request.id, owner_user_id="account-b"
+    ) is None
+    assert engine.list_pending_requests(
+        owner_user_id="account-b"
+    ) == []
+
+    with pytest.raises(ValueError, match="não encontrado"):
+        engine.approve_request(
+            request.id, decided_by="account-b", owner_user_id="account-b"
+        )
+
+    approved = engine.approve_request(
+        request.id, decided_by="account-a", owner_user_id="account-a"
+    )
+    assert approved.owner_user_id == "account-a"
+    assert database.get_approval(
+        request.id, owner_user_id="account-b"
+    ) is None

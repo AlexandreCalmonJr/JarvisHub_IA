@@ -72,8 +72,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "agents:read",
         "agents:write",
         "agents:use",
+        "mobile:pair",
         "models:read",
-        "models:write",
         "skills:read",
         "skills:write",
         "knowledge:read",
@@ -84,13 +84,11 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "approvals:decide",
         "security:read",
         "security:scan",
+        "security:write",
         "audit:read",
         "system:read",
-        "system:logs",
         "hardware:read",
-        "hardware:write",
         "mcp:read",
-        "mcp:reload",
         "voice:use",
         "mock:serve",
         "profile:read",
@@ -110,7 +108,6 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "security:read",
         "audit:read",
         "system:read",
-        "system:logs",
         "hardware:read",
         "mcp:read",
         "profile:read",
@@ -121,7 +118,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 # A ordem importa: regras específicas primeiro.
 PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     # Segurança / operações críticas
+    ({"GET"}, re.compile(r"^/api/v1/tools$"), "coding:read"),
+    ({"POST"}, re.compile(r"^/api/v1/tools/execute$"), "coding:use"),
     ({"POST"}, re.compile(r"^/api/v1/system/kill-switch$"), "security:kill"),
+    ({"POST"}, re.compile(r"^/api/v1/mobile/pair$"), "mobile:pair"),
     ({"GET", "POST", "DELETE"}, re.compile(r"^/api/v1/mobile/.*$"), "mobile:manage"),
     ({"GET"}, re.compile(r"^/api/v1/approvals$"), "approvals:read"),
     ({"POST"}, re.compile(r"^/api/v1/approvals/[^/]+/decide$"), "approvals:decide"),
@@ -468,7 +468,7 @@ class AuthService:
         except PermissionError:
             return None
         return Principal(
-            subject_id=f"device:{device.device_id}",
+            subject_id=device.owner_user_id or f"device:{device.device_id}",
             kind="device",
             role="device",
             scopes=frozenset(device.scopes),

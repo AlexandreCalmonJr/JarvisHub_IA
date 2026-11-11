@@ -3,6 +3,7 @@ import {
   Zap,
   CheckCircle2,
   RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import {
   fetchHardwareProfile,
@@ -17,6 +18,9 @@ import { InstalledModelsEvaluation } from './hardware/InstalledModelsEvaluation'
 
 export const HardwareAdvisorView: React.FC = () => {
   const [data, setData] = useState<any>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [performanceError, setPerformanceError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [applying, setApplying] = useState<boolean>(false);
   const [applySuccess, setApplySuccess] = useState<string | null>(null);
@@ -29,22 +33,28 @@ export const HardwareAdvisorView: React.FC = () => {
 
   const loadProfile = async () => {
     setLoading(true);
-    try {
-      const [res, perf] = await Promise.all([
-        fetchHardwareProfile(),
-        fetchPerformanceMode().catch(() => null),
-      ]);
-      setData(res);
-      if (perf) {
-        setPerfProfile(perf);
-        setSelectedMode(perf.mode || 'auto');
-        setSelectedThreads(perf.cpu_threads || 6);
-      }
-    } catch (e) {
-      console.error('Falha ao carregar perfil de hardware:', e);
-    } finally {
-      setLoading(false);
+    const [hardwareResult, performanceResult] = await Promise.allSettled([
+      fetchHardwareProfile(),
+      fetchPerformanceMode(),
+    ]);
+    if (hardwareResult.status === 'fulfilled') {
+      setData(hardwareResult.value);
+      setLoadError(null);
+    } else {
+      setData(null);
+      setLoadError((hardwareResult.reason as Error)?.message || 'Falha ao carregar diagnóstico de hardware.');
     }
+    if (performanceResult.status === 'fulfilled') {
+      const perf = performanceResult.value;
+      setPerfProfile(perf);
+      setSelectedMode(perf.mode || 'auto');
+      setSelectedThreads(perf.cpu_threads || 6);
+      setPerformanceError(null);
+    } else {
+      setPerfProfile(null);
+      setPerformanceError((performanceResult.reason as Error)?.message || 'Falha ao carregar perfil de desempenho.');
+    }
+    setLoading(false);
   };
 
   const handleSavePerformance = async () => {
@@ -70,12 +80,14 @@ export const HardwareAdvisorView: React.FC = () => {
   const handleApplyOptimal = async () => {
     setApplying(true);
     setApplySuccess(null);
+    setActionError(null);
     try {
       const res = await applyHardwareOptimizations();
       setApplySuccess(res.message || 'Configuração recomendada aplicada aos especialistas!');
       await loadProfile();
     } catch (e: any) {
-      alert(`Erro ao aplicar otimizações: ${e.message}`);
+      setActionError(e?.message || 'Falha ao aplicar otimizações.');
+      notify(`Erro ao aplicar otimizações: ${e.message}`, 'error');
     } finally {
       setApplying(false);
     }
@@ -93,6 +105,19 @@ export const HardwareAdvisorView: React.FC = () => {
     );
   }
 
+  if (!data && !loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '32px', border: '1px solid var(--border-color)', borderRadius: '14px', background: 'var(--bg-tertiary)' }}>
+        <div role="alert" style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertCircle size={18} color="#f87171" />
+          <span>{loadError || 'Diagnóstico de hardware indisponível.'}</span>
+        </div>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>O diagnóstico e as configurações globais do equipamento estão disponíveis apenas para administradores.</p>
+        <div><button onClick={loadProfile} className="btn btn-secondary">Tentar novamente</button></div>
+      </div>
+    );
+  }
+
   const specs = data?.specs || {};
   const recs = data?.recommendations || {};
   const cpu = specs.cpu || {};
@@ -104,6 +129,11 @@ export const HardwareAdvisorView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {(performanceError || actionError) && (
+        <div role="alert" style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--text-primary)', fontSize: '0.84rem' }}>
+          {performanceError || actionError}
+        </div>
+      )}
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>

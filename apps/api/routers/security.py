@@ -19,6 +19,7 @@ from apps.api.deps import (
     UnauthorizedApprovalError,
     coding_broker,
     tool_gateway,
+    db_manager,
 )
 from packages.contracts.agent import AgentRole
 from packages.contracts.approval import ApprovalStatus
@@ -30,9 +31,19 @@ logger = logging.getLogger("jarvis.api.security")
 router = APIRouter(tags=["security"])
 
 
+def _approval_owner(principal: Principal) -> str:
+    if principal.kind == "device" and principal.subject_id.startswith("device:"):
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
+        )
+    return principal.subject_id
+
+
 @router.get("/api/v1/approvals")
-async def list_approvals():
-    return security_core.approval_engine.list_pending_requests()
+async def list_approvals(principal: Principal = Depends(get_principal)):
+    owner = _approval_owner(principal)
+    return security_core.approval_engine.list_pending_requests(owner_user_id=owner)
 
 
 @router.post("/api/v1/approvals/{request_id}/decide")
@@ -42,6 +53,13 @@ async def decide_approval(
     principal: Principal = Depends(get_principal),
 ):
     try:
+        owner = _approval_owner(principal)
+        owned_request = security_core.approval_engine.get_request(
+            request_id, owner_user_id=owner
+        )
+        if owned_request is None:
+            raise HTTPException(status_code=404, detail="Aprovação não encontrada.")
+
         # Rejeita imediatamente qualquer tentativa de autoaprovação por agentes
         known_agents = {r.value for r in AgentRole}
         candidate = (payload.decided_by or "").lower().strip()
@@ -69,6 +87,7 @@ async def decide_approval(
                 approved=payload.action == "approve",
                 decided_by=actor,
                 reason=payload.reason,
+                owner_user_id=owner,
             )
             return {
                 "status": "approved" if payload.action == "approve" else "rejected",
@@ -80,6 +99,7 @@ async def decide_approval(
                 request_id=request_id,
                 decided_by=actor,
                 decision_reason=payload.reason,
+                owner_user_id=owner,
             )
             # Pedidos de workspace API são retomados pelo próprio cliente após a decisão.
             # Tarefas do Jarvis Master retomam o checkpoint e executam o payload aprovado.
@@ -88,6 +108,7 @@ async def decide_approval(
                     await jarvis_master.resume_after_approval(
                         task_id=decided.task_id,
                         approved_by=actor,
+                        owner_user_id=owner,
                     )
                 except ValueError as ve:
                     logger.debug("JarvisMaster não encontrou checkpoint para '%s': %s", decided.task_id, ve)
@@ -110,6 +131,7 @@ async def decide_approval(
                 request_id=request_id,
                 decided_by=actor,
                 reason=payload.reason or "Rejeitado pelo utilizador",
+                owner_user_id=owner,
             )
             return {"status": "rejected", "request": decided}
         else:
@@ -158,13 +180,18 @@ async def trigger_kill_switch(
 
 
 @router.get("/api/v1/security/cyber-shield-status")
-async def get_cyber_shield_status():
+async def get_cyber_shield_status(
+    principal: Principal = Depends(require_permission("security:read")),
+):
     """Retorna o status consolidado de blindagem cibernética do JARVIS."""
     return cyber_shield.get_security_status()
 
 
 @router.post("/api/v1/security/network-isolation")
-async def toggle_network_isolation_endpoint(payload: NetworkIsolationPayload):
+async def toggle_network_isolation_endpoint(
+    payload: NetworkIsolationPayload,
+    principal: Principal = Depends(require_admin),
+):
     """Ativa ou desativa o corte total de conexões externas de rede."""
     return cyber_shield.toggle_network_isolation(payload.isolated, reason=payload.reason)
 
@@ -172,13 +199,16 @@ async def toggle_network_isolation_endpoint(payload: NetworkIsolationPayload):
 @router.post("/api/v1/mobile/pair")
 async def pair_mobile_device(
     payload: DevicePairRequest,
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_permission("mobile:pair")),
 ):
+    if principal.kind != "human":
+        raise HTTPException(status_code=403, detail="Apenas uma conta humana pode emparelhar dispositivos.")
     try:
         reg = security_core.device_auth.pair_device(
             device_name=payload.device_name,
             scopes=payload.scopes,
             created_by=principal.display_id,
+            owner_user_id=principal.subject_id,
         )
         return {
             "status": "paired",
@@ -216,9 +246,20 @@ async def revoke_mobile_device(
 
 @router.get("/api/v1/audit/logs")
 @router.get("/api/v1/security/audit-logs")
-async def list_audit_logs_endpoint(limit: int = 50, offset: int = 0, severity: str | None = None):
+async def list_audit_logs_endpoint(
+    limit: int = 50,
+    offset: int = 0,
+    severity: str | None = None,
+    principal: Principal = Depends(require_permission("audit:read")),
+):
     """Retorna eventos registrados na trilha de auditoria inviolável do sistema."""
-    events = security_core.audit.list_events()
+    # A trilha é partilhada pelo runtime, mas cada conta só recebe eventos
+    # cuja identidade de origem corresponde ao principal autenticado.
+    allowed_actors = {principal.subject_id, principal.display_id}
+    events = [
+        event for event in security_core.audit.list_events()
+        if getattr(event, "user_id", None) in allowed_actors
+    ]
     if severity:
         sev_clean = severity.upper()
         events = [
@@ -249,8 +290,13 @@ async def list_audit_logs_endpoint(limit: int = 50, offset: int = 0, severity: s
 
 
 @router.post("/api/v1/security/scan-cves/{project_id}")
-async def scan_project_cves_endpoint(project_id: str):
-    """Varre dependências locais do projeto procurando por CVEs conhecidas sem acesso externo."""
+async def scan_project_cves_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Varre dependências apenas de projetos pertencentes à conta."""
+    owner = _approval_owner(principal)
+    if not db_manager.get_project(project_id, owner_user_id=owner):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         proj_dir = workspace_service.get_project_dir(project_id)
         return security_core.cve_scanner.scan_project_dependencies(proj_dir)
@@ -259,8 +305,13 @@ async def scan_project_cves_endpoint(project_id: str):
 
 
 @router.post("/api/v1/security/red-team/{project_id}")
-async def red_team_audit_endpoint(project_id: str):
-    """Executa varredura estática de Red Team no código procurando SQLi, XSS, Path Traversal e Secrets."""
+async def red_team_audit_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Executa auditoria apenas em projetos pertencentes à conta."""
+    owner = _approval_owner(principal)
+    if not db_manager.get_project(project_id, owner_user_id=owner):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         proj_dir = workspace_service.get_project_dir(project_id)
         return security_core.red_team.run_security_audit(proj_dir)
@@ -269,7 +320,9 @@ async def red_team_audit_endpoint(project_id: str):
 
 
 @router.get("/api/v1/security/policy-templates")
-async def list_security_policy_templates():
+async def list_security_policy_templates(
+    principal: Principal = Depends(require_permission("security:read")),
+):
     """Retorna templates de cabeçalhos de segurança, CSP e CORS estrito prontos para implantação."""
     return security_core.policy_generator.get_available_templates()
 
@@ -281,6 +334,9 @@ async def apply_security_policy_endpoint(
 ):
     """Aplica o template de política de segurança diretamente no diretório do projeto com governança de aprovação."""
     try:
+        owner = _approval_owner(principal)
+        if not db_manager.get_project(payload.project_id, owner_user_id=owner):
+            raise HTTPException(status_code=404, detail="Projeto não encontrado.")
         proj_dir = workspace_service.get_project_dir(payload.project_id)
         if not proj_dir.exists() or not proj_dir.is_dir():
             raise HTTPException(status_code=404, detail=f"Projeto '{payload.project_id}' não encontrado.")
@@ -308,6 +364,7 @@ async def apply_security_policy_endpoint(
             tofile=f"b/{tmpl['filename']}",
         ))
         task_id = f"security-policy:{payload.project_id}:{payload.template_id}"
+        owner = _approval_owner(principal)
         if not payload.approval_id:
             approval = security_core.approval_engine.create_request(
                 task_id=task_id,
@@ -317,6 +374,7 @@ async def apply_security_policy_endpoint(
                 affected_resources=[str(target_file)],
                 proposed_diff=diff,
                 reversible=True,
+                owner_user_id=owner,
             )
             return {
                 "status": "approval_required",
@@ -326,7 +384,9 @@ async def apply_security_policy_endpoint(
                 "impact_summary": approval.impact_summary,
                 "diff": diff,
             }
-        approval = security_core.approval_engine.get_request(payload.approval_id)
+        approval = security_core.approval_engine.get_request(
+            payload.approval_id, owner_user_id=owner
+        )
         if (
             not approval
             or approval.status != ApprovalStatus.APPROVED

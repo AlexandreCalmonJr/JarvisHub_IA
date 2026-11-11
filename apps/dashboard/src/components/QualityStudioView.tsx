@@ -17,10 +17,16 @@ import {
   Check,
   FileCode,
   Flame,
+  AlertCircle,
 } from 'lucide-react';
 
 export const QualityStudioView: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [chaosError, setChaosError] = useState<string | null>(null);
+  const [playwrightError, setPlaywrightError] = useState<string | null>(null);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   // Descoberta e Execução
@@ -40,26 +46,31 @@ export const QualityStudioView: React.FC = () => {
   const [chaosCases, setChaosCases] = useState<any[]>([]);
 
   const loadProjects = async () => {
+    setProjectsLoading(true);
     try {
       const projs = await fetchWorkspaceProjects();
       setProjects(projs || []);
+      setProjectsError(null);
       if (projs && projs.length > 0 && !selectedProjectId) {
         setSelectedProjectId(projs[0].id);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setProjectsError(e?.message || 'Falha ao carregar projetos.');
+    } finally {
+      setProjectsLoading(false);
     }
   };
 
   const loadProjectTests = async (projId: string) => {
     if (!projId) return;
     setLoadingDiscovery(true);
+    setDiscoveryError(null);
     setTestResult(null);
     try {
       const res = await fetchProjectTests(projId);
       setDiscovered(res);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setDiscoveryError(e?.message || 'Falha ao descobrir testes do projeto.');
     } finally {
       setLoadingDiscovery(false);
     }
@@ -69,8 +80,9 @@ export const QualityStudioView: React.FC = () => {
     try {
       const cases = await fetchChaosEdgeCases();
       setChaosCases(cases || []);
-    } catch (e) {
-      console.error(e);
+      setChaosError(null);
+    } catch (e: any) {
+      setChaosError(e?.message || 'Falha ao carregar casos de borda.');
     }
   };
 
@@ -97,7 +109,7 @@ export const QualityStudioView: React.FC = () => {
         is_success: false,
         status: 'error',
         duration_seconds: 0,
-        summary: { total: 0, passed: 0, failed: 1, skipped: 0 },
+        summary: { total: 0, passed: 0, failed: 0, skipped: 0 },
         raw_output: err.message,
       });
     } finally {
@@ -107,11 +119,12 @@ export const QualityStudioView: React.FC = () => {
 
   const handleGeneratePlaywright = async () => {
     setPlaywrightLoading(true);
+    setPlaywrightError(null);
     try {
       const res = await generatePlaywrightTest(targetUrl, scenarioName);
       setGeneratedScript(res.code);
     } catch (err: any) {
-      alert(`Erro: ${err.message}`);
+      setPlaywrightError(err?.message || 'Falha ao gerar roteiro Playwright.');
     } finally {
       setPlaywrightLoading(false);
     }
@@ -119,6 +132,18 @@ export const QualityStudioView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {(projectsError || discoveryError || chaosError || playwrightError) && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--text-primary)' }}>
+          <AlertCircle size={16} color="#f87171" />
+          <span style={{ fontSize: '0.84rem' }}>{projectsError || discoveryError || chaosError || playwrightError}</span>
+          <button className="btn btn-ghost" onClick={() => {
+            if (projectsError) loadProjects();
+            else if (discoveryError && selectedProjectId) loadProjectTests(selectedProjectId);
+            else if (chaosError) loadChaosCases();
+            else if (playwrightError) handleGeneratePlaywright();
+          }}>Tentar novamente</button>
+        </div>
+      )}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -135,7 +160,7 @@ export const QualityStudioView: React.FC = () => {
             Quality Studio & Testes E2E
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
-            Automação de testes em sandbox, gerador de roteiros Playwright e suíte de testes de estresse (Chaos Testing).
+            Execução controlada de testes, gerador de roteiros Playwright e suíte de casos de borda (Chaos Testing).
           </p>
         </div>
 
@@ -145,6 +170,7 @@ export const QualityStudioView: React.FC = () => {
             PROJETO:
           </label>
           <select
+            disabled={projectsLoading || projects.length === 0}
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
             style={{
@@ -200,12 +226,19 @@ export const QualityStudioView: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', borderRadius: '8px' }}
             >
               <Play size={15} />
-              {runningTests ? 'Executando Suíte...' : 'Executar Testes em Sandbox'}
+              {runningTests ? 'Executando Suíte...' : 'Executar Testes'}
             </button>
+          </div>
+          <div style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: '0.74rem' }}>
+            Por segurança, a execução de código está restrita a administradores até existir isolamento de processo por conta.
           </div>
         </div>
 
         {/* Lista de Arquivos de Teste */}
+        {loadingDiscovery && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>A localizar testes do projeto...</div>}
+        {discovered && discovered.test_files.length === 0 && !discoveryError && !loadingDiscovery && (
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Nenhum arquivo de teste encontrado neste projeto.</div>
+        )}
         {discovered && discovered.test_files.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {discovered.test_files.map((file: string, idx: number) => (
@@ -246,7 +279,7 @@ export const QualityStudioView: React.FC = () => {
                 {testResult.is_success ? <CheckCircle size={22} color="#34d399" /> : <XCircle size={22} color="#f87171" />}
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '0.95rem', color: testResult.is_success ? '#34d399' : '#f87171' }}>
-                    {testResult.is_success ? 'Todos os Testes Foram Aprovados' : 'Falha Detectada nos Testes'}
+                    {testResult.is_success ? 'Todos os Testes Foram Aprovados' : testResult.status === 'error' ? 'Não foi possível iniciar os testes' : testResult.status === 'timeout' ? 'Tempo limite da execução atingido' : 'Falha Detectada nos Testes'}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Clock size={12} /> Duração: {testResult.duration_seconds} segundos
@@ -405,6 +438,11 @@ export const QualityStudioView: React.FC = () => {
             </h3>
           </div>
 
+          {chaosError ? (
+            <div role="alert" style={{ color: '#f87171', fontSize: '0.82rem' }}>{chaosError}</div>
+          ) : chaosCases.length === 0 ? (
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Nenhum caso de borda disponível.</div>
+          ) : null}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
             {chaosCases.map((c, idx) => (
               <div

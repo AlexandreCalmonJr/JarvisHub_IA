@@ -47,11 +47,12 @@ def test_quality_studio_discover_tests(tmp_path: Path, project_with_tests):
     assert "test_math.py" in discovered["test_files"]
 
 
-def test_quality_studio_run_tests(tmp_path: Path, project_with_tests):
+@pytest.mark.asyncio
+async def test_quality_studio_run_tests(tmp_path: Path, project_with_tests):
     ws = MockWorkspace(tmp_path)
     service = QualityStudioService(workspace_service=ws)
 
-    result = service.run_tests("app_with_tests", test_file="test_math.py", timeout_seconds=10)
+    result = await service.run_tests("app_with_tests", test_file="test_math.py", timeout_seconds=30)
     assert result["is_success"] is True
     assert result["status"] == "success"
     assert result["summary"]["passed"] >= 2
@@ -73,7 +74,7 @@ def test_quality_studio_generate_playwright():
 
     assert "def test_login_e_chat_e2e" in script
     assert "from playwright.sync_api import Page, expect" in script
-    assert "page.goto(\"http://127.0.0.1:8000/studio\")" in script
+    assert "page.goto(\"http://127.0.0.1:8000/studio\", timeout=10000)" in script
     assert "page.locator(\"#chat-input\").fill(\"Olá JARVIS\")" in script
     assert "page.locator(\"#send-btn\").click()" in script
     assert "expect(page.locator(\".chat-bubble\")).to_be_visible()" in script

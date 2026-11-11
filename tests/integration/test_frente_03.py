@@ -118,6 +118,7 @@ async def test_frente_03_chat_history_search_and_export_markdown():
                     }
                 ],
             },
+            owner_user_id="admin",
         )
 
         # 1. Busca no histórico de chat
@@ -138,7 +139,7 @@ async def test_frente_03_chat_history_search_and_export_markdown():
         assert "cybersecurity_engineer" in md_text
 
         # Limpeza
-        db_manager.delete_session(session_id)
+        db_manager.delete_session(session_id, owner_user_id="admin")
 
 
 @pytest.mark.asyncio

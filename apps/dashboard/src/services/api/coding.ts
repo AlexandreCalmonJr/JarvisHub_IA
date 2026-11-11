@@ -81,7 +81,10 @@ export async function reloadMcpServers(): Promise<McpReloadSummary> {
 
 export async function fetchCodingMessages(sessionId: string): Promise<CodingMessage[]> {
   const res = await fetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`);
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar histórico do Coding Agent.' }));
+    throw new Error(errorData.detail || 'Falha ao carregar histórico do Coding Agent.');
+  }
   const data = await res.json();
   return data.messages || [];
 }
@@ -98,13 +101,12 @@ export async function clearCodingMessages(sessionId: string): Promise<number> {
 export async function decideCodingApproval(
   approvalId: string,
   action: 'approve' | 'reject',
-  decidedBy: string,
   reason?: string
 ): Promise<any> {
   const res = await fetch(`${API_BASE}/coding/approvals/${approvalId}/decide`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, decided_by: decidedBy, reason }),
+    body: JSON.stringify({ action, reason }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Falha ao decidir aprovação' }));

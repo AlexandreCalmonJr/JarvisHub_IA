@@ -21,6 +21,9 @@ class ApprovalRequest(BaseModel):
 
     id: str = Field(..., description="Identificador único do pedido de aprovação")
     task_id: str = Field(..., description="ID da tarefa associada")
+    owner_user_id: str | None = Field(
+        None, description="Conta proprietária do pedido; nulo apenas para registos legados"
+    )
     agent_role: str = Field(..., description="Agente que solicitou a operação")
     operation: str = Field(
         ...,

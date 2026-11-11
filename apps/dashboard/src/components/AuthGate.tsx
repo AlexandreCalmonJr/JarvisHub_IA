@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useState } from 'react';
+import { clearActiveAccountScope, setActiveAccountScope } from '../services/accountScope';
 
 type LoginMode = 'account' | 'admin' | 'bootstrap';
 
@@ -28,14 +29,32 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const [accessMessage, setAccessMessage] = useState('');
   const [resetTarget, setResetTarget] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState('');
+  const [deviceOpen, setDeviceOpen] = useState(false);
+  const [deviceName, setDeviceName] = useState('Meu Android');
+  const [deviceToken, setDeviceToken] = useState('');
+  const [deviceBusy, setDeviceBusy] = useState(false);
+  const [deviceError, setDeviceError] = useState('');
 
   const verifySession = async () => {
     try {
       const response = await fetch('/api/v1/auth/me', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-      if (!response.ok) { setStatus('anonymous'); setSession(null); return; }
-      setSession(await response.json());
+      if (!response.ok) {
+        clearActiveAccountScope();
+        setStatus('anonymous');
+        setSession(null);
+        return;
+      }
+      const nextSession = await response.json() as SessionInfo;
+      const accountId = nextSession.user_id || nextSession.subject_id;
+      if (!accountId) throw new Error('A sessão não identificou a conta autenticada.');
+      setActiveAccountScope(accountId);
+      setSession(nextSession);
       setStatus('authenticated');
-    } catch { setStatus('anonymous'); }
+    } catch {
+      clearActiveAccountScope();
+      setStatus('anonymous');
+      setSession(null);
+    }
   };
 
   useEffect(() => { void verifySession(); }, []);
@@ -64,7 +83,11 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 
   const logout = async () => {
     try { await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
-    finally { setSession(null); setStatus('anonymous'); }
+    finally {
+      clearActiveAccountScope();
+      setSession(null);
+      setStatus('anonymous');
+    }
   };
 
   const loadUsers = async () => {
@@ -127,6 +150,34 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     } catch (cause) {
       setAccessMessage(cause instanceof Error ? cause.message : 'Erro ao redefinir palavra-passe.');
     } finally { setAccessBusy(false); }
+  };
+
+  const pairOwnDevice = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setDeviceBusy(true);
+    setDeviceError('');
+    try {
+      const response = await fetch('/api/v1/mobile/pair', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ device_name: deviceName.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível emparelhar o dispositivo.');
+      if (!payload.device_token) throw new Error('O servidor não devolveu o token do dispositivo.');
+      setDeviceToken(payload.device_token);
+    } catch (cause) {
+      setDeviceError(cause instanceof Error ? cause.message : 'Falha ao emparelhar o dispositivo.');
+    } finally {
+      setDeviceBusy(false);
+    }
+  };
+
+  const closeDevicePairing = () => {
+    setDeviceOpen(false);
+    setDeviceToken('');
+    setDeviceError('');
   };
 
   const toggleUser = async (user: UserRecord) => {
@@ -201,9 +252,53 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
       <div style={styles.sessionPill}>
         <span style={styles.sessionDot} />
         <span>{session?.user_id || session?.subject_id || 'Sessão ativa'} · {session?.role || 'utilizador'}</span>
+        {(session?.role === 'admin' || session?.role === 'developer') && (
+          <button type="button" onClick={() => { setDeviceOpen(true); setDeviceToken(''); setDeviceError(''); }} style={styles.pillButton}>
+            Conectar Android
+          </button>
+        )}
         {session?.role === 'admin' && <button type="button" onClick={() => setAccessOpen(true)} style={styles.pillButton}>Gerir acessos</button>}
         <button type="button" onClick={logout} style={styles.logout}>Sair</button>
       </div>
+      {deviceOpen && (session?.role === 'admin' || session?.role === 'developer') && (
+        <div style={styles.overlay} role="presentation" onClick={closeDevicePairing}>
+          <section style={styles.accessPanel} role="dialog" aria-modal="true" aria-labelledby="device-title" onClick={(e) => e.stopPropagation()}>
+            <div style={styles.accessHeader}>
+              <div>
+                <p style={styles.eyebrow}>DISPOSITIVO DA SUA CONTA</p>
+                <h2 id="device-title" style={styles.accessTitle}>Conectar app Android</h2>
+              </div>
+              <button type="button" style={styles.close} onClick={closeDevicePairing}>×</button>
+            </div>
+            {!deviceToken ? (
+              <>
+                <p style={styles.mutedSmall}>
+                  Gere um token pessoal. O dispositivo ficará associado apenas à sua conta e não poderá consultar dados de outros utilizadores.
+                </p>
+                <form onSubmit={pairOwnDevice} style={styles.userForm}>
+                  <label style={styles.label} htmlFor="device-name">Nome do dispositivo</label>
+                  <input id="device-name" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} style={styles.input} maxLength={100} required />
+                  {deviceError && <div role="alert" style={styles.error}>{deviceError}</div>}
+                  <button type="submit" disabled={deviceBusy} style={styles.button}>
+                    {deviceBusy ? 'A emparelhar...' : 'Gerar token do meu dispositivo'}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <p style={styles.mutedSmall}>
+                  Token criado para esta conta. Copie-o agora e cole no app Android, em Configuração de Rede & Conexão. Por segurança, o token não será guardado no navegador nem apresentado novamente.
+                </p>
+                <input aria-label="Token do dispositivo" readOnly value={deviceToken} style={{ ...styles.input, fontFamily: 'monospace' }} onFocus={(e) => e.currentTarget.select()} />
+                <button type="button" style={styles.button} onClick={() => void navigator.clipboard.writeText(deviceToken)}>
+                  Copiar token
+                </button>
+                <button type="button" style={styles.cancelButton} onClick={closeDevicePairing}>Concluído</button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
       {accessOpen && session?.role === 'admin' && (
         <div style={styles.overlay} role="presentation" onClick={() => setAccessOpen(false)}>
           <section style={styles.accessPanel} role="dialog" aria-modal="true" aria-labelledby="access-title" onClick={(e) => e.stopPropagation()}>

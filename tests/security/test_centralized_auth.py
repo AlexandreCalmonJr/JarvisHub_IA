@@ -84,10 +84,9 @@ async def test_05_non_admin_forbidden_from_admin_endpoints():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Tenta cadastrar dispositivo móvel (operação restrita a admin)
-        res = await client.post(
-            "/api/v1/mobile/pair",
-            json={"device_name": "Invasor"},
+        # A listagem global de dispositivos continua restrita a administradores.
+        res = await client.get(
+            "/api/v1/mobile/devices",
             headers={"Authorization": f"Bearer {session.session_id}"},
         )
         assert res.status_code == 403
@@ -101,6 +100,7 @@ async def test_06_authorized_device_access():
         device_name="Tablet de Teste",
         scopes=["approvals:read", "approvals:decide"],
         created_by="admin_test",
+        owner_user_id="admin",
     )
     device_token = device_reg.device_token
 
@@ -161,6 +161,7 @@ async def test_09_approval_spoofed_identity_ignored():
         operation="file_write",
         impact_summary="Teste de falsificação de identidade",
         affected_resources=["config.py"],
+        owner_user_id="legit_developer",
     )
 
     # Usuário desenvolvedor autenticado
@@ -193,6 +194,7 @@ async def test_09_approval_spoofed_identity_ignored():
             operation="file_write",
             impact_summary="Tentativa com papel de agente",
             affected_resources=["main.py"],
+            owner_user_id="legit_developer",
         )
         res_agent = await client.post(
             f"/api/v1/approvals/{ticket_agent.request.id}/decide",

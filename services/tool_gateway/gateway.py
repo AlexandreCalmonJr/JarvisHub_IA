@@ -23,7 +23,6 @@ from .specialized_tools import (
     execute_scan_sast_patterns,
     execute_scan_secrets,
     execute_sql_query_explain,
-    vector_memory_manager,
 )
 from .types import ToolCategory, ToolExecutionRequest, ToolExecutionResult
 
@@ -45,7 +44,15 @@ class ToolGateway:
         self.tool_registry = ToolRegistry()
         self.sandbox = sandbox or SubprocessSandbox()
 
-    async def execute_tool(self, request: ToolExecutionRequest) -> ToolExecutionResult:
+    async def execute_tool(
+        self, request: ToolExecutionRequest, owner_user_id: str, actor_role: str = "developer"
+    ) -> ToolExecutionResult:
+        if not owner_user_id:
+            raise PermissionDeniedError("A conta proprietária é obrigatória para executar ferramentas.")
+        if request.tool_name in {"run_tests", "run_linter", "duckdb_query", "execute_command"} and actor_role != "admin":
+            raise PermissionDeniedError(
+                "Esta ferramenta executa código ou acessa arquivos por SQL e está restrita ao administrador até existir isolamento de processo por conta."
+            )
         start_time = time.perf_counter()
 
         # 1. Verificação do Kill Switch
@@ -61,7 +68,7 @@ class ToolGateway:
         # 2. Verificação no Catálogo de Ferramentas Permitidas
         tool_def = self.tool_registry.get_tool(request.tool_name)
         if not tool_def:
-            self._audit(request, "DENIED", reason="Ferramenta não permitida ou desconhecida")
+            self._audit(request, "DENIED", owner_user_id=owner_user_id, reason="Ferramenta não permitida ou desconhecida")
             raise PermissionDeniedError(
                 f"A ferramenta '{request.tool_name}' não está no catálogo autorizado."
             )
@@ -103,7 +110,7 @@ class ToolGateway:
                 raise PermissionDeniedError(
                     f"A ferramenta '{request.tool_name}' exige autorização humana explícita."
                 )
-            appr = self.security_core.approval_engine.get_request(request.approval_id)
+            appr = self.security_core.approval_engine.get_request(request.approval_id, owner_user_id=owner_user_id)
             if not appr or appr.status != ApprovalStatus.APPROVED:
                 raise PermissionDeniedError(
                     f"Aprovação '{request.approval_id}' não autorizada ou pendente."
@@ -294,15 +301,10 @@ class ToolGateway:
                 )
 
             elif request.tool_name == "vector_search":
-                table = request.arguments.get("table", "project_vectors")
-                vec = request.arguments.get("vector", [0.0] * 128)
-                top_k = request.arguments.get("top_k", 5)
-                matches = vector_memory_manager.search_similar(table_name=table, query_vector=vec, top_k=top_k)
-                result = ToolExecutionResult(
-                    tool_name=request.tool_name,
-                    success=True,
-                    stdout=json.dumps(matches, indent=2, ensure_ascii=False),
-                    duration_ms=(time.perf_counter() - start_time) * 1000.0,
+                # O índice vetorial legado usa tabelas globais sem namespace de conta.
+                # Bloqueia até a migração para índices privados por proprietário.
+                raise PermissionDeniedError(
+                    "Busca vetorial indisponível até a conclusão do isolamento dos índices por conta."
                 )
 
             elif request.tool_name == "web_search":
@@ -434,17 +436,18 @@ class ToolGateway:
             else:
                 raise PermissionDeniedError(f"Handler para '{request.tool_name}' não implementado.")
 
-            self._audit(request, "SUCCESS", parameters={"duration_ms": result.duration_ms})
+            self._audit(request, "SUCCESS", owner_user_id=owner_user_id, parameters={"duration_ms": result.duration_ms})
             return result
 
         except Exception as exc:
-            self._audit(request, "FAILED", reason=str(exc))
+            self._audit(request, "FAILED", owner_user_id=owner_user_id, reason=str(exc))
             raise
 
     def _audit(
         self,
         req: ToolExecutionRequest,
         status: str,
+        owner_user_id: str,
         parameters: dict[str, Any] | None = None,
         reason: str | None = None,
     ):
@@ -454,6 +457,7 @@ class ToolGateway:
                 status=status,
                 agent_role=req.agent_role,
                 project_id=req.project_id,
+                user_id=owner_user_id,
                 tool_name=req.tool_name,
                 parameters=parameters or req.arguments,
                 severity=AuditEventSeverity.INFO

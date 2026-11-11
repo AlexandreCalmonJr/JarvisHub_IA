@@ -130,7 +130,7 @@ class AutonomousAgentRuntime:
         # 2. Injeção Contextual Inteligente
         agent_instance = AutonomousAgent(profile)
         history = self._load_history(config, session_id)
-        memories = self._load_memories(role)
+        memories = self._load_memories(role, owner_user_id=config.owner_user_id)
         skills_inst = self._load_skills(role)
 
         commands = detect_project_commands(project_root) if project_root else {}
@@ -156,7 +156,7 @@ class AutonomousAgentRuntime:
         messages: list[ChatTurn] = [ChatTurn(role="system", content=system_prompt)]
         messages.extend(history)
         messages.append(ChatTurn(role="user", content=config.prompt))
-        self._persist(session_id, config.project_id, "user", config.prompt)
+        self._persist(session_id, config.project_id, "user", config.prompt, owner_user_id=config.owner_user_id)
 
         # 3. Filtragem de Ferramentas Exclusivas do Especialista
         available_tools = self._tools_for_specialist(profile.allowed_tools, config.mode)
@@ -197,7 +197,7 @@ class AutonomousAgentRuntime:
                     timeout_seconds=min(remaining, config.timeout_seconds),
                 )
             except ProviderError as exc:
-                self._persist(session_id, config.project_id, "assistant", f"[erro do provedor] {exc}")
+                self._persist(session_id, config.project_id, "assistant", f"[erro do provedor] {exc}", owner_user_id=config.owner_user_id)
                 yield {"type": "error", "task_id": task_id, "agent_role": role.value, "error": str(exc)}
                 break
             except asyncio.CancelledError:
@@ -217,7 +217,7 @@ class AutonomousAgentRuntime:
 
             if not reply.tool_calls:
                 final_content = reply.content.strip()
-                self._persist(session_id, config.project_id, "assistant", reply.content)
+                self._persist(session_id, config.project_id, "assistant", reply.content, owner_user_id=config.owner_user_id)
                 break
 
             messages.append(
@@ -232,6 +232,7 @@ class AutonomousAgentRuntime:
                 config.project_id,
                 "assistant",
                 reply.content,
+                owner_user_id=config.owner_user_id,
                 tool_calls=[call.model_dump() for call in reply.tool_calls],
             )
 
@@ -416,6 +417,7 @@ class AutonomousAgentRuntime:
                     affected_resources=preview["affected_resources"],
                     proposed_diff=preview.get("proposed_diff"),
                     reversible=preview.get("reversible", True),
+                    owner_user_id=config.owner_user_id,
                 )
                 yield {
                     "type": "approval_required",
@@ -510,6 +512,7 @@ class AutonomousAgentRuntime:
             model_text,
             tool_call_id=tool_result.call_id,
             tool_name=tool_result.name,
+            owner_user_id=config.owner_user_id,
         )
 
         output = tool_result.output or tool_result.error or ""
@@ -553,7 +556,8 @@ class AutonomousAgentRuntime:
             return []
         try:
             rows = self.db_manager.list_chat_messages(
-                session_id, limit=MAX_HISTORY_MESSAGES, ascending=False
+                session_id, limit=MAX_HISTORY_MESSAGES, ascending=False,
+                owner_user_id=config.owner_user_id
             )
         except Exception as exc:
             logger.warning("Falha ao carregar histórico da sessão %s: %s", session_id, exc)
@@ -585,11 +589,15 @@ class AutonomousAgentRuntime:
             )
         return turns
 
-    def _load_memories(self, role: AgentRole) -> list[str]:
+    def _load_memories(
+        self, role: AgentRole, owner_user_id: str | None = None
+    ) -> list[str]:
         if not self.db_manager:
             return []
         try:
-            mems = self.db_manager.list_agent_memories(agent_role=role.value, limit=10)
+            mems = self.db_manager.list_agent_memories(
+                agent_role=role.value, limit=10, owner_user_id=owner_user_id
+            )
             return [f"{m.get('key', 'Fato')}: {m.get('content', '')}" for m in mems if m.get("content")]
         except Exception as exc:
             logger.warning("Falha ao ler memórias do agente %s: %s", role.value, exc)
@@ -635,6 +643,7 @@ class AutonomousAgentRuntime:
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
         tool_name: str | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         if self.db_manager is None:
             return
@@ -647,6 +656,7 @@ class AutonomousAgentRuntime:
                 tool_calls=tool_calls,
                 tool_call_id=tool_call_id,
                 tool_name=tool_name,
+                owner_user_id=owner_user_id,
             )
         except Exception as exc:
             logger.warning("Falha ao persistir mensagem do agente %s: %s", role, exc)

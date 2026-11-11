@@ -23,6 +23,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   // Trilha de Auditoria ao Vivo
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>('');
 
   const loadAuditLogs = async () => {
@@ -30,8 +31,9 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
     try {
       const data = await fetchAuditLogs(20, 0, severityFilter || undefined);
       setAuditLogs(data.events || []);
+      setLogsError(null);
     } catch (e) {
-      console.error(e);
+      setLogsError(e instanceof Error ? e.message : 'Não foi possível carregar a trilha de auditoria.');
     } finally {
       setLogsLoading(false);
     }
@@ -232,7 +234,9 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
             overflowY: 'auto',
           }}
         >
-          {auditLogs.length === 0 ? (
+          {logsError ? (
+            <div role="alert" style={{ padding: '20px', textAlign: 'center', color: 'var(--danger-color)', fontSize: '0.875rem' }}>{logsError}</div>
+          ) : auditLogs.length === 0 ? (
             <div
               style={{
                 padding: '24px',

@@ -27,7 +27,7 @@ export const FolderIndexModal: React.FC<FolderIndexModalProps> = ({
       <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div>
           <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '4px' }}>
-            Caminho Físico da Pasta no Computador
+            Caminho Físico da Pasta no Servidor JARVIS
           </label>
           <input
             type="text"
@@ -69,7 +69,7 @@ export const FolderIndexModal: React.FC<FolderIndexModalProps> = ({
         </div>
 
         <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
-          O JARVIS percorrerá o diretório recursivamente, indexando arquivos de código, markdown e texto (ignorando node_modules e dependências pesadas).
+          O JARVIS percorrerá uma pasta acessível no servidor, recursivamente. Em instalações remotas, este caminho não aponta para o disco do seu computador. Apenas pastas de projetos e uploads autorizados da sua conta serão aceitas.
         </p>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

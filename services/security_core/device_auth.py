@@ -45,6 +45,7 @@ def hash_token(token: str) -> str:
 class DeviceRegistration(BaseModel):
     device_id: str
     device_name: str
+    owner_user_id: str | None = None
     device_token: str | None = None
     token_hash: str = ""
     scopes: list[str] = Field(default_factory=list)
@@ -117,6 +118,7 @@ class DeviceAuthManager:
                     reg = DeviceRegistration(
                         device_id=item["device_id"],
                         device_name=item.get("device_name", "unknown"),
+                        owner_user_id=item.get("owner_user_id"),
                         device_token=None,
                         token_hash=item.get("token_hash", ""),
                         scopes=list(item.get("scopes", [])),
@@ -139,6 +141,7 @@ class DeviceAuthManager:
                     reg = DeviceRegistration(
                         device_id=item["device_id"],
                         device_name=item.get("device_name", "unknown"),
+                        owner_user_id=item.get("owner_user_id"),
                         device_token=None,
                         token_hash=item.get("token_hash", ""),
                         scopes=list(item.get("scopes", [])),
@@ -170,6 +173,7 @@ class DeviceAuthManager:
                 is_revoked=reg.is_revoked,
                 paired_at=reg.paired_at,
                 last_seen_at=reg.last_seen_at,
+                owner_user_id=reg.owner_user_id,
             )
         except Exception:
             pass
@@ -187,6 +191,7 @@ class DeviceAuthManager:
                 {
                     "device_id": reg.device_id,
                     "device_name": reg.device_name,
+                    "owner_user_id": reg.owner_user_id,
                     "token_hash": reg.token_hash,
                     "scopes": list(reg.scopes),
                     "is_revoked": reg.is_revoked,
@@ -212,6 +217,7 @@ class DeviceAuthManager:
         device_name: str,
         scopes: list[str] | None = None,
         created_by: str = "system",
+        owner_user_id: str | None = None,
     ) -> DeviceRegistration:
         requested = list(DEFAULT_DEVICE_SCOPES if scopes is None else scopes)
         unknown = sorted(set(requested) - ALLOWED_DEVICE_SCOPES)
@@ -226,6 +232,7 @@ class DeviceAuthManager:
         stored_reg = DeviceRegistration(
             device_id=device_id,
             device_name=device_name,
+            owner_user_id=owner_user_id,
             device_token=None,
             token_hash=token_digest,
             scopes=requested,
@@ -252,6 +259,7 @@ class DeviceAuthManager:
         return DeviceRegistration(
             device_id=device_id,
             device_name=device_name,
+            owner_user_id=owner_user_id,
             device_token=device_token,
             token_hash=token_digest,
             scopes=requested,

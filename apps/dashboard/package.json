@@ -6,7 +6,25 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:router": "node --test scripts/router.test.mjs",
+    "test:overview": "node --test scripts/overview.test.mjs",
+    "test:dashboard": "node --test",
+    "test:workspace": "node --test scripts/workspace.test.mjs",
+    "test:coding": "node --test scripts/coding.test.mjs",
+    "test:agents": "node --test scripts/agents.test.mjs",
+    "test:tasks": "node --test scripts/tasks.test.mjs",
+    "test:models": "node --test scripts/models.test.mjs",
+    "test:approvals": "node --test scripts/approvals.test.mjs",
+    "test:security": "node --test scripts/security.test.mjs",
+    "test:logs": "node --test scripts/logs.test.mjs",
+    "test:profile": "node --test scripts/profile.test.mjs",
+    "test:knowledge": "node --test scripts/knowledge.test.mjs",
+    "test:skills": "node --test scripts/skills.test.mjs",
+    "test:backend-studio": "node --test scripts/backend-studio.test.mjs",
+    "test:quality-studio": "node --test scripts/quality-studio.test.mjs",
+    "test:design-studio": "node --test scripts/design-studio.test.mjs",
+    "test:hardware-executive-setup": "node --test scripts/hardware-executive-setup.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",

@@ -63,6 +63,7 @@ class ApprovalBroker:
         affected_resources: list[str] | None = None,
         proposed_diff: str | None = None,
         reversible: bool = True,
+        owner_user_id: str | None = None,
     ) -> ApprovalTicket:
         request = self.approval_engine.create_request(
             task_id=task_id,
@@ -72,6 +73,7 @@ class ApprovalBroker:
             affected_resources=affected_resources or [],
             proposed_diff=proposed_diff,
             reversible=reversible,
+            owner_user_id=owner_user_id,
         )
         ticket = ApprovalTicket(request=request)
         self._tickets[request.id] = ticket
@@ -132,13 +134,14 @@ class ApprovalBroker:
         approved: bool,
         decided_by: str,
         reason: str | None = None,
+        owner_user_id: str | None = None,
     ) -> ApprovalRequest:
         """Decide via broker atualizando o motor e libertando o runtime.
 
         É tolerante a decisões já aplicadas (por exemplo, pelo endpoint legado
         ``/api/v1/approvals/{id}/decide``), evitando erros duplicados.
         """
-        request = self.approval_engine.get_request(request_id)
+        request = self.approval_engine.get_request(request_id, owner_user_id=owner_user_id)
         if request is None:
             raise ValueError(f"Pedido de aprovação '{request_id}' não encontrado.")
 
@@ -148,12 +151,14 @@ class ApprovalBroker:
                     request_id=request_id,
                     decided_by=decided_by,
                     decision_reason=reason,
+                    owner_user_id=owner_user_id,
                 )
             else:
                 request = self.approval_engine.reject_request(
                     request_id=request_id,
                     decided_by=decided_by,
                     reason=reason or "Rejeitado pelo utilizador.",
+                    owner_user_id=owner_user_id,
                 )
 
         self.resolve(
@@ -186,9 +191,9 @@ class ApprovalBroker:
     # ------------------------------------------------------------------
     # Consulta
     # ------------------------------------------------------------------
-    def list_pending(self) -> list[dict[str, Any]]:
+    def list_pending(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
         pending: list[dict[str, Any]] = []
-        for request in self.approval_engine.list_pending_requests():
+        for request in self.approval_engine.list_pending_requests(owner_user_id=owner_user_id):
             ticket = self._tickets.get(request.id)
             pending.append(
                 {

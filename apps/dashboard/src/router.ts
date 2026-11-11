@@ -59,24 +59,28 @@ const PATH_TABS: Record<string, string> = {
   intelligence: 'executive_report',
 };
 
-const KNOWN_TABS = new Set(Object.keys(TAB_PATHS));
+export const KNOWN_TABS = new Set(Object.keys(TAB_PATHS));
+
+export function isKnownTab(tab: string): boolean {
+  return KNOWN_TABS.has(tab);
+}
 
 export function tabFromLocation(pathname: string, search = ''): string {
   const params = new URLSearchParams(search);
   const tabParam = params.get('tab');
-  if (tabParam && KNOWN_TABS.has(tabParam)) {
-    return tabParam;
+  if (tabParam) {
+    return KNOWN_TABS.has(tabParam) ? tabParam : 'not_found';
   }
 
   const path = pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-  if (path.startsWith('apps/dashboard')) {
+  if (path === 'apps/dashboard') {
     return 'chat';
   }
-  return PATH_TABS[path] || 'chat';
+  return PATH_TABS[path] || 'not_found';
 }
 
 export function pathForTab(tab: string): string {
-  return TAB_PATHS[tab] || TAB_PATHS.chat;
+  return TAB_PATHS[tab] || '/404';
 }
 
 export function updateDocumentTitle(tab: string, title: string): void {

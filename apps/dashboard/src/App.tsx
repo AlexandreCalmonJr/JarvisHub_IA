@@ -9,9 +9,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Minus,
   Square,
-  X as CloseIcon,
   MessageSquare,
   Code2,
   PanelLeft,
@@ -19,8 +17,10 @@ import {
 import { SetupWizardModal } from './components/common/SetupWizardModal';
 import { UserProfileModal, getUserProfile, UserProfileData } from './components/common/UserProfileModal';
 import { ToastContainer } from './components/common/Toast';
+import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
 import { CommandPalette } from './components/common/CommandPalette';
 import { pathForTab, tabFromLocation } from './router';
+import { getAccountStorageKey } from './services/accountScope';
 
 // Code splitting: cada tela é carregada sob demanda
 const Overview = lazy(() =>
@@ -93,6 +93,15 @@ const ViewFallback: React.FC = () => (
   </div>
 );
 
+const NotFoundView: React.FC<{ onGoHome: () => void }> = ({ onGoHome }) => (
+  <section role="status" aria-labelledby="not-found-title" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+    <div style={{ fontSize: '3rem', color: 'var(--accent-color)', fontWeight: 700 }}>404</div>
+    <h1 id="not-found-title" style={{ color: 'var(--text-primary)', fontSize: '1.35rem' }}>Página não encontrada</h1>
+    <p style={{ maxWidth: '420px', fontSize: '0.9rem' }}>Este endereço não corresponde a uma página disponível no JARVIS AI Hub.</p>
+    <button type="button" className="btn btn-primary" onClick={onGoHome}>Ir para a Visão Geral</button>
+  </section>
+);
+
 const DashboardApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>(() =>
     tabFromLocation(window.location.pathname, window.location.search)
@@ -110,16 +119,21 @@ const DashboardApp: React.FC = () => {
   const [targetChatSessionId, setTargetChatSessionId] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequestItem[]>([]);
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [approvalsLoading, setApprovalsLoading] = useState(true);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [approvalsError, setApprovalsError] = useState<string | null>(null);
   const [chatLoaded, setChatLoaded] = useState(
     () => tabFromLocation(window.location.pathname, window.location.search) === 'chat'
   );
 
 
   const navigate = (tab: string) => {
+    const path = pathForTab(tab);
+    if (path === '/404') return;
     setActiveTab(tab);
     if (tab === 'chat') setChatLoaded(true);
     setDesktopMenuOpen(false);
-    const path = pathForTab(tab);
     if (window.location.pathname !== path) {
       window.history.pushState({ tab }, '', path);
     }
@@ -135,14 +149,14 @@ const DashboardApp: React.FC = () => {
 
   // Verificação de primeiro acesso (First-Run Onboarding), rota e atalhos de teclado
   useEffect(() => {
-    const isCompleted = localStorage.getItem('jarvis_setup_completed');
+    const isCompleted = localStorage.getItem(getAccountStorageKey('jarvis_setup_completed'));
     if (isCompleted !== 'true') {
       setShowSetupWizard(true);
     }
 
     const initialTab = tabFromLocation(window.location.pathname, window.location.search);
     const initialPath = pathForTab(initialTab);
-    if (window.location.pathname !== initialPath) {
+    if (initialTab !== 'not_found' && window.location.pathname !== initialPath) {
       window.history.replaceState({ tab: initialTab }, '', initialPath);
     }
 
@@ -173,16 +187,23 @@ const DashboardApp: React.FC = () => {
   }, []);
 
   const loadData = async () => {
-    try {
-      const [h, a] = await Promise.all([
-        fetchHealth().catch(() => null),
-        fetchApprovals().catch(() => []),
-      ]);
-      setHealth(h);
-      setApprovals(a);
-    } catch (e) {
-      console.error('Erro ao atualizar dados:', e);
+    setHealthLoading(true);
+    setApprovalsLoading(true);
+    const [healthResult, approvalsResult] = await Promise.allSettled([fetchHealth(), fetchApprovals()]);
+    if (healthResult.status === 'fulfilled') {
+      setHealth(healthResult.value);
+      setHealthError(null);
+    } else {
+      setHealthError(healthResult.reason instanceof Error ? healthResult.reason.message : 'Falha ao consultar a saúde do sistema.');
     }
+    setHealthLoading(false);
+    if (approvalsResult.status === 'fulfilled') {
+      setApprovals(approvalsResult.value);
+      setApprovalsError(null);
+    } else {
+      setApprovalsError(approvalsResult.reason instanceof Error ? approvalsResult.reason.message : 'Falha ao consultar aprovações.');
+    }
+    setApprovalsLoading(false);
   };
 
   useEffect(() => {
@@ -261,6 +282,11 @@ const DashboardApp: React.FC = () => {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (window.matchMedia('(max-width: 900px)').matches) {
+                    setMobileOpen((prev) => !prev);
+                    setDesktopMenuOpen(false);
+                    return;
+                  }
                   setDesktopMenuOpen((prev) => !prev);
                 }}
                 className="btn btn-ghost"
@@ -270,7 +296,7 @@ const DashboardApp: React.FC = () => {
                 <Menu size={18} />
               </button>
 
-              {/* Menu Cascata do Topo (Arquivo, Editar, Visualizar, Ir, Ajuda) */}
+              {/* Menu de navegação e ações rápidas */}
               {desktopMenuOpen && (
                 <div
                   onClick={(e) => e.stopPropagation()}
@@ -292,11 +318,14 @@ const DashboardApp: React.FC = () => {
                 >
                   <button
                     type="button"
-                    onClick={() => navigate('chat')}
+                    onClick={() => {
+                      setTargetChatSessionId('new_' + Date.now());
+                      navigate('chat');
+                    }}
                     className="btn btn-ghost"
                     style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
                   >
-                    <span>Arquivo</span>
+                    <span>Novo chat</span>
                     <ChevronRight size={12} />
                   </button>
                   <button
@@ -305,7 +334,7 @@ const DashboardApp: React.FC = () => {
                     className="btn btn-ghost"
                     style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
                   >
-                    <span>Editar</span>
+                    <span>Comandos e ações</span>
                     <ChevronRight size={12} />
                   </button>
                   <button
@@ -314,7 +343,7 @@ const DashboardApp: React.FC = () => {
                     className="btn btn-ghost"
                     style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
                   >
-                    <span>Visualizar</span>
+                    <span>Alternar barra lateral</span>
                     <ChevronRight size={12} />
                   </button>
                   <button
@@ -323,7 +352,7 @@ const DashboardApp: React.FC = () => {
                     className="btn btn-ghost"
                     style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
                   >
-                    <span>Ir</span>
+                    <span>Centro de Agentes</span>
                     <ChevronRight size={12} />
                   </button>
                   <button
@@ -332,7 +361,7 @@ const DashboardApp: React.FC = () => {
                     className="btn btn-ghost"
                     style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
                   >
-                    <span>Ajuda</span>
+                    <span>Hardware Advisor</span>
                     <ChevronRight size={12} />
                   </button>
                 </div>
@@ -504,7 +533,7 @@ const DashboardApp: React.FC = () => {
               {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
             </button>
 
-            {/* Controles Nativos Desktop da Janela (─ □ ✕) */}
+            {/* Controlo de ecrã inteiro disponível no navegador */}
             <div
               style={{
                 display: 'flex',
@@ -520,14 +549,6 @@ const DashboardApp: React.FC = () => {
                 type="button"
                 className="btn btn-ghost"
                 style={{ padding: '3px 6px', color: 'var(--text-muted)' }}
-                title="Minimizar"
-              >
-                <Minus size={12} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ padding: '3px 6px', color: 'var(--text-muted)' }}
                 title="Maximizar"
                 onClick={() => {
                   if (!document.fullscreenElement) {
@@ -538,14 +559,6 @@ const DashboardApp: React.FC = () => {
                 }}
               >
                 <Square size={11} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ padding: '3px 6px', color: 'var(--text-muted)' }}
-                title="Fechar"
-              >
-                <CloseIcon size={12} />
               </button>
             </div>
           </div>
@@ -560,8 +573,11 @@ const DashboardApp: React.FC = () => {
             backgroundColor: 'var(--bg-primary)',
           }}
         >
+          {activeTab === 'not_found' ? (
+            <NotFoundView onGoHome={() => navigate('overview')} />
+          ) : (
           <Suspense fallback={<ViewFallback />}>
-            {activeTab === 'overview' && <Overview health={health} approvals={approvals} />}
+            {activeTab === 'overview' && <Overview health={health} approvals={approvals} healthLoading={healthLoading} approvalsLoading={approvalsLoading} healthError={healthError} approvalsError={approvalsError} />}
             {activeTab === 'coding' && <CodingAgentView />}
             {chatLoaded && (
               <div style={{ display: activeTab === 'chat' ? 'block' : 'none', height: '100%' }}>
@@ -572,7 +588,7 @@ const DashboardApp: React.FC = () => {
                 />
               </div>
             )}
-            {activeTab === 'approvals' && <ApprovalCenter approvals={approvals} onRefresh={loadData} />}
+            {activeTab === 'approvals' && <ApprovalCenter approvals={approvals} onRefresh={loadData} loading={approvalsLoading} error={approvalsError} />}
             {activeTab === 'workspace' && (
               <ProjectWorkspaceView
                 onSelectForChat={(id) => {
@@ -601,6 +617,7 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'advisor' && <HardwareAdvisorView />}
             {activeTab === 'server_logs' && <ServerLogsView />}
           </Suspense>
+          )}
         </main>
       </div>
 
@@ -632,6 +649,9 @@ const DashboardApp: React.FC = () => {
         }}
         onOpenProfile={() => setShowProfileModal(true)}
       />
+
+      {/* Aprovação humana integrada para operações do Workspace */}
+      <ApprovalPromptHost />
 
       {/* Notificações Toast Globais */}
       <ToastContainer />

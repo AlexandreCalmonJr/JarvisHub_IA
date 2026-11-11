@@ -15,6 +15,8 @@ from services.memory.database import DatabaseManager
 
 logger = logging.getLogger("jarvis.knowledge")
 
+MAX_INDEX_FILE_BYTES = 25 * 1024 * 1024
+
 SUPPORTED_EXTENSIONS = {
     ".md", ".txt", ".json", ".yaml", ".yml", ".py", ".ts", ".tsx",
     ".js", ".jsx", ".java", ".go", ".cs", ".sql", ".html", ".css", ".pdf", ".docx",
@@ -112,15 +114,21 @@ class KnowledgeVaultService:
             return f"{size_bytes / 1024:.1f} KB"
         return f"{size_bytes / (1024 * 1024):.1f} MB"
 
-    def index_file(self, file_path: Path | str, category: str = "geral") -> dict[str, Any]:
+    def index_file(
+        self, file_path: Path | str, category: str = "geral",
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
         """Processa um arquivo físico e indexa seus blocos na Base de Conhecimento."""
         p = Path(file_path).resolve()
         if not p.exists() or not p.is_file():
             raise FileNotFoundError(f"Arquivo não encontrado: {p}")
 
+        file_size = p.stat().st_size
+        if file_size > MAX_INDEX_FILE_BYTES:
+            raise ValueError("O ficheiro excede o limite de indexação de 25 MB.")
         doc_name = p.name
         file_type = p.suffix.lower().replace(".", "").upper() or "TXT"
-        file_size_formatted = self.format_size(p.stat().st_size)
+        file_size_formatted = self.format_size(file_size)
 
         text = self.extract_text_from_file(p)
         if not text.strip():
@@ -134,6 +142,7 @@ class KnowledgeVaultService:
             chunks=chunks,
             file_size_formatted=file_size_formatted,
             source_path=str(p),
+            owner_user_id=owner_user_id,
         )
 
         return {
@@ -147,7 +156,8 @@ class KnowledgeVaultService:
         }
 
     def index_text_snippet(
-        self, doc_name: str, content: str, category: str = "anotacoes"
+        self, doc_name: str, content: str, category: str = "anotacoes",
+        owner_user_id: str | None = None,
     ) -> dict[str, Any]:
         """Indexa um texto avulso digitado ou colado pelo usuário."""
         chunks = self.chunk_text(content)
@@ -159,6 +169,7 @@ class KnowledgeVaultService:
             chunks=chunks,
             file_size_formatted=file_size_formatted,
             source_path="Entrada Direta do Usuário",
+            owner_user_id=owner_user_id,
         )
         return {
             "status": "indexed",
@@ -167,7 +178,10 @@ class KnowledgeVaultService:
             "file_size": file_size_formatted,
         }
 
-    def index_directory(self, dir_path: Path | str, category: str = "projeto") -> dict[str, Any]:
+    def index_directory(
+        self, dir_path: Path | str, category: str = "projeto",
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
         """Varre e indexa todos os arquivos suportados em um diretório local."""
         root = Path(dir_path).resolve()
         if not root.exists() or not root.is_dir():
@@ -177,16 +191,21 @@ class KnowledgeVaultService:
         skipped_files = []
 
         for p in root.rglob("*"):
-            if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS:
-                # Ignora pastas de cache e dependências gigantes
-                parts = p.parts
-                if any(k in parts for k in ("node_modules", ".venv", "__pycache__", ".git", "dist", "build")):
-                    continue
-                try:
-                    res = self.index_file(p, category=category)
-                    indexed_files.append(res)
-                except Exception as exc:
-                    skipped_files.append({"file": p.name, "error": str(exc)})
+            if p.is_symlink() or not p.is_file() or p.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                continue
+            try:
+                p.resolve(strict=True).relative_to(root)
+            except (OSError, RuntimeError, ValueError):
+                continue
+            # Ignora pastas de cache, dependências e arquivos acima do limite.
+            parts = p.parts
+            if any(k in parts for k in ("node_modules", ".venv", "__pycache__", ".git", "dist", "build")):
+                continue
+            try:
+                res = self.index_file(p, category=category, owner_user_id=owner_user_id)
+                indexed_files.append(res)
+            except Exception as exc:
+                skipped_files.append({"file": p.name, "error": str(exc)})
 
         return {
             "status": "completed",
@@ -196,14 +215,24 @@ class KnowledgeVaultService:
             "skipped_count": len(skipped_files),
         }
 
-    def search(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
-        """Realiza busca textual relacional no Vault."""
-        return self.db.search_knowledge_vault(query, limit=limit)
+    def search(
+        self, query: str, limit: int = 4, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Realiza busca textual restrita ao proprietário."""
+        return self.db.search_knowledge_vault(
+            query, limit=limit, owner_user_id=owner_user_id
+        )
 
-    def list_documents(self) -> list[dict[str, Any]]:
-        """Lista inventário de documentos indexados no Vault."""
-        return self.db.list_knowledge_documents()
+    def list_documents(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Lista inventário de documentos do proprietário."""
+        return self.db.list_knowledge_documents(owner_user_id=owner_user_id)
 
-    def delete_document(self, doc_name: str) -> bool:
-        """Exclui documento do Vault."""
-        return self.db.delete_knowledge_document(doc_name)
+    def delete_document(
+        self, doc_name: str, owner_user_id: str | None = None
+    ) -> bool:
+        """Exclui documento apenas do proprietário."""
+        return self.db.delete_knowledge_document(
+            doc_name, owner_user_id=owner_user_id
+        )

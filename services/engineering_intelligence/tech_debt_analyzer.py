@@ -37,9 +37,13 @@ class EngineeringIntelligenceService:
         complex_functions = []
 
         for f in p_dir.rglob("*"):
-            if not f.is_file() or f.suffix.lower() not in supported_exts:
+            if not f.is_file() or f.is_symlink() or f.suffix.lower() not in supported_exts:
                 continue
             if any(part in ignored_dirs for part in f.parts):
+                continue
+            try:
+                f.resolve().relative_to(p_dir)
+            except (OSError, ValueError):
                 continue
 
             total_files += 1
@@ -125,15 +129,12 @@ class EngineeringIntelligenceService:
             ],
         }
 
-    def calculate_productivity_and_roi(self) -> dict[str, Any]:
+    def calculate_productivity_and_roi(self, owner_user_id: str | None = None) -> dict[str, Any]:
         """Calcula horas economizadas e dólares poupados com inferência local sem nuvem."""
-        total_tasks = 12
+        total_tasks = 0
         if self.db:
-            try:
-                tasks = self.db.list_tasks(limit=100)
-                total_tasks = max(len(tasks), total_tasks)
-            except Exception:
-                pass
+            tasks = self.db.list_tasks(limit=100, owner_user_id=owner_user_id)
+            total_tasks = sum(1 for task in tasks if task.get("is_completed"))
 
         # Estimativa de tokens processados localmente (ex: ~4.000 tokens por tarefa de engenharia)
         estimated_tokens = total_tasks * 4500
@@ -149,32 +150,33 @@ class EngineeringIntelligenceService:
             "cost_saved_usd": cost_saved_usd,
             "cost_saved_brl": round(cost_saved_usd * 5.80, 2),
             "engineering_hours_saved": hours_saved,
-            "cloud_lockin": "0% (Soberania de Dados 100% Local)",
+            "cloud_lockin": "Não calculado",
         }
 
-    def generate_executive_report(self, project_id: str | None = None) -> dict[str, Any]:
-        """Gera relatório executivo consolidado em Markdown e HTML."""
-        roi = self.calculate_productivity_and_roi()
+    def generate_executive_report(
+        self, project_id: str | None = None, owner_user_id: str | None = None
+    ) -> dict[str, Any]:
+        """Gera relatório executivo global (admin) ou limitado à conta/projeto."""
+        if project_id and not owner_user_id:
+            raise PermissionError("A conta proprietária é obrigatória para relatórios de projeto.")
+        roi = self.calculate_productivity_and_roi(owner_user_id=owner_user_id)
         now = datetime.now(UTC).strftime("%d/%m/%Y %H:%M UTC")
 
         proj_name = project_id or "Ecossistema Geral"
         debt = None
         if project_id and self.workspace_service:
-            try:
-                p_dir = self.workspace_service.get_project_dir(project_id)
-                debt = self.analyze_technical_debt(p_dir)
-            except Exception:
-                pass
+            p_dir = self.workspace_service.get_project_dir(project_id)
+            debt = self.analyze_technical_debt(p_dir)
 
         md_lines = [
             f"# 📊 JARVIS AI HUB — Relatório Executivo de Engenharia",
             f"**Data de Emissão:** {now} | **Projeto:** {proj_name}",
             "",
             "## 1. Sumário Executivo de Produtividade & ROI",
-            f"- **Tarefas Automatizadas Concluídas:** {roi['total_tasks_completed']}",
-            f"- **Horas de Engenharia Poupadas:** {roi['engineering_hours_saved']} horas",
-            f"- **Economia Direta em APIs de Nuvem:** US$ {roi['cost_saved_usd']} (~R$ {roi['cost_saved_brl']})",
-            f"- **Privacidade e Soberania:** 100% dos dados mantidos localmente em 127.0.0.1",
+            f"- **Tarefas Concluídas na Conta:** {roi['total_tasks_completed']}",
+            f"- **Tempo potencialmente poupado (estimativa):** {roi['engineering_hours_saved']} horas (0,42h por tarefa)",
+            f"- **Economia estimada em APIs de Nuvem:** US$ {roi['cost_saved_usd']} (~R$ {roi['cost_saved_brl']}) — 4.500 tokens/tarefa a US$ 10 por milhão",
+            f"- **Escopo dos dados:** {'Conta proprietária do projeto' if project_id else 'Relatório global administrativo'}",
             "",
             "## 2. Indicadores de Qualidade e Saúde do Código",
         ]
@@ -196,9 +198,7 @@ class EngineeringIntelligenceService:
         md_lines.extend([
             "",
             "## 3. Conformidade & Segurança Cibernética",
-            "- **Mecanismo Kill Switch:** Operacional",
-            "- **Trilha de Auditoria:** Inviolável com retenção local",
-            "- **Blindagem DLP:** Redaction automático de tokens ativado",
+            "- **Controles de segurança:** consultar o Security Center para o estado operacional atual",
             "",
             "---",
             "*Gerado automaticamente pelo JARVIS AI Hub Intelligence Core.*",

@@ -25,6 +25,7 @@ def build_specialist_prompt(
     project_id: str | None = None,
     domain: str | None = None,
     previous_outputs: list[dict[str, Any]] | None = None,
+    owner_user_id: str | None = None,
 ) -> str:
     """Monta um prompt de sistema rico com perfil do agente, skills ECC ativas, regras de projeto e histórico de colaboração."""
     role_val = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
@@ -54,7 +55,7 @@ def build_specialist_prompt(
         user_inst = ""
         if db_manager and hasattr(db_manager, "get_user_profile"):
             try:
-                prof = db_manager.get_user_profile()
+                prof = db_manager.get_user_profile(owner_user_id=owner_user_id)
                 c_inst = prof.get("custom_instructions") or prof.get("customInstructions")
                 if c_inst and str(c_inst).strip():
                     user_inst = f"\n\nInstruções do Desenvolvedor: {str(c_inst).strip()}"
@@ -72,7 +73,7 @@ def build_specialist_prompt(
     memory_section = ""
     if db_manager and project_id:
         try:
-            memories = db_manager.list_project_memory(project_id)
+            memories = db_manager.list_project_memory(project_id, owner_user_id=owner_user_id)
             if memories:
                 items = []
                 for m in memories[:8]:
@@ -118,7 +119,9 @@ def build_specialist_prompt(
     agent_memory_section = ""
     if db_manager and hasattr(db_manager, "list_agent_memories"):
         try:
-            agent_mems = db_manager.list_agent_memories(agent_role=role_val, limit=5)
+            agent_mems = db_manager.list_agent_memories(
+                agent_role=role_val, limit=5, owner_user_id=owner_user_id
+            )
             if agent_mems:
                 items = []
                 for am in agent_mems:
@@ -137,7 +140,7 @@ def build_specialist_prompt(
     user_instructions_section = ""
     if db_manager and hasattr(db_manager, "get_user_profile"):
         try:
-            user_prof = db_manager.get_user_profile()
+            user_prof = db_manager.get_user_profile(owner_user_id=owner_user_id)
             custom_inst = user_prof.get("custom_instructions") or user_prof.get("customInstructions")
             seniority = user_prof.get("seniority_level") or user_prof.get("seniorityLevel")
             role_title = user_prof.get("role_title") or user_prof.get("roleTitle")
@@ -160,7 +163,9 @@ def build_specialist_prompt(
     knowledge_section = ""
     if db_manager and hasattr(db_manager, "search_knowledge_vault") and user_prompt:
         try:
-            k_results = db_manager.search_knowledge_vault(user_prompt, limit=3)
+            k_results = db_manager.search_knowledge_vault(
+                user_prompt, limit=3, owner_user_id=owner_user_id
+            )
             if k_results:
                 k_items = []
                 for kr in k_results:
@@ -188,9 +193,26 @@ def build_specialist_prompt(
     skills_section = ""
     if skills_catalog:
         try:
-            skills = skills_catalog.get_skills_for_agent(role_val)
+            skills = [
+                skill for skill in skills_catalog.get_skills_for_agent(role_val)
+                if getattr(skill, "origin", "") not in {"user_created", "imported_ecc"}
+            ]
             if not skills and dom:
-                skills = skills_catalog.get_relevant_skills(dom, limit=2)
+                skills = [
+                    skill for skill in skills_catalog.get_relevant_skills(dom, limit=2)
+                    if getattr(skill, "origin", "") not in {"user_created", "imported_ecc"}
+                ]
+            if owner_user_id is not None and db_manager and hasattr(db_manager, "list_user_skills"):
+                private_skills = db_manager.list_user_skills(owner_user_id=owner_user_id)
+                for skill in private_skills:
+                    assigned = skill.get("assigned_agents") or []
+                    if role_val in assigned and skill.get("is_approved", True):
+                        skills.append(type("PrivateSkill", (), {
+                            "name": skill.get("name", skill.get("id", "Skill")),
+                            "version": skill.get("version", "1.0.0"),
+                            "description": skill.get("description", ""),
+                            "instructions": skill.get("instructions", ""),
+                        })())
             if skills:
                 items = []
                 for s in skills[:3]:

@@ -48,18 +48,27 @@ class JarvisMaster:
             tool_gateway=self.tool_gateway,
         )
 
+    @staticmethod
+    def _checkpoint_thread_id(task_id: str, owner_user_id: str | None) -> str:
+        """Namespace checkpoints by account to prevent cross-account task collisions."""
+        if not owner_user_id:
+            return task_id
+        return f"account:{owner_user_id}:task:{task_id}"
+
     async def execute_task(
         self,
         user_prompt: str,
         session_id: str | None = None,
         project_id: str | None = None,
         task_id: str | None = None,
+        owner_user_id: str | None = None,
     ) -> TaskState:
         actual_task_id = task_id or f"tsk-{uuid.uuid4().hex[:8]}"
         actual_session_id = session_id or f"ses-{uuid.uuid4().hex[:8]}"
 
         initial_state: TaskState = {
             "task_id": actual_task_id,
+            "owner_user_id": owner_user_id,
             "session_id": actual_session_id,
             "user_prompt": user_prompt,
             "project_id": project_id,
@@ -79,21 +88,33 @@ class JarvisMaster:
         }
 
         # Executa no grafo com checkpoint associado ao task_id
-        config = {"configurable": {"thread_id": actual_task_id}}
+        config = {"configurable": {"thread_id": self._checkpoint_thread_id(actual_task_id, owner_user_id)}}
         result_state = await self.graph.ainvoke(initial_state, config=config)
         return result_state
 
-    async def resume_after_approval(self, task_id: str, approved_by: str) -> TaskState:
+    async def resume_after_approval(
+        self, task_id: str, approved_by: str, owner_user_id: str | None = None
+    ) -> TaskState:
         """Retoma uma tarefa que estava pausada aguardando aprovação humana e aplica alterações se aplicável."""
-        config = {"configurable": {"thread_id": task_id}}
+        config = {"configurable": {"thread_id": self._checkpoint_thread_id(task_id, owner_user_id)}}
         checkpoint = await self.graph.aget_state(config)
         if not checkpoint or not checkpoint.values:
             raise ValueError(f"Nenhum estado persistido encontrado para a tarefa '{task_id}'.")
 
         current_values = dict(checkpoint.values)
+        checkpoint_owner = current_values.get("owner_user_id")
+        if checkpoint_owner != owner_user_id:
+            raise PermissionDeniedError(
+                "Retomada bloqueada: a tarefa não pertence à conta autenticada."
+            )
         approval_id = current_values.get("approval_id")
         intent = current_values.get("classified_intent")
-        approval = self.security_core.approval_engine.get_request(approval_id) if approval_id else None
+        approval = (
+            self.security_core.approval_engine.get_request(
+                approval_id, owner_user_id=owner_user_id
+            )
+            if approval_id else None
+        )
 
         if intent == "code_modification":
             if (
@@ -144,6 +165,13 @@ class JarvisMaster:
                 )
 
             created = self.workspace_service.scaffold_project(**pending_project)
+            if getattr(self, "db_manager", None) is not None and owner_user_id is not None:
+                self.db_manager.register_project(
+                    project_id=project_id,
+                    name=str(pending_project.get("name") or project_id),
+                    root_path=str(project_root),
+                    owner_user_id=owner_user_id,
+                )
             self.security_core.audit.record_event(
                 operation="WORKSPACE_PROJECT_CREATE_APPROVED",
                 status="SUCCESS",

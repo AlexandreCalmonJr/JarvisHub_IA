@@ -81,6 +81,7 @@ async def test_03_valid_device_token_access():
     reg = security_core.device_auth.pair_device(
         "Tablet de Operações",
         scopes=["chat:read", "chat:use", "system:read", "approvals:read", "workspace:read"],
+        owner_user_id="admin",
     )
     token = reg.device_token
 
@@ -186,6 +187,7 @@ async def test_07_mobile_approval_decision_validated_identity():
     reg = security_core.device_auth.pair_device(
         "Smartphone Homologado",
         scopes=["approvals:read", "approvals:decide"],
+        owner_user_id="admin",
     )
     token = reg.device_token
     device_id = reg.device_id
@@ -197,6 +199,7 @@ async def test_07_mobile_approval_decision_validated_identity():
         operation="schema_migration",
         impact_summary="Aplicar migration no banco",
         affected_resources=["migrations/001.sql"],
+        owner_user_id="admin",
     )
 
     transport = ASGITransport(app=app)
@@ -261,3 +264,42 @@ async def test_08_mobile_kill_switch_scope_enforcement():
 
         # Restaura estado
         security_core.kill_switch.reset_global_kill(authorized_by="admin_test")
+
+
+@pytest.mark.asyncio
+async def test_user_can_pair_device_to_own_private_account():
+    owner = "mobile_owner_test"
+    session = auth_service.create_session(owner, "developer")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        paired = await client.post(
+            "/api/v1/mobile/pair",
+            json={"device_name": "Meu dispositivo de teste"},
+            headers={"Authorization": f"Bearer {session.session_id}"},
+        )
+        assert paired.status_code == 200
+        token = paired.json()["device_token"]
+        device_id = paired.json()["device_id"]
+
+        approval = security_core.approval_engine.create_request(
+            task_id="mobile-owner-approval-test",
+            agent_role=AgentRole.JARVIS_MASTER.value,
+            operation="file_write",
+            impact_summary="Aprovação privada da conta do dispositivo",
+            affected_resources=["project/main.py"],
+            owner_user_id=owner,
+        )
+        visible = await client.get(
+            "/api/v1/approvals", headers={"X-Device-Token": token}
+        )
+        assert visible.status_code == 200
+        assert approval.id in {item["id"] for item in visible.json()}
+
+        assert security_core.device_auth.validate_token(token).owner_user_id == owner
+        security_core.device_auth.revoke_device(
+            device_id, reason="limpeza de teste", revoked_by=owner
+        )
+        security_core.approval_engine.reject_request(
+            approval.id, decided_by=owner, reason="limpeza de teste",
+            owner_user_id=owner,
+        )

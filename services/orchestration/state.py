@@ -8,6 +8,7 @@ class TaskState(TypedDict):
     """
 
     task_id: str
+    owner_user_id: str | None
     session_id: str
     user_prompt: str
     project_id: str | None

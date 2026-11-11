@@ -19,50 +19,81 @@ import {
 export const ExecutiveReportView: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
 
-  // ROI e Produtividade
+  // ROI global (administrativo)
   const [roiData, setRoiData] = useState<any | null>(null);
+  const [roiLoading, setRoiLoading] = useState(false);
+  const [roiError, setRoiError] = useState<string | null>(null);
 
-  // Dívida Técnica
+  // Dívida Técnica do projeto selecionado
   const [debtData, setDebtData] = useState<any | null>(null);
+  const [debtLoading, setDebtLoading] = useState(false);
+  const [debtError, setDebtError] = useState<string | null>(null);
 
   // Relatório Executivo Consolidado
   const [reportMarkdown, setReportMarkdown] = useState<string | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [copiedReport, setCopiedReport] = useState(false);
 
   const loadInitial = async () => {
-    try {
-      const [projs, roi] = await Promise.all([
-        fetchWorkspaceProjects().catch(() => []),
-        fetchProductivityRoi().catch(() => null),
-      ]);
-      setProjects(projs || []);
-      setRoiData(roi);
-      if (projs && projs.length > 0 && !selectedProjectId) {
-        setSelectedProjectId(projs[0].id);
-      }
-    } catch (e) {
-      console.error(e);
+    setProjectsLoading(true);
+    setRoiLoading(true);
+    const [projectResult, roiResult] = await Promise.allSettled([
+      fetchWorkspaceProjects(),
+      fetchProductivityRoi(),
+    ]);
+    if (projectResult.status === 'fulfilled') {
+      const projs = projectResult.value || [];
+      setProjects(projs);
+      setProjectsError(null);
+      if (projs.length > 0 && !selectedProjectId) setSelectedProjectId(projs[0].id);
+    } else {
+      setProjects([]);
+      setProjectsError((projectResult.reason as Error)?.message || 'Falha ao carregar projetos.');
     }
+    if (roiResult.status === 'fulfilled') {
+      setRoiData(roiResult.value);
+      setRoiError(null);
+    } else {
+      setRoiData(null);
+      setRoiError((roiResult.reason as Error)?.message || 'Métricas globais indisponíveis. Apenas administradores podem consultá-las.');
+    }
+    setProjectsLoading(false);
+    setRoiLoading(false);
   };
 
   const loadProjectDebt = async (projId: string) => {
-    if (!projId) return;
+    if (!projId) {
+      setDebtData(null);
+      return;
+    }
+    setDebtLoading(true);
+    setDebtError(null);
+    setDebtData(null);
     try {
       const debt = await fetchProjectTechDebt(projId);
       setDebtData(debt);
-    } catch (e) {
-      console.error(e);
-      setDebtData(null);
+    } catch (e: any) {
+      setDebtError(e?.message || 'Falha ao analisar dívida técnica do projeto.');
+    } finally {
+      setDebtLoading(false);
     }
   };
 
   const generateReport = async (projId?: string) => {
+    setReportLoading(true);
+    setReportError(null);
+    setReportMarkdown(null);
     try {
       const rep = await fetchExecutiveReport(projId);
-      setReportMarkdown(rep.markdown);
-    } catch (e) {
-      console.error(e);
+      setReportMarkdown(rep.markdown || '');
+    } catch (e: any) {
+      setReportError(e?.message || 'Falha ao gerar relatório executivo.');
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -105,6 +136,7 @@ export const ExecutiveReportView: React.FC = () => {
             PROJETO:
           </label>
           <select
+            disabled={projectsLoading || projects.length === 0}
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
             style={{
@@ -126,32 +158,38 @@ export const ExecutiveReportView: React.FC = () => {
         </div>
       </div>
 
+      {projectsError && <div role="alert" style={{ color: '#f87171', fontSize: '0.84rem' }}>{projectsError}</div>}
+      {projectsLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando projetos...</div>}
+      {!projectsLoading && !projectsError && projects.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Nenhum projeto disponível nesta conta.</div>}
+
       {/* Grid de KPIs de ROI e Produtividade */}
+      {roiLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando métricas...</div>}
+      {roiError && <div role="alert" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Métricas globais: {roiError}</div>}
       {roiData && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '16px' }}>
           <div className="glass-card" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Economia em Nuvem</span>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Economia Estimada em Nuvem</span>
               <DollarSign size={16} color="#34d399" />
             </div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
               US$ {roiData.cost_saved_usd}
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Aprox. R$ {roiData.cost_saved_brl} poupados em APIs
+              Aprox. R$ {roiData.cost_saved_brl}; estimativa com 4.500 tokens por tarefa
             </div>
           </div>
 
           <div className="glass-card" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tempo Poupado</span>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tempo Potencialmente Poupado</span>
               <Clock size={16} color="var(--accent-color)" />
             </div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, color: 'var(--accent-color)', fontFamily: 'var(--font-mono)' }}>
               {roiData.engineering_hours_saved}h
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Horas de engenharia automatizadas
+              Estimativa de 0,42h por tarefa concluída
             </div>
           </div>
 
@@ -164,24 +202,27 @@ export const ExecutiveReportView: React.FC = () => {
               {roiData.total_tasks_completed}
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Ações executadas pelos 26 especialistas
+              Tarefas registradas no ambiente
             </div>
           </div>
 
           <div className="glass-card" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Soberania de Dados</span>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Política de Dados</span>
               <ShieldCheck size={16} color="#10b981" />
             </div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, color: '#10b981', fontFamily: 'var(--font-mono)' }}>
-              100% Local
+              Privado por conta
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Zero dependência externa ou vazamento
+              Isolamento aplicado por proprietário nas áreas homologadas
             </div>
           </div>
         </div>
       )}
+
+      {debtLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Analisando dívida técnica do projeto...</div>}
+      {debtError && <div role="alert" style={{ color: '#f87171', fontSize: '0.84rem' }}>{debtError}</div>}
 
       {/* Dívida Técnica do Projeto */}
       {debtData && (
@@ -215,6 +256,9 @@ export const ExecutiveReportView: React.FC = () => {
           )}
         </div>
       )}
+
+      {reportLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Gerando relatório executivo...</div>}
+      {reportError && <div role="alert" style={{ color: '#f87171', fontSize: '0.84rem' }}>{reportError}</div>}
 
       {/* Relatório Executivo Consolidado */}
       <div className="glass-card" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -252,6 +296,9 @@ export const ExecutiveReportView: React.FC = () => {
           </div>
         </div>
 
+        {!reportLoading && !reportError && !reportMarkdown && (
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Selecione um projeto para gerar o relatório.</div>
+        )}
         {reportMarkdown && (
           <pre
             style={{

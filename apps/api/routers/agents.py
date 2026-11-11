@@ -3,9 +3,11 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
 from fastapi.responses import StreamingResponse
 
+from apps.api.auth import Principal, get_principal, require_admin, require_permission
 from apps.api.deps import (
     AGENT_PROFILES,
     InferenceRequest,
@@ -15,6 +17,7 @@ from apps.api.deps import (
     build_specialist_prompt,
     db_manager,
     model_manager,
+    security_core,
     skills_catalog,
     tool_gateway,
 )
@@ -24,6 +27,7 @@ from apps.api.schemas import (
     AgentPlaygroundRequest,
     AutonomousAgentRunRequest,
 )
+from packages.contracts.security import ProjectWorkMode
 from packages.contracts.agent import (
     AgentRole,
     AutonomousAgentMode,
@@ -36,8 +40,19 @@ router = APIRouter(tags=["agents"])
 _agent_session_locks: dict[str, asyncio.Lock] = {}
 
 
+def _private_owner(principal: Principal) -> str:
+    if principal.kind == "device" and principal.subject_id.startswith("device:"):
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
+        )
+    return principal.subject_id
+
+
 @router.get("/api/v1/agents")
-async def list_agents_endpoint():
+async def list_agents_endpoint(
+    principal: Principal = Depends(get_principal),
+):
     return [
         {
             "role": profile.role.value if hasattr(profile.role, "value") else str(profile.role),
@@ -54,7 +69,9 @@ async def list_agents_endpoint():
 
 
 @router.get("/api/v1/agents/{role}")
-async def get_agent_endpoint(role: str):
+async def get_agent_endpoint(
+    role: str, principal: Principal = Depends(get_principal),
+):
     clean_role = role.lower().strip()
     profile = None
     for p in AGENT_PROFILES.values():
@@ -77,7 +94,10 @@ async def get_agent_endpoint(role: str):
 
 
 @router.put("/api/v1/agents/{role}/config")
-async def update_agent_config_endpoint(role: str, payload: AgentConfigUpdateRequest):
+async def update_agent_config_endpoint(
+    role: str, payload: AgentConfigUpdateRequest,
+    principal: Principal = Depends(require_admin),
+):
     clean_role = role.lower().strip()
     target_profile = None
     for p in AGENT_PROFILES.values():
@@ -127,12 +147,21 @@ async def update_agent_config_endpoint(role: str, payload: AgentConfigUpdateRequ
 
 
 @router.get("/api/v1/agents/{role}/memories")
-async def list_agent_memories_endpoint(role: str, category: str | None = None, limit: int = 50):
-    return db_manager.list_agent_memories(agent_role=role, category=category, limit=limit)
+async def list_agent_memories_endpoint(
+    role: str, category: str | None = None, limit: int = 50,
+    principal: Principal = Depends(get_principal),
+):
+    return db_manager.list_agent_memories(
+        agent_role=role, category=category, limit=limit,
+        owner_user_id=_private_owner(principal),
+    )
 
 
 @router.post("/api/v1/agents/{role}/memories")
-async def create_agent_memory_endpoint(role: str, payload: AgentMemoryCreateRequest):
+async def create_agent_memory_endpoint(
+    role: str, payload: AgentMemoryCreateRequest,
+    principal: Principal = Depends(get_principal),
+):
     mem_id = db_manager.set_agent_memory(
         agent_role=role,
         category=payload.category,
@@ -140,20 +169,28 @@ async def create_agent_memory_endpoint(role: str, payload: AgentMemoryCreateRequ
         content=payload.content,
         context=payload.context,
         importance=payload.importance,
+        owner_user_id=_private_owner(principal),
     )
     return {"status": "created", "id": mem_id, "agent_role": role, "key": payload.key}
 
 
 @router.delete("/api/v1/agents/{role}/memories/{memory_id}")
-async def delete_agent_memory_endpoint(role: str, memory_id: str):
-    success = db_manager.delete_agent_memory(memory_id)
+async def delete_agent_memory_endpoint(
+    role: str, memory_id: str, principal: Principal = Depends(get_principal)
+):
+    success = db_manager.delete_agent_memory(
+        memory_id, owner_user_id=_private_owner(principal)
+    )
     if not success:
         raise HTTPException(status_code=404, detail="Memória não encontrada.")
     return {"status": "deleted", "id": memory_id}
 
 
 @router.post("/api/v1/agents/{role}/playground")
-async def agent_playground_endpoint(role: str, payload: AgentPlaygroundRequest):
+async def agent_playground_endpoint(
+    role: str, payload: AgentPlaygroundRequest,
+    principal: Principal = Depends(get_principal),
+):
     """Execução isolada de um especialista no playground interativo."""
     clean_role = role.lower().strip()
     profile = None
@@ -165,11 +202,18 @@ async def agent_playground_endpoint(role: str, payload: AgentPlaygroundRequest):
     if not profile:
         raise HTTPException(status_code=404, detail=f"Agente '{role}' não encontrado.")
 
+    owner_user_id = _private_owner(principal)
+    if payload.project_id and not db_manager.get_project(
+        payload.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
     prompt = build_specialist_prompt(
         agent_role=clean_role,
         agent_registry=agent_registry,
         skills_catalog=skills_catalog,
         db_manager=db_manager,
+        owner_user_id=owner_user_id,
         intent="general_planning",
         user_prompt=payload.prompt,
         project_id=payload.project_id,
@@ -189,11 +233,12 @@ async def agent_playground_endpoint(role: str, payload: AgentPlaygroundRequest):
         m_used = resp.model_name
         t_prompt = resp.tokens_prompt
         t_comp = resp.tokens_completion
-    except Exception:
-        content = f"Parecer técnico estruturado de {profile.name}: Análise de '{payload.prompt}' concluída com sucesso."
-        m_used = profile.preferred_model
-        t_prompt = 30
-        t_comp = 50
+    except Exception as exc:
+        logger.exception("Falha no playground do especialista %s", clean_role)
+        raise HTTPException(
+            status_code=503,
+            detail="O provedor de IA está indisponível. O especialista não foi executado.",
+        ) from exc
 
     return {
         "agent_role": clean_role,
@@ -206,8 +251,10 @@ async def agent_playground_endpoint(role: str, payload: AgentPlaygroundRequest):
 
 
 @router.get("/api/v1/tools")
-async def list_tools_endpoint():
-    """Lista catálogo de ferramentas seguras catalogadas no Tool Gateway."""
+async def list_tools_endpoint(
+    principal: Principal = Depends(require_permission("coding:read")),
+):
+    """Lista o catálogo compartilhado de ferramentas para utilizadores autenticados."""
     return [
         {
             "name": t.name,
@@ -221,14 +268,37 @@ async def list_tools_endpoint():
 
 
 @router.post("/api/v1/tools/execute")
-async def execute_tool_endpoint(request: ToolExecutionRequest):
-    """Executa ferramenta no sandbox isolado com auditoria e controle de permissões."""
-    try:
-        res = await tool_gateway.execute_tool(request)
-        return res.model_dump()
-    except Exception as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+async def execute_tool_endpoint(
+    request: ToolExecutionRequest,
+    principal: Principal = Depends(require_permission("coding:use")),
+):
+    """Executa ferramentas apenas em projetos pertencentes à conta autenticada."""
+    owner_user_id = _private_owner(principal)
+    project = db_manager.get_project(request.project_id, owner_user_id=owner_user_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
+    project_root = Path(project["root_path"]).resolve()
+    if not project_root.exists() or not project_root.is_dir():
+        raise HTTPException(status_code=404, detail="Diretório do projeto não encontrado.")
+
+    try:
+        try:
+            project_mode = ProjectWorkMode(project.get("mode", "read_only"))
+        except ValueError:
+            project_mode = ProjectWorkMode.READ_ONLY
+        security_core.permission_engine.register_project(
+            request.project_id, str(project_root), mode=project_mode
+        )
+        result = await tool_gateway.execute_tool(
+            request, owner_user_id=owner_user_id, actor_role=principal.role
+        )
+        return result.model_dump()
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Falha na execução de ferramenta para o projeto %s", request.project_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 # ---------------------------------------------------------------------------
 # Especialistas Autônomos (Etapa 5: Streaming SSE, Tarefas Estruturadas & Histórico)
@@ -243,16 +313,25 @@ def _resolve_agent_role(role_str: str) -> AgentRole:
 
 
 @router.post("/api/v1/agents/{role}/stream")
-async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRunRequest):
+async def stream_agent_execution_endpoint(
+    role: str, payload: AutonomousAgentRunRequest,
+    principal: Principal = Depends(get_principal),
+):
     """Executa o especialista selecionado em modo ReAct com streaming de eventos SSE em tempo real."""
     agent_role = _resolve_agent_role(role)
+    owner_user_id = _private_owner(principal)
+    if payload.project_id and not db_manager.get_project(
+        payload.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         mode = AutonomousAgentMode(payload.mode.lower().strip())
     except ValueError:
         raise HTTPException(status_code=400, detail="Modo inválido. Use 'plan', 'ask' ou 'auto'.")
 
     session_id = payload.session_id or f"ses-{agent_role.value}-{uuid.uuid4().hex[:8]}"
-    lock = _agent_session_locks.setdefault(session_id, asyncio.Lock())
+    lock_key = f"{owner_user_id}:{session_id}"
+    lock = _agent_session_locks.setdefault(lock_key, asyncio.Lock())
     if lock.locked():
         raise HTTPException(status_code=409, detail="Já existe uma execução ativa nesta sessão do especialista.")
 
@@ -261,6 +340,7 @@ async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRun
         prompt=payload.prompt.strip(),
         session_id=session_id,
         project_id=payload.project_id,
+        owner_user_id=owner_user_id,
         mode=mode,
         max_iterations=payload.max_iterations,
         temperature=payload.temperature,
@@ -296,11 +376,16 @@ async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRun
 
 
 @router.get("/api/v1/agents/{role}/history")
-async def get_agent_history_endpoint(role: str, session_id: str | None = None, limit: int = 100):
+async def get_agent_history_endpoint(
+    role: str, session_id: str | None = None, limit: int = 100,
+    principal: Principal = Depends(get_principal),
+):
     """Lista histórico conversacional e eventos de ferramentas persistidos para a sessão do especialista."""
     agent_role = _resolve_agent_role(role)
     effective_session = session_id or f"ses-{agent_role.value}"
-    messages = db_manager.list_chat_messages(effective_session, limit=limit)
+    messages = db_manager.list_chat_messages(
+        effective_session, limit=limit, owner_user_id=_private_owner(principal)
+    )
     return {
         "agent_role": agent_role.value,
         "session_id": effective_session,
@@ -309,9 +394,17 @@ async def get_agent_history_endpoint(role: str, session_id: str | None = None, l
 
 
 @router.post("/api/v1/agents/{role}/task")
-async def execute_agent_task_endpoint(role: str, payload: AutonomousAgentRunRequest):
+async def execute_agent_task_endpoint(
+    role: str, payload: AutonomousAgentRunRequest,
+    principal: Principal = Depends(get_principal),
+):
     """Executa uma tarefa estruturada com o especialista, retornando o AgentOutputContract formal."""
     agent_role = _resolve_agent_role(role)
+    owner_user_id = _private_owner(principal)
+    if payload.project_id and not db_manager.get_project(
+        payload.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     try:
         mode = AutonomousAgentMode(payload.mode.lower().strip())
     except ValueError:
@@ -323,6 +416,7 @@ async def execute_agent_task_endpoint(role: str, payload: AutonomousAgentRunRequ
         prompt=payload.prompt.strip(),
         session_id=session_id,
         project_id=payload.project_id,
+        owner_user_id=owner_user_id,
         mode=mode,
         max_iterations=payload.max_iterations,
         temperature=payload.temperature,

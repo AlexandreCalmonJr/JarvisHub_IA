@@ -6,38 +6,10 @@ import { AgentActionsModal } from './agents/AgentActionsModal';
 import { AgentDetailModal } from './agents/AgentDetailModal';
 import { AgentPlayground } from './agents/AgentPlayground';
 
-const FALLBACK_AGENTS: AgentInfo[] = [
-  { role: 'jarvis_master', name: 'JARVIS Master', mission: 'Coordenação de tarefas com estado, checkpoints e pedidos de aprovação.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['delegate_agent', 'request_approval', 'query_audit', 'read_file', 'write_file'] },
-  { role: 'software_architect', name: 'Software Architect', mission: 'Definição e análise de arquitetura técnica e padrões de design.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'list_directory', 'inspect_manifest', 'write_file'] },
-  { role: 'project_manager', name: 'Project Manager', mission: 'Gestão de tarefas, dependências, prazos e prioridades.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file', 'list_directory'] },
-  { role: 'research_analyst', name: 'Research Analyst', mission: 'Pesquisa comparativa e sínteses com fontes verificadas.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'project_designer_planner', name: 'Project Designer & Planner', mission: 'Elaboração de PRDs, user stories e critérios de aceitação.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'ux_ui_designer', name: 'UX/UI Designer', mission: 'Desenho de fluxos, Design System e interfaces acessíveis.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'write_file'] },
-  { role: 'frontend_mobile_developer', name: 'Front-end & Mobile Developer', mission: 'Implementação de interfaces Flutter/Dart e React/TypeScript.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'propose_patch', 'run_linter', 'write_file'] },
-  { role: 'backend_developer', name: 'Back-end Developer', mission: 'Implementação de APIs FastAPI, persistência e regras de negócio.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'propose_patch', 'run_tests', 'write_file'] },
-  { role: 'qa_engineer', name: 'QA Engineer', mission: 'Planeamento e execução de testes automatizados e reporte de defeitos.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'run_tests', 'write_file'] },
-  { role: 'code_reviewer', name: 'Code Reviewer', mission: 'Avaliação detalhada de legibilidade, arquitetura e regressões em diffs.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file', 'inspect_diff'] },
-  { role: 'data_scientist', name: 'Data Scientist', mission: 'Análise estatística, experimentos e modelagem analítica.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'business_intelligence', name: 'Business Intelligence', mission: 'Definição de KPIs, métricas e relatórios estratégicos.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'data_engineering_intelligence', name: 'Data Engineering & Intelligence', mission: 'Limpeza, validação, enriquecimento e normalização de dados.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'write_file'] },
-  { role: 'data_engineer_pipelines', name: 'Data Engineer / Pipelines', mission: 'Arquitetura de ingestão, ETL/ELT e pipelines idempotentes.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'write_file'] },
-  { role: 'devops_engineer', name: 'DevOps Engineer', mission: 'Automação de CI/CD, builds, empacotamento e containers seguros.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'run_linter', 'write_file'] },
-  { role: 'network_infrastructure_engineer', name: 'Network & Infrastructure Engineer', mission: 'Análise de conectividade de rede privada, DNS e capacidade.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'cybersecurity_engineer', name: 'Cybersecurity Engineer', mission: 'Coordenação da postura de segurança, mitigação e defesas ativas.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'scan_secrets', 'write_file'] },
-  { role: 'automation_engineer', name: 'Automation Engineer', mission: 'Scripts operacionais, agendamento e automações repetíveis.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'write_file'] },
-  { role: 'threat_modeling_security_architect', name: 'Threat Modeling & Security Architect', mission: 'Identificação de ativos, superfícies de ataque e ameaças STRIDE.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'secure_code_auditor', name: 'Secure Code Auditor', mission: 'Auditoria minuciosa contra vulnerabilidades de injeção e falhas de lógica.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file', 'scan_secrets'] },
-  { role: 'api_security_specialist', name: 'API Security Specialist', mission: 'Análise de autorização de endpoints, rate limits e OWASP API Top 10.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'identity_access_management', name: 'Identity & Access Management', mission: 'Governança de permissões, papéis RBAC e ciclo de sessões.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'software_supply_chain_security', name: 'Software Supply Chain Security', mission: 'Auditoria de dependências, SBOM e integridade de pacotes.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-  { role: 'soc_incident_response', name: 'SOC & Incident Response', mission: 'Monitorização cronológica de alertas e resposta a incidentes.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['query_audit'] },
-  { role: 'ai_security_red_team', name: 'AI Security & Red Team', mission: 'Testes de robustez contra prompt injection e manipulação de agentes.', preferred_model: 'auto_hybrid', is_read_only: false, allowed_tools: ['read_file', 'write_file'] },
-  { role: 'privacy_data_protection', name: 'Privacy & Data Protection', mission: 'Minimização de dados pessoais, retenção e conformidade com RGPD.', preferred_model: 'auto_hybrid', is_read_only: true, allowed_tools: ['read_file'] },
-];
-
 export const AgentCenterView: React.FC = () => {
-  const [agents, setAgents] = useState<AgentInfo[]>(FALLBACK_AGENTS);
-  const [loading, setLoading] = useState(false);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'security' | 'dev' | 'architecture' | 'data'>('all');
 
@@ -60,11 +32,10 @@ export const AgentCenterView: React.FC = () => {
     setLoading(true);
     try {
       const data = await fetchAgents();
-      if (data && data.length > 0) {
-        setAgents(data);
-      }
+      setAgents(data);
+      setLoadError(null);
     } catch (e) {
-      console.warn('Usando catálogo fallback de agentes:', e);
+      setLoadError(e instanceof Error ? e.message : 'Falha ao carregar o catálogo de agentes.');
     } finally {
       setLoading(false);
     }
@@ -144,6 +115,13 @@ export const AgentCenterView: React.FC = () => {
         </button>
       </div>
 
+      {loadError && (
+        <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+          Não foi possível carregar os agentes: {loadError}
+          <button type="button" onClick={loadAgents} className="btn btn-ghost" style={{ marginLeft: '10px', fontSize: '0.76rem' }}>Tentar novamente</button>
+        </div>
+      )}
+
       {/* Barra de Filtros e Busca */}
       <div
         className="glass-panel"
@@ -211,6 +189,12 @@ export const AgentCenterView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {agents.length === 0 && !loading && !loadError && (
+        <div role="status" className="glass-panel" style={{ padding: '36px 24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+          Nenhum especialista foi retornado pelo servidor.
+        </div>
+      )}
 
       {/* Grid de Agentes */}
       <div

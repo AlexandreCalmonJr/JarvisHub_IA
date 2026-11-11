@@ -5,9 +5,10 @@ import re
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 
+from apps.api.auth import Principal, get_principal
 from apps.api.deps import chat_runtime, db_manager, jarvis_master
 from apps.api.schemas import ChatRequest
 from services.coding_agent import ChatRunConfig, ProviderError
@@ -84,6 +85,16 @@ DIALOGUE_PREFIXES = (
 
 _reachability = {"checked_at": 0.0, "ok": False, "provider": ""}
 
+
+
+def _private_owner(principal: Principal) -> str:
+    # Dispositivos ainda não possuem vínculo explícito com uma conta humana.
+    if principal.kind == "device" and principal.subject_id.startswith("device:"):
+        raise HTTPException(
+            status_code=403,
+            detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
+        )
+    return principal.subject_id
 
 def _looks_actionable(prompt: str) -> bool:
     """Classifica ações protegidas e problemas complexos que exigem delegação."""
@@ -202,6 +213,7 @@ def _persist_turn(
     prompt: str,
     summary: str | None,
     persist_user: bool = True,
+    owner_user_id: str | None = None,
 ) -> None:
     """Persiste o turno no histórico compartilhado, inclusive no caminho clássico."""
     if not session_id:
@@ -209,7 +221,8 @@ def _persist_turn(
     try:
         if persist_user:
             db_manager.add_chat_message(
-                session_id=session_id, role="user", content=prompt, project_id=project_id
+                session_id=session_id, role="user", content=prompt, project_id=project_id,
+                owner_user_id=owner_user_id,
             )
         if summary:
             db_manager.add_chat_message(
@@ -217,13 +230,21 @@ def _persist_turn(
                 role="assistant",
                 content=summary,
                 project_id=project_id,
+                owner_user_id=owner_user_id,
             )
     except Exception as exc:
         logger.warning("Falha ao persistir turno do chat: %s", exc)
 
 
 @router.post("/api/v1/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(
+    request: ChatRequest, principal: Principal = Depends(get_principal)
+):
+    owner_user_id = _private_owner(principal)
+    if request.project_id and not db_manager.get_project(
+        request.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     engine = await _resolve_engine(request)
     # Reaproveita a mesma sessão no fallback do agente para o orquestrador,
     # evitando histórico duplicado ou sessões divergentes.
@@ -238,6 +259,7 @@ async def chat_endpoint(request: ChatRequest):
                     prompt=request.prompt,
                     session_id=session_id or "",
                     project_id=request.project_id,
+                    owner_user_id=owner_user_id,
                     model=request.model,
                 )
             )
@@ -250,6 +272,7 @@ async def chat_endpoint(request: ChatRequest):
             user_prompt=request.prompt,
             session_id=session_id,
             project_id=request.project_id,
+            owner_user_id=owner_user_id,
         )
         summary = result.get("final_summary", "") if isinstance(result, dict) else result.final_summary
         sid = result.get("session_id") if isinstance(result, dict) else getattr(result, "session_id", None)
@@ -259,14 +282,9 @@ async def chat_endpoint(request: ChatRequest):
             request.prompt,
             summary,
             persist_user=not agent_persisted,
+            owner_user_id=owner_user_id,
         )
         try:
-            if request.project_id:
-                db_manager.register_project(
-                    project_id=request.project_id,
-                    name=request.project_id,
-                    root_path=f"workspace/{request.project_id}",
-                )
             tid = result["task_id"] if isinstance(result, dict) else result.task_id
             s_dict = result if isinstance(result, dict) else result.model_dump()
             db_manager.save_task(
@@ -275,6 +293,7 @@ async def chat_endpoint(request: ChatRequest):
                 prompt=request.prompt,
                 state_dict=s_dict,
                 project_id=request.project_id,
+                owner_user_id=owner_user_id,
             )
         except Exception as exc:
             logger.warning("Falha ao salvar tarefa no banco de dados: %s", exc)
@@ -284,19 +303,27 @@ async def chat_endpoint(request: ChatRequest):
 
 
 @router.post("/api/v1/chat/stream")
-async def chat_stream_endpoint(request: ChatRequest):
+async def chat_stream_endpoint(
+    request: ChatRequest, principal: Principal = Depends(get_principal)
+):
     """
     Endpoint SSE para streaming de tokens em tempo real.
 
     Com ``engine='auto'`` (padrão), conversas usam o runtime real com memória e
     streaming; ações de código continuam no orquestrador, com aprovação humana.
     """
+    owner_user_id = _private_owner(principal)
+    if request.project_id and not db_manager.get_project(
+        request.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     engine = await _resolve_engine(request)
 
     async def agent_generator():
         config = ChatRunConfig(
             prompt=request.prompt,
             session_id=request.session_id or "",
+            owner_user_id=owner_user_id,
             project_id=request.project_id,
             model=request.model,
         )
@@ -347,6 +374,7 @@ async def chat_stream_endpoint(request: ChatRequest):
                 user_prompt=request.prompt,
                 session_id=request.session_id or session_override,
                 project_id=request.project_id,
+                owner_user_id=owner_user_id,
             )
 
             summary = result.get("final_summary", "")
@@ -361,15 +389,10 @@ async def chat_stream_endpoint(request: ChatRequest):
                 request.prompt,
                 summary,
                 persist_user=persist_user,
+                owner_user_id=owner_user_id,
             )
 
             try:
-                if request.project_id:
-                    db_manager.register_project(
-                        project_id=request.project_id,
-                        name=request.project_id,
-                        root_path=f"workspace/{request.project_id}",
-                    )
                 tid = result["task_id"] if isinstance(result, dict) else result.task_id
                 s_dict = result if isinstance(result, dict) else result.model_dump()
                 db_manager.save_task(
@@ -378,6 +401,7 @@ async def chat_stream_endpoint(request: ChatRequest):
                     prompt=request.prompt,
                     state_dict=s_dict,
                     project_id=request.project_id,
+                    owner_user_id=owner_user_id,
                 )
             except Exception as exc:
                 logger.warning("Falha ao salvar tarefa em streaming: %s", exc)
@@ -421,67 +445,95 @@ async def chat_stream_endpoint(request: ChatRequest):
 
 
 @router.get("/api/v1/tasks")
-async def list_tasks_endpoint(limit: int = 50):
-    return db_manager.list_tasks(limit=limit)
+async def list_tasks_endpoint(
+    limit: int = 50, principal: Principal = Depends(get_principal)
+):
+    return db_manager.list_tasks(limit=limit, owner_user_id=_private_owner(principal))
 
 
 @router.delete("/api/v1/tasks/{task_id}")
-async def delete_task_endpoint(task_id: str):
-    """Exclui permanentemente um registro de tarefa do banco SQLite."""
-    success = db_manager.delete_task(task_id)
+async def delete_task_endpoint(
+    task_id: str, principal: Principal = Depends(get_principal)
+):
+    success = db_manager.delete_task(task_id, owner_user_id=_private_owner(principal))
     return {"task_id": task_id, "deleted": success}
 
 
 @router.post("/api/v1/tasks/purge")
-async def purge_tasks_endpoint(days_retention: int = 30):
-    """Expurga tarefas mais antigas que o período de retenção especificado."""
-    purged_count = db_manager.purge_old_tasks(days_retention=days_retention)
+async def purge_tasks_endpoint(
+    days_retention: int = 30, principal: Principal = Depends(get_principal)
+):
+    purged_count = db_manager.purge_old_tasks(
+        days_retention=days_retention, owner_user_id=_private_owner(principal)
+    )
     return {"purged_count": purged_count, "retention_days": days_retention}
 
 
 @router.get("/api/v1/chat/sessions")
-async def list_chat_sessions_endpoint(limit: int = 50):
-    """Lista sessões de conversa e histórico de interações."""
-    return db_manager.list_chat_sessions(limit=limit)
+async def list_chat_sessions_endpoint(
+    limit: int = 50, principal: Principal = Depends(get_principal)
+):
+    return db_manager.list_chat_sessions(
+        limit=limit, owner_user_id=_private_owner(principal)
+    )
 
 
 @router.get("/api/v1/chat/sessions/{session_id}")
-async def get_chat_session_endpoint(session_id: str):
-    """Recupera tarefas e mensagens de uma sessão específica de conversa."""
-    tasks = db_manager.get_session_tasks(session_id)
-    return {
-        "session_id": session_id,
-        "tasks": tasks,
-        "messages": db_manager.list_chat_messages(session_id, limit=400),
-    }
+async def get_chat_session_endpoint(
+    session_id: str, principal: Principal = Depends(get_principal)
+):
+    owner = _private_owner(principal)
+    tasks = db_manager.get_session_tasks(session_id, owner_user_id=owner)
+    messages = db_manager.list_chat_messages(
+        session_id, limit=400, owner_user_id=owner
+    )
+    if not tasks and not messages:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    return {"session_id": session_id, "tasks": tasks, "messages": messages}
 
 
 @router.get("/api/v1/chat/sessions/{session_id}/messages")
-async def list_session_messages_endpoint(session_id: str, limit: int = 200):
-    """Histórico por mensagem (compartilhado pelos motores clássico e agente)."""
-    return {
-        "session_id": session_id,
-        "messages": db_manager.list_chat_messages(session_id, limit=limit),
-    }
+async def list_session_messages_endpoint(
+    session_id: str, limit: int = 200, principal: Principal = Depends(get_principal)
+):
+    owner = _private_owner(principal)
+    messages = db_manager.list_chat_messages(
+        session_id, limit=limit, owner_user_id=owner
+    )
+    if not messages:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    return {"session_id": session_id, "messages": messages}
 
 
 @router.delete("/api/v1/chat/sessions/{session_id}")
-async def delete_chat_session_endpoint(session_id: str):
-    """Exclui uma sessão de conversa, suas tarefas e mensagens associadas."""
-    deleted_count = db_manager.delete_session(session_id)
+async def delete_chat_session_endpoint(
+    session_id: str, principal: Principal = Depends(get_principal)
+):
+    owner = _private_owner(principal)
+    deleted_count = db_manager.delete_session(session_id, owner_user_id=owner)
     return {"session_id": session_id, "deleted_tasks": deleted_count}
 
 
 @router.get("/api/v1/chat/search")
-async def search_chat_endpoint(query: str, limit: int = 20):
-    """Busca em todo o histórico de conversas e mensagens anteriores."""
-    return db_manager.search_chat_history(query=query, limit=limit)
+async def search_chat_endpoint(
+    query: str, limit: int = 20, principal: Principal = Depends(get_principal)
+):
+    return db_manager.search_chat_history(
+        query=query, limit=limit, owner_user_id=_private_owner(principal)
+    )
 
 
 @router.get("/api/v1/chat/sessions/{session_id}/export")
-async def export_chat_session_endpoint(session_id: str):
-    """Exporta a sessão de chat em formato Markdown (.md) estruturado."""
-    md_content = db_manager.export_session_markdown(session_id)
+async def export_chat_session_endpoint(
+    session_id: str, principal: Principal = Depends(get_principal)
+):
+    owner = _private_owner(principal)
+    tasks = db_manager.get_session_tasks(session_id, owner_user_id=owner)
+    if not tasks:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    md_content = db_manager.export_session_markdown(
+        session_id, owner_user_id=owner
+    )
     return Response(
         content=md_content,
         media_type="text/markdown; charset=utf-8",

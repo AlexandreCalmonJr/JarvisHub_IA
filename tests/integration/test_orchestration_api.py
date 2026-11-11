@@ -1,7 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.api.main import app, workspace_service
+from apps.api.main import app, workspace_service, db_manager
 from packages.contracts.agent import AgentRole
 
 
@@ -65,6 +65,10 @@ async def test_api_chat_code_modification_creates_approval():
             name="Site Auth Approval",
             project_type="web",
             files={"index.html": "<html><head><title>Antigo</title></head><body>Login</body></html>"},
+        )
+        db_manager.register_project(
+            project_id, "Site Auth Approval", str(workspace_service.get_project_dir(project_id)),
+            owner_user_id="admin",
         )
         payload = {"prompt": "Alterar o endpoint de autenticação no projeto site-auth-approval e mudar o título para Login Seguro", "project_id": project_id}
         res = await client.post("/api/v1/chat", json=payload)

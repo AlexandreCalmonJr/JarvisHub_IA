@@ -2,7 +2,7 @@ name: Quality Gates
 
 on:
   push:
-    branches: [main, "hardening/**", "feature/**"]
+    branches: [main, "hardening/**", "feature/**", "dashboard/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -49,9 +49,11 @@ jobs:
           cache-dependency-path: apps/dashboard/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+      - run: npm run test:dashboard
       - run: npm run build
 
   mobile:
+    if: ${{ !startsWith(github.ref, 'refs/heads/dashboard/') }}
     name: Flutter · analyze + tests + APK
     runs-on: windows-latest
     defaults:
@@ -67,6 +69,12 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-mobile-debug-apk
+          path: apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
 
   authenticated-smoke:
     name: Authenticated bootstrap smoke test

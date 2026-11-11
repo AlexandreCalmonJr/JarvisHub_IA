@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service
+from apps.api.main import app, workspace_service, db_manager
 
 
 @pytest.mark.asyncio
@@ -11,6 +11,9 @@ async def test_frente_01_workspace_buttons_and_files():
         test_proj_dir = workspace_service.get_project_dir("test_frente1_project")
         test_proj_dir.mkdir(parents=True, exist_ok=True)
         (test_proj_dir / "main.py").write_text("print('hello front 1')", encoding="utf-8")
+        db_manager.register_project(
+            "test_frente1_project", "Front 1 Test", str(test_proj_dir), owner_user_id="admin"
+        )
 
         # 2. Testa endpoint de abrir pasta no Explorer
         open_folder_resp = await ac.post("/api/v1/workspace/projects/test_frente1_project/open-folder")

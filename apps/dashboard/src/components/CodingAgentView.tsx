@@ -27,6 +27,7 @@ import {
 } from '../services/api';
 import { fetchWorkspaceProjects } from '../services/api';
 import { notify } from './common/Toast';
+import { getAccountStorageKey } from '../services/accountScope';
 
 type Mode = 'plan' | 'ask' | 'auto';
 
@@ -64,17 +65,14 @@ const RISK_COLORS: Record<string, string> = {
 
 export const CodingAgentView: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
-  const [projectId, setProjectId] = useState<string>(() => localStorage.getItem('jarvis_coding_project') || '');
-  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem('jarvis_coding_mode') as Mode) || 'ask');
-  const [model, setModel] = useState<string>(() => localStorage.getItem('jarvis_coding_model') || '');
-  const [decidedBy, setDecidedBy] = useState<string>(
-    () => localStorage.getItem('jarvis_coding_user') || 'local_developer'
-  );
+  const [projectId, setProjectId] = useState<string>(() => localStorage.getItem(getAccountStorageKey('jarvis_coding_project')) || '');
+  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem(getAccountStorageKey('jarvis_coding_mode')) as Mode) || 'ask');
+  const [model, setModel] = useState<string>(() => localStorage.getItem(getAccountStorageKey('jarvis_coding_model')) || '');
   const [sessionId, setSessionId] = useState<string>(() => {
-    const saved = localStorage.getItem('jarvis_coding_session');
+    const saved = localStorage.getItem(getAccountStorageKey('jarvis_coding_session'));
     if (saved) return saved;
     const created = newSessionId();
-    localStorage.setItem('jarvis_coding_session', created);
+    localStorage.setItem(getAccountStorageKey('jarvis_coding_session'), created);
     return created;
   });
   const [tools, setTools] = useState<CodingToolInfo[]>([]);
@@ -88,24 +86,22 @@ export const CodingAgentView: React.FC = () => {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [mcpBusy, setMcpBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('jarvis_coding_session', sessionId);
+    localStorage.setItem(getAccountStorageKey('jarvis_coding_session'), sessionId);
   }, [sessionId]);
   useEffect(() => {
-    localStorage.setItem('jarvis_coding_mode', mode);
+    localStorage.setItem(getAccountStorageKey('jarvis_coding_mode'), mode);
   }, [mode]);
   useEffect(() => {
-    localStorage.setItem('jarvis_coding_user', decidedBy);
-  }, [decidedBy]);
-  useEffect(() => {
-    if (projectId) localStorage.setItem('jarvis_coding_project', projectId);
+    if (projectId) localStorage.setItem(getAccountStorageKey('jarvis_coding_project'), projectId);
   }, [projectId]);
   useEffect(() => {
-    if (model) localStorage.setItem('jarvis_coding_model', model);
-    else localStorage.removeItem('jarvis_coding_model');
+    if (model) localStorage.setItem(getAccountStorageKey('jarvis_coding_model'), model);
+    else localStorage.removeItem(getAccountStorageKey('jarvis_coding_model'));
   }, [model]);
 
   useEffect(() => {
@@ -115,18 +111,23 @@ export const CodingAgentView: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const [projectsData, toolsData] = await Promise.all([
-          fetchWorkspaceProjects().catch(() => []),
-          fetchCodingTools().catch(() => null),
+        const [projectsResult, toolsResult] = await Promise.allSettled([
+          fetchWorkspaceProjects(),
+          fetchCodingTools(),
         ]);
-        setProjects(projectsData);
-        if (!projectId && projectsData.length > 0) {
-          setProjectId(projectsData[0].id);
+        if (projectsResult.status === 'fulfilled') {
+          const projectsData = projectsResult.value;
+          setProjects(projectsData);
+          if (!projectId && projectsData.length > 0) setProjectId(projectsData[0].id);
+        } else {
+          setError(projectsResult.reason instanceof Error ? projectsResult.reason.message : 'Falha ao carregar projetos.');
         }
-        if (toolsData) {
-          setTools(toolsData.tools);
-          setModes(toolsData.modes);
-          setProvider(toolsData.provider);
+        if (toolsResult.status === 'fulfilled') {
+          setTools(toolsResult.value.tools);
+          setModes(toolsResult.value.modes);
+          setProvider(toolsResult.value.provider);
+        } else {
+          setError(toolsResult.reason instanceof Error ? toolsResult.reason.message : 'Falha ao carregar ferramentas do Coding Agent.');
         }
       } catch (err: any) {
         setError(err.message || 'Falha ao inicializar o Coding Agent.');
@@ -148,8 +149,9 @@ export const CodingAgentView: React.FC = () => {
             timestamp: m.created_at?.slice(11, 16) || '',
           }));
         setEntries(mapped);
-      } catch {
-        // Histórico indisponível não bloqueia a UI.
+        setHistoryError(null);
+      } catch (historyFailure) {
+        setHistoryError(historyFailure instanceof Error ? historyFailure.message : 'Falha ao carregar histórico do Coding Agent.');
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -287,19 +289,15 @@ export const CodingAgentView: React.FC = () => {
 
   const handleDecision = async (action: 'approve' | 'reject') => {
     if (!pendingApproval || approvalBusy) return;
-    if (!decidedBy.trim()) {
-      notify('Informe a identidade do humano autorizador.', 'warning');
-      return;
-    }
     setApprovalBusy(true);
     try {
-      await decideCodingApproval(pendingApproval.id, action, decidedBy.trim(), 'Decidido no Coding Agent');
+      await decideCodingApproval(pendingApproval.id, action, 'Decidido no Coding Agent');
       append({
         kind: 'info',
         text:
           action === 'approve'
-            ? `Operação ${pendingApproval.operation} aprovada por ${decidedBy.trim()}.`
-            : `Operação ${pendingApproval.operation} rejeitada por ${decidedBy.trim()}.`,
+            ? `Operação ${pendingApproval.operation} aprovada pela conta autenticada.`
+            : `Operação ${pendingApproval.operation} rejeitada pela conta autenticada.`,
       });
       setPendingApproval(null);
     } catch (err: any) {
@@ -494,16 +492,6 @@ export const CodingAgentView: React.FC = () => {
           />
         </div>
 
-        <div style={styles.fieldGroup}>
-          <label style={styles.label}>Autorizador humano</label>
-          <input
-            value={decidedBy}
-            onChange={(e) => setDecidedBy(e.target.value)}
-            placeholder="ex: alexandre_lead"
-            style={styles.input}
-            disabled={running}
-          />
-        </div>
       </div>
 
       {/* Descrição do modo / provedor */}
@@ -568,6 +556,13 @@ export const CodingAgentView: React.FC = () => {
         <div style={styles.errorCard}>
           <ShieldAlert size={15} color="#f87171" />
           <div>{error}</div>
+        </div>
+      )}
+
+      {historyError && (
+        <div role="alert" style={styles.errorCard}>
+          <ShieldAlert size={15} color="#f87171" />
+          <div>Não foi possível recuperar o histórico: {historyError}</div>
         </div>
       )}
 

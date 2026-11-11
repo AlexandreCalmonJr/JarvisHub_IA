@@ -20,11 +20,13 @@ export const WebhooksModal: React.FC<WebhooksModalProps> = ({ isOpen, onClose })
 
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchWebhooksConfig()
         .then((cfg) => {
+          setLoadError(null);
           if (cfg) {
             setEnabled(Boolean(cfg.enabled));
             setDiscordUrl(cfg.discord_webhook_url || '');
@@ -35,7 +37,7 @@ export const WebhooksModal: React.FC<WebhooksModalProps> = ({ isOpen, onClose })
             if (cfg.notify_on_long_task !== undefined) setNotifyOnLongTask(cfg.notify_on_long_task);
           }
         })
-        .catch(() => {});
+        .catch((error) => setLoadError(error instanceof Error ? error.message : 'Falha ao carregar webhooks.'));
     }
   }, [isOpen]);
 
@@ -80,6 +82,11 @@ export const WebhooksModal: React.FC<WebhooksModalProps> = ({ isOpen, onClose })
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Notificações & Webhooks (Discord / Telegram)">
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {loadError && (
+          <div role="alert" style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(248, 113, 113, 0.3)', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+            Não foi possível carregar as configurações atuais: {loadError}. Evite salvar alterações até confirmar os valores no servidor.
+          </div>
+        )}
         <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
           Receba avisos instantâneos no seu celular quando tarefas longas (exportações ZIP, dockerização ou auditorias de segurança) forem concluídas.
         </p>
@@ -225,7 +232,7 @@ export const WebhooksModal: React.FC<WebhooksModalProps> = ({ isOpen, onClose })
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !!loadError}
               className="btn btn-primary"
               style={{ fontSize: '0.80rem', padding: '7px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
             >

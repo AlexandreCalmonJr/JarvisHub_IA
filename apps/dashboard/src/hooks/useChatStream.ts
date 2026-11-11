@@ -8,6 +8,7 @@ import {
   transcribeAudio,
 } from '../api';
 import { ChatMessage } from '../types';
+import { getAccountStorageKey } from '../services/accountScope';
 import { notify } from '../components/common/Toast';
 import { CanvasArtifact } from '../components/chat/ArtifactCanvas';
 import {
@@ -48,7 +49,7 @@ export function useChatStream(
   // Mensagens carregadas do localStorage ou boas-vindas
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_MESSAGES_KEY);
+      const saved = localStorage.getItem(getAccountStorageKey(STORAGE_MESSAGES_KEY));
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -64,14 +65,14 @@ export function useChatStream(
   // Session ID ativo
   const [sessionId, setSessionId] = useState<string>(() => {
     try {
-      const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
+      const savedSession = localStorage.getItem(getAccountStorageKey(STORAGE_SESSION_KEY));
       if (savedSession) return savedSession;
     } catch (e) {
       console.warn('Falha ao ler sessionId do localStorage:', e);
     }
     const newId = generateSessionId();
     try {
-      localStorage.setItem(STORAGE_SESSION_KEY, newId);
+      localStorage.setItem(getAccountStorageKey(STORAGE_SESSION_KEY), newId);
     } catch {}
     return newId;
   });
@@ -80,7 +81,7 @@ export function useChatStream(
   useEffect(() => {
     if (loading) return;
     try {
-      localStorage.setItem(STORAGE_MESSAGES_KEY, JSON.stringify(messages));
+      localStorage.setItem(getAccountStorageKey(STORAGE_MESSAGES_KEY), JSON.stringify(messages));
       saveSessionMessagesLocally(sessionId, messages);
     } catch (e) {
       console.warn('Falha ao salvar mensagens no localStorage:', e);
@@ -89,7 +90,7 @@ export function useChatStream(
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_SESSION_KEY, sessionId);
+      localStorage.setItem(getAccountStorageKey(STORAGE_SESSION_KEY), sessionId);
     } catch (e) {
       console.warn('Falha ao salvar sessionId no localStorage:', e);
     }
