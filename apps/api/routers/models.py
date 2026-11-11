@@ -1,8 +1,10 @@
 import json
 import logging
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+
+from apps.api.auth import get_principal, require_admin
 
 from apps.api.schemas import (
     HybridConfigRequest,
@@ -33,7 +35,7 @@ router = APIRouter(tags=["models"])
 
 @router.get("/api/v1/models")
 @router.get("/api/v1/models/status")
-async def list_models_endpoint():
+async def list_models_endpoint(principal=Depends(get_principal)):
     cfg = hybrid_router.online_config
 
     installed_local = []
@@ -128,13 +130,13 @@ async def list_models_endpoint():
 
 
 @router.get("/api/v1/system/model-metrics")
-async def get_model_metrics_endpoint():
+async def get_model_metrics_endpoint(principal=Depends(require_admin)):
     """Retorna métricas de inferência: latência média, velocidade t/s e economia acumulada."""
     return inference_tracker.get_metrics_summary()
 
 
 @router.get("/api/v1/models/hybrid-config")
-async def get_hybrid_config_endpoint():
+async def get_hybrid_config_endpoint(principal=Depends(require_admin)):
     cfg = hybrid_router.online_config
     return {
         "provider_name": cfg.provider_name,
@@ -150,7 +152,7 @@ async def get_hybrid_config_endpoint():
 
 
 @router.post("/api/v1/models/hybrid-config")
-async def update_hybrid_config_endpoint(payload: HybridConfigRequest):
+async def update_hybrid_config_endpoint(payload: HybridConfigRequest, principal=Depends(require_admin)):
     cfg = hybrid_router.online_config
     cfg.provider_name = payload.provider_name.lower()
     cfg.enabled = payload.enabled
@@ -217,7 +219,7 @@ async def update_hybrid_config_endpoint(payload: HybridConfigRequest):
 
 
 @router.post("/api/v1/models/hybrid-config/test")
-async def test_hybrid_connection_endpoint(payload: HybridTestRequest):
+async def test_hybrid_connection_endpoint(payload: HybridTestRequest, principal=Depends(require_admin)):
     # Usa a chave fornecida ou recupera a chave descriptografada do KeyVault.
     api_key = (payload.api_key or "").strip()
     if not api_key and hybrid_router.online_config.key_id:
@@ -239,25 +241,25 @@ async def test_hybrid_connection_endpoint(payload: HybridTestRequest):
 
 
 @router.get("/api/v1/models/huggingface/curated")
-async def get_huggingface_curated():
+async def get_huggingface_curated(principal=Depends(get_principal)):
     """Retorna modelos curados e homologados para a CPU Intel do usuário."""
     return CURATED_HUGGINGFACE_MODELS
 
 
 @router.get("/api/v1/models/huggingface/search")
-async def search_huggingface_endpoint(q: str = "", limit: int = 10):
+async def search_huggingface_endpoint(q: str = "", limit: int = 10, principal=Depends(get_principal)):
     """Pesquisa modelos GGUF no Hugging Face Hub."""
     return await search_huggingface_hub(query=q, limit=limit)
 
 
 @router.get("/api/v1/models/agent-recommendations")
-async def get_agent_recommendations_endpoint():
+async def get_agent_recommendations_endpoint(principal=Depends(get_principal)):
     """Retorna a matriz de modelo ótimo do Hugging Face para cada um dos 26 especialistas."""
     return AGENT_MODEL_RECOMMENDATIONS
 
 
 @router.post("/api/v1/models/huggingface/install")
-async def install_huggingface_model_endpoint(payload: HFInstallPayload):
+async def install_huggingface_model_endpoint(payload: HFInstallPayload, principal=Depends(require_admin)):
     """Inicia o download e registro de um modelo via Ollama em background com streaming SSE."""
     async def event_generator():
         async for chunk in stream_ollama_pull(payload.model_tag):
@@ -279,14 +281,14 @@ class KeyProfilePayload(BaseModel):
 
 
 @router.get("/api/v1/models/vault")
-async def list_vault_keys_endpoint():
+async def list_vault_keys_endpoint(principal=Depends(require_admin)):
     """Lista todas as chaves cadastradas no cofre com máscaras de segurança."""
     from apps.api.deps import key_vault
     return key_vault.list_keys()
 
 
 @router.post("/api/v1/models/vault")
-async def save_vault_key_endpoint(payload: KeyProfilePayload):
+async def save_vault_key_endpoint(payload: KeyProfilePayload, principal=Depends(require_admin)):
     """Cadastra ou atualiza uma chave de API nomeada no cofre."""
     from apps.api.deps import key_vault
     prof = key_vault.save_key(
@@ -302,7 +304,7 @@ async def save_vault_key_endpoint(payload: KeyProfilePayload):
 
 
 @router.delete("/api/v1/models/vault/{key_id}")
-async def delete_vault_key_endpoint(key_id: str):
+async def delete_vault_key_endpoint(key_id: str, principal=Depends(require_admin)):
     """Exclui uma chave de API do cofre."""
     from apps.api.deps import key_vault
     deleted = key_vault.delete_key(key_id)
@@ -312,7 +314,7 @@ async def delete_vault_key_endpoint(key_id: str):
 
 
 @router.post("/api/v1/models/vault/{key_id}/test")
-async def test_vault_key_endpoint(key_id: str):
+async def test_vault_key_endpoint(key_id: str, principal=Depends(require_admin)):
     """Testa a conectividade de uma chave específica com o provedor correspondente."""
     from apps.api.deps import key_vault
     res = await key_vault.test_key_connectivity(key_id)
