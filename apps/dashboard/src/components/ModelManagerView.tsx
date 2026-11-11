@@ -299,9 +299,9 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'vault' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'vault' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'vault' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'vault' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'vault' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
@@ -318,9 +318,9 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'local' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'local' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'local' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'local' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'local' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
@@ -337,9 +337,9 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'hybrid' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'hybrid' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'hybrid' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'hybrid' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'hybrid' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
@@ -361,9 +361,9 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'hub' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'hub' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'hub' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'hub' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'hub' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
