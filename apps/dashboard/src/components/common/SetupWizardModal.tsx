@@ -92,7 +92,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 Assistente de Configuração Inicial
               </h2>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                Configure o motor de IA e as preferências do JARVIS em 3 passos simples
+                Configure o ambiente local e conheça as opções de segurança do JARVIS
               </span>
             </div>
           </div>
@@ -361,10 +361,10 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 <ShieldCheck size={22} color="#10b981" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#34d399', margin: '0 0 4px' }}>
-                    Garantia de Privacidade & Prevenção de Fuga de Dados (DLP)
+                    Políticas de Segurança do JARVIS
                   </h4>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.5', margin: 0 }}>
-                    Mesmo com o modo online ativado, qualquer prompt contendo senhas, chaves de API, credenciais ou tokens sensíveis é <strong>bloqueado e redigido localmente</strong> pelo Security Core antes de alcançar qualquer provedor externo.
+                    As políticas de autenticação, permissões e auditoria podem ser consultadas no Security Center. A configuração de provedores em nuvem permanece desativada até a implantação do Cofre Privado por Conta.
                   </p>
                 </div>
               </div>
