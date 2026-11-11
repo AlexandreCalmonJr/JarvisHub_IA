@@ -50,7 +50,7 @@ async def test_path_traversal_in_tool_argument_is_blocked(gateway_and_project, t
         project_id="proj-safe",
     )
     with pytest.raises(PermissionDeniedError, match="fora do diretório do projeto"):
-        await gw.execute_tool(req)
+        await gw.execute_tool(req, owner_user_id="test-owner")
 
 
 @pytest.mark.asyncio
@@ -62,7 +62,7 @@ async def test_tool_read_file_and_list_dir_success(gateway_and_project):
         agent_role=AgentRole.SOFTWARE_ARCHITECT.value,
         project_id="proj-safe",
     )
-    res = await gw.execute_tool(req)
+    res = await gw.execute_tool(req, owner_user_id="test-owner")
     assert res.success is True
     assert "# Safe Project" in res.stdout
 
@@ -89,7 +89,7 @@ async def test_kill_switch_blocks_tool_execution(gateway_and_project):
         project_id="proj-safe",
     )
     with pytest.raises(PermissionDeniedError, match="Kill Switch Global"):
-        await gw.execute_tool(req)
+        await gw.execute_tool(req, owner_user_id="test-owner")
 
 
 @pytest.mark.asyncio
