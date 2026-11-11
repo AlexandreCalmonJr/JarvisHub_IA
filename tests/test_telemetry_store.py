@@ -233,3 +233,61 @@ def test_existing_telemetry_database_is_migrated_without_losing_rows(tmp_path):
     assert len(rows) == 1
     assert rows[0]["id"] == "legacy-1"
     assert rows[0]["cost_usd"] == 0.0
+
+
+def test_quality_feedback_is_owner_scoped_and_only_for_successful_inferences(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    inference_id = store.record_inference(
+        owner_user_id="user-a",
+        task_id="task-a",
+        agent_role="developer",
+        model_name="model-a",
+        provider="ollama_local",
+        status="success",
+        duration_ms=100,
+    )
+    failed_id = store.record_inference(
+        owner_user_id="user-a",
+        task_id="task-a",
+        agent_role="developer",
+        model_name="model-a",
+        provider="ollama_local",
+        status="failed",
+        duration_ms=100,
+    )
+    assert store.record_quality_feedback(
+        owner_user_id="user-a", inference_id=inference_id, rating=5
+    ) is True
+    assert store.record_quality_feedback(
+        owner_user_id="user-a", inference_id=inference_id, rating=4
+    ) is True
+    assert store.record_quality_feedback(
+        owner_user_id="user-b", inference_id=inference_id, rating=1
+    ) is False
+    assert store.record_quality_feedback(
+        owner_user_id="user-a", inference_id=failed_id, rating=5
+    ) is False
+
+    quality = store.quality_by_model_for_owner("user-a")
+    assert len(quality) == 1
+    assert quality[0]["feedback_count"] == 1
+    assert quality[0]["average_rating"] == 4.0
+    assert quality[0]["sample_sufficient"] is False
+    assert store.quality_by_model_for_owner("user-b") == []
+
+
+def test_quality_feedback_requires_valid_owner_and_rating(tmp_path):
+    store = SqliteTelemetryStore(tmp_path / "telemetry.db")
+    try:
+        store.record_quality_feedback(owner_user_id="", inference_id="id", rating=5)
+    except ValueError as exc:
+        assert "owner_user_id" in str(exc)
+    else:
+        raise AssertionError("An owner must be required")
+
+    try:
+        store.record_quality_feedback(owner_user_id="user-a", inference_id="id", rating=6)
+    except ValueError as exc:
+        assert "rating" in str(exc)
+    else:
+        raise AssertionError("Ratings above five must be rejected")
