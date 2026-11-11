@@ -18,7 +18,8 @@
     "test:approvals": "node --experimental-strip-types --test scripts/approvals.test.mjs",
     "test:security": "node --experimental-strip-types --test scripts/security.test.mjs",
     "test:logs": "node --experimental-strip-types --test scripts/logs.test.mjs",
-    "test:profile": "node --experimental-strip-types --test scripts/profile.test.mjs"
+    "test:profile": "node --experimental-strip-types --test scripts/profile.test.mjs",
+    "test:knowledge": "node --experimental-strip-types --test scripts/knowledge.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
