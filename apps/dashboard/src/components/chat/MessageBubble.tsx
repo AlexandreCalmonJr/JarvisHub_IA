@@ -353,7 +353,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                       </span>
                       {task.plan_steps.map((st: string, idx: number) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
-                          <CheckCircle2 size={12} color="#10b981" />
+                          <ChevronRight size={12} color="var(--text-muted)" />
                           <span>{st}</span>
                         </div>
                       ))}
@@ -399,6 +399,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                                 <span key={eIdx} style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>
                                   • {ev}
                                 </span>
+                              ))}
+                            </div>
+                          )}
+                          {out.blockers && out.blockers.length > 0 && (
+                            <div style={{ marginTop: '4px', color: 'var(--danger-color, #ef4444)', fontSize: '0.68rem' }}>
+                              {out.blockers.map((blocker: string, bIdx: number) => (
+                                <div key={bIdx}>Bloqueio: {blocker}</div>
                               ))}
                             </div>
                           )}
