@@ -1,3 +1,9 @@
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
 val releaseStoreFile = System.getenv("JARVIS_KEYSTORE_PATH")
 val releaseStorePassword = System.getenv("JARVIS_KEYSTORE_PASSWORD")
 val releaseKeyAlias = System.getenv("JARVIS_KEY_ALIAS")
@@ -9,11 +15,6 @@ val releaseSigningConfigured = listOf(
     releaseKeyPassword,
 ).all { !it.isNullOrBlank() }
 
-plugins {
-    id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
-    id("dev.flutter.flutter-gradle-plugin")
-}
 
 android {
     namespace = "com.jarvis.hub.jarvis_mobile"
