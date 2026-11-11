@@ -114,3 +114,18 @@ async def test_vector_search_is_blocked_until_private_account_indexes_exist(gate
     )
     with pytest.raises(PermissionDeniedError, match="isolamento dos índices por conta"):
         await gw.execute_tool(req, owner_user_id="test-owner")
+
+
+
+@pytest.mark.asyncio
+async def test_unsandboxed_execution_tools_are_admin_only(gateway_and_project):
+    gw, _, _ = gateway_and_project
+    for tool_name in ("run_tests", "run_linter", "duckdb_query", "execute_command"):
+        req = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments={"command": "whoami", "query": "SELECT 1"},
+            agent_role=AgentRole.SOFTWARE_ARCHITECT.value,
+            project_id="proj-safe",
+        )
+        with pytest.raises(PermissionDeniedError, match="restrita ao administrador"):
+            await gw.execute_tool(req, owner_user_id="test-owner", actor_role="developer")
