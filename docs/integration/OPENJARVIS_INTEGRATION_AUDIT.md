@@ -748,3 +748,41 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Validar Quality Studio com projetos sem testes, falha de execução, timeout e execução autorizada por administrador.
 - Confirmar os estados de leitura do Design Studio para auditor e as ações de developer/admin.
 - Build, lint, testes automatizados e verificação visual ainda não foram executados.
+
+## 20. Visão Geral, Relatórios, Logs e Hardware Advisor
+
+**Estado:** revisão e correções incrementais gravadas na branch de auditoria; homologação ainda não executada.
+
+### 20.1 Visão Geral
+
+- Os indicadores da página usam valores efetivamente recebidos da API; quando o backend não fornece dados, a interface mostra ausência de dados em vez de inventar métricas.
+- A página distingue estado global, runtime de modelos, fila e aprovações pendentes; informa que o endpoint de saúde não é uma auditoria completa de segurança.
+
+### 20.2 Relatórios Executivos
+
+- O ROI consolidado é global e continua restrito a administradores, conforme o endpoint.
+- Developers e auditores deixam de disparar uma chamada administrativa que retornava 403; continuam a consultar dívida técnica e relatório do projeto próprio.
+- A seleção de projeto é reconciliada com a lista atual da conta.
+- Respostas de dívida técnica e relatório são canceladas logicamente quando o utilizador troca de projeto, impedindo que dados antigos substituam o projeto selecionado.
+- A cópia do Markdown trata indisponibilidade e falhas da Clipboard API.
+
+### 20.3 Logs do Servidor
+
+- Logs globais, streaming SSE, métricas globais do tracker e limpeza do buffer são apresentados apenas a administradores, de acordo com os endpoints `require_admin`.
+- O streaming usa a base da API e credenciais de sessão; a limpeza do buffer exige confirmação explícita.
+- Os cartões deixam de inventar um modelo padrão ou taxa de sucesso de 100% quando não há métricas.
+- A indicação de economia esclarece que se trata de estimativa de custo evitado, não de uma fatura real.
+
+### 20.4 Hardware Advisor
+
+- Diagnóstico da máquina anfitriã, alteração de perfil de energia/threads e otimização global dos modelos são apresentados apenas a administradores, em linha com as quatro rotas administrativas.
+- A aplicação de recomendações globais exige confirmação explícita.
+- A seleção de threads é limitada ao número de núcleos lógicos reportado; o painel não apresenta controlos de gravação se o perfil de desempenho não foi carregado.
+- Foram removidas recomendações específicas para Intel Core i5 e valores de bateria/núcleos presumidos quando não existem dados.
+
+### 20.5 Pendências específicas
+
+- Validar relatórios para contas sem projetos, projetos vazios, projeto removido durante a consulta e falhas de análise.
+- Testar Logs e Hardware Advisor com admin, developer e auditor; confirmar que perfis sem administração não recebem dados globais nem executam alterações.
+- Rever a visibilidade desses módulos no menu lateral por perfil, além do bloqueio já aplicado dentro das páginas.
+- Build, lint, testes e validação visual permanecem pendentes para a fase final.
