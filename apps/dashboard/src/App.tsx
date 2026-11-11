@@ -15,6 +15,8 @@ import {
   PanelLeft,
 } from 'lucide-react';
 import { SetupWizardModal } from './components/common/SetupWizardModal';
+import { InitialPasswordChangeModal } from './components/common/InitialPasswordChangeModal';
+import { GuidedTour } from './components/GuidedTour';
 import { UserProfileModal, getUserProfile, UserProfileData } from './components/common/UserProfileModal';
 import { ToastContainer } from './components/common/Toast';
 import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
@@ -110,6 +112,8 @@ const DashboardApp: React.FC = () => {
   const [authRole, setAuthRole] = useState<string | null>(null);
   const [authKind, setAuthKind] = useState<string | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
+  const [authMustChangePassword, setAuthMustChangePassword] = useState(false);
+  const [guidedTourOpen, setGuidedTourOpen] = useState(false);
   const hasPermission = (permission: string) => authPermissions.includes('*') || authPermissions.includes(permission);
   const canAccessTab = (tab: string) => {
     if (tab === 'not_found') return true;
@@ -161,6 +165,7 @@ const DashboardApp: React.FC = () => {
         setAuthPermissions(Array.isArray(principal?.permissions) ? principal.permissions : []);
         setAuthRole(typeof principal?.role === 'string' ? principal.role : null);
         setAuthKind(typeof principal?.kind === 'string' ? principal.kind : null);
+        setAuthMustChangePassword(principal?.must_change_password === true);
         setAuthLoaded(true);
       })
       .catch(() => {
@@ -168,6 +173,7 @@ const DashboardApp: React.FC = () => {
           setAuthPermissions([]);
           setAuthRole(null);
           setAuthKind(null);
+          setAuthMustChangePassword(false);
           setAuthLoaded(true);
         }
       });
@@ -688,15 +694,30 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
             {activeTab === 'advisor' && <HardwareAdvisorView />}
             {activeTab === 'server_logs' && <ServerLogsView />}
-            {activeTab === 'learning' && <LearningCenterView activeTab={activeTab} onNavigate={navigate} />}
+            {activeTab === 'learning' && <LearningCenterView activeTab={activeTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} />}
           </Suspense>
           )}
         </main>
       </div>
 
+      <InitialPasswordChangeModal
+        isOpen={authLoaded && authMustChangePassword}
+        onCompleted={() => {
+          setAuthMustChangePassword(false);
+          setShowSetupWizard(true);
+        }}
+      />
+
+      <GuidedTour
+        isOpen={guidedTourOpen}
+        permissions={authPermissions}
+        onNavigate={navigate}
+        onClose={() => setGuidedTourOpen(false)}
+      />
+
       {/* Assistente de Configuração Inicial Global */}
       <SetupWizardModal
-        isOpen={showSetupWizard && authLoaded && authKind === 'human' && authRole === 'admin'}
+        isOpen={showSetupWizard && authLoaded && !authMustChangePassword && authKind === 'human' && authRole === 'admin'}
         onClose={() => setShowSetupWizard(false)}
         onCompleted={loadData}
       />
