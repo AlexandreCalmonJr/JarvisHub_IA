@@ -944,8 +944,13 @@ def create_master_graph(
                     conv_resp = await model_manager.generate(conv_req)
                     llm_text = conv_resp.content.strip()
                 except Exception as exc:
-                    logger.warning("Falha na resposta conversacional dinâmica: %s", exc)
-                    llm_text = f"Compreendi perfeitamente sua mensagem: '{user_prompt}'. Como o JARVIS Maestro, estou à disposição para aprofundar qualquer detalhe técnico ou coordenar nossos especialistas."
+                    logger.exception(
+                        "O modelo conversacional não conseguiu responder à tarefa %s",
+                        state.get("task_id"),
+                    )
+                    raise RuntimeError(
+                        f"O JARVIS não conseguiu gerar a resposta porque o provedor de IA falhou: {exc}"
+                    ) from exc
 
             primary_output = AgentOutputContract(
                 agent_role=primary_agent,
@@ -1279,26 +1284,24 @@ def create_master_graph(
                 comp_tokens = inference_resp.completion_tokens
                 dur_ms = inference_resp.duration_ms
             except Exception as exc:
-                logger.error("Falha na inferencia de %s: %s", model_name, exc, exc_info=True)
-                llm_text = generate_heuristic_technical_response(
-                    user_prompt=user_prompt,
-                    intent=intent,
-                    role=primary_agent,
-                    domain=domain,
+                logger.exception(
+                    "A inferência do especialista primário %s falhou na tarefa %s",
+                    primary_agent,
+                    state.get("task_id"),
                 )
-                prompt_tokens = 40
-                comp_tokens = len(llm_text.split())
-                dur_ms = 5.0
+                raise RuntimeError(
+                    f"O especialista {primary_agent} não conseguiu executar a análise: {exc}"
+                ) from exc
 
             primary_output = AgentOutputContract(
                 agent_role=primary_agent,
                 objective=f"Executar análise técnica para a intenção '{intent}'",
                 summary=llm_text,
-                evidence=["Verificação de escopo e contexto realizada", "Inferência estruturada concluída"],
-                actions_taken=state.get("plan_steps", []),
+                evidence=["Resposta produzida pela inferência do especialista primário."],
+                actions_taken=["Análise do pedido e do contexto fornecido."],
                 affected_files=[],
-                tests_executed=["Verificação estática de regras e políticas"],
-                risks=["Nenhum risco detectado na fase inicial"],
+                tests_executed=[],
+                risks=[],
                 blockers=[],
                 resource_usage=ResourceUsage(
                     model_name=model_name,
