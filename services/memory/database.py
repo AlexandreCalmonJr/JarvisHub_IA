@@ -693,6 +693,18 @@ class DatabaseManager:
                 project = conn.execute(
                     "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
                 ).fetchone()
+                if project is None:
+                    conn.execute(
+                        """
+                        INSERT INTO projects (
+                            id, name, root_path, mode, created_at, updated_at, owner_user_id
+                        ) VALUES (?, ?, ?, 'read_only', ?, ?, NULL)
+                        """,
+                        (project_id, project_id, f"workspace/{project_id}", now, now),
+                    )
+                    project = {"owner_user_id": None}
+                elif project["owner_user_id"] is not None:
+                    raise PermissionError("É necessário informar o proprietário do projeto.")
             else:
                 project = conn.execute(
                     "SELECT owner_user_id FROM projects WHERE id = ? AND owner_user_id = ?",
