@@ -2,7 +2,7 @@ import io
 import zipfile
 import pytest
 from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service, webhook_service
+from apps.api.main import app, workspace_service
 
 
 @pytest.mark.asyncio
