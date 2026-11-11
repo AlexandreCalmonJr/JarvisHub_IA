@@ -93,6 +93,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const [sessions, setSessions] = useState<LocalSessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   // Carrega e sincroniza sessões do backend + local
   const refreshSessions = async () => {
@@ -103,7 +104,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
       try {
         remoteSessions = await fetchChatSessions();
       } catch (e) {
-        console.warn('Backend offline ou erro ao carregar sessões remotas:', e);
+        setHistoryError(e instanceof Error ? e.message : 'Falha ao carregar histórico remoto.');
+        remoteSessions = [];
       }
 
       // Combina catálogo local com tarefas persistidas no SQLite
@@ -159,14 +161,15 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
 
     setDeletingId(sid);
     try {
+      await deleteChatSession(sid);
       removeSessionLocally(sid);
-      try {
-        await deleteChatSession(sid);
-      } catch {}
       setSessions((prev) => prev.filter((s) => s.id !== sid));
+      setHistoryError(null);
       if (sid === currentSessionId) {
         onNewChat();
       }
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : 'Não foi possível excluir a conversa.');
     } finally {
       setDeletingId(null);
     }
@@ -390,6 +393,11 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
             gap: '16px',
           }}
         >
+          {historyError && (
+            <div role="alert" style={{ margin: '8px 6px', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(248, 113, 113, 0.3)', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+              {historyError}
+            </div>
+          )}
           {loading && sessions.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
               Carregando histórico...
