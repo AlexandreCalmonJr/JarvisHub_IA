@@ -28,6 +28,7 @@ import {
 import { fetchWorkspaceProjects } from '../services/api';
 import { notify } from './common/Toast';
 import { getAccountStorageKey } from '../services/accountScope';
+import { API_BASE } from '../services/api/client';
 
 type Mode = 'plan' | 'ask' | 'auto';
 
@@ -57,6 +58,29 @@ const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '
 const newSessionId = () => `coding_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 const newEntryId = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const readAccountSetting = (key: string): string | null => {
+  try {
+    return localStorage.getItem(getAccountStorageKey(key));
+  } catch {
+    return null;
+  }
+};
+
+const writeAccountSetting = (key: string, value: string | null) => {
+  try {
+    const storageKey = getAccountStorageKey(key);
+    if (value === null) localStorage.removeItem(storageKey);
+    else localStorage.setItem(storageKey, value);
+  } catch {
+    // As preferências locais não impedem a utilização da sessão atual.
+  }
+};
+
+const getInitialMode = (): Mode => {
+  const saved = readAccountSetting('jarvis_coding_mode');
+  return saved === 'plan' || saved === 'ask' || saved === 'auto' ? saved : 'ask';
+};
+
 const RISK_COLORS: Record<string, string> = {
   read: '#34d399',
   write: '#fbbf24',
@@ -65,14 +89,14 @@ const RISK_COLORS: Record<string, string> = {
 
 export const CodingAgentView: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
-  const [projectId, setProjectId] = useState<string>(() => localStorage.getItem(getAccountStorageKey('jarvis_coding_project')) || '');
-  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem(getAccountStorageKey('jarvis_coding_mode')) as Mode) || 'ask');
-  const [model, setModel] = useState<string>(() => localStorage.getItem(getAccountStorageKey('jarvis_coding_model')) || '');
+  const [projectId, setProjectId] = useState<string>(() => readAccountSetting('jarvis_coding_project') || '');
+  const [mode, setMode] = useState<Mode>(getInitialMode);
+  const [model, setModel] = useState<string>(() => readAccountSetting('jarvis_coding_model') || '');
   const [sessionId, setSessionId] = useState<string>(() => {
-    const saved = localStorage.getItem(getAccountStorageKey('jarvis_coding_session'));
+    const saved = readAccountSetting('jarvis_coding_session');
     if (saved) return saved;
     const created = newSessionId();
-    localStorage.setItem(getAccountStorageKey('jarvis_coding_session'), created);
+    writeAccountSetting('jarvis_coding_session', created);
     return created;
   });
   const [tools, setTools] = useState<CodingToolInfo[]>([]);
@@ -87,21 +111,54 @@ export const CodingAgentView: React.FC = () => {
   const [mcpBusy, setMcpBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [canUseCoding, setCanUseCoding] = useState(false);
+  const [canClearHistory, setCanClearHistory] = useState(false);
+  const [canDecideApproval, setCanDecideApproval] = useState(false);
+  const [canReloadMcp, setCanReloadMcp] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(getAccountStorageKey('jarvis_coding_session'), sessionId);
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const human = principal?.kind === 'human';
+        const admin = human && principal?.role === 'admin';
+        const developer = human && principal?.role === 'developer';
+        setCanUseCoding(admin || developer);
+        setCanClearHistory(admin || developer);
+        setCanDecideApproval((admin || developer) || (principal?.kind === 'device' && scopes.includes('approvals:decide')));
+        setCanReloadMcp(admin);
+        setRoleLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanUseCoding(false);
+          setCanClearHistory(false);
+          setCanDecideApproval(false);
+          setCanReloadMcp(false);
+          setRoleLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    writeAccountSetting('jarvis_coding_session', sessionId);
   }, [sessionId]);
   useEffect(() => {
-    localStorage.setItem(getAccountStorageKey('jarvis_coding_mode'), mode);
+    writeAccountSetting('jarvis_coding_mode', mode);
   }, [mode]);
   useEffect(() => {
-    if (projectId) localStorage.setItem(getAccountStorageKey('jarvis_coding_project'), projectId);
+    writeAccountSetting('jarvis_coding_project', projectId || null);
   }, [projectId]);
   useEffect(() => {
-    if (model) localStorage.setItem(getAccountStorageKey('jarvis_coding_model'), model);
-    else localStorage.removeItem(getAccountStorageKey('jarvis_coding_model'));
+    writeAccountSetting('jarvis_coding_model', model || null);
   }, [model]);
 
   useEffect(() => {
@@ -118,7 +175,11 @@ export const CodingAgentView: React.FC = () => {
         if (projectsResult.status === 'fulfilled') {
           const projectsData = projectsResult.value;
           setProjects(projectsData);
-          if (!projectId && projectsData.length > 0) setProjectId(projectsData[0].id);
+          if (projectsData.length > 0 && !projectsData.some((project) => project.id === projectId)) {
+            setProjectId(projectsData[0].id);
+          } else if (projectsData.length === 0) {
+            setProjectId('');
+          }
         } else {
           setError(projectsResult.reason instanceof Error ? projectsResult.reason.message : 'Falha ao carregar projetos.');
         }
@@ -137,6 +198,7 @@ export const CodingAgentView: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const history = await fetchCodingMessages(sessionId);
@@ -148,12 +210,17 @@ export const CodingAgentView: React.FC = () => {
             text: m.content || '',
             timestamp: m.created_at?.slice(11, 16) || '',
           }));
-        setEntries(mapped);
-        setHistoryError(null);
+        if (!cancelled) {
+          setEntries(mapped);
+          setHistoryError(null);
+        }
       } catch (historyFailure) {
-        setHistoryError(historyFailure instanceof Error ? historyFailure.message : 'Falha ao carregar histórico do Coding Agent.');
+        if (!cancelled) setHistoryError(historyFailure instanceof Error ? historyFailure.message : 'Falha ao carregar histórico do Coding Agent.');
       }
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
@@ -245,7 +312,7 @@ export const CodingAgentView: React.FC = () => {
 
   const handleSubmit = async () => {
     const trimmed = prompt.trim();
-    if (!trimmed || running) return;
+    if (!canUseCoding || !trimmed || running) return;
     if (!projectId) {
       notify('Selecione um projeto do workspace antes de executar o agente.', 'warning');
       return;
@@ -288,7 +355,7 @@ export const CodingAgentView: React.FC = () => {
   };
 
   const handleDecision = async (action: 'approve' | 'reject') => {
-    if (!pendingApproval || approvalBusy) return;
+    if (!canDecideApproval || !pendingApproval || approvalBusy) return;
     setApprovalBusy(true);
     try {
       await decideCodingApproval(pendingApproval.id, action, 'Decidido no Coding Agent');
@@ -317,6 +384,7 @@ export const CodingAgentView: React.FC = () => {
   };
 
   const handleClearHistory = async () => {
+    if (!canClearHistory || !window.confirm('Apagar o histórico desta sessão da sua conta?')) return;
     try {
       await clearCodingMessages(sessionId);
       setEntries([]);
@@ -327,6 +395,7 @@ export const CodingAgentView: React.FC = () => {
   };
 
   const handleReloadMcp = async () => {
+    if (!canReloadMcp) return;
     setMcpBusy(true);
     try {
       const summary = await reloadMcpServers();
@@ -370,7 +439,7 @@ export const CodingAgentView: React.FC = () => {
       return (
         <div key={entry.id} style={styles.assistantRow}>
           <div style={styles.assistantBubble}>
-            <div style={{ ...styles.meta, color: '#a5b4fc' }}>
+            <div style={{ ...styles.meta, color: 'var(--accent-color)' }}>
               {entry.timestamp} • JARVIS Coding Agent
             </div>
             <div style={styles.preWrap}>{entry.text}</div>
@@ -411,7 +480,7 @@ export const CodingAgentView: React.FC = () => {
     }
     return (
       <div key={entry.id} style={styles.infoCard}>
-        <Sparkles size={14} color="#818cf8" />
+        <Sparkles size={14} color="var(--accent-color)" />
         <div style={{ whiteSpace: 'pre-wrap' }}>{entry.text}</div>
       </div>
     );
@@ -423,19 +492,19 @@ export const CodingAgentView: React.FC = () => {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
           <h2 className="claude-serif-title" style={{ fontSize: '1.6rem', fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>
-            Coding Agent (Claude Code / OpenCode)
+            Coding Agent JARVIS
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginTop: '3px', maxWidth: '760px' }}>
-            Agente autônomo com leitura, edição, busca e execução de comandos confinados ao projeto selecionado.
+            Agente de desenvolvimento com ferramentas autorizadas, execução confinada ao projeto selecionado e aprovação humana para operações sensíveis.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button onClick={handleNewSession} style={styles.secondaryButton} disabled={running}>
             Nova sessão
           </button>
-          <button onClick={handleClearHistory} style={styles.secondaryButton} disabled={running}>
+          {canClearHistory && <button onClick={handleClearHistory} style={styles.secondaryButton} disabled={running}>
             Limpar histórico
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -502,8 +571,8 @@ export const CodingAgentView: React.FC = () => {
         <span>{currentMode?.description}</span>
         {provider && (
           <span style={{ marginLeft: 'auto' }}>
-            Provedor: <strong style={{ color: '#a5b4fc' }}>{provider.name}</strong> • Modelo:{' '}
-            <strong style={{ color: '#a5b4fc' }}>{provider.model}</strong>
+            Provedor: <strong style={{ color: 'var(--accent-color)' }}>{provider.name}</strong> • Modelo:{' '}
+            <strong style={{ color: 'var(--accent-color)' }}>{provider.model}</strong>
             {provider.error ? ` • ${provider.error}` : ''}
           </span>
         )}
@@ -517,12 +586,12 @@ export const CodingAgentView: React.FC = () => {
             style={{ ...styles.ghostButton, flex: 1, justifyContent: 'space-between' }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Terminal size={15} color="#818cf8" />
+              <Terminal size={15} color="var(--accent-color)" />
               Ferramentas disponíveis ({tools.length})
             </span>
             {showTools ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
           </button>
-          <button
+          {canReloadMcp && <button
             onClick={handleReloadMcp}
             disabled={mcpBusy}
             title="Recarregar servidores MCP e redescobrir ferramentas"
@@ -530,14 +599,14 @@ export const CodingAgentView: React.FC = () => {
           >
             <RefreshCw size={14} color="#818cf8" className={mcpBusy ? 'spin' : undefined} />
             {mcpBusy ? 'Recarregando...' : 'Recarregar MCP'}
-          </button>
+          </button>}
         </div>
         {showTools && (
           <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
             {tools.map((tool) => (
               <div key={tool.name} style={styles.toolItem}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <code style={{ fontSize: '0.78rem', color: '#e0e7ff' }}>{tool.name}</code>
+                  <code style={{ fontSize: '0.78rem', color: 'var(--text-primary)' }}>{tool.name}</code>
                   <span style={{ ...styles.riskBadge, color: RISK_COLORS[tool.risk] || '#94a3b8', borderColor: `${RISK_COLORS[tool.risk] || '#94a3b8'}55` }}>
                     {tool.risk}
                   </span>
@@ -598,11 +667,11 @@ export const CodingAgentView: React.FC = () => {
               <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>Aprovação necessária</span>
               <h4 style={{ fontSize: '0.98rem', fontWeight: 700, marginTop: '8px' }}>{pendingApproval.impact_summary}</h4>
               <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Operação: <strong style={{ color: '#93c5fd' }}>{pendingApproval.operation}</strong> • ID: #{pendingApproval.id.slice(0, 10)}
+                Operação: <strong style={{ color: 'var(--accent-color)' }}>{pendingApproval.operation}</strong> • ID: #{pendingApproval.id.slice(0, 10)}
                 {pendingApproval.reversible === false ? ' • irreversível' : ' • reversível'}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            {canDecideApproval ? <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <button
                 onClick={() => handleDecision('reject')}
                 disabled={approvalBusy}
@@ -617,7 +686,7 @@ export const CodingAgentView: React.FC = () => {
               >
                 <Check size={15} /> Aprovar
               </button>
-            </div>
+            </div> : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>A decisão exige uma sessão com permissão de aprovação.</span>}
           </div>
           {pendingApproval.affected_resources.length > 0 && (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }}>
@@ -629,16 +698,16 @@ export const CodingAgentView: React.FC = () => {
           {pendingApproval.proposed_diff && (
             <div style={{ marginTop: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                <FileDiff size={14} color="#818cf8" /> Diff proposto
+                <FileDiff size={14} color="var(--accent-color)" /> Diff proposto
               </div>
-              <pre style={{ ...styles.pre, maxHeight: '240px', color: '#93c5fd' }}>{pendingApproval.proposed_diff}</pre>
+              <pre style={{ ...styles.pre, maxHeight: '240px', color: 'var(--text-primary)' }}>{pendingApproval.proposed_diff}</pre>
             </div>
           )}
         </div>
       )}
 
       {/* Entrada */}
-      <div style={styles.inputRow}>
+      {canUseCoding ? <div style={styles.inputRow}>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -662,7 +731,7 @@ export const CodingAgentView: React.FC = () => {
             <Play size={18} />
           </button>
         )}
-      </div>
+      </div> : <div className="glass-panel" style={{ padding: '16px', color: 'var(--text-secondary)' }}>{roleLoaded ? 'O seu perfil tem acesso de consulta ao Coding Agent, mas não pode iniciar execuções.' : 'A verificar permissões do Coding Agent…'}</div>}
     </div>
   );
 };
@@ -797,7 +866,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-color)',
     borderRadius: '5px',
     fontSize: '0.72rem',
-    color: '#cbd5e1',
+    color: 'var(--text-secondary)',
   },
   inputRow: { display: 'flex', gap: '10px', alignItems: 'flex-end' },
   textarea: {

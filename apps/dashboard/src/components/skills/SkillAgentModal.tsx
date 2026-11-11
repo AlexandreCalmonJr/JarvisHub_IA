@@ -3,6 +3,7 @@ import { Modal } from '../common/Modal';
 import { Users, Search, Check, RefreshCw } from 'lucide-react';
 import { SkillInfo, AgentInfo, getAgentLabel } from '../../types';
 import { assignSkillAgents } from '../../api';
+import { notify } from '../common/Toast';
 
 interface SkillAgentModalProps {
   isOpen: boolean;
@@ -44,7 +45,7 @@ export const SkillAgentModal: React.FC<SkillAgentModalProps> = ({
       onSaved();
       onClose();
     } catch (e: any) {
-      alert(`Erro ao vincular agentes: ${e.message}`);
+      notify(`Erro ao vincular agentes: ${e.message}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -61,7 +62,7 @@ export const SkillAgentModal: React.FC<SkillAgentModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={`Vincular Especialistas: ${skill.name}`}
-      subtitle="Defina quais dos 26 agentes terão acesso a esta habilidade e instruções no prompt"
+      subtitle="Defina quais agentes registados terão acesso a esta habilidade e às suas instruções"
       icon={<Users size={20} />}
       maxWidth="lg"
       footer={
@@ -118,17 +119,23 @@ export const SkillAgentModal: React.FC<SkillAgentModalProps> = ({
           {filteredAgents.map((ag) => {
             const isSelected = selectedAgents.includes(ag.role);
             return (
-              <div
+              <button
+                type="button"
                 key={ag.role}
+                aria-pressed={isSelected}
                 onClick={() => toggleAgent(ag.role)}
                 style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  font: 'inherit',
+                  color: 'var(--text-primary)',
                   padding: '10px 14px',
                   borderRadius: '8px',
                   border: isSelected
-                    ? '1px solid rgba(99, 102, 241, 0.5)'
+                    ? '1px solid var(--border-accent)'
                     : '1px solid var(--border-color)',
                   backgroundColor: isSelected
-                    ? 'rgba(99, 102, 241, 0.12)'
+                    ? 'var(--accent-glow)'
                     : 'rgba(255, 255, 255, 0.03)',
                   cursor: 'pointer',
                   display: 'flex',
@@ -141,7 +148,7 @@ export const SkillAgentModal: React.FC<SkillAgentModalProps> = ({
                   <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                     {ag.name}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#a5b4fc', fontWeight: 500 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--accent-color)', fontWeight: 500 }}>
                     {getAgentLabel(ag.role)}
                   </div>
                 </div>
@@ -152,9 +159,9 @@ export const SkillAgentModal: React.FC<SkillAgentModalProps> = ({
                     height: '18px',
                     borderRadius: '4px',
                     border: isSelected
-                      ? '1px solid #6366f1'
+                      ? '1px solid var(--accent-color)'
                       : '1px solid var(--border-color)',
-                    backgroundColor: isSelected ? '#6366f1' : 'transparent',
+                    backgroundColor: isSelected ? 'var(--accent-color)' : 'transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -162,7 +169,7 @@ export const SkillAgentModal: React.FC<SkillAgentModalProps> = ({
                 >
                   {isSelected && <Check size={12} color="#fff" />}
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

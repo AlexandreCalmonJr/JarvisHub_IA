@@ -51,7 +51,7 @@ export const ModelStatusHero: React.FC<Props> = ({
         <span>Utilização do orçamento</span><strong>{budgetPercent}%</strong>
       </div>
       <div style={{ height: 7, borderRadius: 99, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
-        <div style={{ width: `${budgetPercent}%`, height: '100%', background: budgetPercent >= 90 ? '#ef4444' : '#3b82f6', transition: 'width .25s' }} />
+        <div style={{ width: `${budgetPercent}%`, height: '100%', background: budgetPercent >= 90 ? '#ef4444' : 'var(--accent-color)', transition: 'width .25s' }} />
       </div>
     </div>
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

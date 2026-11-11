@@ -66,44 +66,47 @@ async def list_models_endpoint(principal=Depends(get_principal)):
 
     # Lista vazia significa que nenhum modelo local foi confirmado como instalado.
 
-    # Modelos online disponíveis e configurados no Model Manager
+    # Só anuncia um modelo online quando o gateway está ativo e a credencial correspondente existe.
     online_models = []
-    if cfg.default_model:
+    active_key = key_vault.get_key(cfg.key_id) if cfg.key_id else None
+    gateway_active = bool(
+        cfg.enabled
+        and active_key
+        and active_key.is_active
+        and hybrid_router.online_adapter is not None
+    )
+    if gateway_active and cfg.default_model:
         online_models.append({
             "name": cfg.default_model,
             "provider": cfg.provider_name,
             "is_default": True,
-            "label": f"{cfg.default_model} ({cfg.provider_name.upper()} — Ativo no Gateway)",
+            "label": f"{cfg.default_model} ({cfg.provider_name.upper()} — configurado e ativo)",
         })
-    for preset in PROVIDER_PRESETS:
-        p_id = preset.get("id")
-        def_m = preset.get("default_model")
-        if def_m and def_m != cfg.default_model:
-            online_models.append({
-                "name": def_m,
-                "provider": p_id,
-                "is_default": False,
-                "label": f"{def_m} ({preset.get('name')})",
-            })
 
-    return {
+    response = {
         "models": installed_local,
         "online_models": online_models,
-        "concurrency_limit": 1,
-        "queue_status": {
-            "active": model_manager.queue.active_count,
-            "waiting": model_manager.queue.waiting_count,
-        },
+        # Chat clients need only the active route and model name; budget,
+        # spend, credential state and global queue telemetry are admin-only.
         "hybrid_gateway": {
-            "enabled": cfg.enabled,
+            "enabled": gateway_active,
             "provider": cfg.provider_name,
             "model": cfg.default_model,
-            "has_api_key": bool(cfg.key_id and key_vault.get_key(cfg.key_id)),
-            "max_budget_usd": cfg.max_budget_usd,
-            "current_spend_usd": cfg.current_spend_usd,
             "fallback_route": "ollama_local",
         },
     }
+    if principal.kind == "human" and principal.role == "admin":
+        response["concurrency_limit"] = 1
+        response["queue_status"] = {
+            "active": model_manager.queue.active_count,
+            "waiting": model_manager.queue.waiting_count,
+        }
+        response["hybrid_gateway"].update({
+            "has_api_key": bool(active_key and active_key.is_active),
+            "max_budget_usd": cfg.max_budget_usd,
+            "current_spend_usd": cfg.current_spend_usd,
+        })
+    return response
 
 
 @router.get("/api/v1/system/model-metrics")
@@ -231,7 +234,7 @@ async def search_huggingface_endpoint(q: str = "", limit: int = 10, principal=De
 
 @router.get("/api/v1/models/agent-recommendations")
 async def get_agent_recommendations_endpoint(principal=Depends(get_principal)):
-    """Retorna a matriz de modelo ótimo do Hugging Face para cada um dos 26 especialistas."""
+    """Retorna recomendações de modelos para os papéis de agente registados."""
     return AGENT_MODEL_RECOMMENDATIONS
 
 

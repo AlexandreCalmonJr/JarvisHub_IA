@@ -11,9 +11,13 @@ import { SkillCard } from './skills/SkillCard';
 import { SkillAgentModal } from './skills/SkillAgentModal';
 import { CreateSkillModal } from './skills/CreateSkillModal';
 import { notify } from './common/Toast';
+import { API_BASE } from '../services/api/client';
 
 export const SkillsManagerView: React.FC = () => {
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [canManageSkills, setCanManageSkills] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -59,6 +63,7 @@ export const SkillsManagerView: React.FC = () => {
   };
 
   const handleDeleteSkill = async (skillId: string, skillName: string) => {
+    if (!canManageSkills) return;
     if (!window.confirm(`Tem certeza que deseja excluir a habilidade "${skillName}"?`)) {
       return;
     }
@@ -73,6 +78,7 @@ export const SkillsManagerView: React.FC = () => {
   };
 
   const handlePonytailChange = async (newLevel: string) => {
+    if (!isAdmin) return;
     setSavingPonytail(true);
     try {
       await savePonytailLevel(newLevel);
@@ -86,10 +92,31 @@ export const SkillsManagerView: React.FC = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const human = principal?.kind === 'human';
+        setIsAdmin(human && principal?.role === 'admin');
+        setCanManageSkills(human && (principal?.role === 'admin' || principal?.role === 'developer'));
+        setRoleLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAdmin(false);
+          setCanManageSkills(false);
+          setRoleLoaded(true);
+        }
+      });
     loadData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleToggle = async (skillId: string) => {
+    if (!canManageSkills) return;
     try {
       await toggleSkill(skillId);
       await loadData();
@@ -139,6 +166,7 @@ export const SkillsManagerView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões do Gestor de Skills…</div>}
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -152,15 +180,15 @@ export const SkillsManagerView: React.FC = () => {
               color: 'var(--text-primary)',
             }}
           >
-            Skills Manager & Catálogo ECC
+            Gestor de Skills e Catálogo ECC
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-            Habilidades técnicas ativas ({activeCount}/{skills.length}), versionadas e com injeção automática no prompt.
+            Habilidades técnicas ativas ({activeCount}/{skills.length}), versionadas e injetadas apenas nos agentes associados e autorizados.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <button
+          {canManageSkills && <button
             onClick={() => setShowCreateModal(true)}
             className="btn btn-primary"
             style={{
@@ -170,9 +198,9 @@ export const SkillsManagerView: React.FC = () => {
             }}
           >
             <span>Nova Habilidade ECC</span>
-          </button>
+          </button>}
 
-          <button onClick={loadData} className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '7px 12px', borderRadius: '8px' }}>
+          <button onClick={() => loadData()} className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '7px 12px', borderRadius: '8px' }}>
             <span>{loading ? 'Atualizando...' : 'Atualizar'}</span>
           </button>
         </div>
@@ -217,13 +245,13 @@ export const SkillsManagerView: React.FC = () => {
             </span>
           </div>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '3px 0 0 0' }}>
-            Força os 26 especialistas a seguirem a Escada da Preguiça Técnica: reaproveitar código existente, usar standard library e nunca instalar pacotes redundantes.
+            Política global de minimalismo técnico: reaproveitar código existente, usar standard library e evitar dependências redundantes.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Nível:</span>
-          <select
+          {isAdmin ? <select
             value={ponytailLevel}
             disabled={savingPonytail}
             onChange={(e) => handlePonytailChange(e.target.value)}
@@ -243,7 +271,7 @@ export const SkillsManagerView: React.FC = () => {
             <option value="lite">Ponytail Leve (Evita Pacotes)</option>
             <option value="senior">Ponytail Sênior (YAGNI & DRY Padrão)</option>
             <option value="ultra">Ponytail Ultra (Minimalismo Radical)</option>
-          </select>
+          </select> : <span style={{ color: 'var(--text-primary)', fontSize: '0.82rem' }}>{ponytailLevel.toUpperCase()} · definido pelo administrador</span>}
         </div>
       </div>
 
@@ -292,9 +320,9 @@ export const SkillsManagerView: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: categoryTab === 'arch' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-            color: categoryTab === 'arch' ? '#38bdf8' : 'var(--text-secondary)',
-            borderBottom: categoryTab === 'arch' ? '2px solid #38bdf8' : '2px solid transparent',
+            backgroundColor: categoryTab === 'arch' ? 'var(--accent-glow)' : 'transparent',
+            color: categoryTab === 'arch' ? 'var(--accent-color)' : 'var(--text-secondary)',
+            borderBottom: categoryTab === 'arch' ? '2px solid var(--accent-color)' : '2px solid transparent',
             transition: 'all 0.15s ease',
           }}
         >
@@ -358,9 +386,9 @@ export const SkillsManagerView: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: categoryTab === 'custom' ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
-            color: categoryTab === 'custom' ? '#c084fc' : 'var(--text-secondary)',
-            borderBottom: categoryTab === 'custom' ? '2px solid #c084fc' : '2px solid transparent',
+            backgroundColor: categoryTab === 'custom' ? 'var(--accent-glow)' : 'transparent',
+            color: categoryTab === 'custom' ? 'var(--accent-color)' : 'var(--text-secondary)',
+            borderBottom: categoryTab === 'custom' ? '2px solid var(--accent-color)' : '2px solid transparent',
             transition: 'all 0.15s ease',
           }}
         >
@@ -475,14 +503,16 @@ export const SkillsManagerView: React.FC = () => {
               skill={skill}
               onToggle={handleToggle}
               onEditAgents={(s) => setEditingSkill(s)}
-              onDelete={handleDeleteSkill}
+              onDelete={canManageSkills ? handleDeleteSkill : undefined}
+              canManageSkills={canManageSkills}
+              isAdmin={isAdmin}
             />
           ))}
         </div>
       )}
 
       {/* Modal de Vinculação de Agentes */}
-      {editingSkill && (
+      {canManageSkills && editingSkill && (
         <SkillAgentModal
           isOpen={true}
           onClose={() => setEditingSkill(null)}
@@ -493,7 +523,7 @@ export const SkillsManagerView: React.FC = () => {
       )}
 
       {/* Modal de Criação / Importação de Skill ECC */}
-      {showCreateModal && (
+      {canManageSkills && showCreateModal && (
         <CreateSkillModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}

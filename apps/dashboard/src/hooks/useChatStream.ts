@@ -22,7 +22,7 @@ const STORAGE_SESSION_KEY = 'jarvis_chat_session_id_v1';
 
 export const INITIAL_GREETING: ChatMessage = {
   sender: 'jarvis',
-  text: 'Olá! Sou o JARVIS Master. Posso orquestrar 26 especialistas locais para criar projetos completos (Python, Java, C#, Go, Kotlin, Flutter ou Web), analisar arquitetura, auditar vulnerabilidades e aplicar alterações físicas no computador.',
+  text: 'Olá! Sou o JARVIS Master. Posso ajudar a planear, analisar e executar tarefas com os agentes e ferramentas efetivamente disponíveis, respeitando as permissões e aprovações configuradas no ambiente.',
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
 };
 

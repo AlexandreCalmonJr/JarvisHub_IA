@@ -7,10 +7,14 @@ interface SkillCardProps {
   onToggle: (id: string) => void;
   onEditAgents: (skill: SkillInfo) => void;
   onDelete?: (id: string, name: string) => void;
+  canManageSkills?: boolean;
+  isAdmin?: boolean;
 }
 
-export const SkillCard: React.FC<SkillCardProps> = ({ skill, onToggle, onEditAgents, onDelete }) => {
+export const SkillCard: React.FC<SkillCardProps> = ({ skill, onToggle, onEditAgents, onDelete, canManageSkills = false, isAdmin = false }) => {
   const isApproved = skill.is_approved && !skill.is_revoked;
+  const isPrivateSkill = skill.origin === 'user_created' || skill.origin === 'imported_ecc' || skill.id.startsWith('user_');
+  const canManageThisSkill = canManageSkills && (isAdmin || isPrivateSkill);
 
   const getDomainBadge = (dom: string) => {
     switch (dom) {
@@ -63,20 +67,27 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, onToggle, onEditAge
             )}
           </div>
 
-          <button
-            onClick={() => onToggle(skill.id)}
-            className={`btn ${isApproved ? 'badge-success' : 'badge-danger'}`}
-            style={{
-              fontSize: '0.74rem',
-              padding: '3px 9px',
-              cursor: 'pointer',
-              border: isApproved ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
-            }}
-            title={isApproved ? 'Skill ativa - clique para desativar' : 'Skill inativa - clique para ativar'}
-          >
-            {isApproved ? <CheckCircle size={13} /> : <XCircle size={13} />}
-            <span>{isApproved ? 'Ativa' : 'Desativada'}</span>
-          </button>
+          {canManageThisSkill ? (
+            <button
+              type="button"
+              onClick={() => onToggle(skill.id)}
+              className={`btn ${isApproved ? 'badge-success' : 'badge-danger'}`}
+              style={{
+                fontSize: '0.74rem',
+                padding: '3px 9px',
+                cursor: 'pointer',
+                border: isApproved ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+              }}
+              title={isApproved ? 'Skill ativa - clique para desativar' : 'Skill inativa - clique para ativar'}
+            >
+              {isApproved ? <CheckCircle size={13} /> : <XCircle size={13} />}
+              <span>{isApproved ? 'Ativa' : 'Desativada'}</span>
+            </button>
+          ) : (
+            <span className={`badge ${isApproved ? 'badge-success' : 'badge-secondary'}`}>
+              {isApproved ? 'Ativa' : 'Desativada'}
+            </span>
+          )}
         </div>
 
         <h4 style={{ fontSize: '0.98rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '10px' }}>
@@ -106,18 +117,18 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, onToggle, onEditAge
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button
+          {canManageThisSkill && <button
             onClick={() => onEditAgents(skill)}
             className="btn btn-ghost"
             style={{ fontSize: '0.75rem', padding: '4px 8px' }}
           >
             Vincular Agentes
-          </button>
-          {onDelete && (skill.origin === 'user_created' || skill.origin?.includes('imported') || skill.id.startsWith('user_')) && (
+          </button>}
+          {onDelete && canManageThisSkill && isPrivateSkill && (
             <button
               onClick={() => onDelete(skill.id, skill.name)}
               className="btn btn-ghost"
-              style={{ fontSize: '0.75rem', padding: '4px 7px', color: '#f87171' }}
+              style={{ fontSize: '0.75rem', padding: '4px 7px', color: 'var(--danger-color)' }}
               title="Excluir habilidade customizada"
             >
               <Trash2 size={13} />

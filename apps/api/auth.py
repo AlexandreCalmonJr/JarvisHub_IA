@@ -53,6 +53,7 @@ ALLOWED_DEVICE_SCOPES = {
     "approvals:read",
     "approvals:decide",
     "system:read",
+    "system:feedback",
     "coding:use",
     "security:kill",
 }
@@ -87,6 +88,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "security:write",
         "audit:read",
         "system:read",
+        "system:feedback",
         "hardware:read",
         "mcp:read",
         "voice:use",
@@ -108,6 +110,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "security:read",
         "audit:read",
         "system:read",
+        "system:feedback",
         "hardware:read",
         "mcp:read",
         "profile:read",
@@ -140,6 +143,8 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     ({"GET"}, re.compile(r"^/api/v1/system/server-logs(?:/stream)?$"), "system:logs"),
     ({"POST"}, re.compile(r"^/api/v1/system/server-logs/clear$"), "system:write"),
     ({"GET"}, re.compile(r"^/api/v1/system/resources$"), "system:read"),
+    ({"GET"}, re.compile(r"^/api/v1/system/inference-telemetry$"), "system:read"),
+    ({"POST"}, re.compile(r"^/api/v1/system/inference-feedback$"), "system:feedback"),
     ({"POST"}, re.compile(r"^/api/v1/system/backup$"), "system:write"),
     ({"GET"}, re.compile(r"^/api/v1/system/webhooks$"), "system:read"),
     ({"POST"}, re.compile(r"^/api/v1/system/webhooks(?:/test)?$"), "system:write"),
@@ -195,9 +200,14 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     ({"POST"}, re.compile(r"^/api/v1/voice/.*$"), "voice:use"),
     # Mock Server: execução dos endpoints simulados apenas para utilizadores autenticados com escopo dedicado.
     ({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}, re.compile(r"^/api/v1/mock/.*$"), "mock:serve"),
+    # SQL Playground: endpoints POST estritamente de leitura continuam acessíveis a auditores.
+    ({"POST"}, re.compile(r"^/api/v1/backend-studio/sql/(?:inspect|query|audit)$"), "studios:read"),
     # Studios
     ({"GET"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:read"),
     ({"POST", "DELETE"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:use"),
+    # Aprendizagem por conta
+    ({"GET"}, re.compile(r"^/api/v1/learning/progress$"), "profile:read"),
+    ({"PUT"}, re.compile(r"^/api/v1/learning/progress$"), "profile:write"),
     # Perfil
     ({"GET"}, re.compile(r"^/api/v1/user/profile$"), "profile:read"),
     ({"POST"}, re.compile(r"^/api/v1/user/profile$"), "profile:write"),
@@ -238,6 +248,7 @@ class Principal:
             "kind": self.kind,
             "role": self.role,
             "scopes": sorted(self.scopes),
+            "permissions": sorted(self.scopes if self.kind == "device" else ROLE_PERMISSIONS.get(self.role, set())),
             "session_id": self.session_id,
             "device_id": self.device_id,
             "device_name": self.device_name,

@@ -44,6 +44,7 @@ from services.model_runtime.huggingface_service import (
     search_huggingface_hub,  # noqa: F401
     stream_ollama_pull,  # noqa: F401
 )
+from services.observability.telemetry_store import SqliteTelemetryStore
 from services.observability import (
     attach_server_logging,  # noqa: F401
     inference_tracker,  # noqa: F401
@@ -197,11 +198,13 @@ hybrid_router = HybridModelRouter(
     audit_trail=security_core.audit,
     key_vault=key_vault,
 )
+telemetry_store = SqliteTelemetryStore(db_path=data_dir / "telemetry.db")
 model_manager = ModelManager(
     adapter=OllamaAdapter(),
     kill_switch=security_core.kill_switch,
     audit_trail=security_core.audit,
     hybrid_router=hybrid_router,
+    telemetry_store=telemetry_store,
 )
 db_manager = DatabaseManager(db_path=str(data_dir / "jarvis.db"))
 security_core.set_db_manager(db_manager)
@@ -290,32 +293,8 @@ if len(skills_catalog.list_all_skills()) == 0:
                     except Exception as exc:
                         logger.debug("Falha ao registrar skill do arquivo %s: %s", f, exc)
 
-# Carrega skills persistidas pelo usuário no SQLite
-try:
-    user_skills_list = db_manager.list_user_skills()
-    for us in user_skills_list:
-        try:
-            content_hash = us.get("content_hash") or SkillValidator.compute_hash(us["instructions"], {})
-            meta = SkillMetadata(
-                id=us["id"],
-                name=us["name"],
-                version=us.get("version", "1.0.0"),
-                origin=us.get("origin", "user_created"),
-                license="MIT",
-                description=us.get("description", ""),
-                domain=us.get("domain", "backend"),
-                allowed_tools=[],
-                required_permissions=[],
-                assigned_agents=us.get("assigned_agents", ["jarvis_master"]),
-                content_hash=content_hash,
-                is_approved=True,
-                instructions=us["instructions"],
-            )
-            skills_catalog.register_skill(meta, auto_approve=True)
-        except Exception as e:
-            logger.warning("Falha ao registrar user_skill %s: %s", us.get("id"), e)
-except Exception as e:
-    logger.warning("Erro ao carregar user_skills do SQLite: %s", e)
+# Skills criadas/importadas por utilizadores permanecem no SQLite por owner.
+# O prompt builder injeta-as apenas quando owner_user_id corresponde à conta autenticada.
 
 logger.info("Catálogo ECC inicializado com %d skills registradas.", len(skills_catalog.list_all_skills()))
 

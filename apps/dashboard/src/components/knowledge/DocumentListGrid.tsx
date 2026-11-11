@@ -6,6 +6,7 @@ interface DocumentListGridProps {
   loading: boolean;
   error?: string | null;
   onDelete: (docName: string) => void;
+  canManage?: boolean;
   onSelectFileClick: () => void;
 }
 
@@ -14,6 +15,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
   loading,
   error,
   onDelete,
+  canManage = false,
   onSelectFileClick,
 }) => {
   return (
@@ -26,7 +28,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
           marginBottom: '14px',
         }}
       >
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
           Documentos e Manuais no Vault
         </h3>
         <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
@@ -54,8 +56,8 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
             color: 'var(--text-secondary)',
           }}
         >
-          <BookOpen size={40} color="#38bdf8" style={{ margin: '0 auto 14px', opacity: 0.8 }} />
-          <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 6px 0' }}>
+          <BookOpen size={40} color="var(--accent-color)" style={{ margin: '0 auto 14px', opacity: 0.8 }} />
+          <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px 0' }}>
             Nenhum documento indexado na Base de Conhecimento
           </h4>
           <p
@@ -66,16 +68,15 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
               lineHeight: 1.5,
             }}
           >
-            Faça upload de manuais em PDF, arquivos de regras em Markdown ou aponte uma pasta local.
-            O JARVIS dividirá o conteúdo em blocos semânticos para alimentar os 26 agentes especialistas.
+            {canManage ? 'Faça upload de manuais, ficheiros Markdown ou indexe uma pasta autorizada do servidor. O conteúdo será dividido em blocos semânticos para recuperação contextual.' : 'Ainda não existem documentos nesta base de conhecimento da conta.'}
           </p>
-          <button
+          {canManage && <button
             onClick={onSelectFileClick}
             className="btn btn-primary"
             style={{ fontSize: '0.82rem', padding: '8px 18px' }}
           >
             <Upload size={14} /> Selecionar Primeiro Arquivo
-          </button>
+          </button>}
         </div>
       ) : (
         <div
@@ -92,8 +93,8 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
               style={{
                 padding: '16px',
                 borderRadius: '12px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-secondary)',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -110,34 +111,34 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={18} color="#38bdf8" />
+                    <FileText size={18} color="var(--accent-color)" />
                     <span
                       style={{
                         fontSize: '0.92rem',
                         fontWeight: 700,
-                        color: '#f8fafc',
+                        color: 'var(--text-primary)',
                         wordBreak: 'break-all',
                       }}
                     >
                       {doc.doc_name}
                     </span>
                   </div>
-                  <button
+                  {canManage && <button
                     type="button"
                     onClick={() => onDelete(doc.doc_name)}
                     className="btn btn-ghost"
-                    style={{ padding: '3px', color: '#f87171' }}
+                    style={{ padding: '3px', color: 'var(--danger-color)' }}
                     title="Excluir do Vault"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </button>}
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
                   <span className="badge badge-info" style={{ fontSize: '0.68rem' }}>
-                    {doc.file_type || 'TXT'}
+                    {doc.file_type || 'Tipo desconhecido'}
                   </span>
-                  <span className="badge badge-purple" style={{ fontSize: '0.68rem' }}>
+                  <span className="badge" style={{ fontSize: '0.68rem' }}>
                     {doc.category || 'geral'}
                   </span>
                   <span
@@ -149,7 +150,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
                       color: 'var(--text-muted)',
                     }}
                   >
-                    {doc.total_chunks} blocos semânticos
+                    {Number(doc.total_chunks) || 0} blocos semânticos
                   </span>
                   {doc.file_size_formatted && (
                     <span
@@ -175,7 +176,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
                   borderTop: '1px solid rgba(255, 255, 255, 0.05)',
                 }}
               >
-                Indexado em: {new Date(doc.created_at).toLocaleString('pt-BR')}
+                Indexado em: {doc.created_at && !Number.isNaN(new Date(doc.created_at).getTime()) ? new Date(doc.created_at).toLocaleString('pt-PT') : 'Data indisponível'}
               </div>
             </div>
           ))}

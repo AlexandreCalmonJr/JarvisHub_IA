@@ -8,6 +8,7 @@ import {
   Info,
 } from 'lucide-react';
 import { triggerKillSwitch, fetchAuditLogs } from '../../api';
+import { API_BASE } from '../../services/api/client';
 
 interface ContainmentAuditSectionProps {
   onRefresh: () => void;
@@ -17,8 +18,9 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   onRefresh,
 }) => {
   const [killLoading, setKillLoading] = useState(false);
+  const [canKill, setCanKill] = useState(false);
   const [taskIdInput, setTaskIdInput] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Trilha de Auditoria ao Vivo
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -40,10 +42,26 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   };
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) setCanKill(principal?.kind === 'human' && principal?.role === 'admin');
+      })
+      .catch(() => {
+        if (!cancelled) setCanKill(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     loadAuditLogs();
   }, [severityFilter]);
 
   const handleGlobalKill = async () => {
+    if (!canKill) return;
     if (
       !window.confirm(
         'ATENÇÃO: Deseja suspender imediatamente todas as operações e ferramentas do JARVIS HUB?'
@@ -54,29 +72,28 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
     setKillLoading(true);
     try {
       await triggerKillSwitch('global');
-      setMessage(
-        'Kill Switch Global ACIONADO com sucesso! Todas as ferramentas foram bloqueadas.'
-      );
+      setMessage({ type: 'success', text: 'Kill Switch Global acionado. As operações foram bloqueadas pelo mecanismo de contenção.' });
       onRefresh();
       loadAuditLogs();
     } catch (err: any) {
-      setMessage(`Erro: ${err.message}`);
+      setMessage({ type: 'error', text: `Erro: ${err.message}` });
     } finally {
       setKillLoading(false);
     }
   };
 
   const handleCancelTask = async () => {
-    if (!taskIdInput.trim()) return;
+    if (!canKill || !taskIdInput.trim()) return;
+    if (!window.confirm(`Cancelar a tarefa '${taskIdInput.trim()}'? Esta ação não pode ser desfeita.`)) return;
     setKillLoading(true);
     try {
       await triggerKillSwitch('task', taskIdInput.trim());
-      setMessage(`Tarefa '${taskIdInput.trim()}' cancelada com sucesso.`);
+      setMessage({ type: 'success', text: `Tarefa '${taskIdInput.trim()}' cancelada com sucesso.` });
       setTaskIdInput('');
       onRefresh();
       loadAuditLogs();
     } catch (err: any) {
-      setMessage(`Erro: ${err.message}`);
+      setMessage({ type: 'error', text: `Erro: ${err.message}` });
     } finally {
       setKillLoading(false);
     }
@@ -86,20 +103,22 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {message && (
         <div
+          role={message.type === 'error' ? 'alert' : 'status'}
           style={{
             padding: '12px 16px',
-            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
+            backgroundColor: message.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+            border: `1px solid ${message.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
             borderRadius: '8px',
-            color: '#818cf8',
+            color: message.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)',
             fontSize: '0.875rem',
           }}
         >
-          {message}
+          {message.text}
         </div>
       )}
 
       {/* Kill Switch Card */}
+      {canKill ? (
       <div
         style={{
           backgroundColor: 'var(--bg-secondary)',
@@ -169,6 +188,11 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
           </div>
         </div>
       </div>
+      ) : (
+        <div className="glass-card" style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+          Os comandos de contenção global estão reservados ao administrador. A trilha de auditoria permanece disponível conforme as permissões da conta.
+        </div>
+      )}
 
       {/* Trilha de Auditoria */}
       <div

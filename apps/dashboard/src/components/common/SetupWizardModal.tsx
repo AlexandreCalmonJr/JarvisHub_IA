@@ -11,7 +11,7 @@ import {
   X,
   Server,
 } from 'lucide-react';
-import { getAccountStorageKey } from '../../services/accountScope';
+import { API_BASE } from '../../services/api/client';
 
 interface SetupWizardModalProps {
   isOpen: boolean;
@@ -25,6 +25,23 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
 
   const [saving, setSaving] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  const [environmentStatus, setEnvironmentStatus] = useState<any>(null);
+  const [checkingEnvironment, setCheckingEnvironment] = useState(false);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setCheckingEnvironment(true);
+    fetch(`${API_BASE}/system/onboarding`, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Não foi possível consultar o estado do servidor.');
+        return response.json();
+      })
+      .then((status) => { if (!cancelled) setEnvironmentStatus(status); })
+      .catch((error) => { if (!cancelled) setFinishError(error.message || 'Falha ao verificar o ambiente.'); })
+      .finally(() => { if (!cancelled) setCheckingEnvironment(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   const handleFinish = async () => {
     setSaving(true);
@@ -33,7 +50,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
       if (mode !== 'local') {
         throw new Error('A configuração de provedores na nuvem ficará disponível após a implantação do Cofre Privado por Conta.');
       }
-      localStorage.setItem(getAccountStorageKey('jarvis_setup_completed'), 'true');
+      const response = await fetch(`${API_BASE}/system/onboarding/complete`, { method: 'POST', credentials: 'include' });
+      if (!response.ok) throw new Error('O servidor não confirmou a conclusão da configuração.');
       if (onCompleted) onCompleted();
       onClose();
     } catch (e: any) {
@@ -65,10 +83,10 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
         style={{
           width: '100%',
           maxWidth: '740px',
-          backgroundColor: '#0a0f1d',
+          backgroundColor: 'var(--bg-secondary)',
           borderRadius: '18px',
-          border: '1px solid rgba(99, 102, 241, 0.3)',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(99, 102, 241, 0.15)',
+          border: '1px solid var(--border-accent)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px var(--accent-glow)',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -83,7 +101,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%)',
+            background: 'linear-gradient(135deg, var(--accent-glow) 0%, var(--bg-secondary) 100%)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -123,7 +141,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
               flex: 1,
               height: '4px',
               borderRadius: '2px',
-              backgroundColor: step >= 1 ? '#6366f1' : 'rgba(255, 255, 255, 0.1)',
+              backgroundColor: step >= 1 ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.1)',
               transition: 'background-color 0.3s',
             }}
           />
@@ -132,7 +150,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
               flex: 1,
               height: '4px',
               borderRadius: '2px',
-              backgroundColor: step >= 2 ? '#6366f1' : 'rgba(255, 255, 255, 0.1)',
+              backgroundColor: step >= 2 ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.1)',
               transition: 'background-color 0.3s',
             }}
           />
@@ -170,9 +188,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     borderRadius: '14px',
                     cursor: 'not-allowed',
                     opacity: 0.55,
-                    backgroundColor: mode === 'cloud' ? 'rgba(99, 102, 241, 0.14)' : 'rgba(255, 255, 255, 0.03)',
-                    border: mode === 'cloud' ? '2px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.08)',
-                    boxShadow: mode === 'cloud' ? '0 8px 24px rgba(99, 102, 241, 0.25)' : 'none',
+                    backgroundColor: mode === 'cloud' ? 'var(--accent-glow)' : 'rgba(255, 255, 255, 0.03)',
+                    border: mode === 'cloud' ? '2px solid var(--accent-color)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    boxShadow: mode === 'cloud' ? '0 8px 24px var(--accent-glow)' : 'none',
                     transition: 'all 0.2s ease',
                     display: 'flex',
                     flexDirection: 'column',
@@ -185,11 +203,11 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                         width: '36px',
                         height: '36px',
                         borderRadius: '10px',
-                        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                        backgroundColor: 'var(--accent-glow)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#818cf8',
+                        color: 'var(--accent-color)',
                       }}
                     >
                       <Zap size={20} />
@@ -221,9 +239,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     padding: '18px 20px',
                     borderRadius: '14px',
                     cursor: 'pointer',
-                    backgroundColor: mode === 'local' ? 'rgba(16, 185, 129, 0.14)' : 'rgba(255, 255, 255, 0.03)',
-                    border: mode === 'local' ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
-                    boxShadow: mode === 'local' ? '0 8px 24px rgba(16, 185, 129, 0.25)' : 'none',
+                    backgroundColor: mode === 'local' ? 'var(--accent-glow)' : 'rgba(255, 255, 255, 0.03)',
+                    border: mode === 'local' ? '2px solid var(--accent-color)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    boxShadow: mode === 'local' ? '0 8px 24px var(--accent-glow)' : 'none',
                     transition: 'all 0.2s ease',
                     display: 'flex',
                     flexDirection: 'column',
@@ -236,11 +254,11 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                         width: '36px',
                         height: '36px',
                         borderRadius: '10px',
-                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        backgroundColor: 'var(--accent-glow)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#34d399',
+                        color: 'var(--accent-color)',
                       }}
                     >
                       <Cpu size={20} />
@@ -284,6 +302,15 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 </p>
               </div>
 
+              <div className="glass-panel" style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                <div><strong style={{ color: 'var(--text-primary)', fontSize: '.8rem' }}>Verificação do ambiente</strong><div style={{ color: 'var(--text-muted)', fontSize: '.72rem', marginTop: 4 }}>{checkingEnvironment ? 'A consultar o servidor…' : 'Estado recebido do backend'}</div></div>
+                {[
+                  ['Base de dados', environmentStatus?.database_available],
+                  ['Modelo local', environmentStatus?.local_model_available],
+                  ['Cofre cifrado', environmentStatus?.vault_encryption_ready],
+                  ['Provider cloud', environmentStatus?.hybrid_provider_enabled],
+                ].map(([label, ready]) => <div key={String(label)} style={{ fontSize: '.78rem', color: 'var(--text-secondary)' }}>{label}: <strong style={{ color: ready === true ? 'var(--success-color)' : ready === false ? 'var(--warning-color)' : 'var(--text-muted)' }}>{ready === true ? 'Disponível' : ready === false ? 'Não configurado' : 'A verificar'}</strong></div>)}
+              </div>
               {mode === 'cloud' ? (
                 <div role="status" style={{ padding: '18px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
                   O Cofre Privado por Conta está em implementação. A configuração global de APIs permanece bloqueada neste assistente para impedir que uma conta altere ou utilize credenciais compartilhadas.
@@ -453,8 +480,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                borderColor: '#10b981',
+                background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
+                borderColor: 'var(--accent-color)',
                 boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
               }}
             >

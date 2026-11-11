@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShieldAlert,
   ChevronDown,
@@ -9,12 +9,17 @@ import {
   VolumeX,
   Globe,
   FolderOpen,
+  Star,
+  Loader2,
+  Check,
 } from 'lucide-react';
 import { TaskStateResponse, getAgentLabel } from '../../types';
 import { CanvasArtifact } from './ArtifactCanvas';
 import { MarkdownMessage } from './MarkdownMessage';
 import { openWorkspaceFolder } from '../../services/api/workspace';
 import { getUserProfile } from '../common/UserProfileModal';
+import { fetchTaskInferenceTelemetry, submitInferenceFeedback } from '../../services/api/system';
+import type { InferenceTelemetryRecord } from '../../services/api/system';
 
 const INTENT_LABELS: Record<string, string> = {
   conversation: 'Conversação & Assistente',
@@ -66,8 +71,42 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
   const isJarvis = message.sender === 'jarvis';
   const [showReasoning, setShowReasoning] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [inferenceRecords, setInferenceRecords] = useState<InferenceTelemetryRecord[]>([]);
+  const [feedbackLoadingId, setFeedbackLoadingId] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const task = message.taskData;
   const userProfile = getUserProfile();
+
+  useEffect(() => {
+    let active = true;
+    if (!isJarvis || !task?.task_id) {
+      setInferenceRecords([]);
+      return () => { active = false; };
+    }
+    fetchTaskInferenceTelemetry(task.task_id)
+      .then((records) => {
+        if (active) setInferenceRecords(records.filter((record) => record.status === 'success'));
+      })
+      .catch((error) => {
+        if (active) console.warn('Não foi possível carregar avaliações da inferência:', error);
+      });
+    return () => { active = false; };
+  }, [isJarvis, task?.task_id]);
+
+  const handleInferenceRating = async (inferenceId: string, rating: number) => {
+    setFeedbackLoadingId(inferenceId);
+    setFeedbackError(null);
+    try {
+      await submitInferenceFeedback(inferenceId, rating);
+      setInferenceRecords((current) =>
+        current.map((record) => record.id === inferenceId ? { ...record, feedback_rating: rating } : record)
+      );
+    } catch (error) {
+      setFeedbackError(error instanceof Error ? error.message : 'Não foi possível registrar a avaliação.');
+    } finally {
+      setFeedbackLoadingId(null);
+    }
+  };
 
   const parsedJson = isJarvis ? parseJsonPayload(message.text) : null;
   const displayText = parsedJson?.chat_response || message.text;
@@ -483,6 +522,78 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
               <div style={{ whiteSpace: 'pre-wrap' }}>{displayText}</div>
             )}
           </div>
+
+          {isJarvis && inferenceRecords.length > 0 && (
+            <div
+              style={{
+                width: '100%',
+                marginTop: '12px',
+                padding: '10px 12px',
+                borderRadius: '10px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-secondary, var(--bg-tertiary))',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '8px' }}>
+                <Star size={13} color="var(--accent-color)" />
+                <span style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Avalie as inferências que contribuíram para esta resposta
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                {inferenceRecords.map((record) => (
+                  <div key={record.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <span style={{ fontSize: '0.73rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                        {record.agent_role ? getAgentLabel(record.agent_role) : 'Especialista'}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                        {record.model_name} · {record.provider}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      {record.feedback_rating ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: 'var(--success-color, #22c55e)', fontSize: '0.70rem' }}>
+                          <Check size={13} /> Avaliado: {record.feedback_rating}/5
+                        </span>
+                      ) : (
+                        [1, 2, 3, 4, 5].map((rating) => (
+                          <button
+                            key={rating}
+                            type="button"
+                            disabled={feedbackLoadingId === record.id}
+                            onClick={() => handleInferenceRating(record.id, rating)}
+                            title={`Avaliar com ${rating} de 5`}
+                            aria-label={`Avaliar ${record.model_name} com ${rating} de 5`}
+                            style={{
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '6px',
+                              background: 'transparent',
+                              color: 'var(--text-secondary)',
+                              cursor: feedbackLoadingId === record.id ? 'wait' : 'pointer',
+                              padding: '5px 7px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              fontSize: '0.70rem',
+                            }}
+                          >
+                            {feedbackLoadingId === record.id ? <Loader2 size={11} className="animate-spin" /> : <Star size={11} />}
+                            {rating}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {feedbackError && (
+                <div role="alert" style={{ marginTop: '8px', fontSize: '0.70rem', color: 'var(--danger-color, #ef4444)' }}>
+                  {feedbackError}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Card de Entrega Limpo do Projeto para o Usuário Final */}
           {projectSlug && (

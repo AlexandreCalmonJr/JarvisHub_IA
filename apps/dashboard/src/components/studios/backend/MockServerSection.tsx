@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../../../services/api/client';
 import {
   Server,
   Plus,
@@ -36,6 +37,9 @@ export const MockServerSection: React.FC = () => {
     durationMs: number;
   } | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [canManageMocks, setCanManageMocks] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+  const [savingMock, setSavingMock] = useState(false);
 
   const loadMockEndpoints = async () => {
     setMockLoading(true);
@@ -51,10 +55,33 @@ export const MockServerSection: React.FC = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) {
+          setCanManageMocks(
+            principal?.kind === 'human' &&
+            (principal?.role === 'admin' || principal?.role === 'developer')
+          );
+          setRoleLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanManageMocks(false);
+          setRoleLoaded(true);
+        }
+      });
     loadMockEndpoints();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSaveMock = async () => {
+    if (!canManageMocks || savingMock) return;
+    setSavingMock(true);
     try {
       let parsedBody: any;
       try {
@@ -77,10 +104,13 @@ export const MockServerSection: React.FC = () => {
       await loadMockEndpoints();
     } catch (err: any) {
       setMockError(`Erro ao salvar mock endpoint: ${err.message}`);
+    } finally {
+      setSavingMock(false);
     }
   };
 
   const handleDeleteMock = async (id: string) => {
+    if (!canManageMocks) return;
     if (confirmDeleteId !== id) {
       setConfirmDeleteId(id);
       return;
@@ -95,6 +125,7 @@ export const MockServerSection: React.FC = () => {
   };
 
   const handleTestMock = async (method: string, path: string) => {
+    if (!canManageMocks) return;
     setTestLoading(true);
     const start = performance.now();
     try {
@@ -123,6 +154,7 @@ export const MockServerSection: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões do Mock Server…</div>}
       {/* Barra de Ações do Mock */}
       <div
         style={{
@@ -150,14 +182,14 @@ export const MockServerSection: React.FC = () => {
             <RefreshCw size={15} className={mockLoading ? 'animate-spin' : ''} />
             Atualizar
           </button>
-          <button
+          {canManageMocks && <button
             onClick={() => setShowMockModal(true)}
             className="btn btn-primary"
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             <Plus size={16} />
             Novo Endpoint Simulado
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -191,7 +223,7 @@ export const MockServerSection: React.FC = () => {
             <Server size={36} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
             <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Nenhum mock cadastrado</p>
             <p style={{ fontSize: '0.85rem', marginTop: '4px' }}>
-              Crie rotas simuladas com JSON customizado para testar seus frontends.
+              {canManageMocks ? 'Crie rotas simuladas com JSON customizado para testar os seus frontends.' : 'Não existem endpoints simulados registados nesta conta.'}
             </p>
           </div>
         ) : (
@@ -263,35 +295,35 @@ export const MockServerSection: React.FC = () => {
                     </span>
                   )}
 
-                  <button
+                  {canManageMocks && <button
                     onClick={() => handleTestMock(ep.method, ep.path)}
                     className="btn btn-ghost"
                     style={{
                       fontSize: '0.8rem',
                       padding: '4px 10px',
-                      color: '#818cf8',
-                      borderColor: 'rgba(129, 140, 248, 0.3)',
+                      color: 'var(--accent-color)',
+                      borderColor: 'var(--border-accent)',
                     }}
                     disabled={testLoading}
                   >
                     <Play size={12} />
                     Testar Rota
-                  </button>
+                  </button>}
 
-                  {confirmDeleteId === ep.id && (
+                  {canManageMocks && confirmDeleteId === ep.id && (
                     <>
                       <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>Excluir este mock?</span>
                       <button className="btn btn-ghost" onClick={() => setConfirmDeleteId(null)} style={{ padding: '4px 8px' }}>Cancelar</button>
                     </>
                   )}
-                  <button
+                  {canManageMocks && <button
                     onClick={() => handleDeleteMock(ep.id)}
                     className="btn btn-ghost"
                     style={{ color: '#ef4444', padding: '6px' }}
                     title={confirmDeleteId === ep.id ? 'Confirmar exclusão' : 'Excluir endpoint simulado'}
                   >
                     {confirmDeleteId === ep.id ? 'Confirmar' : <Trash2 size={15} />}
-                  </button>
+                  </button>}
                 </div>
               </div>
             ))}
@@ -303,8 +335,8 @@ export const MockServerSection: React.FC = () => {
       {testResult && (
         <div
           style={{
-            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-            border: '1px solid rgba(129, 140, 248, 0.3)',
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-accent)',
             borderRadius: '12px',
             padding: '18px 24px',
             display: 'flex',
@@ -314,7 +346,7 @@ export const MockServerSection: React.FC = () => {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <CheckCircle size={18} color="#34d399" />
+              {testResult.status >= 400 ? <AlertCircle size={18} color="var(--danger-color)" /> : <CheckCircle size={18} color="var(--success-color)" />}
               <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>
                 Resposta ao Vivo da Rota Simulada
               </span>
@@ -339,7 +371,7 @@ export const MockServerSection: React.FC = () => {
               backgroundColor: 'rgba(0, 0, 0, 0.4)',
               borderRadius: '8px',
               fontSize: '0.82rem',
-              color: '#a5b4fc',
+              color: 'var(--text-primary)',
               fontFamily: 'monospace',
               overflowX: 'auto',
               maxHeight: '200px',
@@ -351,7 +383,7 @@ export const MockServerSection: React.FC = () => {
       )}
 
       {/* Modal Criar Novo Mock Endpoint */}
-      {showMockModal && (
+      {canManageMocks && showMockModal && (
         <div
           style={{
             position: 'fixed',
@@ -459,6 +491,8 @@ export const MockServerSection: React.FC = () => {
                 </label>
                 <input
                   type="number"
+                  min={100}
+                  max={599}
                   value={newMockStatus}
                   onChange={(e) => setNewMockStatus(Number(e.target.value))}
                   style={{
@@ -482,7 +516,7 @@ export const MockServerSection: React.FC = () => {
                   step="50"
                   value={newMockLatency}
                   onChange={(e) => setNewMockLatency(Number(e.target.value))}
-                  style={{ accentColor: 'var(--primary-color)', marginTop: '8px' }}
+                  style={{ accentColor: 'var(--accent-color)', marginTop: '8px' }}
                 />
               </div>
             </div>
@@ -497,7 +531,7 @@ export const MockServerSection: React.FC = () => {
                 onChange={(e) => setNewMockBody(e.target.value)}
                 style={{
                   backgroundColor: 'var(--bg-primary)',
-                  color: '#38bdf8',
+                  color: 'var(--accent-color)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '8px',
                   padding: '12px',
@@ -518,8 +552,8 @@ export const MockServerSection: React.FC = () => {
               <button onClick={() => setShowMockModal(false)} className="btn btn-ghost">
                 Cancelar
               </button>
-              <button onClick={handleSaveMock} className="btn btn-primary">
-                Salvar Endpoint
+              <button onClick={handleSaveMock} className="btn btn-primary" disabled={savingMock || !newMockPath.trim()}>
+                {savingMock ? 'A guardar…' : 'Salvar Endpoint'}
               </button>
             </div>
           </div>

@@ -41,6 +41,7 @@ from apps.api.routers import (
     coding,
     mcp,
     voice,
+    learning,
 )
 
 # Documentação interativa é opt-in explícito. Em produção (padrão) os endpoints
@@ -111,6 +112,7 @@ app.include_router(studios.router)
 app.include_router(coding.router)
 app.include_router(mcp.router)
 app.include_router(voice.router)
+app.include_router(learning.router)
 
 # Monta aplicativo mobile Flutter (PWA) se compilado
 mobile_dist = Path("apps/mobile/build/web")
@@ -130,6 +132,10 @@ if react_dist and (react_dist / "index.html").exists():
     spa_routes = [
         "/studio",
         "/chat",
+        "/logs",
+        "/backend-studio",
+        "/executive-report",
+        "/learning",
         "/office",
         "/workspace",
         "/tasks",

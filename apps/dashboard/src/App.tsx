@@ -13,14 +13,17 @@ import {
   MessageSquare,
   Code2,
   PanelLeft,
+  CircleHelp,
 } from 'lucide-react';
 import { SetupWizardModal } from './components/common/SetupWizardModal';
+import { InitialPasswordChangeModal } from './components/common/InitialPasswordChangeModal';
+import { GuidedTour } from './components/GuidedTour';
 import { UserProfileModal, getUserProfile, UserProfileData } from './components/common/UserProfileModal';
 import { ToastContainer } from './components/common/Toast';
 import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
 import { CommandPalette } from './components/common/CommandPalette';
 import { pathForTab, tabFromLocation } from './router';
-import { getAccountStorageKey } from './services/accountScope';
+import { API_BASE } from './services/api/client';
 
 // Code splitting: cada tela é carregada sob demanda
 const Overview = lazy(() =>
@@ -74,6 +77,9 @@ const ExecutiveReportView = lazy(() =>
 const CodingAgentView = lazy(() =>
   import('./components/CodingAgentView').then((m) => ({ default: m.CodingAgentView }))
 );
+const LearningCenterView = lazy(() =>
+  import('./components/LearningCenterView').then((m) => ({ default: m.LearningCenterView }))
+);
 const AgentOfficeView = lazy(() =>
   import('./components/office/AgentOfficeView').then((m) => ({ default: m.AgentOfficeView }))
 );
@@ -103,6 +109,27 @@ const NotFoundView: React.FC<{ onGoHome: () => void }> = ({ onGoHome }) => (
 );
 
 const DashboardApp: React.FC = () => {
+  const [authPermissions, setAuthPermissions] = useState<string[]>([]);
+  const [authRole, setAuthRole] = useState<string | null>(null);
+  const [authKind, setAuthKind] = useState<string | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const [authMustChangePassword, setAuthMustChangePassword] = useState(false);
+  const [guidedTourOpen, setGuidedTourOpen] = useState(false);
+  const [learningContextTab, setLearningContextTab] = useState('overview');
+  const hasPermission = (permission: string) => authPermissions.includes('*') || authPermissions.includes(permission);
+  const canAccessTab = (tab: string) => {
+    if (tab === 'not_found') return true;
+    if (tab === 'advisor' || tab === 'server_logs') return authKind === 'human' && authRole === 'admin';
+    const required: Record<string, string> = {
+      chat: 'chat:read', overview: 'system:read', approvals: 'approvals:read',
+      design: 'studios:read', office: 'agents:read', workspace: 'workspace:read',
+      models: 'models:read', coding: 'coding:read', agents: 'agents:read',
+      knowledge: 'knowledge:read', tasks: 'tasks:read', backend_studio: 'studios:read',
+      quality: 'studios:read', skills: 'skills:read', security: 'security:read',
+      executive_report: 'studios:read', learning: 'profile:read',
+    };
+    return !required[tab] || hasPermission(required[tab]);
+  };
   const [activeTab, setActiveTab] = useState<string>(() =>
     tabFromLocation(window.location.pathname, window.location.search)
   );
@@ -113,7 +140,11 @@ const DashboardApp: React.FC = () => {
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfileData>(getUserProfile);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('jarvis_sidebar_collapsed') === 'true';
+    try {
+      return localStorage.getItem('jarvis_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
   });
   const [attachedProjectId, setAttachedProjectId] = useState<string | null>(null);
   const [targetChatSessionId, setTargetChatSessionId] = useState<string | null>(null);
@@ -127,8 +158,44 @@ const DashboardApp: React.FC = () => {
     () => tabFromLocation(window.location.pathname, window.location.search) === 'chat'
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        setAuthPermissions(Array.isArray(principal?.permissions) ? principal.permissions : []);
+        setAuthRole(typeof principal?.role === 'string' ? principal.role : null);
+        setAuthKind(typeof principal?.kind === 'string' ? principal.kind : null);
+        setAuthMustChangePassword(principal?.must_change_password === true);
+        setAuthLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuthPermissions([]);
+          setAuthRole(null);
+          setAuthKind(null);
+          setAuthMustChangePassword(false);
+          setAuthLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authLoaded || authKind !== 'human' || authRole !== 'admin') return;
+    let cancelled = false;
+    fetch(`${API_BASE}/system/onboarding`, { credentials: 'include' })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((status) => { if (!cancelled) setShowSetupWizard(status?.completed !== true); })
+      .catch(() => { if (!cancelled) setShowSetupWizard(false); });
+    return () => { cancelled = true; };
+  }, [authLoaded, authKind, authRole]);
 
   const navigate = (tab: string) => {
+    if (tab === 'learning' && activeTab !== 'learning') setLearningContextTab(activeTab);
     const path = pathForTab(tab);
     if (path === '/404') return;
     setActiveTab(tab);
@@ -142,18 +209,17 @@ const DashboardApp: React.FC = () => {
   const handleToggleSidebar = () => {
     setIsSidebarCollapsed((prev) => {
       const next = !prev;
-      localStorage.setItem('jarvis_sidebar_collapsed', String(next));
+      try {
+        localStorage.setItem('jarvis_sidebar_collapsed', String(next));
+      } catch {
+        // O estado da sidebar permanece funcional nesta sessão.
+      }
       return next;
     });
   };
 
   // Verificação de primeiro acesso (First-Run Onboarding), rota e atalhos de teclado
   useEffect(() => {
-    const isCompleted = localStorage.getItem(getAccountStorageKey('jarvis_setup_completed'));
-    if (isCompleted !== 'true') {
-      setShowSetupWizard(true);
-    }
-
     const initialTab = tabFromLocation(window.location.pathname, window.location.search);
     const initialPath = pathForTab(initialTab);
     if (initialTab !== 'not_found' && window.location.pathname !== initialPath) {
@@ -218,8 +284,9 @@ const DashboardApp: React.FC = () => {
     <div
       style={{
         display: 'flex',
-        height: '100vh',
-        width: '100vw',
+        height: '100dvh',
+        width: '100%',
+        minWidth: 0,
         overflow: 'hidden',
         backgroundColor: 'var(--bg-primary)',
         fontFamily: 'var(--font-sans)',
@@ -229,6 +296,10 @@ const DashboardApp: React.FC = () => {
       }}
     >
       <Sidebar
+        permissions={authPermissions}
+        role={authRole || undefined}
+        principalKind={authKind || undefined}
+        permissionsLoaded={authLoaded}
         activeTab={activeTab}
         setActiveTab={navigate}
         pendingApprovalsCount={pendingApprovalsCount}
@@ -252,9 +323,11 @@ const DashboardApp: React.FC = () => {
       <div
         style={{
           flex: 1,
+          minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
-          height: '100vh',
+          height: '100dvh',
+          minWidth: 0,
           overflow: 'hidden',
           backgroundColor: 'var(--bg-primary)',
         }}
@@ -460,6 +533,8 @@ const DashboardApp: React.FC = () => {
 
           {/* Lado Direito: Busca, Status de Blindagem, Avatar e Controles Desktop ─ □ ✕ */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button type="button" className="btn btn-ghost" onClick={() => navigate('learning')} title="Ajuda contextual e tutoriais" aria-label="Abrir ajuda contextual"><CircleHelp size={16}/></button>
+
             {/* Paleta de Comandos */}
             <button
               onClick={() => setShowCommandPalette(true)}
@@ -530,7 +605,7 @@ const DashboardApp: React.FC = () => {
               }}
               title="Perfil e Configurações"
             >
-              {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
+              {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
             </button>
 
             {/* Controlo de ecrã inteiro disponível no navegador */}
@@ -569,11 +644,19 @@ const DashboardApp: React.FC = () => {
           style={{
             flex: 1,
             overflowY: activeTab === 'chat' || activeTab === 'coding' ? 'hidden' : 'auto',
-            padding: activeTab === 'chat' ? '0' : activeTab === 'coding' ? '18px 24px' : '28px 36px',
+            minWidth: 0,
+            padding: activeTab === 'chat' ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
             backgroundColor: 'var(--bg-primary)',
           }}
         >
-          {activeTab === 'not_found' ? (
+          {!authLoaded ? <ViewFallback /> : !canAccessTab(activeTab) ? (
+            <section role="alert" style={{ minHeight: '55vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <ShieldAlert size={30} color="var(--accent-color)" />
+              <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>Acesso não disponível</h2>
+              <p style={{ maxWidth: '440px', margin: 0, fontSize: '0.86rem' }}>O seu perfil não possui a permissão necessária para abrir este módulo. Se precisar de acesso, contacte o administrador da plataforma.</p>
+              <button type="button" className="btn btn-primary" onClick={() => navigate(hasPermission('system:read') ? 'overview' : 'chat')}>Voltar</button>
+            </section>
+          ) : activeTab === 'not_found' ? (
             <NotFoundView onGoHome={() => navigate('overview')} />
           ) : (
           <Suspense fallback={<ViewFallback />}>
@@ -616,14 +699,30 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
             {activeTab === 'advisor' && <HardwareAdvisorView />}
             {activeTab === 'server_logs' && <ServerLogsView />}
+            {activeTab === 'learning' && <LearningCenterView activeTab={learningContextTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} onOpenProfile={() => setShowProfileModal(true)} />}
           </Suspense>
           )}
         </main>
       </div>
 
+      <InitialPasswordChangeModal
+        isOpen={authLoaded && authMustChangePassword}
+        onCompleted={() => {
+          setAuthMustChangePassword(false);
+          setShowSetupWizard(true);
+        }}
+      />
+
+      <GuidedTour
+        isOpen={guidedTourOpen}
+        permissions={authPermissions}
+        onNavigate={navigate}
+        onClose={() => setGuidedTourOpen(false)}
+      />
+
       {/* Assistente de Configuração Inicial Global */}
       <SetupWizardModal
-        isOpen={showSetupWizard}
+        isOpen={showSetupWizard && authLoaded && !authMustChangePassword && authKind === 'human' && authRole === 'admin'}
         onClose={() => setShowSetupWizard(false)}
         onCompleted={loadData}
       />
@@ -632,16 +731,20 @@ const DashboardApp: React.FC = () => {
       <UserProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
-        onOpenSetupWizard={() => {
+        onOpenSetupWizard={authKind === 'human' && authRole === 'admin' ? () => {
           setShowProfileModal(false);
           setShowSetupWizard(true);
-        }}
+        } : undefined}
         onProfileUpdated={(updated) => setUserProfile(updated)}
       />
 
       {/* Paleta Global de Comandos (Ctrl + K) */}
       <CommandPalette
         isOpen={showCommandPalette}
+        permissions={authPermissions}
+        role={authRole || undefined}
+        principalKind={authKind || undefined}
+        permissionsLoaded={authLoaded}
         onClose={() => setShowCommandPalette(false)}
         onNavigate={(tab) => {
           navigate(tab);

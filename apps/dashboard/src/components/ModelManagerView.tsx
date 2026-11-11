@@ -16,19 +16,22 @@ import { HybridGatewayConfig, ProviderCard } from './models/HybridGatewayConfig'
 import { HuggingFaceHubSection } from './models/HuggingFaceHubSection';
 import { LocalModelsGrid } from './models/LocalModelsGrid';
 import { KeyVaultManager } from './models/KeyVaultManager';
+import { ModelQualityPanel } from './models/ModelQualityPanel';
 
 export const ModelManagerView: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
-  const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub'>('vault');
+  const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub' | 'quality'>('local');
 
   // Form State para Gateway Híbrido
   const [provider, setProvider] = useState<string>('gemini');
   const [apiKey, setApiKey] = useState<string>('');
   const [showKey, setShowKey] = useState<boolean>(false);
-  const [defaultModel, setDefaultModel] = useState<string>('gemini-1.5-flash');
+  const [defaultModel, setDefaultModel] = useState<string>('gemini-2.5-flash');
   const [baseUrl, setBaseUrl] = useState<string>('https://generativelanguage.googleapis.com/v1beta/openai');
   const [maxBudget, setMaxBudget] = useState<number>(5.0);
   const [enabled, setEnabled] = useState<boolean>(false);
@@ -49,12 +52,12 @@ export const ModelManagerView: React.FC = () => {
   const [downloadStatusText, setDownloadStatusText] = useState<string>('');
   const [agentRecommendations, setAgentRecommendations] = useState<Record<string, { model: string; reason: string }>>({});
 
-  const loadData = async () => {
+  const loadData = async (includeAdminConfig = isAdmin) => {
     setLoading(true);
     try {
       const results = await Promise.allSettled([
         fetchModels(),
-        fetchHybridConfig(),
+        includeAdminConfig ? fetchHybridConfig() : Promise.resolve(null),
         fetchCuratedHuggingFaceModels(),
         fetchAgentModelRecommendations(),
       ]);
@@ -64,14 +67,14 @@ export const ModelManagerView: React.FC = () => {
       if (modelsResult.status === 'fulfilled') setData(modelsResult.value);
       else { setData(null); failures.push(modelsResult.reason instanceof Error ? modelsResult.reason.message : 'Falha ao consultar modelos.'); }
 
-      if (hybridResult.status === 'fulfilled') {
+      if (hybridResult.status === 'fulfilled' && hybridResult.value) {
         const hybridRes = hybridResult.value;
         setProvider(hybridRes.provider_name || 'gemini');
         setEnabled(Boolean(hybridRes.enabled));
-        setDefaultModel(hybridRes.default_model || 'gemini-1.5-flash');
+        setDefaultModel(hybridRes.default_model || 'gemini-2.5-flash');
         setBaseUrl(hybridRes.base_url || '');
         setMaxBudget(hybridRes.max_budget_usd || 5.0);
-      } else failures.push(hybridResult.reason instanceof Error ? hybridResult.reason.message : 'Falha ao consultar gateway híbrido.');
+      } else if (includeAdminConfig && hybridResult.status === 'rejected') failures.push(hybridResult.reason instanceof Error ? hybridResult.reason.message : 'Falha ao consultar gateway híbrido.');
 
       if (curatedResult.status === 'fulfilled') setHfCurated(curatedResult.value);
       else failures.push(curatedResult.reason instanceof Error ? curatedResult.reason.message : 'Falha ao consultar Hugging Face.');
@@ -88,7 +91,27 @@ export const ModelManagerView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const admin = principal?.kind === 'human' && principal?.role === 'admin';
+        setIsAdmin(admin);
+        setActiveTab(admin ? 'vault' : 'local');
+        setRoleLoaded(true);
+        void loadData(admin);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsAdmin(false);
+        setActiveTab('local');
+        setRoleLoaded(true);
+        void loadData(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleProviderSelect = (card: ProviderCard) => {
@@ -99,6 +122,7 @@ export const ModelManagerView: React.FC = () => {
   };
 
   const handleTestConnection = async () => {
+    if (!isAdmin) return;
     setTestLoading(true);
     setTestResult(null);
     try {
@@ -134,6 +158,7 @@ export const ModelManagerView: React.FC = () => {
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) return;
     setSaveLoading(true);
     setSaveMessage(null);
     try {
@@ -184,11 +209,12 @@ export const ModelManagerView: React.FC = () => {
     const cleanTag = tag.toLowerCase().replace(/^hf\.co\//, '');
     return data.models.some((m: any) => {
       const mName = (m.name || '').toLowerCase();
-      return mName.includes(cleanTag) || cleanTag.includes(mName);
+      return Boolean(mName) && (mName.includes(cleanTag) || cleanTag.includes(mName));
     });
   };
 
   const handleInstallModel = async (modelTag: string, displayName: string) => {
+    if (!isAdmin) return;
     if (downloadingModelId) {
       notify('Já existe uma instalação em andamento', 'warning');
       return;
@@ -202,6 +228,7 @@ export const ModelManagerView: React.FC = () => {
       const response = await fetch(`${API_BASE}/models/huggingface/install`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ model_tag: modelTag, display_name: displayName }),
       });
 
@@ -212,47 +239,57 @@ export const ModelManagerView: React.FC = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let terminalEventReceived = false;
+
+      const processEventLine = async (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) return;
+        try {
+          const eventData = JSON.parse(trimmed.slice(6));
+          if (eventData.status === 'downloading') {
+            if (eventData.total && eventData.completed) {
+              const pct = Math.min(99, Math.round((eventData.completed / eventData.total) * 100));
+              setDownloadProgress(pct);
+              setDownloadStatusText(`A descarregar camadas: ${pct}% concluído`);
+            } else if (typeof eventData.percent === 'number') {
+              setDownloadProgress(eventData.percent);
+              setDownloadStatusText(`A descarregar: ${eventData.percent}%`);
+            }
+          } else if (eventData.status === 'success') {
+            terminalEventReceived = true;
+            setDownloadProgress(100);
+            setDownloadStatusText('Modelo instalado e confirmado pelo servidor.');
+            notify(`Modelo ${displayName} instalado com sucesso!`, 'success');
+            await loadData();
+          } else if (eventData.status === 'error') {
+            terminalEventReceived = true;
+            const message = eventData.message || 'Erro durante a instalação do modelo.';
+            setDownloadStatusText(message);
+            notify(message, 'error');
+          }
+        } catch {
+          // Ignora heartbeats e linhas SSE incompletas que não contenham JSON válido.
+        }
+      };
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
+        for (const line of lines) await processEventLine(line);
+      }
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const eventData = JSON.parse(trimmed.slice(6));
-              if (eventData.status === 'downloading') {
-                if (eventData.total && eventData.completed) {
-                  const pct = Math.min(99, Math.round((eventData.completed / eventData.total) * 100));
-                  setDownloadProgress(pct);
-                  setDownloadStatusText(`Baixando camadas: ${pct}% concluído`);
-                } else if (eventData.percent) {
-                  setDownloadProgress(eventData.percent);
-                  setDownloadStatusText(`Baixando: ${eventData.percent}%`);
-                }
-              } else if (eventData.status === 'success') {
-                setDownloadProgress(100);
-                setDownloadStatusText('Modelo pronto e instalado com sucesso!');
-                notify(`Modelo ${displayName} instalado com sucesso!`, 'success');
-                await loadData();
-              } else if (eventData.status === 'error') {
-                notify(eventData.message || 'Erro durante download do modelo', 'error');
-              }
-            } catch {
-              // Ignora parse de heartbeats
-            }
-          }
-        }
+      buffer += decoder.decode();
+      if (buffer.trim()) await processEventLine(buffer);
+      if (!terminalEventReceived) {
+        throw new Error('O stream terminou sem confirmar a instalação do modelo.');
       }
     } catch (err: any) {
       notify(`Falha ao instalar modelo: ${err.message}`, 'error');
     } finally {
-      setTimeout(() => {
+      window.setTimeout(() => {
         setDownloadingModelId(null);
         setDownloadProgress(0);
         setDownloadStatusText('');
@@ -260,13 +297,17 @@ export const ModelManagerView: React.FC = () => {
     }
   };
 
-  const isOnlineActive = data?.hybrid_gateway?.enabled;
+  const isOnlineActive = isAdmin && Boolean(data?.hybrid_gateway?.enabled);
   const currentSpend = data?.hybrid_gateway?.current_spend_usd || 0;
   const budgetMax = data?.hybrid_gateway?.max_budget_usd || maxBudget || 5.0;
   const budgetPercent = Math.min(100, Math.round((currentSpend / budgetMax) * 100));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1280px', margin: '0 auto' }}>
+      {!roleLoaded ? (
+        <div role="status" className="glass-panel" style={{ padding: '28px', color: 'var(--text-secondary)' }}>A verificar permissões do Gestor de Modelos…</div>
+      ) : (
+      <>
       {loadError && (
         <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
           Algumas informações não puderam ser carregadas: {loadError}
@@ -288,7 +329,7 @@ export const ModelManagerView: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
+          {isAdmin && <button
             type="button"
             onClick={() => setActiveTab('vault')}
             style={{
@@ -298,14 +339,14 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'vault' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'vault' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'vault' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'vault' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'vault' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
             Cofre de Chaves (KeyVault)
-          </button>
+          </button>}
 
           <button
             type="button"
@@ -317,16 +358,16 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'local' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'local' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'local' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'local' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'local' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
             Modelos Locais ({data?.models?.length || 0})
           </button>
 
-          <button
+          {isAdmin && <button
             type="button"
             onClick={() => setActiveTab('hybrid')}
             style={{
@@ -336,9 +377,9 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'hybrid' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'hybrid' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'hybrid' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'hybrid' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'hybrid' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
@@ -348,7 +389,7 @@ export const ModelManagerView: React.FC = () => {
                 ONLINE
               </span>
             )}
-          </button>
+          </button>}
 
           <button
             type="button"
@@ -360,29 +401,48 @@ export const ModelManagerView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.84rem',
               fontWeight: 500,
-              backgroundColor: activeTab === 'hub' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: activeTab === 'hub' ? 'var(--accent-glow)' : 'transparent',
               color: activeTab === 'hub' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              borderBottom: activeTab === 'hub' ? '2px solid rgba(255, 255, 255, 0.4)' : '2px solid transparent',
+              borderBottom: activeTab === 'hub' ? '2px solid var(--accent-color)' : '2px solid transparent',
               transition: 'all 0.2s ease',
             }}
           >
             Hugging Face Hub
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('quality')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.84rem',
+              fontWeight: 500,
+              backgroundColor: activeTab === 'quality' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: activeTab === 'quality' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'quality' ? '2px solid var(--accent-color)' : '2px solid transparent',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Qualidade & Aprendizagem
+          </button>
         </div>
 
         {/* Botões de Ação Global */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
+          {isAdmin && <button
             type="button"
             onClick={() => setShowWizard(true)}
             className="btn btn-secondary"
             style={{ fontSize: '0.8rem', padding: '6px 12px' }}
           >
             Assistente Rápido
-          </button>
+          </button>}
           <button
             type="button"
-            onClick={loadData}
+            onClick={() => loadData()}
             disabled={loading}
             className="btn btn-ghost"
             style={{ fontSize: '0.8rem', padding: '6px 10px', color: 'var(--text-muted)' }}
@@ -394,12 +454,12 @@ export const ModelManagerView: React.FC = () => {
       </div>
 
       {/* Conteúdo Aba 0: Cofre de Chaves de API (KeyVault) */}
-      {activeTab === 'vault' && <KeyVaultManager />}
+      {isAdmin && activeTab === 'vault' && <KeyVaultManager />}
 
       {/* Conteúdo Aba 1: Modelos Locais & Status do Sistema */}
       {activeTab === 'local' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <ModelStatusHero
+          {isAdmin && <ModelStatusHero
             isOnlineActive={Boolean(isOnlineActive)}
             loading={loading}
             currentSpend={currentSpend}
@@ -407,14 +467,14 @@ export const ModelManagerView: React.FC = () => {
             budgetPercent={budgetPercent}
             providerName={data?.hybrid_gateway?.provider}
             onOpenWizard={() => setShowWizard(true)}
-            onRefresh={loadData}
-          />
+            onRefresh={() => loadData()}
+          />}
           <LocalModelsGrid models={data?.models} />
         </div>
       )}
 
       {/* Conteúdo Aba 2: Gateway Híbrido & Conexão em Nuvem */}
-      {activeTab === 'hybrid' && (
+      {isAdmin && activeTab === 'hybrid' && (
         <HybridGatewayConfig
           provider={provider}
           enabled={enabled}
@@ -450,6 +510,7 @@ export const ModelManagerView: React.FC = () => {
           downloadProgress={downloadProgress}
           downloadStatusText={downloadStatusText}
           agentRecommendations={agentRecommendations}
+          canInstall={isAdmin}
           isModelInstalled={isModelInstalled}
           onSearchChange={(q) => setHfSearchQuery(q)}
           onSearchSubmit={handleSearchHf}
@@ -461,12 +522,16 @@ export const ModelManagerView: React.FC = () => {
         />
       )}
 
+      {activeTab === 'quality' && <ModelQualityPanel />}
+
       {/* Modal do Assistente de Configuração */}
-      <SetupWizardModal
+      {isAdmin && <SetupWizardModal
         isOpen={showWizard}
         onClose={() => setShowWizard(false)}
-        onCompleted={loadData}
-      />
+        onCompleted={() => loadData()}
+      />}
+      </>
+      )}
     </div>
   );
 };

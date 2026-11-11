@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../services/api/client';
 import {
   fetchWorkspaceProjects,
   fetchProductivityRoi,
@@ -18,6 +19,8 @@ import {
 
 export const ExecutiveReportView: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
@@ -38,26 +41,27 @@ export const ExecutiveReportView: React.FC = () => {
   const [reportError, setReportError] = useState<string | null>(null);
   const [copiedReport, setCopiedReport] = useState(false);
 
-  const loadInitial = async () => {
+  const loadInitial = async (includeGlobalRoi = isAdmin) => {
     setProjectsLoading(true);
     setRoiLoading(true);
     const [projectResult, roiResult] = await Promise.allSettled([
       fetchWorkspaceProjects(),
-      fetchProductivityRoi(),
+      includeGlobalRoi ? fetchProductivityRoi() : Promise.resolve(null),
     ]);
     if (projectResult.status === 'fulfilled') {
       const projs = projectResult.value || [];
       setProjects(projs);
       setProjectsError(null);
-      if (projs.length > 0 && !selectedProjectId) setSelectedProjectId(projs[0].id);
+      if (projs.length > 0 && !projs.some((project) => project.id === selectedProjectId)) setSelectedProjectId(projs[0].id);
+      else if (projs.length === 0) setSelectedProjectId('');
     } else {
       setProjects([]);
       setProjectsError((projectResult.reason as Error)?.message || 'Falha ao carregar projetos.');
     }
-    if (roiResult.status === 'fulfilled') {
+    if (roiResult.status === 'fulfilled' && roiResult.value) {
       setRoiData(roiResult.value);
       setRoiError(null);
-    } else {
+    } else if (includeGlobalRoi && roiResult.status === 'rejected') {
       setRoiData(null);
       setRoiError((roiResult.reason as Error)?.message || 'Métricas globais indisponíveis. Apenas administradores podem consultá-las.');
     }
@@ -65,51 +69,81 @@ export const ExecutiveReportView: React.FC = () => {
     setRoiLoading(false);
   };
 
-  const loadProjectDebt = async (projId: string) => {
+  const loadProjectDebt = async (projId: string, isCancelled: () => boolean = () => false) => {
     if (!projId) {
-      setDebtData(null);
+      if (!isCancelled()) setDebtData(null);
       return;
     }
-    setDebtLoading(true);
-    setDebtError(null);
-    setDebtData(null);
+    if (!isCancelled()) {
+      setDebtLoading(true);
+      setDebtError(null);
+      setDebtData(null);
+    }
     try {
       const debt = await fetchProjectTechDebt(projId);
-      setDebtData(debt);
+      if (!isCancelled()) setDebtData(debt);
     } catch (e: any) {
-      setDebtError(e?.message || 'Falha ao analisar dívida técnica do projeto.');
+      if (!isCancelled()) setDebtError(e?.message || 'Falha ao analisar dívida técnica do projeto.');
     } finally {
-      setDebtLoading(false);
+      if (!isCancelled()) setDebtLoading(false);
     }
   };
 
-  const generateReport = async (projId?: string) => {
-    setReportLoading(true);
-    setReportError(null);
-    setReportMarkdown(null);
+  const generateReport = async (projId?: string, isCancelled: () => boolean = () => false) => {
+    if (!isCancelled()) {
+      setReportLoading(true);
+      setReportError(null);
+      setReportMarkdown(null);
+    }
     try {
       const rep = await fetchExecutiveReport(projId);
-      setReportMarkdown(rep.markdown || '');
+      if (!isCancelled()) setReportMarkdown(rep.markdown || '');
     } catch (e: any) {
-      setReportError(e?.message || 'Falha ao gerar relatório executivo.');
+      if (!isCancelled()) setReportError(e?.message || 'Falha ao gerar relatório executivo.');
     } finally {
-      setReportLoading(false);
+      if (!isCancelled()) setReportLoading(false);
     }
   };
 
   useEffect(() => {
-    loadInitial();
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const admin = principal?.kind === 'human' && principal?.role === 'admin';
+        setIsAdmin(admin);
+        setRoleLoaded(true);
+        void loadInitial(admin);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsAdmin(false);
+        setRoleLoaded(true);
+        void loadInitial(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     if (selectedProjectId) {
-      loadProjectDebt(selectedProjectId);
-      generateReport(selectedProjectId);
+      void loadProjectDebt(selectedProjectId, () => cancelled);
+      void generateReport(selectedProjectId, () => cancelled);
+    } else {
+      setDebtData(null);
+      setReportMarkdown(null);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [selectedProjectId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões dos relatórios…</div>}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -158,12 +192,13 @@ export const ExecutiveReportView: React.FC = () => {
         </div>
       </div>
 
-      {projectsError && <div role="alert" style={{ color: '#f87171', fontSize: '0.84rem' }}>{projectsError}</div>}
+      {projectsError && <div role="alert" style={{ color: 'var(--danger-color)', fontSize: '0.84rem' }}>{projectsError}</div>}
       {projectsLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando projetos...</div>}
       {!projectsLoading && !projectsError && projects.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Nenhum projeto disponível nesta conta.</div>}
 
       {/* Grid de KPIs de ROI e Produtividade */}
-      {roiLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando métricas...</div>}
+      {isAdmin ? <>
+      {roiLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>A carregar métricas globais...</div>}
       {roiError && <div role="alert" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Métricas globais: {roiError}</div>}
       {roiData && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '16px' }}>
@@ -218,6 +253,11 @@ export const ExecutiveReportView: React.FC = () => {
               Isolamento aplicado por proprietário nas áreas homologadas
             </div>
           </div>
+        </div>
+      )}
+      </> : (
+        <div className="glass-panel" style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+          Os indicadores globais de ROI e produtividade estão reservados a administradores. Os relatórios e a análise técnica do projeto selecionado continuam disponíveis dentro da sua conta.
         </div>
       )}
 
@@ -282,9 +322,13 @@ export const ExecutiveReportView: React.FC = () => {
             {reportMarkdown && (
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(reportMarkdown);
-                  setCopiedReport(true);
-                  setTimeout(() => setCopiedReport(false), 2000);
+                  if (!navigator.clipboard?.writeText) return;
+                  navigator.clipboard.writeText(reportMarkdown)
+                    .then(() => {
+                      setCopiedReport(true);
+                      window.setTimeout(() => setCopiedReport(false), 2000);
+                    })
+                    .catch(() => setReportError('Não foi possível copiar o relatório.'));
                 }}
                 className="btn btn-primary"
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', borderRadius: '8px' }}
@@ -302,7 +346,7 @@ export const ExecutiveReportView: React.FC = () => {
         {reportMarkdown && (
           <pre
             style={{
-              backgroundColor: '#161514',
+              backgroundColor: 'var(--bg-secondary)',
               border: '1px solid var(--border-color)',
               padding: '16px',
               borderRadius: '8px',

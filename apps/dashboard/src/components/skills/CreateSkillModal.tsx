@@ -59,7 +59,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!markdownContent.trim()) {
-      notify('Cole o conteúdo da skill em formato SKILL.md ou texto', 'error');
+      notify('Cole uma skill com frontmatter YAML válido e licença declarada.', 'error');
       return;
     }
     setSaving(true);
@@ -119,17 +119,17 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                 style={{
                   width: '100%',
                   padding: '8px 12px',
-                  backgroundColor: '#070a12',
-                  border: '1px solid rgba(255,255,255,0.12)',
+                  backgroundColor: 'var(--bg-primary)',
+                  border: '1px solid var(--border-color)',
                   borderRadius: '8px',
-                  color: '#fff',
+                  color: 'var(--text-primary)',
                   fontSize: '0.86rem',
                 }}
                 required
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '4px' }}>
                   Domínio Técnico
@@ -140,10 +140,10 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                   style={{
                     width: '100%',
                     padding: '8px 10px',
-                    backgroundColor: '#070a12',
-                    border: '1px solid rgba(255,255,255,0.12)',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
                     borderRadius: '8px',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                     fontSize: '0.84rem',
                   }}
                 >
@@ -169,7 +169,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                   style={{
                     width: '100%',
                     padding: '8px 12px',
-                    backgroundColor: '#070a12',
+                    backgroundColor: 'var(--bg-primary)',
                     border: '1px solid rgba(255,255,255,0.12)',
                     borderRadius: '8px',
                     color: '#fff',
@@ -216,7 +216,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                   padding: '8px',
                   backgroundColor: '#070a12',
                   borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  border: '1px solid var(--border-color)',
                 }}
               >
                 {agents.map((ag) => {
@@ -229,7 +229,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                         alignItems: 'center',
                         gap: '6px',
                         fontSize: '0.78rem',
-                        color: isChecked ? '#fff' : 'var(--text-muted)',
+                        color: isChecked ? 'var(--text-primary)' : 'var(--text-muted)',
                         cursor: 'pointer',
                       }}
                     >
@@ -259,7 +259,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
           <form onSubmit={handleImportSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
               Cole o conteúdo de um arquivo <strong>SKILL.md</strong> do ecossistema ECC, Cursor ou Ponytail.
-              O JARVIS extrai automaticamente o frontmatter (YAML) e as diretrizes técnicas:
+              O JARVIS extrai o frontmatter e valida as instruções. Informe também uma licença reconhecida (por exemplo, MIT) antes da importação:
             </div>
 
             <textarea
@@ -268,6 +268,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
 name: Ponytail Clean Code
 domain: backend
 description: Práticas estritas de YAGNI e reaproveitamento de código existente
+license: MIT
 ---
 # Diretrizes Técnicas:
 1. Nunca crie classes auxiliares se a biblioteca nativa resolver.

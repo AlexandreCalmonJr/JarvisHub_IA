@@ -2,9 +2,9 @@ name: Quality Gates
 
 on:
   push:
-    branches: [main, "hardening/**", "feature/**", "dashboard/**"]
+    branches: [main, "hardening/**", "feature/**", "dashboard/**", "integration/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/local-homologation"]
   workflow_dispatch:
 
 permissions:

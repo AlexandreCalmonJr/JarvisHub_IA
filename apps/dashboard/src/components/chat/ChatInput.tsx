@@ -9,6 +9,7 @@ import {
   ArrowUp,
 } from 'lucide-react';
 import { fetchModels } from '../../api';
+import { getAccountStorageKey } from '../../services/accountScope';
 
 export interface RealChatModel {
   id: string;
@@ -18,13 +19,7 @@ export interface RealChatModel {
   isCloud?: boolean;
 }
 
-const DEFAULT_MODELS: RealChatModel[] = [
-  { id: 'llama-3.3-70b-versatile', name: 'llama-3.3-70b-versatile', label: 'llama-3.3-70b (Groq)', effort: 'Nuvem Rápida', isCloud: true },
-  { id: 'qwen2.5-coder:7b', name: 'qwen2.5-coder:7b', label: 'qwen2.5-coder:7b', effort: 'Código (Local)', isCloud: false },
-  { id: 'llama3.2:3b', name: 'llama3.2:3b', label: 'llama3.2:3b', effort: 'Rápido (Local)', isCloud: false },
-  { id: 'deepseek-r1:1.5b', name: 'deepseek-r1:1.5b', label: 'deepseek-r1:1.5b', effort: 'Raciocínio (Local)', isCloud: false },
-  { id: 'qwen2.5:7b', name: 'qwen2.5:7b', label: 'qwen2.5:7b', effort: 'Geral (Local)', isCloud: false },
-];
+
 
 interface ChatInputProps {
   input: string;
@@ -58,8 +53,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
-  const [modelOptions, setModelOptions] = useState<RealChatModel[]>(DEFAULT_MODELS);
-  const [selectedModel, setSelectedModel] = useState<RealChatModel>(DEFAULT_MODELS[0]);
+  const [modelOptions, setModelOptions] = useState<RealChatModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState<RealChatModel | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -95,12 +90,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           }
         }
 
-        if (list.length > 0) {
-          setModelOptions(list);
-          const savedModelId = localStorage.getItem('jarvis_selected_model');
-          const found = list.find((item) => item.id === savedModelId);
-          setSelectedModel(found || list[0]);
-        }
+        setModelOptions(list);
+        const savedModelId = localStorage.getItem(getAccountStorageKey('jarvis_selected_model'));
+        const found = list.find((item) => item.id === savedModelId);
+        setSelectedModel(found || null);
       })
       .catch((err) => {
         console.warn('Falha ao carregar modelos reais no ChatInput:', err);
@@ -129,14 +122,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (input.trim() && !loading) {
-        onSubmit(undefined, selectedModel.id);
+        onSubmit(undefined, selectedModel?.id);
       }
     }
   };
 
   const handleSelectCommand = (cmd: string) => {
     setShowPlusMenu(false);
-    onSubmit(cmd, selectedModel.id);
+    onSubmit(cmd, selectedModel?.id);
   };
 
   return (
@@ -373,10 +366,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 title="Alternar modelo de IA ativo"
               >
                 <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-                  {selectedModel.label}
+                  {selectedModel?.label || 'Automático (Maestro)'}
                 </span>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.70rem' }}>
-                  {selectedModel.effort}
+                  {selectedModel?.effort || 'Seleção inteligente'}
                 </span>
                 <ChevronDown size={12} color="var(--text-muted)" />
               </button>
@@ -403,13 +396,48 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <div style={{ padding: '4px 8px', fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                     MODELOS REAIS DISPONÍVEIS
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedModel(null);
+                      try {
+                        localStorage.removeItem(getAccountStorageKey('jarvis_selected_model'));
+                      } catch {
+                        // A seleção automática continua válida nesta sessão.
+                      }
+                      setShowModelMenu(false);
+                    }}
+                    className="btn btn-ghost"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '7px 8px',
+                      fontSize: '0.78rem',
+                      width: '100%',
+                      backgroundColor: selectedModel === null ? 'var(--accent-glow)' : 'transparent',
+                      color: selectedModel === null ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    <span>Automático (Maestro)</span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--accent-color)' }}>Recomendado</span>
+                  </button>
+                  {modelOptions.length === 0 && (
+                    <div style={{ padding: '8px', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                      Nenhum modelo foi confirmado pela API. A seleção automática continua disponível.
+                    </div>
+                  )}
                   {modelOptions.map((m) => (
                     <button
                       key={m.id}
                       type="button"
                       onClick={() => {
                         setSelectedModel(m);
-                        localStorage.setItem('jarvis_selected_model', m.id);
+                        try {
+                          localStorage.setItem(getAccountStorageKey('jarvis_selected_model'), m.id);
+                        } catch {
+                          // A seleção continua ativa nesta sessão mesmo sem persistência local.
+                        }
                         setShowModelMenu(false);
                       }}
                       className="btn btn-ghost"
@@ -420,11 +448,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         padding: '6px 8px',
                         fontSize: '0.78rem',
                         width: '100%',
-                        backgroundColor: selectedModel.id === m.id ? 'rgba(217, 119, 87, 0.15)' : 'transparent',
-                        color: selectedModel.id === m.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        backgroundColor: selectedModel?.id === m.id ? 'rgba(217, 119, 87, 0.15)' : 'transparent',
+                        color: selectedModel?.id === m.id ? 'var(--text-primary)' : 'var(--text-secondary)',
                       }}
                     >
-                      <span style={{ fontWeight: selectedModel.id === m.id ? 600 : 400 }}>{m.label}</span>
+                      <span style={{ fontWeight: selectedModel?.id === m.id ? 600 : 400 }}>{m.label}</span>
                       <span style={{ fontSize: '0.68rem', color: m.isCloud ? 'var(--accent-color)' : 'var(--text-muted)' }}>
                         {m.effort}
                       </span>
@@ -511,7 +539,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ) : (
               <button
                 type="button"
-                onClick={() => onSubmit(undefined, selectedModel.id)}
+                onClick={() => onSubmit(undefined, selectedModel?.id)}
                 disabled={!input.trim()}
                 style={{
                   width: '32px',

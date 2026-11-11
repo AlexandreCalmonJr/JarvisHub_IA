@@ -58,6 +58,6 @@ async def test_tool_gateway_blocks_modifications_for_read_only_agent(tmp_path):
     )
 
     with pytest.raises(PermissionDeniedError) as exc_info:
-        await gateway.execute_tool(req)
+        await gateway.execute_tool(req, owner_user_id="test-owner", actor_role="admin")
 
     assert "Somente Leitura (Read-Only)" in str(exc_info.value)

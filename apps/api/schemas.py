@@ -281,3 +281,10 @@ class AutonomousAgentRunRequest(BaseModel):
     max_tokens: int = Field(default=2048, ge=256, le=32768)
     timeout_seconds: float = Field(default=180.0, ge=10.0, le=1800.0)
     include_history: bool = True
+
+
+class InferenceQualityFeedbackPayload(BaseModel):
+    """Avaliação humana de uma inferência bem-sucedida pertencente à conta autenticada."""
+
+    inference_id: str = Field(..., min_length=1, max_length=64)
+    rating: int = Field(..., ge=1, le=5)

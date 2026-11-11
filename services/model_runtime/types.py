@@ -26,6 +26,11 @@ class InferenceRequest(BaseModel):
     format_json: bool = False
     contains_sensitive_data: bool = False
     task_id: str | None = None
+    # Identidade definida pelo servidor; usada para segregar telemetria por conta.
+    owner_user_id: str | None = None
+    agent_role: str | None = None
+    task_capability: str | None = None
+    force_local: bool = False
     timeout_seconds: float = 180.0
     # Schema de ferramentas no formato OpenAI ({"type": "function", ...}) ou Anthropic.
     # O adaptador converte quando necessário; vazio desativa tool calling.
@@ -41,6 +46,7 @@ class InferenceResponse(BaseModel):
     completion_tokens: int = 0
     duration_ms: float = 0.0
     tokens_per_second: float = 0.0
+    cost_usd: float = 0.0
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     finish_reason: str = "stop"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

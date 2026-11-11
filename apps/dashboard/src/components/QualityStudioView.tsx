@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../services/api/client';
 import {
   fetchWorkspaceProjects,
   fetchProjectTests,
@@ -22,6 +23,9 @@ import {
 
 export const QualityStudioView: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
+  const [canRunTests, setCanRunTests] = useState(false);
+  const [canGeneratePlaywright, setCanGeneratePlaywright] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [chaosError, setChaosError] = useState<string | null>(null);
@@ -87,8 +91,30 @@ export const QualityStudioView: React.FC = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const human = principal?.kind === 'human';
+        const admin = human && principal?.role === 'admin';
+        const developer = human && principal?.role === 'developer';
+        setCanRunTests(admin);
+        setCanGeneratePlaywright(admin || developer);
+        setRoleLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanRunTests(false);
+          setCanGeneratePlaywright(false);
+          setRoleLoaded(true);
+        }
+      });
     loadProjects();
     loadChaosCases();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -98,7 +124,7 @@ export const QualityStudioView: React.FC = () => {
   }, [selectedProjectId]);
 
   const handleRunTests = async () => {
-    if (!selectedProjectId) return;
+    if (!canRunTests || !selectedProjectId) return;
     setRunningTests(true);
     setTestResult(null);
     try {
@@ -118,6 +144,7 @@ export const QualityStudioView: React.FC = () => {
   };
 
   const handleGeneratePlaywright = async () => {
+    if (!canGeneratePlaywright) return;
     setPlaywrightLoading(true);
     setPlaywrightError(null);
     try {
@@ -132,6 +159,7 @@ export const QualityStudioView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões do Quality Studio…</div>}
       {(projectsError || discoveryError || chaosError || playwrightError) && (
         <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.08)', color: 'var(--text-primary)' }}>
           <AlertCircle size={16} color="#f87171" />
@@ -219,7 +247,7 @@ export const QualityStudioView: React.FC = () => {
             <button onClick={() => loadProjectTests(selectedProjectId)} className="btn btn-ghost" disabled={loadingDiscovery} title="Recarregar">
               <RefreshCw size={14} className={loadingDiscovery ? 'animate-spin' : ''} />
             </button>
-            <button
+            {canRunTests && <button
               onClick={handleRunTests}
               disabled={runningTests || !selectedProjectId}
               className="btn btn-primary"
@@ -227,11 +255,11 @@ export const QualityStudioView: React.FC = () => {
             >
               <Play size={15} />
               {runningTests ? 'Executando Suíte...' : 'Executar Testes'}
-            </button>
+            </button>}
           </div>
-          <div style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: '0.74rem' }}>
-            Por segurança, a execução de código está restrita a administradores até existir isolamento de processo por conta.
-          </div>
+          {!canRunTests && <div style={{ marginTop: '8px', color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+            A execução de código está reservada a administradores até existir isolamento de processo por conta.
+          </div>}
         </div>
 
         {/* Lista de Arquivos de Teste */}
@@ -348,6 +376,7 @@ export const QualityStudioView: React.FC = () => {
             </h3>
           </div>
 
+          {canGeneratePlaywright ? <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: '10px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>URL Alvo</label>
@@ -379,7 +408,12 @@ export const QualityStudioView: React.FC = () => {
             {playwrightLoading ? 'Gerando Script...' : 'Gerar Roteiro Playwright'}
           </button>
 
-          {generatedScript && (
+          </> : (
+            <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+              A geração de scripts Playwright está reservada a perfis admin e developer.
+            </div>
+          )}
+          {generatedScript && canGeneratePlaywright && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
@@ -387,9 +421,13 @@ export const QualityStudioView: React.FC = () => {
                 </span>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(generatedScript);
-                    setCopiedPlaywright(true);
-                    setTimeout(() => setCopiedPlaywright(false), 2000);
+                    if (!navigator.clipboard?.writeText) return;
+                    navigator.clipboard.writeText(generatedScript)
+                      .then(() => {
+                        setCopiedPlaywright(true);
+                        window.setTimeout(() => setCopiedPlaywright(false), 2000);
+                      })
+                      .catch(() => setPlaywrightError('Não foi possível copiar o script.'));
                   }}
                   className="btn btn-ghost"
                   style={{ fontSize: '0.75rem', padding: '2px 8px' }}

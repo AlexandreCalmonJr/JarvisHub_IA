@@ -166,7 +166,7 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp
         logs_b = await client.get("/api/v1/system/server-logs", headers=headers_b)
         assert logs_b.status_code == 403
 
-        unauth_tools = await client.get("/api/v1/tools")
+        unauth_tools = await client.get("/api/v1/tools", headers={"x-no-auth": "1"})
         assert unauth_tools.status_code == 401
         cross_account_tool = await client.post(
             "/api/v1/tools/execute",

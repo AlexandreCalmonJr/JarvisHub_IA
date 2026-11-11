@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { fetchUserProfileApi, saveUserProfileApi, createSystemBackup } from '../../api';
 import { getAccountStorageKey } from '../../services/accountScope';
+import { API_BASE } from '../../services/api/client';
 import { notify } from './Toast';
 
 export interface UserProfileData {
@@ -77,54 +78,106 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'profile' | 'instructions' | 'keys' | 'engine' | 'data'>('profile');
   const [profile, setProfile] = useState<UserProfileData>(getUserProfile);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [canEditProfile, setCanEditProfile] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
-    return (localStorage.getItem(getAccountStorageKey('jarvis_experience_mode')) as any) || 'technical';
+    try {
+      const stored = localStorage.getItem(getAccountStorageKey('jarvis_experience_mode'));
+      return stored === 'essential' || stored === 'advanced' ? stored : 'technical';
+    } catch {
+      return 'technical';
+    }
   });
 
   useEffect(() => {
-    if (isOpen) {
-      // Carrega do SQLite ou fallback para localStorage
-      fetchUserProfileApi()
-        .then((dbProfile) => {
-          if (dbProfile) {
-            const merged = { ...getUserProfile(), ...dbProfile };
-            setProfile(merged);
-            saveUserProfile(merged);
-          }
-        })
-        .catch(() => {
-          setProfile(getUserProfile());
-        });
-      setSavedSuccess(false);
-    }
+    if (!isOpen) return;
+    let cancelled = false;
+    setIsAdmin(false);
+    setCanEditProfile(false);
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) {
+          const human = principal?.kind === 'human';
+          setIsAdmin(human && principal?.role === 'admin');
+          setCanEditProfile(human && (principal?.role === 'admin' || principal?.role === 'developer'));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAdmin(false);
+          setCanEditProfile(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setProfile(getUserProfile());
+    setLoadingProfile(true);
+    setSavedSuccess(false);
+
+    fetchUserProfileApi()
+      .then((dbProfile) => {
+        if (cancelled || !dbProfile) return;
+        const merged = { ...getUserProfile(), ...dbProfile };
+        setProfile(merged);
+        saveUserProfile(merged);
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(getUserProfile());
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProfile(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
+    if (!canEditProfile || saving) return;
+    setSaving(true);
     try {
+      try {
+        localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
+      } catch {
+        // A preferência local é opcional; a gravação no servidor deve continuar.
+      }
       await saveUserProfileApi(profile);
       saveUserProfile(profile);
       setSavedSuccess(true);
-      notify('Perfil e configurações da conta salvos com sucesso!', 'success');
-      if (onProfileUpdated) onProfileUpdated(profile);
-      setTimeout(() => setSavedSuccess(false), 2500);
+      notify('Perfil e preferências sincronizados com a conta.', 'success');
+      onProfileUpdated?.(profile);
+      window.setTimeout(() => setSavedSuccess(false), 2500);
     } catch {
       saveUserProfile(profile);
+      onProfileUpdated?.(profile);
       setSavedSuccess(false);
       notify(
-        'Não foi possível sincronizar com o servidor. As preferências não secretas ficaram guardadas apenas neste navegador.',
+        'Não foi possível sincronizar com o servidor. As preferências não secretas foram guardadas apenas neste navegador.',
         'error',
       );
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleBackupDatabase = async () => {
+    if (!isAdmin) return;
     setBackingUp(true);
     try {
-      const res = await createSystemBackup();
-      notify(`Backup gerado com sucesso em: ${res.backup_path}`, 'success');
+      await createSystemBackup();
+      notify('Backup do sistema criado com sucesso.', 'success');
     } catch (e: any) {
       notify(`Erro ao gerar backup: ${e.message}`, 'error');
     } finally {
@@ -134,9 +187,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleClearHistory = () => {
     if (window.confirm('Tem certeza de que deseja apagar todo o histórico de conversas locais? Esta ação não pode ser desfeita.')) {
-      localStorage.removeItem(getAccountStorageKey('jarvis_chat_messages_v1'));
-      localStorage.removeItem(getAccountStorageKey('jarvis_sessions_catalog_v1'));
-      notify('Histórico de conversas limpo com sucesso.', 'info');
+      try {
+        const accountSuffix = getAccountStorageKey('__scope_probe__').slice('__scope_probe__'.length);
+        const fixedKeys = new Set([
+          getAccountStorageKey('jarvis_chat_messages_v1'),
+          getAccountStorageKey('jarvis_chat_session_id_v1'),
+          getAccountStorageKey('jarvis_sessions_catalog_v1'),
+        ]);
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+          const key = localStorage.key(index);
+          if (key && (fixedKeys.has(key) || (key.startsWith('jarvis_session_messages_') && key.endsWith(accountSuffix)))) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch {
+        notify('O navegador não permitiu limpar o armazenamento local.', 'error');
+        return;
+      }
+      notify('Histórico local desta conta limpo com sucesso.', 'info');
       setTimeout(() => window.location.reload(), 600);
     }
   };
@@ -151,7 +219,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       a.download = `jarvis_chat_export_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      notify('Histórico de conversas exportado.', 'success');
+      notify('Conversa atual exportada.', 'success');
     } catch (e: any) {
       notify(`Erro ao exportar dados: ${e.message}`, 'error');
     }
@@ -169,7 +237,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         style={{
           display: 'flex',
           gap: '8px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid var(--border-color)',
           paddingBottom: '12px',
           marginBottom: '20px',
           flexWrap: 'wrap',
@@ -253,7 +321,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               Nível de Experiência da Interface
             </label>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
-              Adapta o nível de detalhe e a densidade de informações em todo o JARVIS:
+              Guarda a preferência de experiência neste navegador. Os módulos que ainda não suportam modos adaptativos mantêm a apresentação padrão.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
               {[
@@ -264,15 +332,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <button
                   key={mode.id}
                   type="button"
-                  onClick={() => setExperienceMode(mode.id as any)}
+                  onClick={() => {
+                    const nextMode = mode.id as 'essential' | 'technical' | 'advanced';
+                    setExperienceMode(nextMode);
+                    try {
+                      localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), nextMode);
+                    } catch {
+                      // A preferência permanece ativa apenas nesta sessão.
+                    }
+                  }}
                   style={{
                     padding: '10px 12px',
                     borderRadius: '8px',
                     textAlign: 'left',
                     cursor: 'pointer',
-                    backgroundColor: experienceMode === mode.id ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                    border: `1px solid ${experienceMode === mode.id ? 'rgba(255, 255, 255, 0.35)' : 'var(--border-color)'}`,
+                    backgroundColor: experienceMode === mode.id ? 'var(--accent-glow)' : 'rgba(255, 255, 255, 0.02)',
+                    border: `1px solid ${experienceMode === mode.id ? 'var(--accent-color)' : 'var(--border-color)'}`,
+                    minWidth: 0,
                     color: experienceMode === mode.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    borderColor: experienceMode === mode.id ? 'var(--accent-color)' : 'var(--border-color)',
                     transition: 'all 0.15s ease',
                   }}
                 >
@@ -283,7 +361,27 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          {!canEditProfile && <div role="status" style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>Perfil em modo de consulta. A edição exige a permissão profile:write.</div>}
+          <fieldset disabled={!canEditProfile} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="user-profile-avatar-section">
+            <label className="user-profile-field-label">Ícone do perfil</label>
+            <div className="user-profile-avatar-options" role="group" aria-label="Escolher ícone do perfil">
+              {['💻', '🧑‍💻', '👨‍💼', '👩‍💻', '🛠️', '🧠', '🚀', '🤖'].map((avatar) => (
+                <button
+                  key={avatar}
+                  type="button"
+                  className={`user-profile-avatar-option ${profile.avatarIcon === avatar ? 'is-active' : ''}`}
+                  aria-label={`Selecionar ícone ${avatar}`}
+                  aria-pressed={profile.avatarIcon === avatar}
+                  onClick={() => setProfile({ ...profile, avatarIcon: avatar })}
+                >
+                  {avatar}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="user-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
             <div>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                 Nome de Exibição:
@@ -315,7 +413,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="user-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
             <div>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                 Nível de Senioridade:
@@ -350,18 +448,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <button type="submit" className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          </fieldset>
+          {canEditProfile && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+            <button type="submit" disabled={saving || loadingProfile} className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Save size={15} />
-              <span>Salvar Perfil</span>
+              <span>{saving ? 'Salvando…' : 'Salvar Perfil'}</span>
             </button>
-          </div>
+          </div>}
         </form>
       )}
 
       {/* Conteúdo Aba: Instruções Personalizadas (ChatGPT style) */}
       {activeTab === 'instructions' && (
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {!canEditProfile && <div role="status" style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>Instruções personalizadas em modo de consulta. A edição exige a permissão profile:write.</div>}
+          <fieldset disabled={!canEditProfile} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
               O que o JARVIS deve saber sobre você para fornecer respostas melhores?
@@ -396,12 +497,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <button type="submit" className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          </fieldset>
+          {canEditProfile && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+            <button type="submit" disabled={saving} className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Save size={15} />
-              <span>Salvar Instruções</span>
+              <span>{saving ? 'Salvando…' : 'Salvar Instruções'}</span>
             </button>
-          </div>
+          </div>}
         </form>
       )}
 
@@ -420,9 +522,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               lineHeight: 1.5,
             }}
           >
-            <strong style={{ color: 'var(--text-primary)' }}>Cofre privado por conta em implementação</strong>
+            <strong style={{ color: 'var(--text-primary)' }}>Gestão de credenciais no Gestor de Modelos</strong>
             <p style={{ margin: '8px 0 0' }}>
-              A gravação segura de credenciais ainda não está disponível. Para proteger suas chaves, esta tela não envia nem armazena tokens de API. Aguarde a entrega do Cofre de Credenciais individual, com criptografia e isolamento entre contas.
+              As credenciais de providers devem ser geridas no módulo Gestor de Modelos, na área Cofre de Chaves, quando disponível para o seu perfil de acesso. Não coloque tokens ou palavras-passe nas instruções personalizadas.
             </p>
           </div>
         </section>
@@ -435,8 +537,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             style={{
               padding: '16px',
               borderRadius: '10px',
-              backgroundColor: 'rgba(99, 102, 241, 0.08)',
-              border: '1px solid rgba(99, 102, 241, 0.25)',
+              backgroundColor: 'var(--accent-glow)',
+              border: '1px solid var(--border-accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -445,11 +547,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="badge badge-success">Local-First Ativo</span>
-                <strong style={{ fontSize: '0.94rem', color: '#f8fafc' }}>Ollama Local (100% Offline)</strong>
+                <span className="badge">Configuração centralizada</span>
+                <strong style={{ fontSize: '0.94rem', color: 'var(--text-primary)' }}>Preferências de execução e modelos</strong>
               </div>
               <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', margin: '6px 0 0 0' }}>
-                Seu JARVIS opera com modelos locais instalados na CPU/RAM (Llama 3.2 3B, Qwen 2.5 Coder 7B e Qwen 2.5 7B), com zero envio de dados para a nuvem.
+                A seleção efetiva de modelos e providers é controlada pelo Gestor de Modelos e pelas políticas de execução. Esta área oferece acesso ao assistente de configuração, sem presumir que um modelo específico esteja ativo.
               </p>
             </div>
 
@@ -488,9 +590,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             }}
           >
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              Garantia de Privacidade & DLP Local:
+              Privacidade e políticas de dados:
             </div>
-            Todas as credenciais, tokens e segredos em arquivos no seu computador são redigidos localmente pelo Núcleo de Políticas e Auditoria antes de qualquer inferência.
+            A proteção de dados depende das políticas e integrações efetivamente ativas. Consulte Segurança e o Gestor de Modelos para verificar os controlos disponíveis nesta instalação.
           </div>
         </div>
       )}
@@ -498,52 +600,56 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       {/* Conteúdo Aba: Dados & Backup */}
       {activeTab === 'data' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div
-            style={{
-              padding: '16px',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-            }}
-          >
-            <div>
-              <strong style={{ fontSize: '0.90rem', color: '#f8fafc', display: 'block' }}>Backup Físico do Banco de Dados</strong>
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Cria uma cópia física segura e instantânea do SQLite (jarvis.db) com histórico e memórias.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleBackupDatabase}
-              disabled={backingUp}
-              className="btn btn-secondary"
-              style={{ fontSize: '0.80rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          {isAdmin && (
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
             >
-              <Database size={14} color="#818cf8" />
-              <span>{backingUp ? 'Gerando Backup...' : 'Criar Backup SQLite'}</span>
-            </button>
-          </div>
+              <div>
+                <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Backup do sistema</strong>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Gera uma cópia do banco de dados do servidor. Disponível apenas para administradores.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleBackupDatabase}
+                disabled={backingUp}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.80rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Database size={14} color="var(--accent-color)" />
+                <span>{backingUp ? 'Gerando Backup...' : 'Criar Backup SQLite'}</span>
+              </button>
+            </div>
+          )}
 
           <div
             style={{
               padding: '16px',
               borderRadius: '10px',
               backgroundColor: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              border: '1px solid var(--border-color)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              flexWrap: 'wrap',
               gap: '12px',
             }}
           >
             <div>
-              <strong style={{ fontSize: '0.90rem', color: '#f8fafc', display: 'block' }}>Exportar Histórico de Conversas</strong>
+              <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Exportar Conversa Atual</strong>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Faça download de todas as mensagens e dados do chat em formato JSON legível.
+                Exporta as mensagens da conversa atual guardadas neste navegador em formato JSON.
               </span>
             </div>
             <button
@@ -566,13 +672,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              flexWrap: 'wrap',
               gap: '12px',
             }}
           >
             <div>
-              <strong style={{ fontSize: '0.90rem', color: '#fca5a5', display: 'block' }}>Limpar Histórico Local</strong>
+              <strong style={{ fontSize: '0.90rem', color: 'var(--danger-color)', display: 'block' }}>Limpar Histórico Local</strong>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Apaga todas as sessões anteriores e restaura a saudação inicial do JARVIS.
+                Apaga o histórico de conversas e o catálogo de sessões guardados neste navegador para esta conta.
               </span>
             </div>
             <button

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../services/api/client';
 import { fetchServerLogs, clearServerLogs, fetchModelMetrics } from '../api';
 import { ModelMetricsCards } from './logs/ModelMetricsCards';
 import { InferenceHistoryTable } from './logs/InferenceHistoryTable';
@@ -35,6 +36,29 @@ export const ServerLogsView: React.FC = () => {
   const [logsError, setLogsError] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) {
+          setIsAdmin(principal?.kind === 'human' && principal?.role === 'admin');
+          setRoleLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAdmin(false);
+          setRoleLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Carrega métricas e logs iniciais
   const loadInitialData = async () => {
@@ -59,16 +83,16 @@ export const ServerLogsView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadInitialData();
-  }, [levelFilter]);
+    if (isAdmin) void loadInitialData();
+  }, [levelFilter, isAdmin]);
 
   // Conexão SSE para streaming em tempo real
   useEffect(() => {
-    if (!isStreaming) return;
+    if (!isAdmin || !isStreaming) return;
 
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource('/api/v1/system/server-logs/stream');
+      eventSource = new EventSource(`${API_BASE}/system/server-logs/stream`, { withCredentials: true });
       eventSource.onmessage = (event) => {
         try {
           const entry: LogEntry = JSON.parse(event.data);
@@ -99,9 +123,10 @@ export const ServerLogsView: React.FC = () => {
       if (eventSource) eventSource.close();
       clearInterval(interval);
     };
-  }, [isStreaming]);
+  }, [isAdmin, isStreaming]);
 
   const handleClear = async () => {
+    if (!isAdmin || !window.confirm('Limpar o buffer global de logs do servidor?')) return;
     try {
       await clearServerLogs();
       setLogs([]);
@@ -115,9 +140,13 @@ export const ServerLogsView: React.FC = () => {
     const text = logs
       .map((l) => `[${l.timestamp}] [${l.level}] [${l.logger}]: ${l.message}`)
       .join('\n');
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (!navigator.clipboard?.writeText) return;
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => setLogsError('Não foi possível copiar os logs.'));
   };
 
   return (
@@ -142,7 +171,7 @@ export const ServerLogsView: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {isAdmin && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={() => setIsStreaming(!isStreaming)}
             className="btn btn-secondary"
@@ -168,9 +197,12 @@ export const ServerLogsView: React.FC = () => {
           >
             Limpar
           </button>
-        </div>
+        </div>}
       </div>
 
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '12px 14px', color: 'var(--text-secondary)' }}>A verificar permissões dos logs do servidor…</div>}
+      {roleLoaded && !isAdmin && <div className="glass-panel" style={{ padding: '18px', color: 'var(--text-secondary)' }}>Os logs globais do servidor e a limpeza do buffer são restritos a administradores. As métricas individuais de inferência permanecem disponíveis nos módulos autorizados da sua conta.</div>}
+      {isAdmin && <>
       {loading && <p role="status" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando logs e métricas...</p>}
       {logsError && <div role="alert" style={{ padding: '12px 14px', border: '1px solid var(--danger-color)', borderRadius: '8px', color: 'var(--danger-color)', fontSize: '0.84rem' }}>{logsError}</div>}
       {metricsError && <div role="alert" style={{ padding: '12px 14px', border: '1px solid var(--warning-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Métricas indisponíveis: {metricsError}</div>}
@@ -197,6 +229,7 @@ export const ServerLogsView: React.FC = () => {
         autoScroll={autoScroll}
         setAutoScroll={setAutoScroll}
       />
+      </>}
     </div>
   );
 };

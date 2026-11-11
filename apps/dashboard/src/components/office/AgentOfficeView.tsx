@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../../services/api/client';
 import {
   Bot,
   Code2,
@@ -7,6 +8,8 @@ import {
   Key,
 } from 'lucide-react';
 import { fetchAgents, updateAgentConfig, fetchKeyVault, KeyVaultItem } from '../../api';
+import { getAgentLabel } from '../../types';
+import type { AgentInfo } from '../../types';
 import { notify } from '../common/Toast';
 import { AgentOfficeCanvas } from './AgentOfficeCanvas';
 
@@ -19,421 +22,124 @@ export interface OfficeAgent {
   mission: string;
   tools: string[];
   isReadOnly: boolean;
-  status: 'idle' | 'thinking' | 'coding' | 'meeting';
   preferredModel: string;
   assignedKeyId?: string;
   color: string;
 }
 
-const DEPARTMENTS = [
-  { id: 'command', name: 'Comando Central & Orquestrador', color: '#eab308', bg: 'rgba(234, 179, 8, 0.08)', border: 'rgba(234, 179, 8, 0.25)' },
-  { id: 'dev', name: 'Engenharia de Software', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.08)', border: 'rgba(99, 102, 241, 0.25)' },
+const DEPARTMENTS: Array<{
+  id: OfficeAgent['department'];
+  name: string;
+  color: string;
+  bg: string;
+  border: string;
+}> = [
+  { id: 'command', name: 'Comando Central & Orquestração', color: '#eab308', bg: 'rgba(234, 179, 8, 0.08)', border: 'rgba(234, 179, 8, 0.25)' },
+  { id: 'dev', name: 'Engenharia de Software', color: '#d97757', bg: 'rgba(217, 119, 87, 0.08)', border: 'rgba(217, 119, 87, 0.25)' },
   { id: 'design', name: 'Design, UX & Produto', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.08)', border: 'rgba(236, 72, 153, 0.25)' },
   { id: 'infra', name: 'DevOps & Automação', color: '#f97316', bg: 'rgba(249, 115, 22, 0.08)', border: 'rgba(249, 115, 22, 0.25)' },
   { id: 'data', name: 'Dados & Inteligência', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.08)', border: 'rgba(6, 182, 212, 0.25)' },
-  { id: 'security', name: 'Cybersecurity Shield', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.25)' },
+  { id: 'security', name: 'Segurança & Conformidade', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.25)' },
 ];
 
-const INITIAL_OFFICE_AGENTS: OfficeAgent[] = [
-  // 1. Comando Central
-  {
-    id: 'jarvis_master',
-    name: 'JARVIS Maestro',
-    role: 'Orquestrador Geral dos 26 Agentes',
-    department: 'command',
-    departmentName: 'Comando Central',
-    mission: 'Decompor requisitos complexos, convocar especialistas e sintetizar respostas.',
-    tools: ['delegate_task', 'run_command', 'write_file', 'read_file'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#eab308',
-  },
-  {
-    id: 'project_manager',
-    name: 'Gerente de Projetos',
-    role: 'Gestão de Backlog & Sprints',
-    department: 'command',
-    departmentName: 'Comando Central',
-    mission: 'Organizar entregas, quebrar épicos em sprints e acompanhar prazos.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#eab308',
-  },
-  {
-    id: 'research_analyst',
-    name: 'Analista de Pesquisa Técnica',
-    role: 'Investigação Técnica & Documentação',
-    department: 'command',
-    departmentName: 'Comando Central',
-    mission: 'Realizar pesquisas em documentações oficiais e auditar dependências.',
-    tools: ['web_search', 'read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#eab308',
-  },
+const departmentForRole = (role: string): OfficeAgent['department'] => {
+  const normalized = role.toLowerCase();
+  if (/(master|orchestrat|orquestrat|project_manager|planner|coordinator|gerente)/.test(normalized)) return 'command';
+  if (/(security|privacy|compliance|red.?team|audit|incident|soc|seguran|privacidade)/.test(normalized)) return 'security';
+  if (/(design|ux|ui|product|brand|accessibility|designer)/.test(normalized)) return 'design';
+  if (/(devops|infra|network|cloud|sre|automation|release|platform|rede)/.test(normalized)) return 'infra';
+  if (/(data|analytics|database|\\bbi\\b|machine_learning|research|rag|knowledge|dados|pesquisa)/.test(normalized)) return 'data';
+  return 'dev';
+};
 
-  // 2. Engenharia de Software
-  {
-    id: 'software_architect',
-    name: 'Arquiteto de Software',
-    role: 'Arquitetura Clean & ADRs',
-    department: 'dev',
-    departmentName: 'Engenharia de Software',
-    mission: 'Desenhar topologias modulares, diagramas de arquitetura e decisões técnicas.',
-    tools: ['write_file', 'read_file'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#6366f1',
-  },
-  {
-    id: 'frontend_mobile_developer',
-    name: 'Dev Frontend & Mobile',
-    role: 'React, Vite, Tailwind & Mobile',
-    department: 'dev',
-    departmentName: 'Engenharia de Software',
-    mission: 'Construir interfaces reativas e aplicações completas para web e dispositivos móveis.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#6366f1',
-  },
-  {
-    id: 'backend_developer',
-    name: 'Dev Backend (APIs)',
-    role: 'FastAPI, Node & Banco de Dados',
-    department: 'dev',
-    departmentName: 'Engenharia de Software',
-    mission: 'Desenvolver endpoints REST, WebSocket, integrações com bancos e regras de negócio.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#6366f1',
-  },
-  {
-    id: 'code_reviewer',
-    name: 'Revisor de Código Sênior',
-    role: 'Auditoria de Qualidade & Clean Code',
-    department: 'dev',
-    departmentName: 'Engenharia de Software',
-    mission: 'Identificar code smells, otimizar complexidade algorítmica e aprovar pull requests.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#6366f1',
-  },
-  {
-    id: 'qa_engineer',
-    name: 'Engenheiro de QA & Testes',
-    role: 'Testes Unitários & E2E',
-    department: 'dev',
-    departmentName: 'Engenharia de Software',
-    mission: 'Desenvolver testes automatizados, garantir cobertura e prevenir regressões.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#6366f1',
-  },
-
-  // 3. Design & Produto
-  {
-    id: 'project_designer_planner',
-    name: 'Designer & Planejador',
-    role: 'Design Estrutural & Escopo',
-    department: 'design',
-    departmentName: 'Design & Produto',
-    mission: 'Elaborar wireframes mentais, jornadas do usuário e requisitos de interface.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ec4899',
-  },
-  {
-    id: 'ux_ui_designer',
-    name: 'Designer de UX/UI',
-    role: 'Design Systems & Estética',
-    department: 'design',
-    departmentName: 'Design & Produto',
-    mission: 'Criar layouts responsivos, paletas de cores harmônicas e micro-interações.',
-    tools: ['write_file', 'read_file'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ec4899',
-  },
-
-  // 4. DevOps & Infraestrutura
-  {
-    id: 'devops_engineer',
-    name: 'Engenheiro DevOps & CI/CD',
-    role: 'Docker, Pipelines & Release',
-    department: 'infra',
-    departmentName: 'DevOps & Automação',
-    mission: 'Automatizar builds, contêineres Docker, GitHub Actions e infra como código.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#f97316',
-  },
-  {
-    id: 'network_infrastructure_engineer',
-    name: 'Engenheiro de Redes & Infra',
-    role: 'Conectividade, DNS & Portas',
-    department: 'infra',
-    departmentName: 'DevOps & Automação',
-    mission: 'Garantir comunicação segura em 127.0.0.1, portas locais e protocolos de rede.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#f97316',
-  },
-  {
-    id: 'automation_engineer',
-    name: 'Engenheiro de Automação',
-    role: 'Scripts & Automação de Tarefas',
-    department: 'infra',
-    departmentName: 'DevOps & Automação',
-    mission: 'Criar scripts utilitários em Python/PowerShell para tarefas repetitivas.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#f97316',
-  },
-
-  // 5. Dados & Inteligência
-  {
-    id: 'data_scientist',
-    name: 'Cientista de Dados',
-    role: 'Modelagem Estatística & ML',
-    department: 'data',
-    departmentName: 'Dados & Inteligência',
-    mission: 'Analisar tendências de dados, criar previsões e otimizar vetores de busca.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#06b6d4',
-  },
-  {
-    id: 'business_intelligence',
-    name: 'Business Intelligence (BI)',
-    role: 'KPIs, Dashboards & Negócio',
-    department: 'data',
-    departmentName: 'Dados & Inteligência',
-    mission: 'Construir métricas analíticas e painéis de indicadores de performance.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#06b6d4',
-  },
-  {
-    id: 'data_engineering_intelligence',
-    name: 'Engenheiro de Dados',
-    role: 'Estruturação & Modelagem SQL',
-    department: 'data',
-    departmentName: 'Dados & Inteligência',
-    mission: 'Modelar tabelas SQLite, consultas otimizadas e índices para alta performance.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#06b6d4',
-  },
-  {
-    id: 'data_engineer_pipelines',
-    name: 'Engenheiro de Pipelines',
-    role: 'ETL, Ingestão & RAG',
-    department: 'data',
-    departmentName: 'Dados & Inteligência',
-    mission: 'Construir fluxos de ingestão de arquivos para a Base de Conhecimento RAG.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#06b6d4',
-  },
-
-  // 6. Cybersecurity Shield
-  {
-    id: 'cybersecurity_engineer',
-    name: 'Engenheiro de Cibersegurança',
-    role: 'Hardening & Cyber Shield',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Supervisionar a postura de segurança do hub e mitigar vulnerabilidades.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'threat_modeling_security_architect',
-    name: 'Arquiteto de Ameaças',
-    role: 'Modelagem STRIDE & Riscos',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Identificar vetores de ataque potenciais e elaborar defesas preventivas.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'secure_code_auditor',
-    name: 'Auditor de Código Seguro',
-    role: 'Auditoria SAST & OWASP',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Inspecionar código em busca de injeções de SQL, XSS e vazamentos de credenciais.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'api_security_specialist',
-    name: 'Especialista em APIs OWASP',
-    role: 'Segurança de Endpoints & Headers',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Auditar cabeçalhos de segurança, rate limiting e autenticação nas APIs REST.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'identity_access_management',
-    name: 'Gestão de Identidade (IAM)',
-    role: 'RBAC, Tokens & Permissões',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Gerenciar permissões de usuários e agentes no confinamento de 127.0.0.1.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'software_supply_chain_security',
-    name: 'Segurança de Pacotes (SBOM)',
-    role: 'Auditoria de Dependências & CVEs',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Garantir que bibliotecas Python e pacotes npm estejam livres de malwares conhecidos.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'soc_incident_response',
-    name: 'Resposta a Incidentes SOC',
-    role: 'Monitoramento & Kill Switch',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Analisar anomalias em tempo real e acionar o Kill Switch se necessário.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'ai_security_red_team',
-    name: 'Red Team de Segurança de IA',
-    role: 'Prompt Injection & Jailbreak Defense',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Testar e blindar os prompts dos agentes contra injeções adversárias.',
-    tools: ['write_file', 'read_file', 'run_command'],
-    isReadOnly: false,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-  {
-    id: 'privacy_data_protection',
-    name: 'Privacidade de Dados (LGPD)',
-    role: 'Anonimização & Conformidade',
-    department: 'security',
-    departmentName: 'Cybersecurity Shield',
-    mission: 'Verificar conformidade com a LGPD e impedir vazamento de dados sensíveis.',
-    tools: ['read_file'],
-    isReadOnly: true,
-    status: 'idle',
-    preferredModel: 'auto_hybrid',
-    color: '#ef4444',
-  },
-];
+const toOfficeAgent = (agent: AgentInfo): OfficeAgent => {
+  const department = departmentForRole(agent.role || '');
+  const departmentInfo = DEPARTMENTS.find((item) => item.id === department) || DEPARTMENTS[1];
+  return {
+    id: agent.role,
+    name: agent.name,
+    role: getAgentLabel(agent.role) || agent.role,
+    department,
+    departmentName: departmentInfo.name,
+    mission: agent.mission || 'Missão não descrita no catálogo.',
+    tools: Array.isArray(agent.allowed_tools) ? agent.allowed_tools : [],
+    isReadOnly: agent.is_read_only !== false,
+    preferredModel: agent.preferred_model || 'auto_hybrid',
+    assignedKeyId: agent.assigned_key_id,
+    color: departmentInfo.color,
+  };
+};
 
 interface AgentOfficeViewProps {
   onSelectForChat?: (agentId: string) => void;
 }
 
 export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForChat }) => {
-  const [agents, setAgents] = useState<OfficeAgent[]>(INITIAL_OFFICE_AGENTS);
+  const [agents, setAgents] = useState<OfficeAgent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<OfficeAgent | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [vaultKeys, setVaultKeys] = useState<KeyVaultItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [keyVaultError, setKeyVaultError] = useState<string | null>(null);
+  const [canManageAgents, setCanManageAgents] = useState(false);
+  const [canUseChat, setCanUseChat] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
   const [activeKeySelection, setActiveKeySelection] = useState<string>('');
   const [officeMode, setOfficeMode] = useState<'both' | 'canvas' | 'desks'>('both');
 
-  const loadData = async () => {
+  const loadData = async (allowKeyManagement = canManageAgents) => {
+    setLoading(true);
+    setLoadError(null);
+    setKeyVaultError(null);
     try {
-      setLoading(true);
-      const [configs, keys] = await Promise.all([
-        fetchAgents().catch(() => []),
-        fetchKeyVault().catch(() => []),
-      ]);
-      setVaultKeys(Array.isArray(keys) ? keys : []);
-
-      if (Array.isArray(configs) && configs.length > 0) {
-        setAgents((prev) =>
-          prev.map((a) => {
-            const remote = configs.find((c: any) => c.role === a.id || c.agent_id === a.id);
-            if (remote) {
-              return {
-                ...a,
-                preferredModel: remote.preferred_model || a.preferredModel,
-                assignedKeyId: remote.assigned_key_id || a.assignedKeyId,
-                isReadOnly: remote.is_read_only !== undefined ? remote.is_read_only : a.isReadOnly,
-              };
-            }
-            return a;
-          })
-        );
-      }
-    } catch (err) {
-      console.warn('Erro ao carregar configurações do escritório:', err);
-    } finally {
-      setLoading(false);
+      const configs = await fetchAgents();
+      setAgents(Array.isArray(configs) ? configs.map(toOfficeAgent) : []);
+    } catch (err: any) {
+      setAgents([]);
+      setLoadError(err?.message || 'Não foi possível carregar o catálogo de agentes.');
     }
+
+    if (allowKeyManagement) {
+      try {
+        const keys = await fetchKeyVault();
+        setVaultKeys(Array.isArray(keys) ? keys : []);
+      } catch (err: any) {
+        setVaultKeys([]);
+        setKeyVaultError(err?.message || 'Não foi possível carregar o Cofre de Chaves.');
+      }
+    } else {
+      setVaultKeys([]);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const permissions = Array.isArray(principal?.permissions) ? principal.permissions : [];
+        const human = principal?.kind === 'human';
+        const canManage = human && (permissions.includes('*') || permissions.includes('agents:write'));
+        setCanManageAgents(canManage);
+        setCanUseChat(human && (permissions.includes('*') || permissions.includes('chat:use')));
+        setRoleLoaded(true);
+        void loadData(canManage);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanManageAgents(false);
+          setCanUseChat(false);
+          setRoleLoaded(true);
+          void loadData(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleOpenDrawer = (agent: OfficeAgent) => {
@@ -442,7 +148,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
   };
 
   const handleSaveAgentKey = async () => {
-    if (!selectedAgent) return;
+    if (!canManageAgents || !selectedAgent) return;
     try {
       setSavingKey(true);
       await updateAgentConfig(selectedAgent.id, {
@@ -456,7 +162,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
       );
       setSelectedAgent((prev) => (prev ? { ...prev, assignedKeyId: activeKeySelection || undefined } : null));
 
-      notify(`Chave atribuída com sucesso ao especialista ${selectedAgent.name}!`, 'success');
+      notify(`Atribuição de chave atualizada para ${selectedAgent.name}.`, 'success');
     } catch (err: any) {
       notify(`Erro ao vincular chave: ${err.message}`, 'error');
     } finally {
@@ -466,6 +172,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '20px' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões do Escritório Virtual…</div>}
       {/* Topo: Cabeçalho Clean & Filtros Rápidos */}
       <div
         style={{
@@ -480,10 +187,10 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
       >
         <div>
           <h1 style={{ fontSize: '1.35rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Escritório Virtual dos 26 Agentes
+            Escritório Virtual de Agentes ({agents.length})
           </h1>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            Visão viva dos especialistas trabalhando nos 6 departamentos técnicos. Clique em uma mesa para configurar chave e modelo.
+            Visualização animada do catálogo registado; os movimentos são ilustrativos e não representam atividade em tempo real. {canManageAgents ? 'Clique numa mesa para configurar o agente.' : 'Clique numa mesa para consultar os detalhes.'}
           </p>
         </div>
 
@@ -502,9 +209,9 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
               border: '1px solid var(--border-color)',
             }}
           >
-            Todos (26)
+            Todos ({agents.length})
           </button>
-          {DEPARTMENTS.map((dept) => {
+          {DEPARTMENTS.filter((dept) => agents.some((agent) => agent.department === dept.id)).map((dept) => {
             const isSel = selectedDepartment === dept.id;
             return (
               <button
@@ -587,17 +294,21 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
 
           <button
             type="button"
-            onClick={loadData}
+            onClick={() => loadData()}
             disabled={loading}
             className="btn btn-ghost"
             style={{ padding: '6px', color: 'var(--text-muted)' }}
-            title="Atualizar status das mesas"
+            title="Atualizar catálogo de agentes"
           >
             <RefreshCw size={14} className={loading ? 'spin' : ''} />
           </button>
         </div>
       </div>
 
+      {roleLoaded && loadError && agents.length === 0 && <div role="alert" className="glass-panel" style={{ padding: '16px', color: 'var(--danger-color)' }}>{loadError}</div>}
+      {loading && agents.length === 0 && <div role="status" className="glass-panel" style={{ padding: '16px', color: 'var(--text-secondary)' }}>A carregar agentes registados…</div>}
+      {!loading && !loadError && agents.length === 0 && <div className="glass-panel" style={{ padding: '20px', color: 'var(--text-secondary)' }}>O catálogo da API não devolveu agentes configurados para esta instância.</div>}
+      {agents.length > 0 && <>
       {/* 1. Andar 2.5D Animado com Avatares Andando pelo Escritório */}
       {(officeMode === 'canvas' || officeMode === 'both') && (
         <AgentOfficeCanvas
@@ -666,7 +377,8 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                 {deptAgents.map((agent) => {
                   const hasCustomKey = !!agent.assignedKeyId;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={agent.id}
                       onClick={() => handleOpenDrawer(agent)}
                       style={{
@@ -675,10 +387,14 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                         border: '1px solid rgba(255, 255, 255, 0.08)',
                         padding: '12px 10px',
                         cursor: 'pointer',
+                        width: '100%',
+                        font: 'inherit',
+                        color: 'inherit',
+                        textAlign: 'center',
+                        appearance: 'none',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        textAlign: 'center',
                         position: 'relative',
                         transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
                       }}
@@ -692,7 +408,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                         e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
                         e.currentTarget.style.boxShadow = 'none';
                       }}
-                      title={`Clique para configurar ${agent.name}`}
+                      title={canManageAgents ? `Clique para configurar ${agent.name}` : `Consultar ${agent.name}`}
                     >
                       {/* Indicador de Status Luminoso */}
                       <div
@@ -703,10 +419,9 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                           width: '7px',
                           height: '7px',
                           borderRadius: '50%',
-                          backgroundColor: '#10b981',
-                          boxShadow: '0 0 6px #10b981',
+                          backgroundColor: 'var(--text-muted)',
                         }}
-                        title="Ocioso (Pronto)"
+                        title="Atividade em tempo real não monitorizada"
                       />
 
                       {/* Estação de Trabalho / Avatar do Especialista */}
@@ -782,18 +497,18 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                           fontSize: '0.63rem',
                           padding: '1px 6px',
                           borderRadius: '4px',
-                          backgroundColor: hasCustomKey ? 'rgba(99, 102, 241, 0.18)' : 'rgba(255, 255, 255, 0.06)',
-                          color: hasCustomKey ? '#818cf8' : 'var(--text-secondary)',
-                          border: `1px solid ${hasCustomKey ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255, 255, 255, 0.1)'}`,
+                          backgroundColor: hasCustomKey ? 'var(--accent-glow)' : 'rgba(255, 255, 255, 0.06)',
+                          color: hasCustomKey ? 'var(--accent-color)' : 'var(--text-secondary)',
+                          border: `1px solid ${hasCustomKey ? 'var(--border-accent)' : 'rgba(255, 255, 255, 0.1)'}`,
                           display: 'flex',
                           alignItems: 'center',
                           gap: '3px',
                         }}
                       >
                         <Key size={8} />
-                        <span>{agent.assignedKeyId ? agent.assignedKeyId.split('_')[0] : 'auto_hybrid'}</span>
+                        <span>{hasCustomKey ? 'Chave vinculada' : ['auto', 'auto_hybrid'].includes(agent.preferredModel) ? 'Roteamento automático' : 'Modelo fixo'}</span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -802,6 +517,8 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
         })}
       </div>
       )}
+
+      </>}
 
       {/* Drawer Lateral de Configuração do Especialista */}
       {selectedAgent && (
@@ -926,10 +643,11 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
               <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 Provedor / Chave de API Atribuída
               </div>
+              {canManageAgents ? <>
               <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
                 Escolha qual chave do cofre este agente utilizará nas deliberações.
               </p>
-
+              {keyVaultError && <div role="alert" style={{ color: 'var(--danger-color)', fontSize: '0.76rem' }}>{keyVaultError}</div>}
               <select
                 className="input"
                 value={activeKeySelection}
@@ -964,10 +682,11 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                 <Key size={14} />
                 <span>{savingKey ? 'Salvando...' : 'Salvar Atribuição de Chave'}</span>
               </button>
+              </> : <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-primary)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>A atribuição de providers e chaves exige agents:write. Nenhum segredo é apresentado nesta vista.</div>}
             </div>
 
             {/* Botão de Ação: Abrir no Chat */}
-            {onSelectForChat && (
+            {onSelectForChat && canUseChat && (
               <button
                 type="button"
                 onClick={() => {
@@ -982,8 +701,8 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '6px',
-                  color: '#818cf8',
-                  borderColor: 'rgba(99, 102, 241, 0.3)',
+                  color: 'var(--accent-color)',
+                  borderColor: 'var(--border-accent)',
                   marginTop: 'auto',
                 }}
               >

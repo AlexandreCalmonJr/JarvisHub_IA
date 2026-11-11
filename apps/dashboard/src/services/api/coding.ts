@@ -1,5 +1,7 @@
 import { API_BASE } from './client';
 
+const requestOptions: RequestInit = { credentials: 'include' };
+
 export interface CodingModeInfo {
   id: 'plan' | 'ask' | 'auto';
   label: string;
@@ -60,7 +62,7 @@ export type CodingEvent = {
 };
 
 export async function fetchCodingTools(): Promise<CodingToolsResponse> {
-  const res = await fetch(`${API_BASE}/coding/tools`);
+  const res = await fetch(`${API_BASE}/coding/tools`, requestOptions);
   if (!res.ok) throw new Error('Falha ao carregar as ferramentas do Coding Agent');
   return res.json();
 }
@@ -74,13 +76,13 @@ export interface McpReloadSummary {
 }
 
 export async function reloadMcpServers(): Promise<McpReloadSummary> {
-  const res = await fetch(`${API_BASE}/mcp/reload`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/mcp/reload`, { ...requestOptions, method: 'POST' });
   if (!res.ok) throw new Error('Falha ao recarregar servidores MCP');
   return res.json();
 }
 
 export async function fetchCodingMessages(sessionId: string): Promise<CodingMessage[]> {
-  const res = await fetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`);
+  const res = await fetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`, requestOptions);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar histórico do Coding Agent.' }));
     throw new Error(errorData.detail || 'Falha ao carregar histórico do Coding Agent.');
@@ -91,6 +93,7 @@ export async function fetchCodingMessages(sessionId: string): Promise<CodingMess
 
 export async function clearCodingMessages(sessionId: string): Promise<number> {
   const res = await fetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`, {
+    ...requestOptions,
     method: 'DELETE',
   });
   if (!res.ok) throw new Error('Falha ao limpar o histórico da sessão');
@@ -103,7 +106,8 @@ export async function decideCodingApproval(
   action: 'approve' | 'reject',
   reason?: string
 ): Promise<any> {
-  const res = await fetch(`${API_BASE}/coding/approvals/${approvalId}/decide`, {
+  const res = await fetch(`${API_BASE}/coding/approvals/${encodeURIComponent(approvalId)}/decide`, {
+    ...requestOptions,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, reason }),
@@ -124,6 +128,7 @@ export async function runCodingAgentStream(
   signal?: AbortSignal
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/coding/run/stream`, {
+    ...requestOptions,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -141,21 +146,26 @@ export async function runCodingAgentStream(
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
 
+  const dispatchBlock = (block: string) => {
+    const dataLine = block.split(/\r?\n/).find((line) => line.startsWith('data:'));
+    if (!dataLine) return;
+    try {
+      const event = JSON.parse(dataLine.slice(5).trim()) as CodingEvent;
+      onEvent(event);
+    } catch (err) {
+      console.warn('Evento SSE inválido do Coding Agent:', err);
+    }
+  };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const blocks = buffer.split('\n\n');
+    const blocks = buffer.split(/\r?\n\r?\n/);
     buffer = blocks.pop() || '';
-    for (const block of blocks) {
-      const trimmed = block.trim();
-      if (!trimmed.startsWith('data: ')) continue;
-      try {
-        const event = JSON.parse(trimmed.slice(6)) as CodingEvent;
-        onEvent(event);
-      } catch (err) {
-        console.warn('Evento SSE inválido do Coding Agent:', err);
-      }
-    }
+    for (const block of blocks) dispatchBlock(block);
   }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) dispatchBlock(buffer);
 }

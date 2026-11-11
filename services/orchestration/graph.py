@@ -11,7 +11,6 @@ from langgraph.graph import END, START, StateGraph
 from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
 from services.model_runtime import InferenceRequest, ModelManager
 from services.security_core import PermissionDeniedError, SecurityCore
-from services.tool_gateway import ToolExecutionRequest
 
 from .state import TaskState
 from .self_correction import SelfCorrectionEngine
@@ -461,26 +460,15 @@ def create_master_graph(
         )
         hybrid_default = getattr(getattr(model_manager.hybrid_router, "online_config", None), "default_model", "qwen/qwen3.8-27b") if is_hybrid_active else "auto"
 
-        if is_hybrid_active:
-            pref = prim_profile.preferred_model if prim_profile else "auto_hybrid"
-            if not pref or pref in ("auto", "auto_hybrid", "llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
-                model_name = hybrid_default
-            else:
-                model_name = pref
+        pref = prim_profile.preferred_model if prim_profile else ("auto_hybrid" if is_hybrid_active else "auto")
+        if not pref or pref in ("auto", "auto_hybrid"):
+            # Delega a escolha ao seletor governado do ModelManager.
+            model_name = "auto_hybrid" if is_hybrid_active else "auto"
+        elif is_hybrid_active and pref in ("llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
+            model_name = hybrid_default
         else:
-            model_name = prim_profile.preferred_model if prim_profile else "auto"
-            # Otimização Inteligente para CPU: Reaproveita modelo já residente na RAM para evitar swapping de 60s
-            if hasattr(model_manager, "get_loaded_models"):
-                try:
-                    loaded = await model_manager.get_loaded_models()
-                    if loaded:
-                        model_name = loaded[0]
-                    elif prim_profile and prim_profile.preferred_model:
-                        model_name = prim_profile.preferred_model
-                    else:
-                        model_name = "auto"
-                except Exception:
-                    model_name = prim_profile.preferred_model if prim_profile else "auto"
+            # Preferências explícitas e personalizadas do perfil são preservadas.
+            model_name = pref
 
         # Tenta inferir target_project se não especificado explicitamente
         if not project_id and workspace_service:
@@ -596,6 +584,8 @@ def create_master_graph(
                 temperature=0.3,
                 timeout_seconds=20.0,
                 task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
+                agent_role=arch_role.value,
             )
             arch_p_tokens = 35
             arch_c_tokens = 110
@@ -653,6 +643,8 @@ def create_master_graph(
                     temperature=0.3,
                     timeout_seconds=20.0,
                     task_id=state.get("task_id"),
+                    owner_user_id=state.get("owner_user_id"),
+                    agent_role=sec_role.value,
                 )
                 try:
                     sec_resp = await model_manager.generate(sec_req)
@@ -718,6 +710,8 @@ def create_master_graph(
                         temperature=0.3,
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
+                        owner_user_id=state.get("owner_user_id"),
+                        agent_role=dev_role.value,
                     )
                 )
                 dev_summary = dev_resp.content.strip()
@@ -756,6 +750,8 @@ def create_master_graph(
                         temperature=0.2,
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
+                        owner_user_id=state.get("owner_user_id"),
+                        agent_role=qa_role.value,
                     )
                 )
                 qa_summary = qa_resp.content.strip()
@@ -938,6 +934,8 @@ def create_master_graph(
                     temperature=0.7,
                     timeout_seconds=45.0,
                     task_id=state.get("task_id"),
+                    owner_user_id=state.get("owner_user_id"),
+                    agent_role=primary_agent,
                 )
                 try:
                     conv_resp = await model_manager.generate(conv_req)
@@ -1067,6 +1065,8 @@ def create_master_graph(
                     temperature=0.25,
                     timeout_seconds=120.0,
                     task_id=state.get("task_id"),
+                    owner_user_id=state.get("owner_user_id"),
+                    agent_role=specialist_role,
                     key_id=getattr(specialist_profile, "assigned_key_id", None),
                 )
                 try:
@@ -1138,6 +1138,8 @@ def create_master_graph(
                         temperature=0.2,
                         timeout_seconds=120.0,
                         task_id=state.get("task_id"),
+                        owner_user_id=state.get("owner_user_id"),
+                        agent_role=AgentRole.JARVIS_MASTER.value,
                     )
                 )
             except Exception as exc:
@@ -1183,74 +1185,7 @@ def create_master_graph(
             )
             llm_text = consensus_summary
 
-            # Insere contratos de cada especialista no estado para visualização no painel de raciocínio
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=role_1,
-                    objective=title_1,
-                    summary=text_1,
-                    evidence=["Mesa Redonda Multi-Agente", "Deliberação de Especialista"],
-                    actions_taken=["Análise de Metodologia"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=50, tokens_completion=200, duration_ms=15.0),
-                    next_recommendation="Integrar diretriz com plano executivo",
-                ).model_dump()
-            )
-
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=role_2,
-                    objective=title_2,
-                    summary=text_2,
-                    evidence=["Mesa Redonda Multi-Agente", "Planejamento Estratégico"],
-                    actions_taken=["Análise do contexto", "Revisão do parecer do primeiro especialista", "Proposta de contrapontos e recomendações"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=50, tokens_completion=200, duration_ms=15.0),
-                    next_recommendation="Acompanhar execução dos ciclos semanais",
-                ).model_dump()
-            )
-
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=role_3,
-                    objective=title_3,
-                    summary=text_3,
-                    evidence=["Mesa Redonda Multi-Agente", "Garantia de Qualidade"],
-                    actions_taken=["Revisão dos dois pareceres anteriores", "Identificação de lacunas e riscos", "Validação de critérios de aceitação"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=50, tokens_completion=200, duration_ms=15.0),
-                    next_recommendation="Validar retenção com prática no chat",
-                ).model_dump()
-            )
-
-            # 4. Parecer e Deliberação Consensual do JARVIS Maestro
-            agent_outputs.append(
-                AgentOutputContract(
-                    agent_role=AgentRole.JARVIS_MASTER,
-                    objective="Consolidação e Deliberação da Mesa Redonda Técnica",
-                    summary=consensus_summary,
-                    evidence=["Deliberação Consensual", "Mesa Redonda Multi-Agente", consensus_title],
-                    actions_taken=["Mediação entre especialistas", "Comparação de divergências", "Síntese executiva baseada nos pareceres recebidos"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(model_name=model_name, tokens_prompt=150, tokens_completion=300, duration_ms=25.0),
-                    next_recommendation="Apresentar síntese consensual ao utilizador",
-                ).model_dump()
-            )
-            llm_text = consensus_summary
-
-        # 5. Demais intenções (arquitetura, análise, qa, planejamento): inferência com contexto enriquecido
+            # 5. Demais intenções (arquitetura, análise, qa, planejamento): inferência com contexto enriquecido
         else:
             system_prompt = build_specialist_prompt(
                 agent_role=primary_agent,
@@ -1273,6 +1208,8 @@ def create_master_graph(
                 temperature=0.3,
                 timeout_seconds=90.0,
                 task_id=state.get("task_id"),
+                owner_user_id=state.get("owner_user_id"),
+                agent_role=primary_agent,
                 key_id=getattr(prim_profile, "assigned_key_id", None),
             )
 
@@ -1370,6 +1307,8 @@ def create_master_graph(
                         temperature=0.25,
                         timeout_seconds=120.0,
                         task_id=state.get("task_id"),
+                        owner_user_id=state.get("owner_user_id"),
+                        agent_role=secondary_role,
                         key_id=getattr(secondary_profile, "assigned_key_id", None),
                     )
                 )

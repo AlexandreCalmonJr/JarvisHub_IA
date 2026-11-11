@@ -12,12 +12,16 @@ import {
   deleteKnowledgeDocument,
 } from '../api';
 import { notify } from './common/Toast';
+import { API_BASE } from '../services/api/client';
 import { KnowledgeSearchBar } from './knowledge/KnowledgeSearchBar';
 import { DocumentListGrid } from './knowledge/DocumentListGrid';
 import { FolderIndexModal, TextSnippetModal } from './knowledge/DocumentModals';
 
 export const KnowledgeVaultView: React.FC = () => {
   const [documents, setDocuments] = useState<any[]>([]);
+  const [canManageKnowledge, setCanManageKnowledge] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [loading, setLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,7 +56,27 @@ export const KnowledgeVaultView: React.FC = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        setCanManageKnowledge(
+          principal?.kind === 'human' &&
+          (principal?.role === 'admin' || principal?.role === 'developer')
+        );
+        setRoleLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanManageKnowledge(false);
+          setRoleLoaded(true);
+        }
+      });
     loadDocuments();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSearch = async (e?: React.FormEvent) => {
@@ -76,9 +100,16 @@ export const KnowledgeVaultView: React.FC = () => {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageKnowledge) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 25 * 1024 * 1024) {
+      notify('O ficheiro excede o limite de 25 MB.', 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setUploadingFile(true);
     notify(`Indexando '${file.name}' no Knowledge Vault...`, 'info');
     try {
       const res = await uploadKnowledgeDocument(file, 'manuais');
@@ -87,12 +118,14 @@ export const KnowledgeVaultView: React.FC = () => {
     } catch (err: any) {
       notify(`Falha ao indexar arquivo: ${err.message}`, 'error');
     } finally {
+      setUploadingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleFolderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageKnowledge) return;
     if (!folderPath.trim()) return;
 
     setFolderIndexing(true);
@@ -112,6 +145,7 @@ export const KnowledgeVaultView: React.FC = () => {
 
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageKnowledge) return;
     if (!textDocName.trim() || !textContent.trim()) return;
 
     setTextIndexing(true);
@@ -130,6 +164,7 @@ export const KnowledgeVaultView: React.FC = () => {
   };
 
   const handleDelete = async (docName: string) => {
+    if (!canManageKnowledge) return;
     if (!window.confirm(`Tem certeza que deseja remover '${docName}' da Base de Conhecimento?`)) {
       return;
     }
@@ -150,6 +185,7 @@ export const KnowledgeVaultView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1280px', margin: '0 auto' }}>
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões de gestão do Knowledge Vault…</div>}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -166,21 +202,22 @@ export const KnowledgeVaultView: React.FC = () => {
             Base de Conhecimento & RAG Local
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
-            {documents.length} documentos indexados ({totalChunks} trechos semânticos) com injeção contextual nos 26 especialistas.
+            {documents.length} documentos indexados ({totalChunks} trechos semânticos) com recuperação contextual para os agentes autorizados da conta.
           </p>
         </div>
 
         {/* Botões de Ação */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <input
+          {canManageKnowledge && <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileUpload}
             style={{ display: 'none' }}
             accept=".pdf,.docx,.md,.txt,.json,.yaml,.yml,.py,.ts,.tsx,.java,.go,.cs,.sql"
-          />
+            disabled={uploadingFile}
+          />}
 
-          <button
+          {canManageKnowledge && <button
             onClick={() => fileInputRef.current?.click()}
             className="btn btn-primary"
             style={{
@@ -189,25 +226,25 @@ export const KnowledgeVaultView: React.FC = () => {
               borderRadius: '8px',
             }}
           >
-            <span>Upload de Arquivo</span>
-          </button>
+            <span>{uploadingFile ? 'A indexar…' : 'Upload de Arquivo'}</span>
+          </button>}
 
-          <button
+          {canManageKnowledge && <button
             onClick={() => setShowFolderModal(true)}
             className="btn btn-secondary"
             style={{ fontSize: '0.82rem', padding: '7px 14px', borderRadius: '8px' }}
           >
-            <span>Indexar Pasta Local</span>
-          </button>
+            <span>Indexar Pasta do Servidor</span>
+          </button>}
 
-          <button
+          {canManageKnowledge && <button
             onClick={() => setShowTextModal(true)}
             className="btn btn-secondary"
             style={{ fontSize: '0.82rem', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '8px' }}
           >
             <Plus size={14} />
             <span>Adicionar Anotação</span>
-          </button>
+          </button>}
 
           <button
             onClick={loadDocuments}
@@ -239,11 +276,12 @@ export const KnowledgeVaultView: React.FC = () => {
         loading={loading}
         error={documentsError}
         onDelete={handleDelete}
+        canManage={canManageKnowledge}
         onSelectFileClick={() => fileInputRef.current?.click()}
       />
 
       {/* Modais */}
-      <FolderIndexModal
+      {canManageKnowledge && <FolderIndexModal
         isOpen={showFolderModal}
         onClose={() => setShowFolderModal(false)}
         folderPath={folderPath}
@@ -252,9 +290,9 @@ export const KnowledgeVaultView: React.FC = () => {
         setFolderCategory={setFolderCategory}
         onSubmit={handleFolderSubmit}
         indexing={folderIndexing}
-      />
+      />}
 
-      <TextSnippetModal
+      {canManageKnowledge && <TextSnippetModal
         isOpen={showTextModal}
         onClose={() => setShowTextModal(false)}
         textDocName={textDocName}
@@ -265,7 +303,7 @@ export const KnowledgeVaultView: React.FC = () => {
         setTextCategory={setTextCategory}
         onSubmit={handleTextSubmit}
         indexing={textIndexing}
-      />
+      />}
     </div>
   );
 };
