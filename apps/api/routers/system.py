@@ -8,6 +8,7 @@ from apps.api.auth import Principal, get_principal, require_permission, require_
 from apps.api.schemas import (
     UserProfilePayload,
     WebhookConfigPayload,
+    InferenceQualityFeedbackPayload,
 )
 from apps.api.deps import (
     model_manager,
@@ -94,11 +95,34 @@ async def get_inference_telemetry(
         "model_performance": telemetry_store.performance_by_model_for_owner(
             principal.subject_id
         ),
+        "model_quality": telemetry_store.quality_by_model_for_owner(
+            principal.subject_id
+        ),
         "model_selections": telemetry_store.list_model_selections_for_owner(
             principal.subject_id
         ),
     }
 
+
+
+
+@router.post("/api/v1/system/inference-feedback")
+async def submit_inference_feedback(
+    payload: InferenceQualityFeedbackPayload,
+    principal: Principal = Depends(require_permission("system:feedback")),
+):
+    """Registra nota humana apenas para inferência bem-sucedida da conta autenticada."""
+    saved = telemetry_store.record_quality_feedback(
+        owner_user_id=principal.subject_id,
+        inference_id=payload.inference_id,
+        rating=payload.rating,
+    )
+    if not saved:
+        raise HTTPException(
+            status_code=404,
+            detail="Inferência não encontrada nesta conta ou ainda não concluída com sucesso.",
+        )
+    return {"status": "recorded", "inference_id": payload.inference_id, "rating": payload.rating}
 
 @router.get("/api/v1/system/resources")
 async def system_resources(
