@@ -122,6 +122,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     # Segurança / operações críticas
     ({"POST"}, re.compile(r"^/api/v1/system/kill-switch$"), "security:kill"),
+    ({"POST"}, re.compile(r"^/api/v1/mobile/pair$"), "mobile:pair"),
     ({"GET", "POST", "DELETE"}, re.compile(r"^/api/v1/mobile/.*$"), "mobile:manage"),
     ({"GET"}, re.compile(r"^/api/v1/approvals$"), "approvals:read"),
     ({"POST"}, re.compile(r"^/api/v1/approvals/[^/]+/decide$"), "approvals:decide"),
