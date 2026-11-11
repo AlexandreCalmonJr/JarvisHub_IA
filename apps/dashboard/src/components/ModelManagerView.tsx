@@ -19,7 +19,8 @@ import { KeyVaultManager } from './models/KeyVaultManager';
 
 export const ModelManagerView: React.FC = () => {
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub'>('vault');
 
@@ -51,25 +52,36 @@ export const ModelManagerView: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [modelsRes, hybridRes, hfRes, recsRes] = await Promise.all([
-        fetchModels().catch(() => null),
-        fetchHybridConfig().catch(() => null),
-        fetchCuratedHuggingFaceModels().catch(() => []),
-        fetchAgentModelRecommendations().catch(() => ({})),
+      const results = await Promise.allSettled([
+        fetchModels(),
+        fetchHybridConfig(),
+        fetchCuratedHuggingFaceModels(),
+        fetchAgentModelRecommendations(),
       ]);
-      if (modelsRes) setData(modelsRes);
-      if (hfRes && Array.isArray(hfRes)) setHfCurated(hfRes);
-      if (recsRes) setAgentRecommendations(recsRes);
+      const failures: string[] = [];
+      const [modelsResult, hybridResult, curatedResult, recommendationsResult] = results;
 
-      if (hybridRes) {
+      if (modelsResult.status === 'fulfilled') setData(modelsResult.value);
+      else { setData(null); failures.push(modelsResult.reason instanceof Error ? modelsResult.reason.message : 'Falha ao consultar modelos.'); }
+
+      if (hybridResult.status === 'fulfilled') {
+        const hybridRes = hybridResult.value;
         setProvider(hybridRes.provider_name || 'gemini');
         setEnabled(Boolean(hybridRes.enabled));
         setDefaultModel(hybridRes.default_model || 'gemini-1.5-flash');
         setBaseUrl(hybridRes.base_url || '');
         setMaxBudget(hybridRes.max_budget_usd || 5.0);
-      }
+      } else failures.push(hybridResult.reason instanceof Error ? hybridResult.reason.message : 'Falha ao consultar gateway híbrido.');
+
+      if (curatedResult.status === 'fulfilled') setHfCurated(curatedResult.value);
+      else failures.push(curatedResult.reason instanceof Error ? curatedResult.reason.message : 'Falha ao consultar Hugging Face.');
+
+      if (recommendationsResult.status === 'fulfilled') setAgentRecommendations(recommendationsResult.value);
+      else failures.push(recommendationsResult.reason instanceof Error ? recommendationsResult.reason.message : 'Falha ao consultar recomendações.');
+
+      setLoadError(failures.length ? failures.join(' ') : null);
     } catch (e) {
-      console.error('Falha ao carregar modelos e configurações:', e);
+      setLoadError(e instanceof Error ? e.message : 'Falha ao carregar modelos e configurações.');
     } finally {
       setLoading(false);
     }
@@ -141,7 +153,7 @@ export const ModelManagerView: React.FC = () => {
       await loadData();
       setTimeout(() => setSaveMessage(null), 4000);
     } catch (err: any) {
-      alert(`Erro ao salvar: ${err.message}`);
+      notify(`Erro ao salvar: ${err.message}`, 'error');
     } finally {
       setSaveLoading(false);
     }
@@ -255,6 +267,12 @@ export const ModelManagerView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1280px', margin: '0 auto' }}>
+      {loadError && (
+        <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+          Algumas informações não puderam ser carregadas: {loadError}
+        </div>
+      )}
+
       {/* Barra de Navegação por Abas Limpas */}
       <div
         style={{
