@@ -56,7 +56,7 @@ export async function deleteWorkspaceProject(projectId: string): Promise<any> {
 }
 
 export async function openWorkspaceFolder(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/open-folder`, {
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/open-folder`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error('Falha ao abrir pasta local');
@@ -83,7 +83,7 @@ export async function importExternalFolder(folderPath: string, name?: string): P
 }
 
 export async function fetchProjectFile(projectId: string, path: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/file?path=${encodeURIComponent(path)}`);
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}`);
   if (!res.ok) throw new Error('Não foi possível ler o arquivo.');
   const data = await res.json();
   return data.content || '';
@@ -111,7 +111,7 @@ export async function writeProjectFile(
 }
 
 export async function fetchProjectMemory(projectId: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/memory`);
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/memory`);
   return handleApiResponse<any[]>(res, 'Falha ao carregar a memória do projeto.');
 }
 
@@ -135,7 +135,7 @@ export async function openWorkspaceRoot(): Promise<any> {
 }
 
 export async function openProjectInCode(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/open-code`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/open-code`, { method: 'POST' });
   if (!res.ok) throw new Error('Falha ao abrir projeto no VS Code');
   return res.json();
 }
@@ -151,7 +151,7 @@ export async function rollbackWorkspaceProject(projectId: string): Promise<any> 
 }
 
 export async function fetchGitHistory(projectId: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/workspace/projects/${projectId}/git-history`);
+  const res = await fetch(`${API_BASE}/workspace/projects/${encodeURIComponent(projectId)}/git-history`);
   return handleApiResponse<any[]>(res, 'Falha ao carregar o histórico Git do projeto.');
 }
 
