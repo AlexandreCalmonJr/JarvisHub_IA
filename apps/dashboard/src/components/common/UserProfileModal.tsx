@@ -5,8 +5,6 @@ import {
   Save,
   Trash2,
   Download,
-  Eye,
-  EyeOff,
   Database,
 } from 'lucide-react';
 import { fetchUserProfileApi, saveUserProfileApi, createSystemBackup } from '../../api';
@@ -79,9 +77,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'profile' | 'instructions' | 'keys' | 'engine' | 'data'>('profile');
   const [profile, setProfile] = useState<UserProfileData>(getUserProfile);
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [showHfKey, setShowHfKey] = useState(false);
-  const [showGroqKey, setShowGroqKey] = useState(false);
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
     return (localStorage.getItem(getAccountStorageKey('jarvis_experience_mode')) as any) || 'technical';
