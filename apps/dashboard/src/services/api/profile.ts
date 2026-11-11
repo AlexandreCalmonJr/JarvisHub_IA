@@ -9,9 +9,23 @@ export interface AccountProfilePayload {
   customInstructions: string;
 }
 
-export async function fetchUserProfileApi(): Promise<Partial<AccountProfilePayload> | null> {
+export async function fetchUserProfileApi(): Promise<{
+  displayName?: string; avatarIcon?: string; roleTitle?: string;
+  seniorityLevel?: string; responseStyle?: string;
+  userBackground?: string; responseGuidelines?: string;
+} | null> {
   const response = await fetch(`${API_BASE}/user/profile`, { credentials: 'include' });
-  return handleApiResponse<Partial<AccountProfilePayload>>(response, 'Falha ao carregar perfil da conta.');
+  const stored = await handleApiResponse<Partial<AccountProfilePayload>>(response, 'Falha ao carregar perfil da conta.');
+  const instructionParts = (stored.customInstructions || '').split(/\\n\\s*\\n/);
+  return {
+    displayName: stored.displayName,
+    avatarIcon: stored.avatarIcon,
+    roleTitle: stored.developerRole,
+    seniorityLevel: stored.seniorityLevel,
+    responseStyle: stored.responseStyle,
+    userBackground: instructionParts[0] || '',
+    responseGuidelines: instructionParts.slice(1).join('\\n\\n'),
+  };
 }
 
 export async function saveUserProfileApi(profile: {
