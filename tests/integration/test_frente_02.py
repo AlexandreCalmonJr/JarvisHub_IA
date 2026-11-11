@@ -86,7 +86,7 @@ async def test_frente_02_git_version_control_and_rollback():
             f"/api/v1/workspace/projects/{proj_id}/files/write",
             json={
                 "path": "index.js",
-                "content": "console.log('Versao 2 - alterada');\\n",
+                "content": "console.log('Versao 2 - alterada');\n",
                 "reason": "Segunda alteracao",
                 "approval_id": mod_data["approval_id"],
             },
