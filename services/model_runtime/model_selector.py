@@ -113,9 +113,6 @@ class ModelSelector:
             stats = performance.get((metadata.name, provider, agent_role))
             if stats is None:
                 stats = performance.get((metadata.name, provider, None))
-            quality_stats = quality.get((metadata.name, provider, agent_role))
-            if quality_stats is None:
-                quality_stats = quality.get((metadata.name, provider, None))
             if estimated_cost <= 0 and stats and int(stats.get("total_inferences", 0)) > 0:
                 estimated_cost = float(stats.get("average_cost_usd") or 0.0)
             candidate = ModelCandidate(
