@@ -300,6 +300,7 @@ class AuthService:
         self.auth_dir.mkdir(parents=True, exist_ok=True)
         self.admin_store = AdminCredentialStore(self.auth_dir / "admin.json")
         self.user_store = UserCredentialStore(self.auth_dir / "users.sqlite3")
+        self._ensure_initial_admin_user()
         self.admin_token_path = self.auth_dir / "admin_token.txt"
         self.bootstrap_token_path = self.auth_dir / "bootstrap_token.txt"
         self.bootstrap_state_path = self.auth_dir / "bootstrap_state.json"
@@ -321,6 +322,54 @@ class AuthService:
     # ------------------------------------------------------------------
     # Bootstrap / admin
     # ------------------------------------------------------------------
+    def _ensure_initial_admin_user(self) -> None:
+        """Cria a conta humana admin automaticamente na primeira inicialização.
+
+        Em desenvolvimento local, a senha inicial padrão é 'admin 123'.
+        Fora de desenvolvimento, a senha deve ser fornecida por variável de
+        ambiente para impedir a publicação de uma credencial conhecida.
+        """
+        active_admins = [
+            user for user in self.user_store.list_users()
+            if user.get("role") == "admin" and user.get("is_active")
+        ]
+        if active_admins:
+            return
+
+        environment = os.environ.get(
+            "JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")
+        ).strip().lower()
+        password = os.environ.get("JARVIS_BOOTSTRAP_ADMIN_PASSWORD")
+        if not password and environment not in {"prod", "production"}:
+            password = "admin 123"
+        if not password:
+            raise RuntimeError(
+                "Ainda não existe administrador. Defina JARVIS_BOOTSTRAP_ADMIN_PASSWORD "
+                "para criar a conta admin na primeira inicialização."
+            )
+        if len(password) < 8:
+            raise RuntimeError("A senha inicial do administrador deve ter pelo menos 8 caracteres.")
+
+        try:
+            self.user_store.create_user(
+                username=os.environ.get("JARVIS_BOOTSTRAP_ADMIN_USERNAME", "admin").strip() or "admin",
+                display_name="Administrador",
+                password=password,
+                role="admin",
+            )
+        except ValueError as exc:
+            # Se outro worker criou o administrador simultaneamente, a condição
+            # já está satisfeita. Outros conflitos devem interromper o arranque.
+            active_admins = [
+                user for user in self.user_store.list_users()
+                if user.get("role") == "admin" and user.get("is_active")
+            ]
+            if not active_admins:
+                raise RuntimeError(
+                    "Não foi possível criar a conta admin automaticamente: " + str(exc)
+                ) from exc
+        logger.info("Conta administrativa inicial verificada/criada automaticamente.")
+
     def _ensure_admin_credential(self) -> None:
         env_token = os.environ.get("JARVIS_ADMIN_TOKEN", "").strip()
         if env_token:

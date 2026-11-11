@@ -19,12 +19,9 @@ from apps.api.auth import auth_service
 
 def _cmd_status(_: argparse.Namespace) -> int:
     print(f"Credencial admin configurada: {auth_service.admin_store.has_credential}")
+    print(f"Contas humanas: {len(auth_service.user_store.list_users())}")
     print(f"Arquivo do token admin: {auth_service.admin_token_path}")
     print(f"Arquivo do bootstrap token: {auth_service.bootstrap_token_path}")
-    print(
-        "Rotação: 'python -m apps.api.auth_cli rotate-admin' "
-        "(invalida imediatamente o token anterior)."
-    )
     return 0
 
 
@@ -37,7 +34,6 @@ def _cmd_rotate_admin(_: argparse.Namespace) -> int:
 
 def _cmd_bootstrap(args: argparse.Namespace) -> int:
     token = auth_service.issue_bootstrap_token(ttl_seconds=args.ttl, persist=True)
-    # Confirma apenas que o token foi emitido; o valor existe somente no arquivo.
     assert token
     print(f"Bootstrap token de uso único gravado em: {auth_service.bootstrap_token_path}")
     print(f"Validade: {args.ttl or 600}s. O arquivo será sobrescrito na próxima emissão.")
