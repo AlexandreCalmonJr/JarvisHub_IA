@@ -39,6 +39,7 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
   const pendingList = approvals.filter(a => a.status === 'pending');
 
   const handleDecision = async (id: string, action: 'approve' | 'reject') => {
+    if (!canDecide || actionLoading) return;
     setErrorMessage(null);
     setActionLoading(id);
     try {
@@ -170,7 +171,7 @@ export const ApprovalCenter: React.FC<ApprovalCenterProps> = ({ approvals, onRef
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                   onClick={() => handleDecision(appr.id, 'reject')}
-                  disabled={actionLoading === appr.id}
+                  disabled={!!actionLoading}
                   className="btn btn-secondary"
                   style={{
                     padding: '8px 16px',
