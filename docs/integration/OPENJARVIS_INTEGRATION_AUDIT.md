@@ -333,3 +333,41 @@ O repositório consultado é `open-jarvis/OpenJarvis`, branch `main`. A document
 Concluir a Fase 1 com a leitura dos módulos pendentes e, em seguida, executar a Fase 2: auditoria do Hub por backend, persistência, segurança, APIs, frontend e páginas/rotas. Só depois consolidar a matriz definitiva e desenhar os contratos de integração.
 
 **Estado desta entrega:** branch criada e relatório inicial versionado. Nenhuma integração funcional foi aplicada e nenhum teste de runtime foi declarado como executado.
+
+
+---
+
+## 9. Primeira integração funcional — telemetria persistente de inferência
+
+**Estado:** implementada na branch `integration/openjarvis-audit`; ainda pendente de execução local dos testes e validação funcional.
+
+### 9.1 O que foi acrescentado
+
+- Novo `SqliteTelemetryStore` em `services/observability/telemetry_store.py`.
+- Banco separado `data/telemetry.db`, evitando migração destrutiva no banco principal.
+- Registro de sucesso/falha, duração, provider, modelo, tokens, task_id e agent_role.
+- Metadado `owner_user_id` no contrato `InferenceRequest`.
+- O grafo LangGraph propaga o owner autenticado para as nove chamadas de inferência identificadas.
+- `ModelManager.generate()` grava telemetria de sucesso e falha. Falhas de gravação da telemetria são registradas no log, mas não interrompem a inferência.
+- Endpoint autenticado `GET /api/v1/system/inference-telemetry`, que deriva o owner de `Principal.subject_id`; o cliente não pode escolher a conta consultada.
+- Testes unitários para isolamento por owner, exigência de identidade na consulta e ausência de campos de prompt/resposta/credencial no schema.
+
+### 9.2 Proteções de privacidade
+
+- Não são armazenados prompts, respostas, conteúdo de documentos ou chaves de API.
+- Todas as consultas do store exigem owner e usam filtro SQL `WHERE owner_user_id = ?`.
+- O endpoint usa exclusivamente a identidade autenticada do servidor.
+- Registros sem owner, provenientes de chamadas internas não associadas a uma conta, não aparecem nas consultas privadas de qualquer utilizador.
+- Não há endpoint administrativo para consultar globalmente a telemetria de todas as contas.
+
+### 9.3 Limites conhecidos desta entrega
+
+- O endpoint está disponível no backend; a interface visual ainda não foi ligada a ele.
+- O streaming ainda não é instrumentado por este primeiro incremento.
+- Chamadas fora do grafo que não preencham `owner_user_id` ficam sem associação a uma conta.
+- Custo monetário e energia não são estimados. Só são expostos tokens e duração efetivamente fornecidos/medidos.
+- A atribuição de agent_role está sendo transportada pelo contrato, mas deve ser conferida em todos os caminhos de inferência.
+
+### 9.4 Validação
+
+Foram adicionados testes em `tests/test_telemetry_store.py`. **Não foram executados neste ambiente**; a homologação local continua pendente. Nenhum resultado de teste ou build é declarado como aprovado.
