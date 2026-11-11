@@ -97,6 +97,29 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     } finally { setAccessBusy(false); }
   };
 
+
+  const resetUserPassword = async (user: UserRecord) => {
+    const nextPassword = window.prompt(`Nova palavra-passe para ${user.username} (mínimo 12 caracteres):`);
+    if (nextPassword === null) return;
+    if (nextPassword.length < 12) {
+      setAccessMessage('A palavra-passe precisa de pelo menos 12 caracteres.');
+      return;
+    }
+    setAccessBusy(true); setAccessMessage('');
+    try {
+      const response = await fetch(`/api/v1/auth/users/${encodeURIComponent(user.username)}/password`, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: nextPassword }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível redefinir a palavra-passe.');
+      setAccessMessage(`Palavra-passe de @${user.username} atualizada. As sessões anteriores foram encerradas.`);
+    } catch (cause) {
+      setAccessMessage(cause instanceof Error ? cause.message : 'Erro ao redefinir palavra-passe.');
+    } finally { setAccessBusy(false); }
+  };
+
   const toggleUser = async (user: UserRecord) => {
     setAccessBusy(true); setAccessMessage('');
     try {
@@ -188,7 +211,10 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
             <div style={styles.userList}>
               {users.map((user) => <div key={user.username} style={styles.userRow}>
                 <div><b>{user.display_name}</b><span style={styles.userMeta}>@{user.username} · {user.role}</span></div>
-                <button type="button" disabled={accessBusy} onClick={() => void toggleUser(user)} style={user.is_active ? styles.disableButton : styles.enableButton}>{user.is_active ? 'Desativar' : 'Ativar'}</button>
+                <div style={styles.userActions}>
+                  <button type="button" disabled={accessBusy} onClick={() => void resetUserPassword(user)} style={styles.resetButton}>Redefinir senha</button>
+                  <button type="button" disabled={accessBusy} onClick={() => void toggleUser(user)} style={user.is_active ? styles.disableButton : styles.enableButton}>{user.is_active ? 'Desativar' : 'Ativar'}</button>
+                </div>
               </div>)}
               {users.length === 0 && <p style={styles.mutedSmall}>Ainda não existem contas locais.</p>}
             </div>
@@ -233,6 +259,8 @@ const styles: Record<string, React.CSSProperties> = {
   userList: { display: 'grid', gap: 8 },
   userRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 11, borderRadius: 9, background: '#172033', border: '1px solid #293548' },
   userMeta: { display: 'block', marginTop: 3, color: '#94a3b8', fontSize: 10 },
+  userActions: { display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
+  resetButton: { border: '1px solid #334155', background: '#1e293b', color: '#cbd5e1', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontSize: 11 },
   disableButton: { border: '1px solid #7f1d1d', background: 'rgba(127,29,29,.2)', color: '#fecaca', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontSize: 11 },
   enableButton: { border: '1px solid #166534', background: 'rgba(22,101,52,.2)', color: '#bbf7d0', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontSize: 11 },
 };
