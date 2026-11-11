@@ -34,7 +34,7 @@ MODE_LABELS = {
     },
     AgentMode.AUTO: {
         "label": "Automático",
-        "description": "Executa dentro do sandbox sem pausas; bloqueios de segurança continuam ativos.",
+        "description": "Executa tarefas de leitura sem pausas; toda escrita ou comando exige aprovação humana.",
     },
 }
 
