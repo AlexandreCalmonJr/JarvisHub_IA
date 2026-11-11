@@ -37,22 +37,6 @@ export async function clearServerLogs(): Promise<void> {
   }
 }
 
-export async function fetchUserProfileApi(): Promise<any> {
-  const res = await fetch(`${API_BASE}/user/profile`);
-  if (!res.ok) return {};
-  return res.json();
-}
-
-export async function saveUserProfileApi(profile: any): Promise<any> {
-  const res = await fetch(`${API_BASE}/user/profile`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(profile),
-  });
-  if (!res.ok) throw new Error('Falha ao salvar preferências');
-  return res.json();
-}
-
 export async function createSystemBackup(): Promise<any> {
   const res = await fetch(`${API_BASE}/system/backup`, { method: 'POST' });
   if (!res.ok) throw new Error('Falha ao gerar backup');
