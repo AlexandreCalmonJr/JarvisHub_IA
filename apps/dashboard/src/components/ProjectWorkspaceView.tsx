@@ -242,6 +242,10 @@ export const ProjectWorkspaceView: React.FC<ProjectWorkspaceViewProps> = ({ onSe
           <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px' }} />
           Escaneando workspace local do computador...
         </div>
+      ) : loadError && projects.length === 0 ? (
+        <div role="status" className="glass-panel" style={{ textAlign: 'center', padding: '36px 24px', color: 'var(--text-secondary)' }}>
+          Os projetos não puderam ser carregados. Verifique a ligação ao servidor e tente atualizar.
+        </div>
       ) : filteredProjects.length === 0 ? (
         <div
           className="glass-panel"
