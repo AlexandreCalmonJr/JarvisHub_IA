@@ -19,6 +19,8 @@ export const DesignStudioView: React.FC = () => {
   const [primaryHex, setPrimaryHex] = useState('#6366f1');
   const [paletteName, setPaletteName] = useState('jarvis');
   const [paletteData, setPaletteData] = useState<any | null>(null);
+  const [paletteLoading, setPaletteLoading] = useState(false);
+  const [paletteError, setPaletteError] = useState<string | null>(null);
   const [copiedCss, setCopiedCss] = useState(false);
 
   // Acessibilidade WCAG
@@ -27,42 +29,61 @@ export const DesignStudioView: React.FC = () => {
   );
   const [wcagResult, setWcagResult] = useState<any | null>(null);
   const [wcagLoading, setWcagLoading] = useState(false);
+  const [wcagError, setWcagError] = useState<string | null>(null);
 
   // Componentes
   const [selectedCompType, setSelectedCompType] = useState('navbar');
   const [componentCode, setComponentCode] = useState<string | null>(null);
+  const [componentLoading, setComponentLoading] = useState(false);
+  const [componentError, setComponentError] = useState<string | null>(null);
   const [copiedComp, setCopiedComp] = useState(false);
 
   const loadPalette = async (hex: string, name: string) => {
+    setPaletteLoading(true);
+    setPaletteError(null);
+    setPaletteData(null);
     try {
       const data = await extractColorPalette(hex, name);
       setPaletteData(data);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setPaletteError(e?.message || 'Falha ao gerar paleta de cores.');
+    } finally {
+      setPaletteLoading(false);
     }
   };
 
   const loadComponent = async (compType: string) => {
+    setComponentLoading(true);
+    setComponentError(null);
+    setComponentCode(null);
     try {
       const data = await fetchComponentBoilerplate(compType);
       setComponentCode(data.code);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setComponentError(e?.message || 'Falha ao carregar componente.');
+    } finally {
+      setComponentLoading(false);
     }
   };
 
   useEffect(() => {
-    loadPalette(primaryHex, paletteName);
+    const timer = window.setTimeout(() => loadPalette(primaryHex, paletteName), 300);
+    return () => window.clearTimeout(timer);
+  }, [primaryHex, paletteName]);
+
+  useEffect(() => {
     loadComponent(selectedCompType);
-  }, []);
+  }, [selectedCompType]);
 
   const handleAuditWcag = async () => {
     setWcagLoading(true);
+    setWcagError(null);
+    setWcagResult(null);
     try {
       const res = await auditWcagAccessibility(markupInput);
       setWcagResult(res);
     } catch (err: any) {
-      alert(`Erro: ${err.message}`);
+      setWcagError(err?.message || 'Falha ao auditar acessibilidade.');
     } finally {
       setWcagLoading(false);
     }
@@ -139,7 +160,6 @@ export const DesignStudioView: React.FC = () => {
                 value={primaryHex}
                 onChange={(e) => {
                   setPrimaryHex(e.target.value);
-                  loadPalette(e.target.value, paletteName);
                 }}
                 style={{ width: '42px', height: '42px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
               />
@@ -161,12 +181,13 @@ export const DesignStudioView: React.FC = () => {
                 value={paletteName}
                 onChange={(e) => {
                   setPaletteName(e.target.value);
-                  loadPalette(primaryHex, e.target.value);
                 }}
                 style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', width: '120px' }}
               />
             </div>
 
+            {paletteLoading && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Gerando paleta...</span>}
+            {paletteError && <div role="alert" style={{ color: '#f87171', fontSize: '0.82rem' }}>{paletteError}</div>}
             {paletteData && (
               <button
                 onClick={() => {
@@ -276,6 +297,8 @@ export const DesignStudioView: React.FC = () => {
             />
           </div>
 
+          {wcagError && <div role="alert" style={{ color: '#f87171', fontSize: '0.82rem' }}>{wcagError}</div>}
+
           {/* Resultado WCAG */}
           {wcagResult && (
             <div
@@ -355,7 +378,7 @@ export const DesignStudioView: React.FC = () => {
                 key={comp.id}
                 onClick={() => {
                   setSelectedCompType(comp.id);
-                  loadComponent(comp.id);
+
                 }}
                 className={`btn ${selectedCompType === comp.id ? 'btn-primary' : 'btn-ghost'}`}
                 style={{ fontSize: '0.82rem', borderRadius: '8px' }}
@@ -363,7 +386,9 @@ export const DesignStudioView: React.FC = () => {
                 {comp.label}
               </button>
             ))}
-            {componentCode && (
+            {componentLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Carregando componente...</div>}
+          {componentError && <div role="alert" style={{ color: '#f87171', fontSize: '0.82rem' }}>{componentError}</div>}
+          {componentCode && (
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(componentCode);
