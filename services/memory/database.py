@@ -234,7 +234,7 @@ class DatabaseManager:
 
     @staticmethod
     def _apply_migrations(conn: sqlite3.Connection) -> None:
-        """Aplica migrações versionadas sem atribuir dados antigos a uma conta."""
+        """Aplica migrações sequenciais, mantendo registos legados sem proprietário."""
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -244,53 +244,114 @@ class DatabaseManager:
             )
             """
         )
-        applied = conn.execute(
+
+        version_one = conn.execute(
             "SELECT 1 FROM schema_migrations WHERE version = 1"
         ).fetchone()
-        if applied:
-            return
-
-        # Colunas nullable são intencionais: registos legados ficam sem dono
-        # até existir uma rotina de associação explícita e confirmada.
-        private_tables = (
-            "projects",
-            "tasks",
-            "chat_messages",
-            "approvals",
-            "project_memory",
-            "agent_memories",
-            "user_skills",
-            "knowledge_vault",
-        )
-        conn.execute("SAVEPOINT account_ownership_migration")
-        try:
-            for table in private_tables:
-                columns = {
-                    row["name"]
-                    for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
-                }
-                if "owner_user_id" not in columns:
+        if not version_one:
+            private_tables = (
+                "projects", "tasks", "chat_messages", "approvals",
+                "project_memory", "agent_memories", "user_skills", "knowledge_vault",
+            )
+            conn.execute("SAVEPOINT account_ownership_migration")
+            try:
+                for table in private_tables:
+                    columns = {
+                        row["name"]
+                        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+                    }
+                    if "owner_user_id" not in columns:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN owner_user_id TEXT")
                     conn.execute(
-                        f"ALTER TABLE {table} ADD COLUMN owner_user_id TEXT"
+                        f"CREATE INDEX IF NOT EXISTS idx_{table}_owner_user "
+                        f"ON {table}(owner_user_id)"
                     )
                 conn.execute(
-                    f"CREATE INDEX IF NOT EXISTS idx_{table}_owner_user "
-                    f"ON {table}(owner_user_id)"
+                    """
+                    INSERT INTO schema_migrations (version, name, applied_at)
+                    VALUES (1, 'account_ownership_columns', ?)
+                    """,
+                    (datetime.now(UTC).isoformat(),),
                 )
+                conn.execute("RELEASE SAVEPOINT account_ownership_migration")
+            except Exception:
+                conn.execute("ROLLBACK TO SAVEPOINT account_ownership_migration")
+                conn.execute("RELEASE SAVEPOINT account_ownership_migration")
+                raise
 
-            conn.execute(
-                """
-                INSERT INTO schema_migrations (version, name, applied_at)
-                VALUES (1, 'account_ownership_columns', ?)
-                """,
-                (datetime.now(UTC).isoformat(),),
-            )
-            conn.execute("RELEASE SAVEPOINT account_ownership_migration")
-        except Exception:
-            conn.execute("ROLLBACK TO SAVEPOINT account_ownership_migration")
-            conn.execute("RELEASE SAVEPOINT account_ownership_migration")
-            raise
-
+        version_two = conn.execute(
+            "SELECT 1 FROM schema_migrations WHERE version = 2"
+        ).fetchone()
+        if not version_two:
+            # A antiga UNIQUE(agent_role, category, key) misturava todas as contas.
+            # Reconstruímos a tabela para permitir a mesma chave em contas distintas,
+            # mantendo uma regra de unicidade separada para dados legados sem dono.
+            conn.execute("SAVEPOINT agent_memory_owner_migration")
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE agent_memories_new (
+                        id TEXT PRIMARY KEY,
+                        agent_role TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        key TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        context TEXT,
+                        importance INTEGER NOT NULL DEFAULT 1,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        owner_user_id TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO agent_memories_new (
+                        id, agent_role, category, key, content, context,
+                        importance, created_at, updated_at, owner_user_id
+                    )
+                    SELECT id, agent_role, category, key, content, context,
+                           importance, created_at, updated_at, owner_user_id
+                    FROM agent_memories
+                    """
+                )
+                conn.execute("DROP TABLE agent_memories")
+                conn.execute(
+                    "ALTER TABLE agent_memories_new RENAME TO agent_memories"
+                )
+                conn.execute(
+                    "CREATE INDEX idx_agent_memories_role ON agent_memories(agent_role)"
+                )
+                conn.execute(
+                    "CREATE INDEX idx_agent_memories_owner_user "
+                    "ON agent_memories(owner_user_id)"
+                )
+                conn.execute(
+                    """
+                    CREATE UNIQUE INDEX uq_agent_memories_legacy
+                    ON agent_memories(agent_role, category, key)
+                    WHERE owner_user_id IS NULL
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE UNIQUE INDEX uq_agent_memories_owner
+                    ON agent_memories(owner_user_id, agent_role, category, key)
+                    WHERE owner_user_id IS NOT NULL
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO schema_migrations (version, name, applied_at)
+                    VALUES (2, 'agent_memory_owner_scoped_uniqueness', ?)
+                    """,
+                    (datetime.now(UTC).isoformat(),),
+                )
+                conn.execute("RELEASE SAVEPOINT agent_memory_owner_migration")
+            except Exception:
+                conn.execute("ROLLBACK TO SAVEPOINT agent_memory_owner_migration")
+                conn.execute("RELEASE SAVEPOINT agent_memory_owner_migration")
+                raise
 
     def register_project(
         self, project_id: str, name: str, root_path: str, mode: str = "read_only",
