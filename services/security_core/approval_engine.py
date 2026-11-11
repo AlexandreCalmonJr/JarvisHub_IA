@@ -64,6 +64,7 @@ class ApprovalEngine:
                 req = ApprovalRequest(
                     id=req_id,
                     task_id=row.get("task_id", ""),
+                    owner_user_id=row.get("owner_user_id"),
                     agent_role=row.get("agent_role", "unknown"),
                     operation=row.get("operation", "unknown"),
                     impact_summary=row.get("impact_summary", ""),
@@ -103,6 +104,7 @@ class ApprovalEngine:
                 decided_at=request.decided_at,
                 decided_by=request.decided_by,
                 decision_reason=request.decision_reason,
+                owner_user_id=request.owner_user_id,
             )
         except Exception:
             pass
@@ -116,11 +118,13 @@ class ApprovalEngine:
         affected_resources: list[str],
         proposed_diff: str | None = None,
         reversible: bool = True,
+        owner_user_id: str | None = None,
     ) -> ApprovalRequest:
         req_id = f"appr-{uuid.uuid4().hex[:10]}"
         request = ApprovalRequest(
             id=req_id,
             task_id=task_id,
+            owner_user_id=owner_user_id,
             agent_role=agent_role,
             operation=operation,
             impact_summary=impact_summary,
@@ -147,11 +151,15 @@ class ApprovalEngine:
             )
         return request
 
-    def get_request(self, request_id: str) -> ApprovalRequest | None:
+    def get_request(
+        self, request_id: str, owner_user_id: str | None = None
+    ) -> ApprovalRequest | None:
         req = self._requests.get(request_id)
+        if req and owner_user_id is not None and req.owner_user_id != owner_user_id:
+            return None
         if not req and self._db_manager:
             try:
-                row = self._db_manager.get_approval(request_id)
+                row = self._db_manager.get_approval(request_id, owner_user_id=owner_user_id)
                 if row:
                     req_at = (
                         datetime.fromisoformat(row["requested_at"])
@@ -172,6 +180,7 @@ class ApprovalEngine:
                     req = ApprovalRequest(
                         id=row["id"],
                         task_id=row.get("task_id", ""),
+                        owner_user_id=row.get("owner_user_id"),
                         agent_role=row.get("agent_role", "unknown"),
                         operation=row.get("operation", "unknown"),
                         impact_summary=row.get("impact_summary", ""),
@@ -197,6 +206,7 @@ class ApprovalEngine:
         task_id: str,
         resource: str,
         proposed_diff: str | None = None,
+        owner_user_id: str | None = None,
     ) -> ApprovalRequest:
         """Valida o escopo e consome uma aprovação exatamente uma vez.
 
@@ -204,7 +214,7 @@ class ApprovalEngine:
         o lock local também evita corridas dentro da mesma instância.
         """
         with self._consume_lock:
-            request = self.get_request(request_id)
+            request = self.get_request(request_id, owner_user_id=owner_user_id)
             if (
                 not request
                 or request.status != ApprovalStatus.APPROVED
@@ -217,7 +227,7 @@ class ApprovalEngine:
                     "Aprovação ausente, já utilizada ou não correspondente à operação e ao recurso."
                 )
 
-            if self._db_manager and not self._db_manager.consume_approved_approval(request_id):
+            if self._db_manager and not self._db_manager.consume_approved_approval(request_id, owner_user_id=owner_user_id):
                 raise ValueError("A aprovação já foi utilizada ou deixou de estar válida.")
 
             request.status = ApprovalStatus.CONSUMED
@@ -238,16 +248,23 @@ class ApprovalEngine:
                 )
             return request
 
-    def list_pending_requests(self) -> list[ApprovalRequest]:
-        return [r for r in self._requests.values() if r.status == ApprovalStatus.PENDING]
+    def list_pending_requests(
+        self, owner_user_id: str | None = None
+    ) -> list[ApprovalRequest]:
+        return [
+            request for request in self._requests.values()
+            if request.status == ApprovalStatus.PENDING
+            and (owner_user_id is None or request.owner_user_id == owner_user_id)
+        ]
 
     def approve_request(
         self,
         request_id: str,
         decided_by: str,
         decision_reason: str | None = None,
+        owner_user_id: str | None = None,
     ) -> ApprovalRequest:
-        request = self.get_request(request_id)
+        request = self.get_request(request_id, owner_user_id=owner_user_id)
         if not request:
             raise ValueError(f"Pedido de aprovação '{request_id}' não encontrado.")
 
@@ -297,8 +314,9 @@ class ApprovalEngine:
         request_id: str,
         decided_by: str,
         reason: str,
+        owner_user_id: str | None = None,
     ) -> ApprovalRequest:
-        request = self.get_request(request_id)
+        request = self.get_request(request_id, owner_user_id=owner_user_id)
         if not request:
             raise ValueError(f"Pedido de aprovação '{request_id}' não encontrado.")
 
