@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from apps.api.auth import Principal, get_principal
-from apps.api.deps import coding_broker, coding_runtime, coding_tools, security_core
+from apps.api.deps import coding_broker, coding_runtime, coding_tools, db_manager, security_core
 from apps.api.schemas import CodingApprovalDecision, CodingRunRequest
 from services.coding_agent import AgentMode, AgentRunConfig
 from services.security_core import UnauthorizedApprovalError
@@ -124,6 +124,10 @@ async def run_coding_agent_stream(
         )
 
     owner_user_id = _private_owner(principal)
+    if not db_manager.get_project(
+        payload.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     session_id = payload.session_id or f"coding-{uuid.uuid4().hex[:10]}"
     lock_key = f"{owner_user_id}:{session_id}"
     lock = _session_locks.setdefault(lock_key, asyncio.Lock())
