@@ -479,7 +479,7 @@ Os testes **não foram executados** nesta etapa. A consulta ao GitHub não retor
 
 ### 12.3 Aprendizagem operacional e limites
 
-- O seletor utiliza histórico privado por owner de taxa de sucesso e latência, e agora considera também o custo estimado da solicitação.
+- O seletor utiliza histórico privado por owner de taxa de sucesso, latência e custo médio real. Quando não há tarifa configurada para um provedor, usa o custo médio observado da própria conta; sem histórico, não inventa preço.
 - A telemetria agrega custos reais confirmados por modelo e owner, permitindo evolução posterior da política.
 - Esta etapa **não implementa aprendizagem por qualidade semântica**: não há ainda avaliação explícita do usuário, score de qualidade validado nem treinamento/ajuste automático de pesos.
 - Não há otimização de energia, custo de infraestrutura local ou preço por modelo individual quando o provedor não fornece uma tarifa específica.
