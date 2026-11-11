@@ -218,8 +218,9 @@ const DashboardApp: React.FC = () => {
     <div
       style={{
         display: 'flex',
-        height: '100vh',
-        width: '100vw',
+        height: '100dvh',
+        width: '100%',
+        minWidth: 0,
         overflow: 'hidden',
         backgroundColor: 'var(--bg-primary)',
         fontFamily: 'var(--font-sans)',
@@ -252,9 +253,11 @@ const DashboardApp: React.FC = () => {
       <div
         style={{
           flex: 1,
+          minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
-          height: '100vh',
+          height: '100dvh',
+          minWidth: 0,
           overflow: 'hidden',
           backgroundColor: 'var(--bg-primary)',
         }}
@@ -569,7 +572,8 @@ const DashboardApp: React.FC = () => {
           style={{
             flex: 1,
             overflowY: activeTab === 'chat' || activeTab === 'coding' ? 'hidden' : 'auto',
-            padding: activeTab === 'chat' ? '0' : activeTab === 'coding' ? '18px 24px' : '28px 36px',
+            minWidth: 0,
+            padding: activeTab === 'chat' ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
             backgroundColor: 'var(--bg-primary)',
           }}
         >
