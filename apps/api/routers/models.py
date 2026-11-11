@@ -11,6 +11,7 @@ from apps.api.schemas import (
 )
 from apps.api.deps import (
     hybrid_router,
+    key_vault,
     model_manager,
     security_core,
     build_online_adapter,
@@ -118,7 +119,7 @@ async def list_models_endpoint():
             "enabled": cfg.enabled,
             "provider": cfg.provider_name,
             "model": cfg.default_model,
-            "has_api_key": bool(cfg.api_key),
+            "has_api_key": bool(cfg.key_id and key_vault.get_key(cfg.key_id)),
             "max_budget_usd": cfg.max_budget_usd,
             "current_spend_usd": cfg.current_spend_usd,
             "fallback_route": "ollama_local",
@@ -139,7 +140,7 @@ async def get_hybrid_config_endpoint():
         "provider_name": cfg.provider_name,
         "enabled": cfg.enabled,
         "has_api_key": bool(cfg.api_key),
-        "masked_api_key": cfg.masked_api_key(),
+        "masked_api_key": (lambda p: (f"{p.api_key[:4]}...{p.api_key[-4:]}" if p and len(p.api_key) > 8 else ("***" if p else None)))(key_vault.get_key(cfg.key_id) if cfg.key_id else None),
         "base_url": cfg.base_url,
         "default_model": cfg.default_model,
         "max_budget_usd": cfg.max_budget_usd,
@@ -160,16 +161,31 @@ async def update_hybrid_config_endpoint(payload: HybridConfigRequest):
     if payload.default_model:
         cfg.default_model = payload.default_model.strip()
 
-    # Atualiza a chave de API apenas se uma nova chave foi enviada
+    # Segredos são gravados exclusivamente no KeyVault cifrado.
     if payload.api_key and payload.api_key.strip():
-        cfg.api_key = payload.api_key.strip()
+        key_id = cfg.key_id or "hybrid_primary"
+        key_vault.save_key(
+            key_id=key_id,
+            label=f"{cfg.provider_name.upper()} — Gateway Híbrido",
+            provider=cfg.provider_name,
+            api_key=payload.api_key.strip(),
+            base_url=cfg.base_url,
+            default_model=cfg.default_model,
+            is_active=True,
+        )
+        cfg.key_id = key_id
+    elif cfg.key_id:
+        existing = key_vault.get_key(cfg.key_id)
+        if existing and existing.provider.lower() != cfg.provider_name.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="O provedor foi alterado. Informe uma nova chave para o provedor selecionado.",
+            )
 
-    # Reconfigura o adaptador online
-    if cfg.api_key:
-        hybrid_router.online_adapter = build_online_adapter(cfg)
-    else:
+    cfg.api_key = None
+    hybrid_router.online_adapter = build_online_adapter(cfg, key_vault)
+    if cfg.enabled and hybrid_router.online_adapter is None:
         cfg.enabled = False
-        hybrid_router.online_adapter = None
 
     save_hybrid_config_to_disk(cfg, HYBRID_CONFIG_PATH)
 
@@ -202,13 +218,14 @@ async def update_hybrid_config_endpoint(payload: HybridConfigRequest):
 
 @router.post("/api/v1/models/hybrid-config/test")
 async def test_hybrid_connection_endpoint(payload: HybridTestRequest):
-    # Usa a chave fornecida ou a já salva no servidor
+    # Usa a chave fornecida ou recupera a chave descriptografada do KeyVault.
     api_key = (payload.api_key or "").strip()
-    if not api_key and hybrid_router.online_config.api_key:
-        api_key = hybrid_router.online_config.api_key
+    if not api_key and hybrid_router.online_config.key_id:
+        profile = key_vault.get_key(hybrid_router.online_config.key_id)
+        api_key = profile.api_key if profile and profile.is_active else ""
 
     if not api_key:
-        raise HTTPException(status_code=400, detail="Nenhuma chave de API informada ou previamente configurada.")
+        raise HTTPException(status_code=400, detail="Nenhuma chave de API informada ou previamente configurada no KeyVault.")
 
     adapter = UniversalOnlineAdapter(
         api_key=api_key,
