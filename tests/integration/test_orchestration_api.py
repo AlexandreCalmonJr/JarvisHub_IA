@@ -97,33 +97,45 @@ async def test_api_chat_create_website_and_modify_file():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. Pedido no chat para criar um site
         create_payload = {"prompt": "cria um site simples de cafeteria para mim com index.html e style.css"}
         create_res = await client.post("/api/v1/chat", json=create_payload)
         assert create_res.status_code == 200
         data = create_res.json()
         assert data["classified_intent"] == "project_creation"
-        assert data["is_completed"] is True
+        assert data["approval_required"] is True
+        assert data["is_completed"] is False
         assert "site-cafeteria" in data["final_summary"]
 
-        # Verifica se os arquivos físicos foram criados no disco do computador
         site_dir = Path("workspace/site-cafeteria")
+        assert not site_dir.exists()
+        create_decision = await client.post(
+            f"/api/v1/approvals/{data['approval_id']}/decide",
+            json={"action": "approve", "reason": "Criação aprovada no teste E2E"},
+        )
+        assert create_decision.status_code == 200
         assert site_dir.exists()
         assert (site_dir / "index.html").exists()
         assert (site_dir / "style.css").exists()
         assert (site_dir / "app.js").exists()
         assert (site_dir / "README.md").exists()
 
-        # 2. Pedido no chat para modificar o arquivo no computador
-        mod_payload = {"prompt": "no site da cafeteria mude o titulo para Café Imperial Especial"}
+        mod_payload = {
+            "prompt": "no site da cafeteria mude o título para Café Imperial Especial",
+            "project_id": "site-cafeteria",
+        }
         mod_res = await client.post("/api/v1/chat", json=mod_payload)
         assert mod_res.status_code == 200
         mod_data = mod_res.json()
         assert mod_data["classified_intent"] == "code_modification"
-        assert mod_data["is_completed"] is True
-        assert "Café Imperial Especial" in mod_data["final_summary"]
+        assert mod_data["approval_required"] is True
+        assert mod_data["is_completed"] is False
 
-        # Verifica que o arquivo físico no disco foi modificado e possui backup .bak
+        mod_decision = await client.post(
+            f"/api/v1/approvals/{mod_data['approval_id']}/decide",
+            json={"action": "approve", "reason": "Alteração aprovada no teste E2E"},
+        )
+        assert mod_decision.status_code == 200
         updated_html = (site_dir / "index.html").read_text(encoding="utf-8")
         assert "<title>Café Imperial Especial</title>" in updated_html
         assert (site_dir / "index.html.bak").exists()
+        workspace_service.delete_project("site-cafeteria")
