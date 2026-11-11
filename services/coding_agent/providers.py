@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+from types import SimpleNamespace
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
@@ -1024,7 +1025,28 @@ def resolve_governed_chat_provider(
     has_external_data_approval: bool = False,
 ) -> ChatProvider:
     """Resolve o provedor de chat e aplica a política central do HybridRouter."""
-    provider = resolve_chat_provider(online_config, local_provider)
+    effective_config = online_config
+    if (
+        online_config is not None
+        and getattr(online_config, "enabled", False)
+        and not (getattr(online_config, "api_key", None) or "").strip()
+        and getattr(online_config, "key_id", None)
+        and router is not None
+        and getattr(router, "key_vault", None) is not None
+    ):
+        profile = router.key_vault.get_key(online_config.key_id)
+        if profile and profile.is_active and profile.api_key:
+            # Segredo recuperado em memória apenas para criar o provider;
+            # o JSON de configuração contém somente o identificador da chave.
+            effective_config = SimpleNamespace(
+                enabled=True,
+                api_key=profile.api_key,
+                provider_name=profile.provider,
+                base_url=profile.base_url,
+                default_model=profile.default_model,
+            )
+
+    provider = resolve_chat_provider(effective_config, local_provider)
     if isinstance(provider, ResilientChatProvider) and router is not None:
         return GovernedChatProvider(
             primary=provider.primary,
