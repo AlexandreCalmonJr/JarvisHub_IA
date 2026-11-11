@@ -34,6 +34,7 @@ export async function indexKnowledgeFolder(folderPath: string, category: string 
 export async function indexKnowledgeText(docName: string, content: string, category: string = 'anotacoes'): Promise<any> {
   const res = await fetch(`${API_BASE}/knowledge/index-text`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ doc_name: docName, content, category }),
   });
@@ -43,6 +44,7 @@ export async function indexKnowledgeText(docName: string, content: string, categ
 export async function searchKnowledge(query: string, limit: number = 5): Promise<any[]> {
   const res = await fetch(`${API_BASE}/knowledge/search`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, limit }),
   });
