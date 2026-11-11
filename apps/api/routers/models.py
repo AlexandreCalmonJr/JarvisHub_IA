@@ -206,7 +206,7 @@ async def update_hybrid_config_endpoint(payload: HybridConfigRequest):
         "config": {
             "provider_name": cfg.provider_name,
             "enabled": cfg.enabled,
-            "has_api_key": bool(cfg.api_key),
+            "has_api_key": bool(cfg.key_id and key_vault.get_key(cfg.key_id)),
             "masked_api_key": (lambda p: (f"{p.api_key[:4]}...{p.api_key[-4:]}" if p and len(p.api_key) > 8 else ("***" if p else None)))(key_vault.get_key(cfg.key_id) if cfg.key_id else None),
             "base_url": cfg.base_url,
             "default_model": cfg.default_model,
