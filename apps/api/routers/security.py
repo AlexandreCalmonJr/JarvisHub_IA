@@ -32,10 +32,10 @@ router = APIRouter(tags=["security"])
 
 
 def _approval_owner(principal: Principal) -> str:
-    if principal.kind != "human":
+    if principal.kind == "device" and principal.subject_id.startswith("device:"):
         raise HTTPException(
             status_code=403,
-            detail="Dispositivos precisam ser associados a uma conta antes de gerir aprovações.",
+            detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
         )
     return principal.subject_id
 
