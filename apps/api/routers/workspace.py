@@ -141,6 +141,7 @@ async def write_project_file_endpoint(
             summary=f"Gravar {payload.path} no projeto {project_id}: {payload.reason}",
             resource=str(target),
             proposed_diff=diff,
+            owner_user_id=principal.subject_id,
         )
         if pending:
             return {
@@ -194,6 +195,7 @@ async def rollback_project_endpoint(
             operation="git_rollback",
             summary=f"Reverter o último commit do projeto {project_id} (HEAD {head}).",
             resource=str(project_dir),
+            owner_user_id=principal.subject_id,
         )
         if pending:
             return {"status": "approval_required", "approval_id": pending.id, "project_id": project_id, "current_head": head}
@@ -406,10 +408,18 @@ async def import_external_folder_endpoint(
             operation="project_import",
             summary=f"Importar a pasta autorizada '{target}' como projeto '{project_id}'.",
             resource=str(target),
+            owner_user_id=principal.subject_id,
         )
         if pending:
             return {"status": "approval_required", "approval_id": pending.id, "path": str(target), "project_id": project_id}
         result = workspace_service.import_external_project(str(target), payload.name)
+        project_root = workspace_service.get_project_dir(project_id).resolve()
+        db_manager.register_project(
+            project_id=project_id,
+            name=name,
+            root_path=str(project_root),
+            owner_user_id=principal.subject_id,
+        )
         security_core.audit.record_event(
             operation="WORKSPACE_IMPORT_APPROVED",
             status="SUCCESS",
