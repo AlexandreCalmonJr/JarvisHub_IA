@@ -1585,7 +1585,7 @@ def create_master_graph(
                 f"Impacto: {impact}. Nenhum ficheiro foi alterado ainda."
             )
             summary = (
-                f"{prepared_summary}\\n\\n{approval_notice}"
+                f"{prepared_summary}\n\n{approval_notice}"
                 if prepared_summary
                 else f"A operação requer aprovação humana prévia. {approval_notice}"
             )
