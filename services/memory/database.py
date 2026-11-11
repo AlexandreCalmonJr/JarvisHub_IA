@@ -230,6 +230,67 @@ class DatabaseManager:
                 conn.execute("ALTER TABLE agent_configs ADD COLUMN assigned_key_id TEXT;")
             except Exception:
                 pass
+            self._apply_migrations(conn)
+
+    @staticmethod
+    def _apply_migrations(conn: sqlite3.Connection) -> None:
+        """Aplica migrações versionadas sem atribuir dados antigos a uma conta."""
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at TEXT NOT NULL
+            )
+            """
+        )
+        applied = conn.execute(
+            "SELECT 1 FROM schema_migrations WHERE version = 1"
+        ).fetchone()
+        if applied:
+            return
+
+        # Colunas nullable são intencionais: registos legados ficam sem dono
+        # até existir uma rotina de associação explícita e confirmada.
+        private_tables = (
+            "projects",
+            "tasks",
+            "chat_messages",
+            "approvals",
+            "project_memory",
+            "agent_memories",
+            "user_skills",
+            "knowledge_vault",
+        )
+        conn.execute("SAVEPOINT account_ownership_migration")
+        try:
+            for table in private_tables:
+                columns = {
+                    row["name"]
+                    for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+                }
+                if "owner_user_id" not in columns:
+                    conn.execute(
+                        f"ALTER TABLE {table} ADD COLUMN owner_user_id TEXT"
+                    )
+                conn.execute(
+                    f"CREATE INDEX IF NOT EXISTS idx_{table}_owner_user "
+                    f"ON {table}(owner_user_id)"
+                )
+
+            conn.execute(
+                """
+                INSERT INTO schema_migrations (version, name, applied_at)
+                VALUES (1, 'account_ownership_columns', ?)
+                """,
+                (datetime.now(UTC).isoformat(),),
+            )
+            conn.execute("RELEASE SAVEPOINT account_ownership_migration")
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT account_ownership_migration")
+            conn.execute("RELEASE SAVEPOINT account_ownership_migration")
+            raise
+
 
     def register_project(
         self, project_id: str, name: str, root_path: str, mode: str = "read_only"
