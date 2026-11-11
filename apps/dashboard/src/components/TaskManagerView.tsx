@@ -60,10 +60,17 @@ export const TaskManagerView: React.FC = () => {
   }, []);
 
   const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    notify('Copiado para a área de transferência!', 'info');
-    setTimeout(() => setCopiedId(null), 1800);
+    if (!navigator.clipboard?.writeText) {
+      notify('A cópia automática não está disponível neste navegador.', 'warning');
+      return;
+    }
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedId(id);
+        notify('Copiado para a área de transferência!', 'info');
+        window.setTimeout(() => setCopiedId(null), 1800);
+      })
+      .catch(() => notify('Não foi possível copiar. Verifique as permissões do navegador.', 'error'));
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -139,7 +146,7 @@ export const TaskManagerView: React.FC = () => {
     if (!isoString) return 'Data recente';
     try {
       const d = new Date(isoString);
-      return d.toLocaleString('pt-BR', {
+      return d.toLocaleString('pt-PT', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -200,9 +207,9 @@ export const TaskManagerView: React.FC = () => {
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
               Total de Tarefas
             </span>
-            <Layers size={18} color="#818cf8" />
+            <Layers size={18} color="var(--accent-color)" />
           </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '8px', color: '#fff' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '8px', color: 'var(--text-primary)' }}>
             {totalCount}
           </div>
         </div>
@@ -576,7 +583,7 @@ export const TaskManagerView: React.FC = () => {
               </h3>
             </div>
             <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              Esta ação removerá do banco de dados SQLite todas as tarefas registradas com mais de <b>30 dias</b> de retenção. Tarefas recentes e memórias de projetos ativos não serão afetadas.
+              Esta ação removerá apenas as tarefas da sua conta com mais de <b>30 dias</b>. Tarefas recentes e dados de outras contas não serão afetados.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
               <button onClick={() => setShowPurgeModal(false)} className="btn btn-secondary" style={{ fontSize: '0.80rem' }} disabled={purging}>

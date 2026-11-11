@@ -56,7 +56,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
   const [hybridGatewayInfo, setHybridGatewayInfo] = useState<any>(null);
   // Estado de configuração
   const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt || '');
-  const [preferredModel, setPreferredModel] = useState(agent.preferred_model || 'llama3.2:3b');
+  const [preferredModel, setPreferredModel] = useState(agent.preferred_model || 'auto_hybrid');
   const [allowedTools, setAllowedTools] = useState<string[]>(agent.allowed_tools || []);
   const [isReadOnly, setIsReadOnly] = useState<boolean>(agent.is_read_only ?? true);
   const [savingConfig, setSavingConfig] = useState(false);
@@ -72,9 +72,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
   useEffect(() => {
     setSystemPrompt(agent.system_prompt || '');
     // Modo híbrido é o padrão para o especialista se não estiver travado em um modelo específico
-    const initialModel = agent.preferred_model && agent.preferred_model !== 'auto'
-      ? agent.preferred_model
-      : 'auto_hybrid';
+    const initialModel = agent.preferred_model || 'auto_hybrid';
     setPreferredModel(initialModel);
     setAllowedTools(agent.allowed_tools || []);
     setFeedbackMsg(null);
@@ -184,9 +182,9 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               fontSize: '0.75rem',
               padding: '2px 8px',
               borderRadius: '6px',
-              backgroundColor: 'rgba(99, 102, 241, 0.15)',
-              color: '#818cf8',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
+              backgroundColor: 'var(--accent-glow)',
+              color: 'var(--accent-color)',
+              border: '1px solid var(--border-accent)',
               fontWeight: 600,
             }}
           >
@@ -195,7 +193,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
         </div>
       }
       subtitle={agent.mission}
-      icon={<Brain size={22} color="#818cf8" />}
+      icon={<Brain size={22} color="var(--accent-color)" />}
       maxWidth="xl"
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -210,7 +208,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                <Sparkles size={15} color="#818cf8" />
+                <Sparkles size={15} color="var(--accent-color)" />
                 Abrir no Playground
               </button>
             )}
@@ -270,8 +268,8 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               cursor: 'pointer',
               fontSize: '0.88rem',
               fontWeight: 600,
-              backgroundColor: activeTab === 'config' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-              color: activeTab === 'config' ? '#818cf8' : 'var(--text-secondary)',
+              backgroundColor: activeTab === 'config' ? 'var(--accent-glow)' : 'transparent',
+              color: activeTab === 'config' ? 'var(--accent-color)' : 'var(--text-secondary)',
             }}
           >
             <Cpu size={16} />
@@ -289,8 +287,8 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
               cursor: 'pointer',
               fontSize: '0.88rem',
               fontWeight: 600,
-              backgroundColor: activeTab === 'memories' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-              color: activeTab === 'memories' ? '#818cf8' : 'var(--text-secondary)',
+              backgroundColor: activeTab === 'memories' ? 'var(--accent-glow)' : 'transparent',
+              color: activeTab === 'memories' ? 'var(--accent-color)' : 'var(--text-secondary)',
             }}
           >
             <BookOpen size={16} />
@@ -311,7 +309,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                     type="button"
                     onClick={() => setPreferredModel('auto_hybrid')}
                     className="btn btn-ghost"
-                    style={{ fontSize: '0.72rem', color: '#38bdf8', padding: '2px 6px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{ fontSize: '0.72rem', color: 'var(--accent-color)', padding: '2px 6px', display: 'flex', alignItems: 'center', gap: '4px' }}
                     title="Restaurar para o roteamento híbrido dinâmico padrão"
                   >
                     <Sparkles size={12} />
@@ -348,11 +346,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="llama3.2:3b">💻 llama3.2:3b (Local — Orquestração & JSON)</option>
-                      <option value="qwen2.5-coder:7b">💻 qwen2.5-coder:7b (Local — Especialista em Código)</option>
-                      <option value="qwen2.5:7b">💻 qwen2.5:7b (Local — Raciocínio & QA)</option>
-                    </>
+                    <option value="" disabled>Nenhum modelo local confirmado pela API</option>
                   )}
                 </optgroup>
                 {/* Modelos Online Configurados no Model Manager / Gateway Híbrido */}
@@ -364,11 +358,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                       </option>
                     ))
                   ) : (
-                    <>
-                      <option value="gpt-4o-mini">☁️ gpt-4o-mini (OpenAI — Gateway Híbrido)</option>
-                      <option value="gemini-1.5-flash">☁️ gemini-1.5-flash (Google Gemini — Gateway Híbrido)</option>
-                      <option value="deepseek-chat">☁️ deepseek-chat (DeepSeek — Gateway Híbrido)</option>
-                    </>
+                    <option value="" disabled>Nenhum modelo online confirmado pela API</option>
                   )}
                 </optgroup>
                 {/* Opção Personalizada se o modelo atual não estiver listado */}

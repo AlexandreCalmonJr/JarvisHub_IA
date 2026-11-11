@@ -61,8 +61,11 @@ async def list_agents_endpoint(
             "preferred_model": profile.preferred_model,
             "is_read_only": profile.is_read_only,
             "allowed_tools": profile.allowed_tools,
-            "system_prompt": profile.system_prompt,
-            "assigned_key_id": getattr(profile, "assigned_key_id", None),
+            **(
+                {"system_prompt": profile.system_prompt}
+                if principal.kind == "human" and principal.role in {"admin", "developer"}
+                else {}
+            ),
         }
         for profile in AGENT_PROFILES.values()
     ]
@@ -88,15 +91,18 @@ async def get_agent_endpoint(
         "preferred_model": profile.preferred_model,
         "is_read_only": profile.is_read_only,
         "allowed_tools": profile.allowed_tools,
-        "system_prompt": profile.system_prompt,
-        "assigned_key_id": getattr(profile, "assigned_key_id", None),
+        **(
+            {"system_prompt": profile.system_prompt}
+            if principal.kind == "human" and principal.role in {"admin", "developer"}
+            else {}
+        ),
     }
 
 
 @router.put("/api/v1/agents/{role}/config")
 async def update_agent_config_endpoint(
     role: str, payload: AgentConfigUpdateRequest,
-    principal: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_permission("agents:write")),
 ):
     clean_role = role.lower().strip()
     target_profile = None

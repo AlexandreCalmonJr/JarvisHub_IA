@@ -92,14 +92,14 @@ export const AgentActionsModal: React.FC<AgentActionsModalProps> = ({
               textAlign: 'left',
               borderRadius: '10px',
               border: '1px solid var(--border-color)',
-              backgroundColor: 'rgba(99, 102, 241, 0.05)',
+              backgroundColor: 'var(--accent-glow)',
             }}
           >
-            <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', flexShrink: 0 }}>
+            <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: 'var(--accent-glow)', color: 'var(--accent-color)', flexShrink: 0 }}>
               <Settings size={18} />
             </div>
             <div>
-              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#818cf8' }}>
+              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--accent-color)' }}>
                 Configurações & Modelo
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>

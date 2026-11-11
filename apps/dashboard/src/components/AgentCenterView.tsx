@@ -5,11 +5,13 @@ import { notify } from './common/Toast';
 import { AgentActionsModal } from './agents/AgentActionsModal';
 import { AgentDetailModal } from './agents/AgentDetailModal';
 import { AgentPlayground } from './agents/AgentPlayground';
+import { API_BASE } from '../services/api/client';
 
 export const AgentCenterView: React.FC = () => {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [canManageAgents, setCanManageAgents] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'security' | 'dev' | 'architecture' | 'data'>('all');
 
@@ -42,7 +44,24 @@ export const AgentCenterView: React.FC = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) {
+          setCanManageAgents(
+            principal?.kind === 'human' &&
+            (principal?.role === 'admin' || principal?.role === 'developer')
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCanManageAgents(false);
+      });
     loadAgents();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filteredAgents = useMemo(() => {
@@ -99,10 +118,10 @@ export const AgentCenterView: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 className="claude-serif-title" style={{ fontSize: '1.6rem', fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>
-            Agent Center (26 Especialistas Lógicos)
+            Centro de Agentes
           </h2>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
-            Orquestração modular com raciocínio ReAct/CoT, memória episódica transversal e execução real de ferramentas no sandbox
+            Consulte os agentes registados, as suas funções e as ferramentas atualmente autorizadas.
           </p>
         </div>
 
@@ -171,7 +190,7 @@ export const AgentCenterView: React.FC = () => {
             className={`btn ${categoryFilter === 'security' ? 'btn-primary' : 'btn-ghost'}`}
             style={{ fontSize: '0.78rem', padding: '4px 10px' }}
           >
-            Segurança (8)
+            Segurança
           </button>
           <button
             onClick={() => setCategoryFilter('architecture')}
@@ -278,7 +297,7 @@ export const AgentCenterView: React.FC = () => {
                       fontWeight: 500,
                     }}
                   >
-                    Modo Híbrido (Auto)
+                    {agent.preferred_model === 'auto' ? 'Automático Local' : 'Automático Híbrido'}
                   </span>
                 ) : (
                   <span
@@ -344,33 +363,37 @@ export const AgentCenterView: React.FC = () => {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                gridTemplateColumns: canManageAgents ? '1fr 1fr' : '1fr',
                 gap: '8px',
                 paddingTop: '8px',
               }}
             >
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setSelectedModalAgent(agent)}
+              {canManageAgents && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedModalAgent(agent)}
                 style={{
                   fontSize: '0.78rem',
                   padding: '7px 10px',
                 }}
               >
-                Configurar
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
+                  Configurar
+                </button>
+              )}
+              {canManageAgents && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
                 onClick={() => setSelectedActionsAgent(agent)}
                 style={{
                   fontSize: '0.78rem',
                   padding: '7px 10px',
                 }}
               >
-                Ações
-              </button>
+                  Ações
+                </button>
+              )}
             </div>
           </div>
         ))}
