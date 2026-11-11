@@ -267,6 +267,7 @@ async def chat_endpoint(
             user_prompt=request.prompt,
             session_id=session_id,
             project_id=request.project_id,
+            owner_user_id=owner_user_id,
         )
         summary = result.get("final_summary", "") if isinstance(result, dict) else result.final_summary
         sid = result.get("session_id") if isinstance(result, dict) else getattr(result, "session_id", None)
@@ -371,6 +372,7 @@ async def chat_stream_endpoint(
                 user_prompt=request.prompt,
                 session_id=request.session_id or session_override,
                 project_id=request.project_id,
+                owner_user_id=owner_user_id,
             )
 
             summary = result.get("final_summary", "")
