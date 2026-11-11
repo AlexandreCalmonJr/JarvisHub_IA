@@ -100,6 +100,7 @@ export const KnowledgeVaultView: React.FC = () => {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageKnowledge) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -124,6 +125,7 @@ export const KnowledgeVaultView: React.FC = () => {
 
   const handleFolderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageKnowledge) return;
     if (!folderPath.trim()) return;
 
     setFolderIndexing(true);
@@ -143,6 +145,7 @@ export const KnowledgeVaultView: React.FC = () => {
 
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageKnowledge) return;
     if (!textDocName.trim() || !textContent.trim()) return;
 
     setTextIndexing(true);
@@ -161,6 +164,7 @@ export const KnowledgeVaultView: React.FC = () => {
   };
 
   const handleDelete = async (docName: string) => {
+    if (!canManageKnowledge) return;
     if (!window.confirm(`Tem certeza que deseja remover '${docName}' da Base de Conhecimento?`)) {
       return;
     }

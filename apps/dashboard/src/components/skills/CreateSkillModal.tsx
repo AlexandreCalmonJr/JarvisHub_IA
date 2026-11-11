@@ -129,7 +129,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '4px' }}>
                   Domínio Técnico
@@ -140,10 +140,10 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                   style={{
                     width: '100%',
                     padding: '8px 10px',
-                    backgroundColor: '#070a12',
-                    border: '1px solid rgba(255,255,255,0.12)',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
                     borderRadius: '8px',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                     fontSize: '0.84rem',
                   }}
                 >
@@ -169,7 +169,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                   style={{
                     width: '100%',
                     padding: '8px 12px',
-                    backgroundColor: '#070a12',
+                    backgroundColor: 'var(--bg-primary)',
                     border: '1px solid rgba(255,255,255,0.12)',
                     borderRadius: '8px',
                     color: '#fff',
@@ -216,7 +216,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                   padding: '8px',
                   backgroundColor: '#070a12',
                   borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  border: '1px solid var(--border-color)',
                 }}
               >
                 {agents.map((ag) => {
@@ -229,7 +229,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                         alignItems: 'center',
                         gap: '6px',
                         fontSize: '0.78rem',
-                        color: isChecked ? '#fff' : 'var(--text-muted)',
+                        color: isChecked ? 'var(--text-primary)' : 'var(--text-muted)',
                         cursor: 'pointer',
                       }}
                     >

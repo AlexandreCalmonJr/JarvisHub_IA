@@ -136,7 +136,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
                   <span className="badge badge-info" style={{ fontSize: '0.68rem' }}>
-                    {doc.file_type || 'TXT'}
+                    {doc.file_type || 'Tipo desconhecido'}
                   </span>
                   <span className="badge" style={{ fontSize: '0.68rem' }}>
                     {doc.category || 'geral'}
@@ -150,7 +150,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
                       color: 'var(--text-muted)',
                     }}
                   >
-                    {doc.total_chunks} blocos semânticos
+                    {Number(doc.total_chunks) || 0} blocos semânticos
                   </span>
                   {doc.file_size_formatted && (
                     <span
@@ -176,7 +176,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
                   borderTop: '1px solid rgba(255, 255, 255, 0.05)',
                 }}
               >
-                Indexado em: {new Date(doc.created_at).toLocaleString('pt-PT')}
+                Indexado em: {doc.created_at && !Number.isNaN(new Date(doc.created_at).getTime()) ? new Date(doc.created_at).toLocaleString('pt-PT') : 'Data indisponível'}
               </div>
             </div>
           ))}

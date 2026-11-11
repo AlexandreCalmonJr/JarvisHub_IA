@@ -20,13 +20,13 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
 }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <form onSubmit={onSearch} style={{ display: 'flex', gap: '10px' }}>
+      <form onSubmit={onSearch} style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
         <div
           style={{
             flex: 1,
             display: 'flex',
             alignItems: 'center',
-            backgroundColor: '#070a12',
+            backgroundColor: 'var(--bg-secondary)',
             borderRadius: '12px',
             border: '1px solid rgba(255, 255, 255, 0.12)',
             padding: '9px 16px',
@@ -44,7 +44,7 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
               backgroundColor: 'transparent',
               border: 'none',
               outline: 'none',
-              color: '#fff',
+              color: 'var(--text-primary)',
               fontSize: '0.88rem',
             }}
           />
@@ -60,7 +60,6 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
             gap: '6px',
             fontSize: '0.84rem',
             padding: '0 20px',
-            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
           }}
         >
           {isSearching ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
@@ -85,15 +84,15 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
           style={{
             padding: '18px 22px',
             borderRadius: '14px',
-            backgroundColor: 'rgba(99, 102, 241, 0.08)',
-            border: '1px solid rgba(99, 102, 241, 0.25)',
+            backgroundColor: 'var(--accent-glow)',
+            border: '1px solid var(--border-accent)',
             display: 'flex',
             flexDirection: 'column',
             gap: '12px',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.90rem', fontWeight: 700, color: '#a5b4fc' }}>
+            <span style={{ fontSize: '0.90rem', fontWeight: 700, color: 'var(--accent-color)' }}>
               Trechos Relevantes Recuperados ({searchResults.length} correspondências):
             </span>
           </div>
@@ -105,7 +104,7 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
                 style={{
                   padding: '12px 14px',
                   borderRadius: '10px',
-                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                  backgroundColor: 'var(--bg-secondary)',
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                   display: 'flex',
                   flexDirection: 'column',
@@ -113,8 +112,8 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#38bdf8' }}>
-                    📄 {res.doc_name} (Bloco #{res.chunk_index + 1})
+                  <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--accent-color)' }}>
+                    📄 {res.doc_name} (Bloco #{(Number(res.chunk_index) || 0) + 1})
                   </span>
                   <span className="badge badge-purple" style={{ fontSize: '0.68rem' }}>
                     {res.category}
@@ -123,7 +122,7 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
                 <p
                   style={{
                     fontSize: '0.80rem',
-                    color: '#e2e8f0',
+                    color: 'var(--text-secondary)',
                     margin: 0,
                     lineHeight: 1.5,
                     fontFamily: 'monospace',

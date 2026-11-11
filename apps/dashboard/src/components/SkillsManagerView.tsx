@@ -63,6 +63,7 @@ export const SkillsManagerView: React.FC = () => {
   };
 
   const handleDeleteSkill = async (skillId: string, skillName: string) => {
+    if (!canManageSkills) return;
     if (!window.confirm(`Tem certeza que deseja excluir a habilidade "${skillName}"?`)) {
       return;
     }
@@ -77,6 +78,7 @@ export const SkillsManagerView: React.FC = () => {
   };
 
   const handlePonytailChange = async (newLevel: string) => {
+    if (!isAdmin) return;
     setSavingPonytail(true);
     try {
       await savePonytailLevel(newLevel);
@@ -114,6 +116,7 @@ export const SkillsManagerView: React.FC = () => {
   }, []);
 
   const handleToggle = async (skillId: string) => {
+    if (!canManageSkills) return;
     try {
       await toggleSkill(skillId);
       await loadData();
