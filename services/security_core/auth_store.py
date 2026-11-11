@@ -86,7 +86,7 @@ class UserCredentialStore:
                     username TEXT PRIMARY KEY COLLATE NOCASE,
                     display_name TEXT NOT NULL,
                     password_hash TEXT NOT NULL,
-                    role TEXT NOT NULL CHECK(role IN ('developer', 'auditor')),
+                    role TEXT NOT NULL CHECK(role IN ('admin', 'developer', 'auditor')),
                     is_active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -120,6 +120,8 @@ class UserCredentialStore:
     def create_user(self, username: str, display_name: str, password: str, role: str) -> dict:
         import sqlite3
 
+        if role not in {"admin", "developer", "auditor"}:
+            raise ValueError("Perfil de acesso inválido.")
         now = datetime.now(UTC).isoformat()
         password_hash = self._hash_password(password)
         try:
@@ -185,6 +187,18 @@ class UserCredentialStore:
         import sqlite3
 
         with sqlite3.connect(self.database_path, timeout=10) as conn:
+            conn.execute("PRAGMA busy_timeout=10000")
+            if not is_active:
+                target = conn.execute(
+                    "SELECT role, is_active FROM human_users WHERE username = ? COLLATE NOCASE",
+                    (username,),
+                ).fetchone()
+                if target and target[0] == "admin" and target[1]:
+                    active_admins = conn.execute(
+                        "SELECT COUNT(*) FROM human_users WHERE role = 'admin' AND is_active = 1"
+                    ).fetchone()[0]
+                    if active_admins <= 1:
+                        raise ValueError("Não é permitido desativar o último administrador ativo.")
             cursor = conn.execute(
                 "UPDATE human_users SET is_active = ?, updated_at = ? WHERE username = ? COLLATE NOCASE",
                 (int(is_active), datetime.now(UTC).isoformat(), username),
