@@ -977,8 +977,8 @@ def create_master_graph(
                 title_3 = "Parecer do Revisor de Código & QA (Modo Ponytail)"
 
                 prompt_1 = f"Como Arquiteto de Software, apresente sua análise estrutural, viabilidade, escalabilidade e trade-offs para: '{clean_prompt}'"
-                prompt_2 = f"Como Engenheiro de Cibersegurança, avalie as superfícies de ataque, mitigações OWASP, sanitização de inputs e blindagem necessária para: '{clean_prompt}'"
-                prompt_3 = f"Como Revisor de Código Sênior sob a disciplina Ponytail (YAGNI/DRY), aponte como implementar '{clean_prompt}' com a menor quantidade de código, sem dependências desnecessárias e com alta testabilidade."
+                prompt_2 = f"Como Engenheiro de Cibersegurança, avalie as superfícies de ataque, mitigações OWASP, sanitização de inputs e blindagem necessária para: '{clean_prompt}'. Leia o parecer arquitetural anterior, identifique riscos omitidos, concorde ou discorde com justificativa e proponha mitigação."
+                prompt_3 = f"Como Revisor de Código Sênior sob a disciplina Ponytail (YAGNI/DRY), revise criticamente os pareceres anteriores sobre '{clean_prompt}'. Aponte contradições, lacunas, riscos e a menor implementação testável. Não aprove automaticamente os pareceres."
 
                 fallback_1 = f"Análise Arquitetural: recomendada estrutura modular com baixo acoplamento e separação estrita de responsabilidades para '{clean_prompt}'."
                 fallback_2 = f"Parecer de Segurança: validação estrita de inputs, controle de acesso local e blindagem 127.0.0.1 prioritários para '{clean_prompt}'."
@@ -1026,6 +1026,7 @@ def create_master_graph(
                 user_prompt=clean_prompt,
                 project_id=project_id,
                 domain="planning" if is_educational else "security",
+                previous_outputs=[{"agent_role": role_1, "summary": text_1}],
             )
             req_2 = InferenceRequest(
                 prompt=prompt_2,
@@ -1052,6 +1053,10 @@ def create_master_graph(
                 user_prompt=clean_prompt,
                 project_id=project_id,
                 domain="qa",
+                previous_outputs=[
+                    {"agent_role": role_1, "summary": text_1},
+                    {"agent_role": role_2, "summary": text_2},
+                ],
             )
             req_3 = InferenceRequest(
                 prompt=prompt_3,
@@ -1068,19 +1073,60 @@ def create_master_graph(
             except Exception:
                 text_3 = fallback_3
 
+            # O Maestro recebe os três pareceres, incluindo críticas e contrapontos,
+            # e produz uma síntese baseada no conteúdo real, sem presumir unanimidade.
+            peer_outputs = [
+                {"agent_role": role_1, "summary": text_1},
+                {"agent_role": role_2, "summary": text_2},
+                {"agent_role": role_3, "summary": text_3},
+            ]
+            master_prompt = (
+                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\\n\\n"
+                f"Parecer 1 ({role_1}):\\n{text_1}\\n\\n"
+                f"Parecer 2 ({role_2}), que recebeu o parecer 1 e pôde contestá-lo:\\n{text_2}\\n\\n"
+                f"Parecer 3 ({role_3}), que recebeu os dois pareceres anteriores:\\n{text_3}\\n\\n"
+                "Compare as recomendações, resolva divergências com justificativa, destaque riscos "
+                "não resolvidos e apresente um plano final. Não invente consenso nem testes/evidências."
+            )
+            master_system = build_specialist_prompt(
+                agent_role=AgentRole.JARVIS_MASTER.value,
+                agent_registry=agent_registry,
+                skills_catalog=skills_catalog,
+                db_manager=db_manager,
+                intent="multi_agent_consensus",
+                user_prompt=clean_prompt,
+                project_id=project_id,
+                domain="planning",
+                previous_outputs=peer_outputs,
+            )
+            try:
+                master_response = await model_manager.generate(
+                    InferenceRequest(
+                        prompt=master_prompt,
+                        system_prompt=master_system,
+                        model_name=model_name,
+                        max_tokens=900,
+                        temperature=0.2,
+                        timeout_seconds=120.0,
+                        task_id=state.get("task_id"),
+                    )
+                )
+                master_summary = master_response.content.strip()
+            except Exception as exc:
+                logger.warning("Síntese do Jarvis Maestro indisponível: %s", exc)
+                master_summary = (
+                    "Síntese automática indisponível. Os três pareceres abaixo permanecem separados; "
+                    "não foi declarado consenso. Revise os pontos de divergência antes de executar."
+                )
+
             consensus_summary = (
-                f"# {consensus_title}\n\n"
-                f"Os 3 especialistas deliberaram sobre o tema apresentado. Abaixo constam os pareceres individuais e a diretriz consensual unificada:\n\n"
-                f"### 1. 🔬 {title_1}\n{text_1}\n\n"
-                f"### 2. 📋 {title_2}\n{text_2}\n\n"
-                f"### 3. ✅ {title_3}\n{text_3}\n\n"
-                f"---\n\n"
-                f"### ⚖️ Diretriz Consensual Aprovada pelo JARVIS Maestro\n\n"
-                f"- **Veredito**: {verdict}\n"
-                f"- {pillar_a}\n"
-                f"- {pillar_b}\n"
-                f"- {pillar_c}\n\n"
-                f"💡 *Dica*: Você pode iniciar a execução deste plano agora mesmo respondendo no chat!"
+                f"# {consensus_title}\\n\\n"
+                f"### 1. 🔬 {title_1}\\n{text_1}\\n\\n"
+                f"### 2. 📋 {title_2}\\n{text_2}\\n\\n"
+                f"### 3. ✅ {title_3}\\n{text_3}\\n\\n"
+                f"---\\n\\n"
+                f"### ⚖️ Deliberação do JARVIS Maestro\\n\\n{master_summary}\\n\\n"
+                f"### Diretriz de referência\\n- {pillar_a}\\n- {pillar_b}\\n- {pillar_c}"
             )
 
             # Insere contratos de cada especialista no estado para visualização no painel de raciocínio
