@@ -13,7 +13,8 @@
     "test:workspace": "node --experimental-strip-types --test scripts/workspace.test.mjs",
     "test:coding": "node --experimental-strip-types --test scripts/coding.test.mjs",
     "test:agents": "node --experimental-strip-types --test scripts/agents.test.mjs",
-    "test:tasks": "node --experimental-strip-types --test scripts/tasks.test.mjs"
+    "test:tasks": "node --experimental-strip-types --test scripts/tasks.test.mjs",
+    "test:models": "node --experimental-strip-types --test scripts/models.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
