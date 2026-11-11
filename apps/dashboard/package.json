@@ -10,7 +10,8 @@
     "test:router": "node --experimental-strip-types --test scripts/router.test.mjs",
     "test:overview": "node --experimental-strip-types --test scripts/overview.test.mjs",
     "test:dashboard": "node --experimental-strip-types --test scripts/*.test.mjs",
-    "test:workspace": "node --experimental-strip-types --test scripts/workspace.test.mjs"
+    "test:workspace": "node --experimental-strip-types --test scripts/workspace.test.mjs",
+    "test:coding": "node --experimental-strip-types --test scripts/coding.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
