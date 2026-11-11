@@ -170,7 +170,7 @@ class CVEScannerService:
                 clean_v = str(v).replace("^", "").replace("~", "").replace(">", "").replace("=", "").strip()
                 packages[k.lower()] = clean_v
         except Exception:
-            pass
+            logger.debug("package.json inválido ignorado na análise de dependências.", exc_info=True)
         return packages
 
     def scan_project_dependencies(self, project_dir: Path) -> dict[str, Any]:

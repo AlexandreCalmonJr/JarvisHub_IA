@@ -1,8 +1,11 @@
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger("jarvis.security.session_manager")
 
 
 class UserRole(str):
@@ -70,7 +73,7 @@ class SessionManager:
                     try:
                         self.db_manager.revoke_session(sid)
                     except Exception:
-                        pass
+                        logger.warning("Falha ao revogar sessão expirada no banco.", exc_info=True)
                     continue
 
                 c_at = (
@@ -96,7 +99,7 @@ class SessionManager:
                 )
                 self._sessions[sid] = session
         except Exception:
-            pass
+            logger.warning("Falha ao carregar sessões do banco.", exc_info=True)
 
     def _save_session_to_db(self, session: UserSession) -> None:
         if not self.db_manager:
@@ -113,7 +116,7 @@ class SessionManager:
                 is_revoked=session.is_revoked,
             )
         except Exception:
-            pass
+            logger.warning("Falha ao persistir sessão no banco.", exc_info=True)
 
     def create_session(
         self,
@@ -153,14 +156,14 @@ class SessionManager:
                 try:
                     self.db_manager.revoke_session(session_id)
                 except Exception:
-                    pass
+                    logger.warning("Falha ao revogar sessão expirada no banco.", exc_info=True)
             return None
         session.last_seen_at = now
         if self.db_manager:
             try:
                 self.db_manager.update_session_last_seen(session_id, now)
             except Exception:
-                pass
+                logger.warning("Falha ao atualizar last_seen da sessão.", exc_info=True)
         return session
 
     def get_session(self, session_id: str) -> UserSession | None:
@@ -173,7 +176,7 @@ class SessionManager:
             try:
                 self.db_manager.revoke_session(session_id)
             except Exception:
-                pass
+                logger.warning("Falha ao revogar sessão no banco.", exc_info=True)
         if session:
             session.is_revoked = True
             return True
@@ -190,7 +193,7 @@ class SessionManager:
             try:
                 self.db_manager.revoke_all_sessions_for_user(user_id)
             except Exception:
-                pass
+                logger.warning("Falha ao revogar sessões do utilizador no banco.", exc_info=True)
         return revoked
 
     def list_sessions(self, include_revoked: bool = False) -> list[UserSession]:
@@ -212,5 +215,5 @@ class SessionManager:
             try:
                 self.db_manager.purge_expired_sessions()
             except Exception:
-                pass
+                logger.warning("Falha ao purgar sessões expiradas no banco.", exc_info=True)
         return len(expired)

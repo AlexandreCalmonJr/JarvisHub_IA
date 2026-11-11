@@ -14,7 +14,6 @@ from services.coding_agent import (
     CodingToolExecutor,
     ProviderReply,
     ToolCall,
-    ToolSpec,
 )
 from services.coding_agent.providers import to_anthropic_messages, to_openai_messages
 from services.memory import DatabaseManager

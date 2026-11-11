@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import secrets
 from datetime import UTC, datetime
@@ -11,6 +12,8 @@ from pydantic import BaseModel, Field
 from packages.contracts.security import AuditEventSeverity
 
 from .audit_trail import AuditTrail
+
+logger = logging.getLogger("jarvis.security.device_auth")
 
 # Scopes que um dispositivo móvel pode receber no emparelhamento.
 ALLOWED_DEVICE_SCOPES: set[str] = {
@@ -132,7 +135,7 @@ class DeviceAuthManager:
                 if self._devices:
                     loaded_from_db = True
             except Exception:
-                pass
+                logger.warning("Falha ao carregar dispositivos do banco.", exc_info=True)
 
         if not loaded_from_db and self.store_path and self.store_path.exists():
             try:
@@ -159,7 +162,7 @@ class DeviceAuthManager:
                     if self.db_manager:
                         self._save_device_to_db(reg)
             except Exception:
-                pass
+                logger.warning("Registo local de dispositivos inválido em %s.", self.store_path, exc_info=True)
 
     def _save_device_to_db(self, reg: DeviceRegistration) -> None:
         if not self.db_manager:
@@ -176,7 +179,7 @@ class DeviceAuthManager:
                 owner_user_id=reg.owner_user_id,
             )
         except Exception:
-            pass
+            logger.warning("Falha ao persistir dispositivo no banco.", exc_info=True)
 
     def _save(self) -> None:
         if self.db_manager:
@@ -290,7 +293,7 @@ class DeviceAuthManager:
             try:
                 self.db_manager.update_device_last_seen(device_id, device.last_seen_at)
             except Exception:
-                pass
+                logger.warning("Falha ao atualizar last_seen do dispositivo.", exc_info=True)
         return device
 
     def revoke_device(
@@ -306,7 +309,7 @@ class DeviceAuthManager:
             try:
                 self.db_manager.revoke_device(device_id)
             except Exception:
-                pass
+                logger.warning("Falha ao revogar dispositivo no banco.", exc_info=True)
 
         if self.audit_trail:
             self.audit_trail.record_event(
@@ -365,7 +368,7 @@ class DeviceAuthManager:
                     if dev.token_hash:
                         self._hash_to_device[dev.token_hash] = dev.device_id
             except Exception:
-                pass
+                logger.warning("Falha ao recarregar dispositivo do banco.", exc_info=True)
         return dev
 
     def purge_revoked(self) -> int:
@@ -379,5 +382,5 @@ class DeviceAuthManager:
             try:
                 self.db_manager.delete_revoked_devices()
             except Exception:
-                pass
+                logger.warning("Falha ao purgar dispositivos revogados no banco.", exc_info=True)
         return len(revoked)

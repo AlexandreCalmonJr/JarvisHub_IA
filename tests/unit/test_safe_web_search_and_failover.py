@@ -1,6 +1,5 @@
 import pytest
-import httpx
-from services.tool_gateway.web_search import is_safe_public_url, sanitize_search_query, SearchResult
+from services.tool_gateway.web_search import is_safe_public_url, sanitize_search_query
 from services.coding_agent.providers import (
     ChatProvider,
     ProviderReply,

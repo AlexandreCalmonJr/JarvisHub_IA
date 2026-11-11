@@ -114,6 +114,8 @@ async def test_api_chat_code_modification_creates_approval():
 async def test_api_chat_create_website_and_modify_file():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Remove resíduos de execuções anteriores antes de validar a criação E2E.
+        workspace_service.delete_project("site-cafeteria")
         create_payload = {"prompt": "cria um site simples de cafeteria para mim com index.html e style.css"}
         create_res = await client.post("/api/v1/chat", json=create_payload)
         assert create_res.status_code == 200

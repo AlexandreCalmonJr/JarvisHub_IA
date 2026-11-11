@@ -6,7 +6,6 @@ Valida:
 3. Geração de boilerplates modernos de componentes em React com Tailwind CSS.
 """
 
-import pytest
 from services.design_studio.color_extractor import DesignStudioService
 
 

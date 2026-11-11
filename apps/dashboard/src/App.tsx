@@ -327,7 +327,6 @@ const DashboardApp: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           height: '100dvh',
-          minWidth: 0,
           overflow: 'hidden',
           backgroundColor: 'var(--bg-primary)',
         }}

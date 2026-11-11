@@ -9,7 +9,9 @@ const api = read('../src/services/api/coding.ts');
 const backend = read('../../api/routers/coding.py');
 
 test('Coding Agent local preferences and session cache are partitioned by account', () => {
-  assert.ok((view.match(/getAccountStorageKey\(/g) || []).length >= 10);
+  assert.ok((view.match(/getAccountStorageKey\(/g) || []).length >= 2);
+  assert.match(view, /readAccountSetting/);
+  assert.match(view, /writeAccountSetting/);
   assert.doesNotMatch(view, /localStorage\.(?:getItem|setItem|removeItem)\('jarvis_coding_(?!user)/);
 });
 

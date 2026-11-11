@@ -21,7 +21,7 @@ test('every registered tab has a canonical path and a shell renderer', () => {
 });
 
 test('root, aliases and current module paths remain registered', () => {
-  assert.match(router, /'': 'chat'/);
+  assert.match(router, /'': 'overview'/);
   assert.match(router, /habbo: 'office'/);
   assert.match(router, /hardware: 'advisor'/);
   assert.match(router, /'server-logs': 'server_logs'/);

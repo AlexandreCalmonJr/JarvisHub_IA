@@ -182,7 +182,7 @@ class ApprovalBroker:
                     reason=reason,
                 )
             except Exception:
-                pass
+                logger.debug("Falha ao rejeitar ticket cancelado %s.", request_id, exc_info=True)
         if not ticket.event.is_set():
             ticket.approved = False
             ticket.reason = reason

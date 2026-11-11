@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from packages.contracts.security import ProjectWorkMode
 from services.project_workspace import ProjectWorkspaceService
 from services.resource_manager import (
@@ -34,8 +32,16 @@ def test_budget_headroom_validation_and_throttling():
     assert len(warnings) >= 1
 
 
-def test_offline_task_execution_within_resource_budget():
-    demo_path = Path("workspace/demo_flutter_app").resolve()
+def test_offline_task_execution_within_resource_budget(tmp_path, monkeypatch):
+    # Fixa a leitura de CPU para evitar flutuações causadas pela própria suíte.
+    monkeypatch.setattr(
+        "services.resource_manager.monitor.psutil.cpu_percent",
+        lambda interval=None: 25.0,
+    )
+    demo_path = tmp_path / "demo_flutter_app"
+    (demo_path / "lib").mkdir(parents=True)
+    (demo_path / "pubspec.yaml").write_text("name: demo_flutter_app\n", encoding="utf-8")
+    (demo_path / "lib" / "main.dart").write_text("void main() {}\n", encoding="utf-8")
     assert demo_path.exists()
 
     security = SecurityCore()

@@ -167,6 +167,7 @@ async def test_multi_agent_sequential_execution_in_jarvis_master():
     assert completed["is_completed"] is True
     assert completed["pending_project"] is None
     assert "criado após aprovação humana" in completed["final_summary"]
+    workspace.delete_project("site-cafeteria")
 
 
 @pytest.mark.asyncio

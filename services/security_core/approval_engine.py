@@ -1,3 +1,4 @@
+import logging
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -8,6 +9,8 @@ from packages.contracts.approval import ApprovalRequest, ApprovalStatus
 from packages.contracts.security import AuditEventSeverity
 
 from .audit_trail import AuditTrail
+
+logger = logging.getLogger("jarvis.security.approval_engine")
 
 
 class UnauthorizedApprovalError(Exception):
@@ -79,7 +82,7 @@ class ApprovalEngine:
                 )
                 self._requests[req_id] = req
         except Exception:
-            pass
+            logger.warning("Falha ao carregar pedidos de aprovação persistidos.", exc_info=True)
 
     def _save_to_db(self, request: ApprovalRequest) -> None:
         if not self._db_manager:
@@ -107,7 +110,7 @@ class ApprovalEngine:
                 owner_user_id=request.owner_user_id,
             )
         except Exception:
-            pass
+            logger.warning("Falha ao persistir pedido de aprovação.", exc_info=True)
 
     def create_request(
         self,
@@ -195,7 +198,7 @@ class ApprovalEngine:
                     )
                     self._requests[req.id] = req
             except Exception:
-                pass
+                logger.warning("Falha ao recarregar pedido de aprovação.", exc_info=True)
         return req
 
     def consume_approved_request(

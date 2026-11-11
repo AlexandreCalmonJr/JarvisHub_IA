@@ -28,7 +28,7 @@ class WebhookNotificationService:
                 try:
                     return json.loads(row["value_json"])
                 except Exception:
-                    pass
+                    logger.debug("Configuração de webhooks inválida no banco; a usar predefinições.", exc_info=True)
         return {
             "enabled": False,
             "discord_webhook_url": "",

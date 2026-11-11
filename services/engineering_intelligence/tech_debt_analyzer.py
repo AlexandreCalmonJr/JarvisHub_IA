@@ -51,6 +51,7 @@ class EngineeringIntelligenceService:
             try:
                 lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
             except Exception:
+                logger.debug("Ficheiro ilegível ignorado na análise de dívida técnica: %s", rel_path, exc_info=True)
                 continue
 
             file_loc = len(lines)

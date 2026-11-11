@@ -106,9 +106,19 @@ class SQLPlaygroundService:
         target = self._resolve_db_path(db_path, project_id)
         clean_query = query.strip()
         if not clean_query:
-            raise ValueError("Informe uma consulta SQL.")
+            return {
+                "success": False,
+                "error": "Informe uma consulta SQL.",
+                "duration_ms": 0.0,
+                "read_only": True,
+            }
         if not re.match(r"^(SELECT|WITH)\b", clean_query, re.IGNORECASE):
-            raise ValueError("O SQL Playground aceita apenas consultas SELECT ou WITH em modo somente leitura.")
+            return {
+                "success": False,
+                "error": "O SQL Playground aceita apenas consultas SELECT ou WITH em modo somente leitura.",
+                "duration_ms": 0.0,
+                "read_only": True,
+            }
         safe_limit = max(1, min(int(limit), 1000))
         started = time.perf_counter()
         conn = self._connect_readonly(target)

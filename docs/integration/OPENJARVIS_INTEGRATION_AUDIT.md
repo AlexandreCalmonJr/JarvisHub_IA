@@ -603,8 +603,8 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 ### 15.1 Centro de Agentes
 
 - O cabeçalho deixou de afirmar um número fixo de especialistas e a descrição não promete capacidades sem confirmação do runtime.
-- O catálogo continua visível em modo de consulta; ações de gestão só aparecem para sessões humanas com perfil `admin` ou `developer`.
-- O endpoint de configuração passou a exigir a permissão `agents:write`, coerente com a matriz de permissões (administrador ou developer).
+- O catálogo continua visível em modo de consulta; ações de gestão só aparecem para sessões humanas com perfil `admin`.
+- O endpoint de configuração passou a exigir a dependência `require_admin`, aplicando least privilege à escrita de configuração de agentes.
 - Os endpoints de listagem e detalhe deixam de devolver `assigned_key_id`; o `system_prompt` só é devolvido a perfis humanos autorizados para gestão de agentes.
 - O seletor deixou de inventar modelos locais ou online quando a API não os devolve. O modelo atualmente configurado pode continuar visível, mas fica identificado como não confirmado na lista atual.
 - Os diálogos passaram a usar tokens de acento do design system em vez de uma paleta azul/índigo paralela.
@@ -831,7 +831,7 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Nome, missão, ferramentas permitidas, modo somente leitura, modelo preferido e chave atribuída são derivados dos dados devolvidos pela API.
 - Os departamentos são uma classificação visual por função/role; não alteram as permissões nem a identidade real do agente.
 - A animação 2.5D é identificada como ilustrativa. O indicador de atividade é neutro, pois esta página não recebe telemetria de execução em tempo real.
-- Atribuição de chave só é apresentada para perfis humanos com `agents:write`; o Cofre de Chaves só é consultado nesses perfis.
+- Atribuição de chave só é apresentada para perfis humanos com perfil `admin`; o Cofre de Chaves só é consultado nesses perfis.
 - Auditores podem consultar agentes e capacidades, mas não alterar providers/chaves nem abrir uma conversa sem `chat:use`.
 - Os cartões passaram a ser botões acessíveis por teclado; IDs de chave deixam de ser mostrados nos cartões.
 

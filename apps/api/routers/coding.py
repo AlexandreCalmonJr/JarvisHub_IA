@@ -245,7 +245,7 @@ async def decide_coding_approval(
             parameters={"task_id": decided.task_id, "operation": decided.operation},
         )
     except Exception:
-        pass
+        logger.debug("Falha ao registar auditoria da decisão de aprovação.", exc_info=True)
 
     return {
         "status": "approved" if action == "approve" else "rejected",

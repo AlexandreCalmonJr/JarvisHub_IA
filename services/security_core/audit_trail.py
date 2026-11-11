@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -5,6 +6,8 @@ from typing import Any
 from packages.contracts.security import AuditEvent, AuditEventSeverity
 
 from .redaction import redact_data
+
+logger = logging.getLogger("jarvis.security.audit_trail")
 
 
 class AuditTrail:
@@ -48,7 +51,7 @@ class AuditTrail:
                 reason=event.reason,
             )
         except Exception:
-            pass
+            logger.warning("Falha ao persistir evento de auditoria no banco.", exc_info=True)
 
     def record_event(
         self,

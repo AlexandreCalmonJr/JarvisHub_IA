@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from abc import ABC, abstractmethod
 from typing import Any
@@ -6,6 +7,8 @@ from typing import Any
 import httpx
 
 from .types import InferenceRequest, InferenceResponse, ModelMetadata
+
+logger = logging.getLogger("jarvis.model_runtime.adapter")
 
 
 def _to_anthropic_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -129,7 +132,7 @@ class OllamaAdapter(BaseModelAdapter):
                     data = res.json()
                     return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
         except Exception:
-            pass
+            logger.debug("Falha ao listar modelos carregados no Ollama.", exc_info=True)
         return []
 
     async def evict_model(self, model_name: str) -> bool:
@@ -330,7 +333,7 @@ class OllamaAdapter(BaseModelAdapter):
                                 provider="ollama_local",
                             )
                     except Exception:
-                        pass
+                        logger.debug("Falha ao registar métricas de inferência.", exc_info=True)
 
 
 class MockAdapter(BaseModelAdapter):
@@ -796,6 +799,7 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                         try:
                             event = json.loads(data_str)
                         except Exception:
+                            logger.debug("Evento SSE inválido ignorado.", exc_info=True)
                             continue
                         if event.get("type") == "message_start":
                             usage = (event.get("message") or {}).get("usage") or {}
@@ -898,4 +902,4 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                                 streamed_chars += len(text)
                                 yield text
                     except Exception:
-                        pass
+                        logger.debug("Fluxo de streaming interrompido.", exc_info=True)

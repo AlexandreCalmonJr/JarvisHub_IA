@@ -1,6 +1,9 @@
-import json
+import logging
 from typing import Any
+
 from packages.contracts.agent import AgentRole
+
+logger = logging.getLogger("jarvis.orchestration.prompt_builder")
 
 INTENT_DOMAIN_MAP: dict[str, str] = {
     "conversation": "general",
@@ -38,7 +41,7 @@ def build_specialist_prompt(
             role_enum = AgentRole(role_val)
             profile = agent_registry.get_profile(role_enum)
         except Exception:
-            pass
+            logger.debug("Perfil do agente indisponível; a usar cabeçalho genérico.", exc_info=True)
 
     if profile:
         header = (
@@ -60,7 +63,7 @@ def build_specialist_prompt(
                 if c_inst and str(c_inst).strip():
                     user_inst = f"\n\nInstruções do Desenvolvedor: {str(c_inst).strip()}"
             except Exception:
-                pass
+                logger.debug("Instruções personalizadas indisponíveis.", exc_info=True)
         lean_footer = (
             "\n\nDIRETRIZES DE RESPOSTA:\n"
             "1. Responda em Português do Brasil com clareza, concisão e naturalidade.\n"
@@ -86,7 +89,7 @@ def build_specialist_prompt(
                     + "\n".join(items)
                 )
         except Exception:
-            pass
+            logger.debug("Memórias do projeto indisponíveis.", exc_info=True)
 
     # 2.0 Injeção de Código Fonte Real do Projeto Físico em Disco
     source_code_section = ""
@@ -103,7 +106,7 @@ def build_specialist_prompt(
                             preview = content[:1800] + ("\n... [restante do arquivo truncado para brevidade]" if len(content) > 1800 else "")
                             file_snippets.append(f"📄 Arquivo `{p.name}`:\n```{p.suffix.lstrip('.')}\n{preview}\n```")
                         except Exception:
-                            pass
+                            logger.debug("Ficheiro de código ilegível ignorado: %s", p.name, exc_info=True)
                     if len(file_snippets) >= 4:
                         break
                 if file_snippets:
@@ -113,7 +116,7 @@ def build_specialist_prompt(
                         + "\nAnalise criticamente o código real acima para emitir seu parecer técnico e recomendações práticas."
                     )
         except Exception:
-            pass
+            logger.debug("Código-fonte real do projeto indisponível.", exc_info=True)
 
     # 2.1 Injeção de Memórias Episódicas do Especialista (Aprendizado Contínuo)
     agent_memory_section = ""
@@ -134,7 +137,7 @@ def build_specialist_prompt(
                     + "\n".join(items)
                 )
         except Exception:
-            pass
+            logger.debug("Memórias episódicas do especialista indisponíveis.", exc_info=True)
 
     # 2.2 Injeção de Diretrizes do Perfil do Usuário (Custom Instructions & Senioridade)
     user_instructions_section = ""
@@ -157,7 +160,7 @@ def build_specialist_prompt(
                     + "\n".join(pref_parts)
                 )
         except Exception:
-            pass
+            logger.debug("Diretrizes do perfil do utilizador indisponíveis.", exc_info=True)
 
     # 2.3 Injeção da Base de Conhecimento Local-First (JARVIS Knowledge Vault / RAG)
     knowledge_section = ""
@@ -178,7 +181,7 @@ def build_specialist_prompt(
                     + "\nUtilize as informações dos documentos acima como referência de autoridade técnica primária."
                 )
         except Exception:
-            pass
+            logger.debug("Base de conhecimento local indisponível.", exc_info=True)
 
     # 2.4 Injeção do Modo Ponytail (Senior YAGNI / The Laziest Senior Developer)
     ponytail_section = ""
@@ -187,7 +190,7 @@ def build_specialist_prompt(
         p_level = db_manager.get_ponytail_level() if (db_manager and hasattr(db_manager, "get_ponytail_level")) else "senior"
         ponytail_section = get_ponytail_instruction(p_level)
     except Exception:
-        pass
+        logger.debug("Instrução do modo Ponytail indisponível.", exc_info=True)
 
     # 3. Injeção de Skills ECC do catálogo de habilidades ativas
     skills_section = ""
@@ -225,7 +228,7 @@ def build_specialist_prompt(
                     + "\n".join(items)
                 )
         except Exception:
-            pass
+            logger.debug("Catálogo de skills indisponível.", exc_info=True)
 
     # 4. Contexto de colaboração multi-agente anterior
     collab_section = ""

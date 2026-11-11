@@ -1,4 +1,3 @@
-from typing import Any
 
 
 def generate_heuristic_technical_response(

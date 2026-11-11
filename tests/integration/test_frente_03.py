@@ -152,6 +152,7 @@ name: Clean Architecture Hexagonal ECC
 domain: backend
 description: Padrões de arquitetura limpa com isolamento estrito de portas e adaptadores
 version: 1.2.0
+license: MIT
 allowed_tools:
   - run_code
   - file_write
@@ -174,12 +175,15 @@ allowed_tools:
         skill_id = skill_data["id"]
         assert "clean_architecture_hexagonal_ecc" in skill_id
 
-        # 2. Verifica se a skill está presente no catálogo e aprovada
-        registered = skills_catalog.get_skill(skill_id)
-        assert registered is not None
-        assert registered.is_approved is True
+        # 2. Verifica se a skill está presente no catálogo privado da conta
+        listing = await ac.get("/api/v1/skills")
+        assert listing.status_code == 200
+        imported = next(s for s in listing.json() if s["id"] == skill_id)
+        assert imported["is_approved"] is True
+        assert imported["origin"] == "imported_ecc"
 
         # 3. Exclui/revoga a skill
         del_resp = await ac.delete(f"/api/v1/skills/{skill_id}")
         assert del_resp.status_code == 200
-        assert skills_catalog.get_skill(skill_id) is None
+        listing_after = await ac.get("/api/v1/skills")
+        assert all(s["id"] != skill_id for s in listing_after.json())

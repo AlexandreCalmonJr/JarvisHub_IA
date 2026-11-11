@@ -1,6 +1,5 @@
 """Serviço de busca, curadoria e instalação de modelos Hugging Face para o JARVIS AI Hub."""
 
-import asyncio
 import json
 import logging
 from typing import Any
@@ -206,7 +205,7 @@ async def stream_ollama_pull(model_tag: str):
                         if status == "success":
                             break
                     except Exception:
-                        pass
+                        logger.debug("Falha ao consultar o progresso do download; a continuar.", exc_info=True)
         except Exception as exc:
             yield {
                 "status": f"Falha no download: {exc}",

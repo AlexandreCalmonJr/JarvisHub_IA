@@ -111,7 +111,7 @@ class McpStdioClient:
             try:
                 process.stdin.close()
             except Exception:
-                pass
+                logger.debug("Falha ao fechar stdin do servidor MCP.", exc_info=True)
         try:
             if process.returncode is None:
                 process.terminate()
@@ -273,7 +273,7 @@ class McpStdioClient:
         except asyncio.CancelledError:
             raise
         except Exception:
-            pass
+            logger.debug("Leitor de stderr do servidor MCP terminou com erro.", exc_info=True)
 
     def _stderr_hint(self) -> str:
         if not self._stderr_tail:

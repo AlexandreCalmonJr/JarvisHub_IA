@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 from fastapi.responses import StreamingResponse
 
-from apps.api.auth import Principal, get_principal, require_permission
+from apps.api.auth import Principal, get_principal, require_admin, require_permission
 from apps.api.deps import (
     AGENT_PROFILES,
     InferenceRequest,
@@ -108,7 +108,7 @@ async def get_agent_endpoint(
 @router.put("/api/v1/agents/{role}/config")
 async def update_agent_config_endpoint(
     role: str, payload: AgentConfigUpdateRequest,
-    principal: Principal = Depends(require_permission("agents:write")),
+    principal: Principal = Depends(require_admin),
 ):
     clean_role = role.lower().strip()
     target_profile = None

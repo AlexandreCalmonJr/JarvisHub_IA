@@ -121,7 +121,7 @@ def load_hybrid_config_from_disk(file_path: Path) -> OnlineProviderConfig:
             data = json.loads(file_path.read_text(encoding="utf-8"))
             return OnlineProviderConfig(**data)
         except Exception:
-            pass
+            logger.warning("Configuração híbrida inválida em %s; a usar predefinições.", file_path)
     return OnlineProviderConfig()
 
 

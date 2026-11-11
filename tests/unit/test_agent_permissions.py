@@ -4,7 +4,7 @@ from packages.contracts.security import ProjectWorkMode
 from services.memory.database import DatabaseManager
 from services.security_core import PermissionDeniedError, SecurityCore
 from services.tool_gateway import ToolGateway
-from services.tool_gateway.types import ToolCategory, ToolDefinition, ToolExecutionRequest
+from services.tool_gateway.types import ToolExecutionRequest
 
 
 def test_agent_read_only_persistence(tmp_path):

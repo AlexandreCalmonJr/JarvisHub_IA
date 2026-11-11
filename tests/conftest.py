@@ -1,14 +1,17 @@
+import atexit
 import os
+import shutil
+import tempfile
 from pathlib import Path
+
 import httpx
-import pytest
 
 TEST_ADMIN_TOKEN = "jrv_admin_test_secret_for_suite_runs"
 os.environ["JARVIS_ADMIN_TOKEN"] = TEST_ADMIN_TOKEN
 
-# Configura diretório de dados para isolar dados de autenticação de teste
-data_dir_override = Path(__file__).resolve().parent.parent / "workspace" / "test_data"
-data_dir_override.mkdir(parents=True, exist_ok=True)
+# Isola os dados de autenticação e do banco num diretório temporário por execução.
+data_dir_override = Path(tempfile.mkdtemp(prefix="jarvis-tests-"))
+atexit.register(shutil.rmtree, data_dir_override, ignore_errors=True)
 os.environ["JARVIS_DATA_DIR"] = str(data_dir_override)
 
 from apps.api.auth import auth_service

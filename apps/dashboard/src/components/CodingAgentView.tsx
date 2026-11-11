@@ -130,7 +130,7 @@ export const CodingAgentView: React.FC = () => {
         const developer = human && principal?.role === 'developer';
         setCanUseCoding(admin || developer);
         setCanClearHistory(admin || developer);
-        setCanDecideApproval((admin || developer) || (principal?.kind === 'device' && scopes.includes('approvals:decide')));
+        setCanDecideApproval((admin || developer) || (principal?.kind === 'device' && Boolean(principal?.scopes?.includes('approvals:decide'))));
         setCanReloadMcp(admin);
         setRoleLoaded(true);
       })

@@ -1,9 +1,12 @@
 import hashlib
 import json
+import logging
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("jarvis.memory.database")
 
 
 class DatabaseManager:
@@ -222,15 +225,15 @@ class DatabaseManager:
             try:
                 conn.execute("ALTER TABLE approvals ADD COLUMN reversible INTEGER DEFAULT 1;")
             except Exception:
-                pass
+                logger.debug("Coluna reversible já existe na tabela approvals.")
             try:
                 conn.execute("ALTER TABLE agent_configs ADD COLUMN is_read_only INTEGER DEFAULT 1;")
             except Exception:
-                pass
+                logger.debug("Coluna is_read_only já existe na tabela agent_configs.")
             try:
                 conn.execute("ALTER TABLE agent_configs ADD COLUMN assigned_key_id TEXT;")
             except Exception:
-                pass
+                logger.debug("Coluna assigned_key_id já existe na tabela agent_configs.")
             self._apply_migrations(conn)
 
     @staticmethod
@@ -1031,7 +1034,7 @@ class DatabaseManager:
                 try:
                     return json.loads(row["value_json"])
                 except Exception:
-                    pass
+                    logger.debug("Perfil de desenvolvedor inválido no banco; a usar predefinições.", exc_info=True)
         return {
             "displayName": "Desenvolvedor",
             "avatarIcon": "💻",
@@ -1130,7 +1133,7 @@ class DatabaseManager:
                 try:
                     return json.loads(row["value_json"])
                 except Exception:
-                    pass
+                    logger.debug("Configuração de hardware inválida no banco; a usar predefinições.", exc_info=True)
         return {
             "mode": "auto",
             "cpu_threads": 6,

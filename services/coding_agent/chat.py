@@ -19,7 +19,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any, Callable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from .context import build_project_context
 from .providers import ChatProvider, ProviderError

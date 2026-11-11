@@ -50,8 +50,7 @@ export const AgentCenterView: React.FC = () => {
       .then((principal) => {
         if (!cancelled) {
           setCanManageAgents(
-            principal?.kind === 'human' &&
-            (principal?.role === 'admin' || principal?.role === 'developer')
+            principal?.kind === 'human' && principal?.role === 'admin'
           );
         }
       })

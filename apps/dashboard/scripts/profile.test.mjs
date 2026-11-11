@@ -31,14 +31,15 @@ test('profile API does not send API credentials to the general profile endpoint'
 });
 
 test('credential entry remains unavailable until the private credential vault exists', () => {
-  assert.match(modal, /Cofre privado por conta em implementação/);
-  assert.match(modal, /não envia nem armazena tokens de API/);
+  assert.match(modal, /Cofre de Chaves/);
+  assert.match(modal, /Não coloque tokens ou palavras-passe/);
   assert.doesNotMatch(modal, /value=\{profile\.huggingfaceToken/);
   assert.doesNotMatch(modal, /value=\{profile\.groqApiKey/);
   assert.doesNotMatch(modal, /value=\{profile\.geminiApiKey/);
 });
 
 test('export and history cleanup operate only on the active account keys', () => {
-  assert.match(modal, /localStorage\.getItem\(getAccountStorageKey\('jarvis_chat_messages_v1'\)\)/);
-  assert.match(modal, /localStorage\.removeItem\(getAccountStorageKey\('jarvis_chat_messages_v1'\)\)/);
+  assert.match(modal, /const fixedKeys = new Set\(\[/);
+  assert.match(modal, /getAccountStorageKey\('jarvis_chat_messages_v1'\)/);
+  assert.match(modal, /localStorage\.removeItem\(key\)/);
 });

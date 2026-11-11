@@ -58,7 +58,6 @@ from services.quality_studio import QualityStudioService
 from services.resource_manager import ResourceManager
 from services.security_core import SecurityCore, UnauthorizedApprovalError, cyber_shield  # noqa: F401
 from services.skills_manager import SkillMetadata, SkillsCatalog
-from services.skills_manager.validator import SkillValidator
 from services.tool_gateway import SubprocessSandbox, ToolExecutionRequest, ToolGateway  # noqa: F401
 
 logger = logging.getLogger("jarvis.api")

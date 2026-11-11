@@ -27,8 +27,8 @@ test('task deletion requires an explicit confirmation in the dashboard modal', (
   assert.match(view, /setConfirmDeleteId\(task\.id\)/);
 });
 
-test('empty task history does not display a 100 percent success rate', () => {
-  assert.match(view, /successRate === null \? '—'/);
+test('empty task history does not display a 100 percent completion rate', () => {
+  assert.match(view, /completionRate === null \? '—'/);
   assert.match(view, /: null/);
 });
 

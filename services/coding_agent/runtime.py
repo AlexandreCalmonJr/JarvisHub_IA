@@ -533,6 +533,7 @@ class CodingAgentRuntime:
                 try:
                     tool_calls.append(ToolCall(**raw))
                 except Exception:
+                    logger.debug("Chamada de ferramenta inválida ignorada no histórico.", exc_info=True)
                     continue
             turns.append(
                 ChatTurn(

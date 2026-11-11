@@ -1,5 +1,8 @@
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("jarvis.project_workspace.dockerizer")
 
 
 class ProjectDockerizer:
@@ -218,13 +221,13 @@ services:
                 self.workspace.ensure_git_repo(project_id)
                 self.workspace.commit_project_changes(project_id, f"feat(devops): Dockerizacao em 1 clique para {stack}")
             except Exception:
-                pass
+                logger.debug("Falha ao registar commit Git da dockerização.", exc_info=True)
             try:
                 inventory = self.workspace.scanner.scan(project_id=project_id, root_path=project_dir)
                 self.workspace._inventories[project_id] = inventory
                 self.workspace._reports[project_id] = self.workspace.analyzer.analyze(inventory)
             except Exception:
-                pass
+                logger.debug("Falha ao atualizar inventário após dockerização.", exc_info=True)
             if hasattr(self.workspace.security_core, "audit") and self.workspace.security_core.audit:
                 self.workspace.security_core.audit.record_event(
                     operation="PROJECT_DOCKERIZED",

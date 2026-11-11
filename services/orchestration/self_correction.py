@@ -8,7 +8,6 @@ import ast
 import json
 import logging
 import re
-from typing import Any
 
 logger = logging.getLogger("jarvis.orchestration.self_correction")
 
@@ -88,7 +87,7 @@ class SelfCorrectionEngine:
             json.loads(code)
             return code, False, None
         except Exception:
-            pass
+            logger.debug("JSON inválido; a tentar reparação heurística.", exc_info=True)
 
         cleaned = code.strip()
         # Remove vírgulas finais antes de fechar objeto ou array

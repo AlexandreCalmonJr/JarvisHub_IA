@@ -6,7 +6,6 @@ preservados, mas não são publicados para nenhuma conta automaticamente.
 """
 import json
 import logging
-import time
 import uuid
 from typing import Any
 from datetime import datetime, UTC

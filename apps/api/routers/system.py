@@ -22,8 +22,6 @@ from apps.api.deps import (
     webhook_service,
     telemetry_store,
     hybrid_config,
-    save_hybrid_config_to_disk,
-    HYBRID_CONFIG_PATH,
     data_dir,
     key_vault,
 )

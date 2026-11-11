@@ -5,9 +5,7 @@ para injeção contextual em tempo real nos 26 agentes especialistas.
 Opera 100% offline, local e blindado na sua máquina (Intel i5 + 32GB RAM).
 """
 
-import hashlib
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +102,7 @@ class KnowledgeVaultService:
             try:
                 return file_path.read_text(encoding=enc)
             except Exception:
+                logger.debug("Codificação %s falhou para %s; a tentar a seguinte.", enc, file_path.name, exc_info=True)
                 continue
         return ""
 

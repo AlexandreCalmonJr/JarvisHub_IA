@@ -8,7 +8,6 @@ CORS restrito e HSTS para frameworks populares:
 """
 
 import logging
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("jarvis.policy_generator")

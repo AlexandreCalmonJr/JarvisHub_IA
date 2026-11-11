@@ -123,7 +123,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
         if (cancelled) return;
         const permissions = Array.isArray(principal?.permissions) ? principal.permissions : [];
         const human = principal?.kind === 'human';
-        const canManage = human && (permissions.includes('*') || permissions.includes('agents:write'));
+        const canManage = human && permissions.includes('*');
         setCanManageAgents(canManage);
         setCanUseChat(human && (permissions.includes('*') || permissions.includes('chat:use')));
         setRoleLoaded(true);
@@ -682,7 +682,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                 <Key size={14} />
                 <span>{savingKey ? 'Salvando...' : 'Salvar Atribuição de Chave'}</span>
               </button>
-              </> : <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-primary)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>A atribuição de providers e chaves exige agents:write. Nenhum segredo é apresentado nesta vista.</div>}
+              </> : <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-primary)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>A atribuição de providers e chaves exige perfil de administrador. Nenhum segredo é apresentado nesta vista.</div>}
             </div>
 
             {/* Botão de Ação: Abrir no Chat */}

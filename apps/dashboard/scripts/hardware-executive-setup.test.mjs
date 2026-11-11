@@ -48,8 +48,10 @@ test('executive report UI distinguishes loading and access errors from empty dat
 });
 
 test('setup wizard does not collect or save shared provider API keys', () => {
-  assert.match(setupView, /getAccountStorageKey\('jarvis_setup_completed'\)/);
+  assert.match(setupView, /\/system\/onboarding/);
+  assert.match(setupView, /\/system\/onboarding\/complete/);
   assert.doesNotMatch(setupView, /apiKey|saveHybridConfig|testHybridConnection|fetchHybridConfig/);
   assert.match(setupView, /Cofre Privado por Conta/);
-  assert.match(app, /getAccountStorageKey\('jarvis_setup_completed'\)/);
+  assert.match(app, /\/system\/onboarding/);
+  assert.doesNotMatch(app, /jarvis_setup_completed/);
 });

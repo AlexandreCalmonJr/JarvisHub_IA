@@ -335,7 +335,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       id: 'act-settings',
       category: 'Ações Rápidas',
       title: 'Perfil e Preferências',
-      subtitle: 'Consulte o perfil e ajuste as preferências locais disponíveis'
+      subtitle: 'Consulte o perfil e ajuste as preferências locais disponíveis',
       icon: Settings,
       iconColor: 'var(--accent-color)',
       action: () => {
