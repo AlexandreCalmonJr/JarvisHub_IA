@@ -387,3 +387,63 @@ async def test_09_protected_files_blocked_from_modification(test_project_id):
             new_content="[core] hacked = true",
         )
 
+@pytest.mark.asyncio
+async def test_08_workspace_api_write_requires_matching_human_approval(test_project_id):
+    """Workspace API não escreve antes da aprovação e rejeita pedidos pendentes."""
+    project_dir = workspace_service.get_project_dir(test_project_id)
+    target = project_dir / "main.py"
+    original = target.read_text(encoding="utf-8")
+    payload = {
+        "path": "main.py",
+        "content": "print('approved content')\n",
+        "reason": "Teste de aprovação explícita",
+    }
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        requested = await client.post(
+            f"/api/v1/workspace/projects/{test_project_id}/files/write",
+            json=payload,
+        )
+        assert requested.status_code == 200
+        data = requested.json()
+        assert data["status"] == "approval_required"
+        assert target.read_text(encoding="utf-8") == original
+
+        pending_attempt = await client.post(
+            f"/api/v1/workspace/projects/{test_project_id}/files/write",
+            json={**payload, "approval_id": data["approval_id"]},
+        )
+        assert pending_attempt.status_code == 403
+        assert target.read_text(encoding="utf-8") == original
+
+        decision = await client.post(
+            f"/api/v1/approvals/{data['approval_id']}/decide",
+            json={"action": "approve", "reason": "Aprovado no teste E2E"},
+        )
+        assert decision.status_code == 200
+        assert decision.json()["status"] == "approved"
+
+        applied = await client.post(
+            f"/api/v1/workspace/projects/{test_project_id}/files/write",
+            json={**payload, "approval_id": data["approval_id"]},
+        )
+        assert applied.status_code == 200
+        assert applied.json()["status"] == "saved"
+        assert target.read_text(encoding="utf-8") == payload["content"]
+
+
+def test_09_external_import_requires_an_explicitly_allowed_root(monkeypatch, tmp_path):
+    """A importação fora do workspace só é permitida quando a raiz é configurada."""
+    external_root = tmp_path / "approved-imports"
+    external_root.mkdir()
+    project = external_root / "sample"
+    project.mkdir()
+
+    monkeypatch.delenv("JARVIS_WORKSPACE_IMPORT_ROOTS", raising=False)
+    with pytest.raises(PermissionDeniedError, match="raiz autorizada"):
+        workspace_service.validate_import_root(str(project))
+
+    monkeypatch.setenv("JARVIS_WORKSPACE_IMPORT_ROOTS", str(external_root))
+    assert workspace_service.validate_import_root(str(project)) == project.resolve()
+
