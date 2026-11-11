@@ -371,41 +371,40 @@ def create_master_graph(
         approval_id = None
 
         if intent == "code_modification":
-            is_workspace_site = False
-            if workspace_service:
-                projects = workspace_service.list_available_projects()
-                p_lower = state["user_prompt"].lower()
-                for prj in projects:
-                    p_id = prj["id"].lower()
-                    if p_id in p_lower or any(
-                        part in p_lower for part in p_id.split("-") if len(part) > 2
-                    ):
-                        is_workspace_site = True
-                        break
-
-            # Se não for um site de workspace em edição rápida, exige aprovação humana
-            if not is_workspace_site:
-                approval_required = True
-                if project_id:
-                    try:
-                        security_core.permission_engine.check_operation_permission(
-                            agent_role=AgentRole.BACKEND_DEVELOPER,
-                            project_id=project_id,
-                            operation="file_write",
-                            has_human_approval=False,
+            # Nenhuma escrita física é tratada como "edição rápida": todas exigem
+            # pré-visualização e aprovação humana, inclusive projetos já registados.
+            approval_required = True
+            if not workspace_service:
+                violations.append("Serviço de workspace indisponível; alteração bloqueada.")
+            else:
+                try:
+                    preview, affected_resources = execute_workspace_modification(
+                        workspace_service=workspace_service,
+                        user_prompt=state["user_prompt"],
+                        project_id=project_id,
+                        preview_only=True,
+                    )
+                    if not affected_resources:
+                        raise PermissionDeniedError(
+                            "Não foi possível determinar o recurso físico que seria alterado."
                         )
-                    except PermissionDeniedError as err:
-                        violations.append(str(err))
-
-                appr = security_core.approval_engine.create_request(
-                    task_id=state["task_id"],
-                    agent_role=AgentRole.JARVIS_MASTER.value,
-                    operation="code_modification",
-                    impact_summary=f"Alteração de código solicitada pelo utilizador: '{state['user_prompt']}'",
-                    affected_resources=[f"project:{project_id or 'workspace'}"],
-                    reversible=True,
-                )
-                approval_id = appr.id
+                    appr = security_core.approval_engine.create_request(
+                        task_id=state["task_id"],
+                        agent_role=AgentRole.JARVIS_MASTER.value,
+                        operation="file_write",
+                        impact_summary=(
+                            f"Alteração de código solicitada pelo utilizador: "
+                            f"'{state['user_prompt']}'"
+                        ),
+                        affected_resources=affected_resources,
+                        proposed_diff=preview,
+                        reversible=True,
+                    )
+                    approval_id = appr.id
+                except Exception as exc:
+                    violations.append(
+                        f"Pré-visualização da alteração falhou; nenhuma escrita foi realizada: {exc}"
+                    )
 
         return {
             "policy_verified": len(violations) == 0,
