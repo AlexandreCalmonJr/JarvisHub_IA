@@ -20,7 +20,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   const [killLoading, setKillLoading] = useState(false);
   const [canKill, setCanKill] = useState(false);
   const [taskIdInput, setTaskIdInput] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Trilha de Auditoria ao Vivo
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -71,13 +71,11 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
     setKillLoading(true);
     try {
       await triggerKillSwitch('global');
-      setMessage(
-        'Kill Switch Global ACIONADO com sucesso! Todas as ferramentas foram bloqueadas.'
-      );
+      setMessage({ type: 'success', text: 'Kill Switch Global acionado. As operações foram bloqueadas pelo mecanismo de contenção.' });
       onRefresh();
       loadAuditLogs();
     } catch (err: any) {
-      setMessage(`Erro: ${err.message}`);
+      setMessage({ type: 'error', text: `Erro: ${err.message}` });
     } finally {
       setKillLoading(false);
     }
@@ -88,7 +86,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
     setKillLoading(true);
     try {
       await triggerKillSwitch('task', taskIdInput.trim());
-      setMessage(`Tarefa '${taskIdInput.trim()}' cancelada com sucesso.`);
+      setMessage({ type: 'success', text: `Tarefa '${taskIdInput.trim()}' cancelada com sucesso.` });
       setTaskIdInput('');
       onRefresh();
       loadAuditLogs();
@@ -103,16 +101,17 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {message && (
         <div
+          role={message.type === 'error' ? 'alert' : 'status'}
           style={{
             padding: '12px 16px',
-            backgroundColor: 'var(--accent-glow)',
-            border: '1px solid var(--border-accent)',
+            backgroundColor: message.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+            border: `1px solid ${message.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
             borderRadius: '8px',
-            color: 'var(--accent-color)',
+            color: message.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)',
             fontSize: '0.875rem',
           }}
         >
-          {message}
+          {message.text}
         </div>
       )}
 

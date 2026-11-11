@@ -444,7 +444,7 @@ export const DevSecOpsSection: React.FC = () => {
                         fontSize: '0.88rem',
                       }}
                     >
-                      {f.file}:{f.line} — <code style={{ color: '#818cf8' }}>{f.type}</code>
+                      {f.file}:{f.line} — <code style={{ color: 'var(--accent-color)' }}>{f.type}</code>
                     </div>
                     <span
                       className={`badge ${
@@ -498,7 +498,7 @@ export const DevSecOpsSection: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-              Políticas de Segurança e Hardening (1-Clique)
+              Políticas de Segurança e Hardening
             </h3>
             <p
               style={{
@@ -507,7 +507,7 @@ export const DevSecOpsSection: React.FC = () => {
                 marginTop: '2px',
               }}
             >
-              Aplique headers de proteção CSP, CORS estrito e proteção contra Clickjacking/XSS no seu projeto.
+              Solicite a aplicação de headers CSP, CORS estrito e proteção contra Clickjacking/XSS. A alteração só é executada depois de aprovação humana.
             </p>
           </div>
         </div>
