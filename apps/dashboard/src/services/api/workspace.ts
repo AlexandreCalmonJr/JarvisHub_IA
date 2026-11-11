@@ -32,7 +32,7 @@ async function requestWithHumanApproval<T>(
       reason: approved ? 'Aprovado explicitamente pelo utilizador na interface.' : 'Rejeitado pelo utilizador na interface.',
     }),
   });
-  const decisionData = await parse(decision);
+  await parse(decision);
   if (!approved) throw new Error('Operação cancelada. O pedido foi rejeitado e nada foi alterado.');
 
   const next = retry(approvalId);
