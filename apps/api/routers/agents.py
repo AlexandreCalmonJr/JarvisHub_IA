@@ -285,6 +285,7 @@ async def stream_agent_execution_endpoint(role: str, payload: AutonomousAgentRun
         prompt=payload.prompt.strip(),
         session_id=session_id,
         project_id=payload.project_id,
+        owner_user_id=_private_owner(principal),
         mode=mode,
         max_iterations=payload.max_iterations,
         temperature=payload.temperature,
@@ -338,7 +339,10 @@ async def get_agent_history_endpoint(
 
 
 @router.post("/api/v1/agents/{role}/task")
-async def execute_agent_task_endpoint(role: str, payload: AutonomousAgentRunRequest):
+async def execute_agent_task_endpoint(
+    role: str, payload: AutonomousAgentRunRequest,
+    principal: Principal = Depends(get_principal),
+):
     """Executa uma tarefa estruturada com o especialista, retornando o AgentOutputContract formal."""
     agent_role = _resolve_agent_role(role)
     try:
