@@ -47,7 +47,9 @@ def _private_owner(principal: Principal) -> str:
 
 
 @router.get("/api/v1/agents")
-async def list_agents_endpoint():
+async def list_agents_endpoint(
+    principal: Principal = Depends(get_principal),
+):
     return [
         {
             "role": profile.role.value if hasattr(profile.role, "value") else str(profile.role),
@@ -64,7 +66,9 @@ async def list_agents_endpoint():
 
 
 @router.get("/api/v1/agents/{role}")
-async def get_agent_endpoint(role: str):
+async def get_agent_endpoint(
+    role: str, principal: Principal = Depends(get_principal),
+):
     clean_role = role.lower().strip()
     profile = None
     for p in AGENT_PROFILES.values():
@@ -226,11 +230,12 @@ async def agent_playground_endpoint(
         m_used = resp.model_name
         t_prompt = resp.tokens_prompt
         t_comp = resp.tokens_completion
-    except Exception:
-        content = f"Parecer técnico estruturado de {profile.name}: Análise de '{payload.prompt}' concluída com sucesso."
-        m_used = profile.preferred_model
-        t_prompt = 30
-        t_comp = 50
+    except Exception as exc:
+        logger.exception("Falha no playground do especialista %s", clean_role)
+        raise HTTPException(
+            status_code=503,
+            detail="O provedor de IA está indisponível. O especialista não foi executado.",
+        ) from exc
 
     return {
         "agent_role": clean_role,
