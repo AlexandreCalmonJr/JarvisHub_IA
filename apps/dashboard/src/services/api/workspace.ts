@@ -19,8 +19,10 @@ async function requestWithHumanApproval<T>(
   const approvalId = String(firstData.approval_id || '');
   if (!approvalId) throw new Error('O servidor solicitou aprovação sem fornecer um identificador válido.');
 
+  const previewValue = firstData.diff || firstData.path || firstData.current_head || firstData.project_id || '';
+  const previewText = String(previewValue).slice(0, 3500);
   const approved = window.confirm(
-    `${impactLabel}\n\nO JARVIS preparou a operação e registou o pedido no Approval Center.\n\nDeseja aprovar e executar agora?`,
+    `${impactLabel}\n\nPré-visualização:\n${previewText || 'Consulte o pedido no Approval Center.'}\n\nO pedido foi registado no Approval Center. Deseja aprovar e executar agora?`,
   );
   const decision = await fetch(`${API_BASE}/approvals/${encodeURIComponent(approvalId)}/decide`, {
     method: 'POST',
