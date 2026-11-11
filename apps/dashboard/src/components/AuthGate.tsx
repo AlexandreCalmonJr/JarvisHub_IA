@@ -234,10 +234,10 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
             </form>
             </>
           )}
-          <div style={styles.modeLinks}>
-            <button type="button" onClick={() => { setMode('account'); setError(''); }}>Conta e palavra-passe</button>
-            <button type="button" onClick={() => { setMode('bootstrap'); setError(''); }}>Primeiro acesso</button>
-            <button type="button" onClick={() => { setMode('admin'); setError(''); }}>Token admin</button>
+          <div className="auth-mode-links" role="group" aria-label="Métodos de acesso">
+            <button className={mode === 'account' ? 'auth-mode-link is-active' : 'auth-mode-link'} type="button" onClick={() => { setMode('account'); setError(''); }}>Conta e palavra-passe</button>
+            <button className={mode === 'bootstrap' ? 'auth-mode-link is-active' : 'auth-mode-link'} type="button" onClick={() => { setMode('bootstrap'); setError(''); }}>Primeiro acesso</button>
+            <button className={mode === 'admin' ? 'auth-mode-link is-active' : 'auth-mode-link'} type="button" onClick={() => { setMode('admin'); setError(''); }}>Token admin</button>
           </div>
           <div style={styles.securityNote}><span aria-hidden="true">🔒</span><span>As palavras-passe são armazenadas com hash seguro. A sessão utiliza cookie HttpOnly e o navegador não guarda as credenciais.</span></div>
           <p style={styles.footer}>JARVIS AI HUB · Orquestração inteligente multiagente</p>
@@ -349,45 +349,45 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  screen: { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'radial-gradient(ellipse at 50% 0%, #172554 0%, #0b1120 48%, #070a12 100%)', color: '#e5e7eb', fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' },
-  panel: { width: 'min(100%, 440px)', boxSizing: 'border-box', padding: 36, border: '1px solid rgba(148,163,184,.2)', borderRadius: 22, background: 'rgba(15,23,42,.92)', boxShadow: '0 24px 80px rgba(0,0,0,.45)' },
+  screen: { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 'clamp(16px, 4vw, 36px)', background: 'radial-gradient(ellipse at 50% 0%, var(--accent-glow) 0%, var(--bg-primary) 55%, #11100f 100%)', color: 'var(--text-primary)', fontFamily: 'var(--font-sans)' },
+  panel: { width: 'min(100%, 460px)', boxSizing: 'border-box', padding: 'clamp(22px, 5vw, 38px)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-xl)', background: 'var(--bg-secondary)', boxShadow: '0 24px 80px rgba(0,0,0,.38)' },
   brandRow: { display: 'flex', alignItems: 'center', gap: 13, marginBottom: 26 },
-  brand: { color: '#f8fafc', fontSize: 15, letterSpacing: '.12em', fontWeight: 600 },
-  mark: { width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 14, background: 'linear-gradient(135deg,#2563eb,#7c3aed)', fontSize: 25, fontWeight: 800, color: '#fff' },
-  eyebrow: { color: '#60a5fa', fontSize: 10, fontWeight: 700, letterSpacing: '.16em', margin: '0 0 9px' },
-  title: { fontSize: 27, letterSpacing: '-.04em', margin: '0 0 10px', color: '#f8fafc' },
-  muted: { color: '#94a3b8', fontSize: 13, lineHeight: 1.65, margin: '0 0 25px' },
-  mutedSmall: { color: '#94a3b8', fontSize: 12, lineHeight: 1.55, margin: '0 0 18px' },
+  brand: { color: 'var(--text-primary)', fontSize: 15, letterSpacing: '.12em', fontWeight: 700 },
+  mark: { width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 'var(--radius-lg)', background: 'linear-gradient(135deg,var(--accent-color),var(--accent-hover))', fontSize: 25, fontWeight: 800, color: '#fff', boxShadow: '0 8px 24px var(--accent-glow)' },
+  eyebrow: { color: 'var(--accent-color)', fontSize: 10, fontWeight: 700, letterSpacing: '.16em', margin: '0 0 9px' },
+  title: { fontSize: 'clamp(24px, 5vw, 29px)', letterSpacing: '-.04em', margin: '0 0 10px', color: 'var(--text-primary)' },
+  muted: { color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.65, margin: '0 0 25px' },
+  mutedSmall: { color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.55, margin: '0 0 18px' },
   form: { display: 'grid', gap: 10 },
-  helpText: { margin: '0 0 14px', color: '#93c5fd', fontSize: 11, lineHeight: 1.65 },
+  helpText: { margin: '0 0 14px', color: 'var(--text-secondary)', fontSize: 11, lineHeight: 1.65 },
   userForm: { display: 'grid', gap: 8 },
-  label: { color: '#cbd5e1', fontSize: 11, fontWeight: 650, marginTop: 6 },
-  input: { width: '100%', boxSizing: 'border-box', padding: '12px 13px', borderRadius: 10, border: '1px solid #334155', background: '#0b1220', color: '#f8fafc', outline: 'none', fontSize: 13 },
-  button: { marginTop: 10, padding: '13px 16px', border: 0, borderRadius: 10, background: 'linear-gradient(135deg,#2563eb,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer' },
-  error: { padding: 11, borderRadius: 9, background: 'rgba(127,29,29,.3)', border: '1px solid #7f1d1d', color: '#fecaca', fontSize: 12 },
+  label: { color: 'var(--text-secondary)', fontSize: 11, fontWeight: 650, marginTop: 6 },
+  input: { width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 13px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none', fontSize: 13 },
+  button: { marginTop: 10, padding: '13px 16px', border: 0, borderRadius: 'var(--radius-md)', background: 'linear-gradient(135deg,var(--accent-color),var(--accent-hover))', color: '#fff', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 22px var(--accent-glow)' },
+  error: { padding: 11, borderRadius: 9, background: 'rgba(127,29,29,.3)', border: '1px solid rgba(248,113,113,.35)', color: '#fecaca', fontSize: 12 },
   modeLinks: { display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 19 },
-  securityNote: { display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 21, padding: 12, borderRadius: 10, background: 'rgba(30,41,59,.65)', color: '#94a3b8', fontSize: 10, lineHeight: 1.5 },
-  footer: { textAlign: 'center', color: '#64748b', fontSize: 10, margin: '23px 0 0' },
-  progress: { height: 3, borderRadius: 3, background: 'linear-gradient(90deg,#2563eb,#818cf8)', marginTop: 24, animation: 'pulse 1.4s infinite' },
-  sessionPill: { position: 'fixed', right: 16, bottom: 14, zIndex: 3000, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 999, background: 'rgba(15,23,42,.96)', border: '1px solid rgba(148,163,184,.25)', color: '#cbd5e1', fontSize: 11, boxShadow: '0 8px 30px rgba(0,0,0,.25)' },
+  securityNote: { display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 21, padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 10, lineHeight: 1.5 },
+  footer: { textAlign: 'center', color: 'var(--text-muted)', fontSize: 10, margin: '23px 0 0' },
+  progress: { height: 3, borderRadius: 3, background: 'linear-gradient(90deg,var(--accent-color),var(--accent-hover))', marginTop: 24, animation: 'pulse 1.4s infinite' },
+  sessionPill: { position: 'fixed', right: 16, bottom: 14, zIndex: 3000, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, maxWidth: 'calc(100vw - 32px)', padding: '8px 11px', borderRadius: 999, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 11, boxShadow: '0 8px 30px rgba(0,0,0,.25)' },
   sessionDot: { width: 7, height: 7, borderRadius: '50%', background: '#22c55e' },
-  pillButton: { border: 0, borderLeft: '1px solid #334155', paddingLeft: 9, background: 'transparent', color: '#93c5fd', cursor: 'pointer', fontSize: 11 },
-  logout: { border: 0, borderLeft: '1px solid #334155', paddingLeft: 9, background: 'transparent', color: '#fca5a5', cursor: 'pointer', fontSize: 11 },
-  overlay: { position: 'fixed', inset: 0, zIndex: 4000, display: 'grid', placeItems: 'center', padding: 18, background: 'rgba(2,6,23,.78)', backdropFilter: 'blur(8px)' },
-  accessPanel: { width: 'min(100%, 560px)', maxHeight: 'min(90vh, 850px)', overflowY: 'auto', boxSizing: 'border-box', padding: 25, borderRadius: 18, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', boxShadow: '0 25px 90px rgba(0,0,0,.5)' },
+  pillButton: { border: 0, borderLeft: '1px solid var(--border-color)', paddingLeft: 9, background: 'transparent', color: 'var(--accent-color)', cursor: 'pointer', fontSize: 11 },
+  logout: { border: 0, borderLeft: '1px solid var(--border-color)', paddingLeft: 9, background: 'transparent', color: 'var(--danger-color)', cursor: 'pointer', fontSize: 11 },
+  overlay: { position: 'fixed', inset: 0, zIndex: 4000, display: 'grid', placeItems: 'center', padding: 18, background: 'rgba(0,0,0,.72)', backdropFilter: 'blur(8px)' },
+  accessPanel: { width: 'min(100%, 560px)', maxHeight: 'min(90vh, 850px)', overflowY: 'auto', boxSizing: 'border-box', padding: 'clamp(18px, 4vw, 25px)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 25px 90px rgba(0,0,0,.5)' },
   accessHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
-  accessTitle: { margin: 0, fontSize: 23, color: '#f8fafc' },
-  close: { border: 0, background: 'transparent', color: '#94a3b8', fontSize: 28, cursor: 'pointer' },
-  accessMessage: { padding: 10, borderRadius: 8, background: 'rgba(37,99,235,.12)', color: '#bfdbfe', fontSize: 12 },
+  accessTitle: { margin: 0, fontSize: 23, color: 'var(--text-primary)' },
+  close: { border: 0, background: 'transparent', color: 'var(--text-secondary)', fontSize: 28, cursor: 'pointer' },
+  accessMessage: { padding: 10, borderRadius: 8, background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: 12 },
   listTitle: { margin: '24px 0 10px', fontSize: 14 },
   userList: { display: 'grid', gap: 8 },
-  userRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 11, borderRadius: 9, background: '#172033', border: '1px solid #293548' },
+  userRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 11, borderRadius: 9, background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' },
   userMeta: { display: 'block', marginTop: 3, color: '#94a3b8', fontSize: 10 },
   resetForm: { display: 'grid', gap: 9, marginTop: 14, padding: 13, borderRadius: 10, border: '1px solid #334155', background: '#111c30' },
   resetHeading: { fontSize: 12, color: '#e2e8f0' },
   resetActions: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' },
   cancelButton: { border: '1px solid #334155', background: 'transparent', color: '#cbd5e1', borderRadius: 7, padding: '8px 11px', cursor: 'pointer', fontSize: 11 },
-  resetConfirmButton: { border: 0, background: '#2563eb', color: '#fff', borderRadius: 7, padding: '8px 11px', cursor: 'pointer', fontSize: 11, fontWeight: 650 },
+  resetConfirmButton: { border: 0, background: 'var(--accent-color)', color: '#fff', borderRadius: 7, padding: '8px 11px', cursor: 'pointer', fontSize: 11, fontWeight: 650 },
   userActions: { display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
   resetButton: { border: '1px solid #334155', background: '#1e293b', color: '#cbd5e1', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontSize: 11 },
   disableButton: { border: '1px solid #7f1d1d', background: 'rgba(127,29,29,.2)', color: '#fecaca', borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontSize: 11 },

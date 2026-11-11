@@ -297,3 +297,41 @@ code, pre {
     transform: translateX(0);
   }
 }
+
+
+/* Autenticação — utiliza exclusivamente os tokens visuais do JARVIS */
+.auth-mode-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 19px;
+}
+.auth-mode-link {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-capsule);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+.auth-mode-link:hover,
+.auth-mode-link.is-active {
+  color: var(--accent-color);
+  border-color: var(--border-accent);
+  background: var(--accent-glow);
+}
+.auth-mode-link:focus-visible,
+.auth-mode-link:focus-visible,
+[style*="var(--bg-primary)"] input:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+.first-run-screen, .auth-mode-links, .sessionPill { min-width: 0; }
+@media (max-width: 520px) {
+  .auth-mode-links { display: grid; grid-template-columns: 1fr; }
+  .auth-mode-link { width: 100%; }
+}
