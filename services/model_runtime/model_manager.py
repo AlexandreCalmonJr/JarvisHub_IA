@@ -122,6 +122,7 @@ class ModelManager:
             duration_ms=measured_duration_ms,
             prompt_tokens=response.prompt_tokens,
             completion_tokens=response.completion_tokens,
+            model_name=response.model_name,
         )
 
         # 3. Registo em auditoria
@@ -152,6 +153,7 @@ class ModelManager:
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
         error_type: str | None = None,
+        model_name: str | None = None,
     ) -> None:
         """Persiste somente metadados operacionais, nunca prompts ou respostas."""
         if not self.telemetry_store:
@@ -161,7 +163,7 @@ class ModelManager:
                 owner_user_id=request.owner_user_id,
                 task_id=request.task_id,
                 agent_role=request.agent_role,
-                model_name=request.model_name,
+                model_name=model_name or request.model_name,
                 provider=provider,
                 status=status,
                 duration_ms=duration_ms,
