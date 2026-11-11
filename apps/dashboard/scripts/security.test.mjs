@@ -23,7 +23,7 @@ test('tool execution is authenticated, permission-checked and owner-scoped', () 
 
 test('global vector indexes and unsandboxed code execution are not exposed to regular accounts', () => {
   assert.match(toolGateway, /Busca vetorial indisponível até a conclusão do isolamento/);
-  assert.match(toolGateway, /request\.tool_name in \{"run_tests", "run_linter", "duckdb_query"\}/);
+  assert.match(toolGateway, /request\.tool_name in \{"run_tests", "run_linter", "duckdb_query", "execute_command"\}/);
   assert.match(toolGateway, /actor_role != "admin"/);
 });
 
