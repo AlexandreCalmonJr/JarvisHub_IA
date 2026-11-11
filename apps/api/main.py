@@ -198,7 +198,7 @@ else:
             <div class="card">
             <div class="badge">● Backend Operacional</div>
             <h1>JARVIS AI HUB — Conectado</h1>
-            <p>O monólito modular está 100% ativo e sincronizado. Clique abaixo para recarregar o estúdio interativo.</p>
+            <p>O backend está disponível. Clique abaixo para recarregar o painel quando o bundle React estiver instalado.</p>
             <button class="btn" onclick="window.location.reload()">Carregar Painel do Usuário</button>
             </div></body></html>"""
         )
