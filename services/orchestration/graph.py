@@ -1361,9 +1361,13 @@ def create_master_graph(
     async def finalize_task(state: TaskState) -> dict[str, Any]:
         if state.get("approval_required"):
             appr_id = state.get("approval_id")
+            if state.get("classified_intent") == "project_creation":
+                impact = "criação de projeto e gravação dos ficheiros no Workspace"
+            else:
+                impact = "alteração de código pendente de revisão"
             summary = (
                 f"A operação requer aprovação humana prévia. Solicitação '{appr_id}' criada no Approval Center. "
-                f"Impacto: alteração de código pendente de revisão."
+                f"Impacto: {impact}. Nenhum ficheiro foi alterado ainda."
             )
             return {"final_summary": summary, "is_completed": False}
 
