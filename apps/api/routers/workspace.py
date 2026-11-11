@@ -1,6 +1,5 @@
 import hashlib
 import logging
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, Response, Depends
 from fastapi.responses import HTMLResponse
 
