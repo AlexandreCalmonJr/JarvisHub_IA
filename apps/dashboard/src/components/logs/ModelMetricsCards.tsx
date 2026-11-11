@@ -237,7 +237,7 @@ export const ModelMetricsCards: React.FC<ModelMetricsCardsProps> = ({ metrics })
             ${typeof metrics?.total_savings_usd === 'number' ? metrics.total_savings_usd.toFixed(3) : '—'} USD
           </div>
           <div style={{ fontSize: '0.72rem', color: '#10b981', marginTop: '2px' }}>
-            100% Grátis (R$ 0,00 gasto)
+            Estimativa de custo evitado; não representa uma fatura real
           </div>
         </div>
       </div>
