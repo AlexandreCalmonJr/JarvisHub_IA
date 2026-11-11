@@ -77,54 +77,70 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'profile' | 'instructions' | 'keys' | 'engine' | 'data'>('profile');
   const [profile, setProfile] = useState<UserProfileData>(getUserProfile);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
-    return (localStorage.getItem(getAccountStorageKey('jarvis_experience_mode')) as any) || 'technical';
+    const stored = localStorage.getItem(getAccountStorageKey('jarvis_experience_mode'));
+    return stored === 'essential' || stored === 'advanced' ? stored : 'technical';
   });
 
   useEffect(() => {
-    if (isOpen) {
-      // Carrega do SQLite ou fallback para localStorage
-      fetchUserProfileApi()
-        .then((dbProfile) => {
-          if (dbProfile) {
-            const merged = { ...getUserProfile(), ...dbProfile };
-            setProfile(merged);
-            saveUserProfile(merged);
-          }
-        })
-        .catch(() => {
-          setProfile(getUserProfile());
-        });
-      setSavedSuccess(false);
-    }
+    if (!isOpen) return;
+    let cancelled = false;
+    setProfile(getUserProfile());
+    setLoadingProfile(true);
+    setSavedSuccess(false);
+
+    fetchUserProfileApi()
+      .then((dbProfile) => {
+        if (cancelled || !dbProfile) return;
+        const merged = { ...getUserProfile(), ...dbProfile };
+        setProfile(merged);
+        saveUserProfile(merged);
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(getUserProfile());
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProfile(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
+    if (saving) return;
+    setSaving(true);
     try {
+      localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
       await saveUserProfileApi(profile);
       saveUserProfile(profile);
       setSavedSuccess(true);
-      notify('Perfil e configurações da conta salvos com sucesso!', 'success');
-      if (onProfileUpdated) onProfileUpdated(profile);
-      setTimeout(() => setSavedSuccess(false), 2500);
+      notify('Perfil e preferências sincronizados com a conta.', 'success');
+      onProfileUpdated?.(profile);
+      window.setTimeout(() => setSavedSuccess(false), 2500);
     } catch {
       saveUserProfile(profile);
+      onProfileUpdated?.(profile);
       setSavedSuccess(false);
       notify(
-        'Não foi possível sincronizar com o servidor. As preferências não secretas ficaram guardadas apenas neste navegador.',
+        'Não foi possível sincronizar com o servidor. As preferências não secretas foram guardadas apenas neste navegador.',
         'error',
       );
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleBackupDatabase = async () => {
     setBackingUp(true);
     try {
-      const res = await createSystemBackup();
-      notify(`Backup gerado com sucesso em: ${res.backup_path}`, 'success');
+      await createSystemBackup();
+      notify('Backup do sistema criado com sucesso.', 'success');
     } catch (e: any) {
       notify(`Erro ao gerar backup: ${e.message}`, 'error');
     } finally {
@@ -169,7 +185,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         style={{
           display: 'flex',
           gap: '8px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid var(--border-color)',
           paddingBottom: '12px',
           marginBottom: '20px',
           flexWrap: 'wrap',
@@ -253,7 +269,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               Nível de Experiência da Interface
             </label>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 12px 0' }}>
-              Adapta o nível de detalhe e a densidade de informações em todo o JARVIS:
+              Define a densidade visual preferida neste navegador:
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
               {[
@@ -270,9 +286,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     borderRadius: '8px',
                     textAlign: 'left',
                     cursor: 'pointer',
-                    backgroundColor: experienceMode === mode.id ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                    border: `1px solid ${experienceMode === mode.id ? 'rgba(255, 255, 255, 0.35)' : 'var(--border-color)'}`,
+                    backgroundColor: experienceMode === mode.id ? 'var(--accent-glow)' : 'rgba(255, 255, 255, 0.02)',
+                    border: `1px solid ${experienceMode === mode.id ? 'var(--accent-color)' : 'var(--border-color)'}`,
+                    minWidth: 0,
                     color: experienceMode === mode.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    borderColor: experienceMode === mode.id ? 'var(--accent-color)' : 'var(--border-color)',
                     transition: 'all 0.15s ease',
                   }}
                 >
@@ -283,7 +301,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="user-profile-avatar-section">
+            <label className="user-profile-field-label">Ícone do perfil</label>
+            <div className="user-profile-avatar-options" role="group" aria-label="Escolher ícone do perfil">
+              {['💻', '🧑‍💻', '👨‍💼', '👩‍💻', '🛠️', '🧠', '🚀', '🤖'].map((avatar) => (
+                <button
+                  key={avatar}
+                  type="button"
+                  className={`user-profile-avatar-option ${profile.avatarIcon === avatar ? 'is-active' : ''}`}
+                  aria-label={`Selecionar ícone ${avatar}`}
+                  aria-pressed={profile.avatarIcon === avatar}
+                  onClick={() => setProfile({ ...profile, avatarIcon: avatar })}
+                >
+                  {avatar}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', className: 'user-profile-grid' }}>
             <div>
               <label style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                 Nome de Exibição:
@@ -351,9 +387,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <button type="submit" className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button type="submit" disabled={saving || loadingProfile} className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Save size={15} />
-              <span>Salvar Perfil</span>
+              <span>{saving ? 'Salvando…' : 'Salvar Perfil'}</span>
             </button>
           </div>
         </form>
@@ -399,7 +435,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
             <button type="submit" className="btn btn-primary" style={{ padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Save size={15} />
-              <span>Salvar Instruções</span>
+              <span>{saving ? 'Salvando…' : 'Salvar Instruções'}</span>
             </button>
           </div>
         </form>
@@ -435,8 +471,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             style={{
               padding: '16px',
               borderRadius: '10px',
-              backgroundColor: 'rgba(99, 102, 241, 0.08)',
-              border: '1px solid rgba(99, 102, 241, 0.25)',
+              backgroundColor: 'var(--accent-glow)',
+              border: '1px solid var(--border-accent)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -446,10 +482,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="badge badge-success">Local-First Ativo</span>
-                <strong style={{ fontSize: '0.94rem', color: '#f8fafc' }}>Ollama Local (100% Offline)</strong>
+                <strong style={{ fontSize: '0.94rem', color: 'var(--text-primary)' }}>Preferências de execução e modelos</strong>
               </div>
               <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', margin: '6px 0 0 0' }}>
-                Seu JARVIS opera com modelos locais instalados na CPU/RAM (Llama 3.2 3B, Qwen 2.5 Coder 7B e Qwen 2.5 7B), com zero envio de dados para a nuvem.
+                A seleção efetiva de modelos e providers é controlada pelo Gestor de Modelos e pelas políticas de execução. Esta área oferece acesso ao assistente de configuração, sem presumir que um modelo específico esteja ativo.
               </p>
             </div>
 
@@ -490,7 +526,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
               Garantia de Privacidade & DLP Local:
             </div>
-            Todas as credenciais, tokens e segredos em arquivos no seu computador são redigidos localmente pelo Núcleo de Políticas e Auditoria antes de qualquer inferência.
+            A proteção de dados depende das políticas e integrações efetivamente ativas. Consulte Segurança e o Gestor de Modelos para verificar os controlos disponíveis nesta instalação.
           </div>
         </div>
       )}
@@ -511,9 +547,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             }}
           >
             <div>
-              <strong style={{ fontSize: '0.90rem', color: '#f8fafc', display: 'block' }}>Backup Físico do Banco de Dados</strong>
+              <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Backup do sistema (apenas administradores)</strong>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Cria uma cópia física segura e instantânea do SQLite (jarvis.db) com histórico e memórias.
+                Gera uma cópia do banco de dados do servidor. A API valida a permissão administrativa antes de executar a operação.
               </span>
             </div>
             <button
@@ -523,7 +559,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               className="btn btn-secondary"
               style={{ fontSize: '0.80rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <Database size={14} color="#818cf8" />
+              <Database size={14} color="var(--accent-color)" />
               <span>{backingUp ? 'Gerando Backup...' : 'Criar Backup SQLite'}</span>
             </button>
           </div>
@@ -543,7 +579,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div>
               <strong style={{ fontSize: '0.90rem', color: '#f8fafc', display: 'block' }}>Exportar Histórico de Conversas</strong>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Faça download de todas as mensagens e dados do chat em formato JSON legível.
+                Exporta as mensagens guardadas localmente neste navegador em formato JSON.
               </span>
             </div>
             <button
@@ -570,9 +606,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             }}
           >
             <div>
-              <strong style={{ fontSize: '0.90rem', color: '#fca5a5', display: 'block' }}>Limpar Histórico Local</strong>
+              <strong style={{ fontSize: '0.90rem', color: 'var(--danger-color)', display: 'block' }}>Limpar Histórico Local</strong>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Apaga todas as sessões anteriores e restaura a saudação inicial do JARVIS.
+                Apaga o histórico de conversas e o catálogo de sessões guardados neste navegador para esta conta.
               </span>
             </div>
             <button

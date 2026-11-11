@@ -533,7 +533,7 @@ const DashboardApp: React.FC = () => {
               }}
               title="Perfil e Configurações"
             >
-              {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
+              {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
             </button>
 
             {/* Controlo de ecrã inteiro disponível no navegador */}

@@ -37,10 +37,20 @@ export async function clearServerLogs(): Promise<void> {
   }
 }
 
-export async function createSystemBackup(): Promise<any> {
-  const res = await fetch(`${API_BASE}/system/backup`, { method: 'POST' });
-  if (!res.ok) throw new Error('Falha ao gerar backup');
-  return res.json();
+export async function createSystemBackup(): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE}/system/backup`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Falha ao gerar backup.' }));
+    if (res.status === 403) {
+      throw new Error('Apenas administradores podem criar backups do sistema.');
+    }
+    throw new Error(error.detail || 'Falha ao gerar backup.');
+  }
+  const result = await res.json();
+  return { status: result.status || 'created' };
 }
 
 

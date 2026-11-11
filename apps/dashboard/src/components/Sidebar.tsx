@@ -717,7 +717,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   fontSize: '0.72rem',
                 }}
               >
-                {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
+                {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
               </div>
               <span style={{ fontWeight: 500 }}>
                 {userProfile.displayName || 'Alexandre'}
@@ -744,7 +744,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
               title="Perfil e Configurações"
             >
-              {userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A'}
+              {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
             </button>
           )}
 
