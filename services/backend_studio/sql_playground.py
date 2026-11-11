@@ -39,6 +39,7 @@ class SQLPlaygroundService:
     def _connect_readonly(target: Path) -> sqlite3.Connection:
         conn = sqlite3.connect(f"{target.as_uri()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
+        conn.execute('PRAGMA query_only = ON')
         # Evita que uma consulta exploratória monopolize o processo da API.
         conn.set_progress_handler(lambda: 1, 250000)
         return conn
@@ -106,6 +107,8 @@ class SQLPlaygroundService:
         clean_query = query.strip()
         if not clean_query:
             raise ValueError("Informe uma consulta SQL.")
+        if not re.match(r"^(SELECT|WITH)\b", clean_query, re.IGNORECASE):
+            raise ValueError("O SQL Playground aceita apenas consultas SELECT ou WITH em modo somente leitura.")
         safe_limit = max(1, min(int(limit), 1000))
         started = time.perf_counter()
         conn = self._connect_readonly(target)

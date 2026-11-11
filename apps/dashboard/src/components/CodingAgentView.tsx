@@ -440,7 +440,7 @@ export const CodingAgentView: React.FC = () => {
       return (
         <div key={entry.id} style={styles.assistantRow}>
           <div style={styles.assistantBubble}>
-            <div style={{ ...styles.meta, color: '#a5b4fc' }}>
+            <div style={{ ...styles.meta, color: 'var(--accent-color)' }}>
               {entry.timestamp} • JARVIS Coding Agent
             </div>
             <div style={styles.preWrap}>{entry.text}</div>
@@ -668,7 +668,7 @@ export const CodingAgentView: React.FC = () => {
               <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>Aprovação necessária</span>
               <h4 style={{ fontSize: '0.98rem', fontWeight: 700, marginTop: '8px' }}>{pendingApproval.impact_summary}</h4>
               <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Operação: <strong style={{ color: '#93c5fd' }}>{pendingApproval.operation}</strong> • ID: #{pendingApproval.id.slice(0, 10)}
+                Operação: <strong style={{ color: 'var(--accent-color)' }}>{pendingApproval.operation}</strong> • ID: #{pendingApproval.id.slice(0, 10)}
                 {pendingApproval.reversible === false ? ' • irreversível' : ' • reversível'}
               </div>
             </div>
@@ -867,7 +867,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-color)',
     borderRadius: '5px',
     fontSize: '0.72rem',
-    color: '#cbd5e1',
+    color: 'var(--text-secondary)',
   },
   inputRow: { display: 'flex', gap: '10px', alignItems: 'flex-end' },
   textarea: {

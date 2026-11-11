@@ -243,7 +243,7 @@ export const SqlPlaygroundSection: React.FC = () => {
           gap: '14px',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
             Editor de Consultas SQL
           </label>
@@ -253,7 +253,7 @@ export const SqlPlaygroundSection: React.FC = () => {
               className="btn btn-ghost"
               disabled={auditLoading || !selectedDbPath}
               style={{
-                color: '#818cf8',
+                color: 'var(--accent-color)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -288,7 +288,7 @@ export const SqlPlaygroundSection: React.FC = () => {
           style={{
             width: '100%',
             backgroundColor: 'var(--bg-primary)',
-            color: '#e2e8f0',
+            color: 'var(--text-primary)',
             border: '1px solid var(--border-color)',
             borderRadius: '8px',
             padding: '12px',
@@ -304,11 +304,21 @@ export const SqlPlaygroundSection: React.FC = () => {
       {auditResult && (
         <div
           style={{
-            backgroundColor: auditResult.is_table_scan
+            backgroundColor: auditResult.status === 'error'
               ? 'rgba(239, 68, 68, 0.08)'
-              : 'rgba(16, 185, 129, 0.08)',
+              : auditResult.status === 'skipped'
+                ? 'var(--accent-glow)'
+                : auditResult.is_table_scan
+                  ? 'rgba(239, 68, 68, 0.08)'
+                  : 'rgba(16, 185, 129, 0.08)',
             border: `1px solid ${
-              auditResult.is_table_scan ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'
+              auditResult.status === 'error'
+                ? 'rgba(239, 68, 68, 0.3)'
+                : auditResult.status === 'skipped'
+                  ? 'var(--border-accent)'
+                  : auditResult.is_table_scan
+                    ? 'rgba(239, 68, 68, 0.3)'
+                    : 'rgba(16, 185, 129, 0.3)'
             }`,
             borderRadius: '12px',
             padding: '20px',
@@ -319,16 +329,18 @@ export const SqlPlaygroundSection: React.FC = () => {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {auditResult.is_table_scan ? (
-                <AlertTriangle size={20} color="#f87171" />
+              {auditResult.status === 'error' || auditResult.is_table_scan ? (
+                <AlertTriangle size={20} color="var(--danger-color)" />
+              ) : auditResult.status === 'skipped' ? (
+                <Sparkles size={20} color="var(--accent-color)" />
               ) : (
-                <CheckCircle size={20} color="#34d399" />
+                <CheckCircle size={20} color="var(--success-color)" />
               )}
               <div>
-                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{auditResult.verdict}</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{auditResult.error || auditResult.message || auditResult.verdict || 'Auditoria concluída.'}</div>
+                {typeof auditResult.score === 'number' && <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                   Score de Otimização: <b>{auditResult.score}/100</b>
-                </div>
+                </div>}
               </div>
             </div>
             <button
@@ -358,14 +370,18 @@ export const SqlPlaygroundSection: React.FC = () => {
                 >
                   <div style={{ color: '#fbbf24' }}>{s.recommendation}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <code style={{ color: '#38bdf8', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                    <code style={{ color: 'var(--accent-color)', fontFamily: 'monospace', fontSize: '0.8rem' }}>
                       {s.example_sql}
                     </code>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(s.example_sql);
-                        setCopiedIndex(true);
-                        setTimeout(() => setCopiedIndex(false), 2000);
+                        if (!navigator.clipboard?.writeText) return;
+                        navigator.clipboard.writeText(s.example_sql)
+                          .then(() => {
+                            setCopiedIndex(true);
+                            window.setTimeout(() => setCopiedIndex(false), 2000);
+                          })
+                          .catch(() => setInspectionError('Não foi possível copiar a sugestão SQL.'));
                       }}
                       className="btn btn-ghost"
                       style={{ padding: '2px 8px', fontSize: '0.75rem' }}
