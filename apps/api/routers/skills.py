@@ -9,10 +9,8 @@ from apps.api.schemas import (
     CreateSkillRequest,
     ImportEccSkillRequest,
 )
-from apps.api.deps import (
-    skills_catalog,
-    db_manager,
-)
+from apps.api.deps import skills_catalog, db_manager
+from services.skills_manager import SkillMetadata, SkillValidator
 
 logger = logging.getLogger("jarvis.api.skills")
 router = APIRouter(tags=["skills"])
@@ -22,6 +20,48 @@ def _skill_owner(principal: Principal) -> str:
     if principal.kind == "device" and principal.subject_id.startswith("device:"):
         raise HTTPException(status_code=403, detail="Dispositivo sem associação a uma conta.")
     return principal.subject_id
+
+def _ensure_skill_id_available(skill_id: str) -> None:
+    if any(skill.id == skill_id for skill in skills_catalog.list_all_skills()):
+        raise HTTPException(
+            status_code=409,
+            detail="Este identificador já pertence a uma habilidade global. Escolha outro ID.",
+        )
+
+
+def _validate_private_skill(
+    skill_id: str,
+    name: str,
+    origin: str,
+    license_name: str,
+    description: str,
+    domain: str,
+    assigned_agents: list[str],
+    instructions: str,
+) -> str:
+    content_hash = SkillValidator.compute_hash(instructions, {})
+    metadata = SkillMetadata(
+        id=skill_id,
+        name=name,
+        version="1.0.0",
+        origin=origin,
+        license=license_name,
+        description=description,
+        domain=domain,
+        allowed_tools=[],
+        required_permissions=[],
+        assigned_agents=assigned_agents,
+        content_hash=content_hash,
+        is_approved=True,
+        instructions=instructions,
+    )
+    is_valid, violations = SkillValidator().validate(metadata)
+    if not is_valid:
+        raise HTTPException(
+            status_code=422,
+            detail="A skill não passou na validação de segurança: " + "; ".join(violations),
+        )
+    return content_hash
 
 
 @router.get("/api/v1/skills")
@@ -109,6 +149,11 @@ async def create_user_skill_endpoint(
     payload: CreateSkillRequest, principal: Principal = Depends(get_principal)
 ):
     skill_id = payload.id or payload.name.lower().replace(" ", "_").replace("-", "_")
+    _ensure_skill_id_available(skill_id)
+    content_hash = _validate_private_skill(
+        skill_id, payload.name, "user_created", "Proprietary", payload.description,
+        payload.domain, payload.assigned_agents, payload.instructions,
+    )
     skill_dict = {
         "id": skill_id,
         "name": payload.name,
@@ -119,6 +164,8 @@ async def create_user_skill_endpoint(
         "instructions": payload.instructions,
         "assigned_agents": payload.assigned_agents,
         "is_approved": True,
+        "content_hash": content_hash,
+        "license": "Proprietary",
     }
     owner = _skill_owner(principal)
     try:
@@ -147,6 +194,7 @@ async def import_ecc_skill_endpoint(
     name = "Skill Importada ECC"
     desc = "Habilidade importada do ecossistema ECC"
     domain = "backend"
+    license_name = "unknown"
     instructions = text
 
     if text.startswith("---"):
@@ -161,8 +209,15 @@ async def import_ecc_skill_endpoint(
                     desc = line.replace("description:", "").strip()
                 elif line.startswith("domain:"):
                     domain = line.replace("domain:", "").strip()
+                elif line.startswith("license:"):
+                    license_name = line.replace("license:", "").strip()
 
     skill_id = name.lower().replace(" ", "_").replace("-", "_")[:32]
+    _ensure_skill_id_available(skill_id)
+    content_hash = _validate_private_skill(
+        skill_id, name, "imported_ecc", license_name, desc, domain,
+        ["jarvis_master"], instructions,
+    )
     skill_dict = {
         "id": skill_id,
         "name": name,
@@ -173,6 +228,8 @@ async def import_ecc_skill_endpoint(
         "instructions": instructions,
         "assigned_agents": ["jarvis_master"],
         "is_approved": True,
+        "content_hash": content_hash,
+        "license": license_name,
     }
     owner = _skill_owner(principal)
     try:

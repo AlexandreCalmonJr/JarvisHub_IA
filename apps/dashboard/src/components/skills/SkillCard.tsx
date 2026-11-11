@@ -67,20 +67,27 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, onToggle, onEditAge
             )}
           </div>
 
-          {canManageThisSkill && <button
-            onClick={() => onToggle(skill.id)}
-            className={`btn ${isApproved ? 'badge-success' : 'badge-danger'}`}
-            style={{
-              fontSize: '0.74rem',
-              padding: '3px 9px',
-              cursor: 'pointer',
-              border: isApproved ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
-            }}
-            title={isApproved ? 'Skill ativa - clique para desativar' : 'Skill inativa - clique para ativar'}
-          >
-            {isApproved ? <CheckCircle size={13} /> : <XCircle size={13} />}
-            <span>{isApproved ? 'Ativa' : 'Desativada'}</span>
-          </button>}
+          {canManageThisSkill ? (
+            <button
+              type="button"
+              onClick={() => onToggle(skill.id)}
+              className={`btn ${isApproved ? 'badge-success' : 'badge-danger'}`}
+              style={{
+                fontSize: '0.74rem',
+                padding: '3px 9px',
+                cursor: 'pointer',
+                border: isApproved ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+              }}
+              title={isApproved ? 'Skill ativa - clique para desativar' : 'Skill inativa - clique para ativar'}
+            >
+              {isApproved ? <CheckCircle size={13} /> : <XCircle size={13} />}
+              <span>{isApproved ? 'Ativa' : 'Desativada'}</span>
+            </button>
+          ) : (
+            <span className={`badge ${isApproved ? 'badge-success' : 'badge-secondary'}`}>
+              {isApproved ? 'Ativa' : 'Desativada'}
+            </span>
+          )}
         </div>
 
         <h4 style={{ fontSize: '0.98rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '10px' }}>

@@ -68,8 +68,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
               lineHeight: 1.5,
             }}
           >
-            Faça upload de manuais em PDF, arquivos de regras em Markdown ou aponte uma pasta local.
-            O JARVIS dividirá o conteúdo em blocos semânticos para recuperação contextual pelos agentes autorizados.
+            {canManage ? 'Faça upload de manuais, ficheiros Markdown ou indexe uma pasta autorizada do servidor. O conteúdo será dividido em blocos semânticos para recuperação contextual.' : 'Ainda não existem documentos nesta base de conhecimento da conta.'}
           </p>
           {canManage && <button
             onClick={onSelectFileClick}
@@ -112,12 +111,12 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={18} color="#38bdf8" />
+                    <FileText size={18} color="var(--accent-color)" />
                     <span
                       style={{
                         fontSize: '0.92rem',
                         fontWeight: 700,
-                        color: '#f8fafc',
+                        color: 'var(--text-primary)',
                         wordBreak: 'break-all',
                       }}
                     >
@@ -128,7 +127,7 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
                     type="button"
                     onClick={() => onDelete(doc.doc_name)}
                     className="btn btn-ghost"
-                    style={{ padding: '3px', color: '#f87171' }}
+                    style={{ padding: '3px', color: 'var(--danger-color)' }}
                     title="Excluir do Vault"
                   >
                     <Trash2 size={14} />
