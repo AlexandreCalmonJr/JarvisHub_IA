@@ -639,18 +639,34 @@ class DatabaseManager:
                 )
             return cur.rowcount > 0
 
-    def export_project_data(self, project_id: str) -> dict[str, Any]:
+    def export_project_data(
+        self, project_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any]:
         with self._get_connection() as conn:
-            proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+            if owner_user_id is None:
+                proj = conn.execute(
+                    "SELECT * FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                owner_filter = ""
+                params: tuple[Any, ...] = (project_id,)
+            else:
+                proj = conn.execute(
+                    "SELECT * FROM projects WHERE id = ? AND owner_user_id = ?",
+                    (project_id, owner_user_id),
+                ).fetchone()
+                owner_filter = " AND owner_user_id = ?"
+                params = (project_id, owner_user_id)
             if not proj:
                 raise ValueError(f"Projeto '{project_id}' não encontrado.")
             tasks = conn.execute(
-                "SELECT id, session_id, prompt, intent, is_completed, created_at FROM tasks WHERE project_id = ?",
-                (project_id,),
+                "SELECT id, session_id, prompt, intent, is_completed, created_at "
+                "FROM tasks WHERE project_id = ?" + owner_filter,
+                params,
             ).fetchall()
             memory = conn.execute(
-                "SELECT category, key, content, sources_json, updated_at FROM project_memory WHERE project_id = ?",
-                (project_id,),
+                "SELECT category, key, content, sources_json, updated_at "
+                "FROM project_memory WHERE project_id = ?" + owner_filter,
+                params,
             ).fetchall()
             return {
                 "project": dict(proj),
@@ -666,38 +682,59 @@ class DatabaseManager:
         key: str,
         content: str,
         sources: list[str] | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         import uuid
         now = datetime.now(UTC).isoformat()
         mem_id = f"mem-{uuid.uuid4().hex[:8]}"
         sources_json = json.dumps(sources or [])
-        # Garante que o projeto está registrado para integridade referencial
-        self.register_project(project_id, project_id, f"workspace/{project_id}")
         with self._get_connection() as conn:
+            if owner_user_id is None:
+                project = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+            else:
+                project = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ? AND owner_user_id = ?",
+                    (project_id, owner_user_id),
+                ).fetchone()
+            if not project:
+                raise ValueError("Projeto não encontrado para a conta autenticada.")
             conn.execute(
                 """
-                INSERT INTO project_memory (id, project_id, category, key, content, sources_json, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO project_memory (
+                    id, project_id, category, key, content, sources_json,
+                    updated_at, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(project_id, category, key) DO UPDATE SET
                     content=excluded.content,
                     sources_json=excluded.sources_json,
                     updated_at=excluded.updated_at
+                WHERE project_memory.owner_user_id IS excluded.owner_user_id
                 """,
-                (mem_id, project_id, category, key, content, sources_json, now),
+                (mem_id, project_id, category, key, content, sources_json, now, owner_user_id),
             )
 
-    def list_project_memory(self, project_id: str) -> list[dict[str, Any]]:
+    def list_project_memory(
+        self, project_id: str, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = (
+            "SELECT id, project_id, category, key, content, sources_json, updated_at "
+            "FROM project_memory WHERE project_id = ?"
+        )
+        params: list[Any] = [project_id]
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " ORDER BY updated_at DESC"
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT id, project_id, category, key, content, sources_json, updated_at FROM project_memory WHERE project_id = ? ORDER BY updated_at DESC",
-                (project_id,),
-            )
-            rows = []
-            for r in cur.fetchall():
-                d = dict(r)
-                d["sources"] = json.loads(d["sources_json"])
-                rows.append(d)
-            return rows
+            rows = conn.execute(query, params).fetchall()
+        result = []
+        for row in rows:
+            data = dict(row)
+            data["sources"] = json.loads(data["sources_json"])
+            result.append(data)
+        return result
 
     def set_agent_memory(
         self,
