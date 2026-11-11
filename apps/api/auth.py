@@ -191,6 +191,8 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     ({"POST"}, re.compile(r"^/api/v1/mcp/reload$"), "mcp:reload"),
     # Voz
     ({"POST"}, re.compile(r"^/api/v1/voice/.*$"), "voice:use"),
+    # Mock Server: execução dos endpoints simulados apenas para utilizadores autenticados com escopo dedicado.
+    ({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}, re.compile(r"^/api/v1/mock/.*$"), "mock:serve"),
     # Studios
     ({"GET"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:read"),
     ({"POST", "DELETE"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:use"),
