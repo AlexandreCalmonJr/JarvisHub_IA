@@ -77,3 +77,23 @@ export async function submitInferenceFeedback(inferenceId: string, rating: numbe
     throw new Error(err.detail || 'Falha ao registrar avaliação.');
   }
 }
+
+
+export interface ModelQualitySummary {
+  model_name: string;
+  provider: string;
+  agent_role?: string | null;
+  feedback_count: number;
+  average_rating: number;
+  sample_sufficient: boolean;
+}
+
+export async function fetchModelQualitySummary(): Promise<ModelQualitySummary[]> {
+  const res = await fetch(`${API_BASE}/system/inference-telemetry?limit=1`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao carregar qualidade dos modelos.' }));
+    throw new Error(err.detail || 'Falha ao carregar qualidade dos modelos.');
+  }
+  const data = await res.json();
+  return Array.isArray(data.model_quality) ? data.model_quality : [];
+}
