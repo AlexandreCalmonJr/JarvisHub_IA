@@ -96,6 +96,42 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
     },
     {
+      id: 'nav-overview',
+      category: 'Navegação',
+      title: 'Visão Geral',
+      subtitle: 'Resumo operacional, saúde do sistema e atividade recente',
+      icon: Activity,
+      iconColor: 'var(--accent-color)',
+      action: () => {
+        onNavigate('overview');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-approvals',
+      category: 'Navegação',
+      title: 'Central de Aprovações',
+      subtitle: 'Revise e decida operações que exigem autorização humana',
+      icon: CheckSquare,
+      iconColor: '#fbbf24',
+      action: () => {
+        onNavigate('approvals');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-design',
+      category: 'Navegação',
+      title: 'Design Studio',
+      subtitle: 'Ferramentas de criação e revisão de interfaces',
+      icon: Sparkles,
+      iconColor: 'var(--accent-color)',
+      action: () => {
+        onNavigate('design');
+        onClose();
+      },
+    },
+    {
       id: 'nav-office',
       category: 'Navegação',
       title: 'Escritório Virtual (26 Agentes)',
