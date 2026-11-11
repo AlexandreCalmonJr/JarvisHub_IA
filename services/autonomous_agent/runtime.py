@@ -389,7 +389,7 @@ class AutonomousAgentRuntime:
             return
 
         # 3. Aprovação Humana no modo ASK para operações críticas
-        if spec.requires_approval and config.mode == AutonomousAgentMode.ASK:
+        if spec.requires_approval:
             try:
                 preview = self.tools.preview(call, config.project_id or "")
             except PermissionDeniedError as exc:
