@@ -1,14 +1,13 @@
 """
 JARVIS AI HUB - Quality Studio & Testes Automatizados E2E
 Gerenciamento de testes locais:
-- Execução controlada em sandbox local com timeout
+- Execução controlada sem shell, com ambiente sanitizado e timeout
 - Geração de testes ponta a ponta (E2E) com Playwright
 - Geração de testes de caos e casos de borda (Chaos / Edge Case Testing)
 """
 
 import logging
 import re
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -88,7 +87,7 @@ class QualityStudioService:
         else:
             command = [sys.executable, "-m", "pytest", "-v"]
         if test_file:
-            command.append(Path(test_file).as_posix())
+            command.append(f"./{Path(test_file).as_posix()}")
 
         from services.tool_gateway.sandbox import SandboxTimeoutError, SubprocessSandbox
 
