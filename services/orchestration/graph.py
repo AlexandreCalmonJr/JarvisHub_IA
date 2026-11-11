@@ -233,13 +233,24 @@ def create_master_graph(
                     AgentRole.FRONTEND_MOBILE_DEVELOPER.value,
                     AgentRole.QA_ENGINEER.value,
                 ]
-        elif len(prompt.split()) >= 6 and any(
-            marker in prompt
-            for marker in (
-                "analise", "análise", "analisar", "investigue", "investigar",
-                "resolver", "solucionar", "diagnosticar", "estratégia",
-                "planejamento", "decisão", "compare", "avaliar",
-                "problema", "problemas", "causa", "causas",
+        elif (
+            len(prompt.split()) >= 6
+            and any(
+                marker in prompt
+                for marker in (
+                    "analise", "análise", "analisar", "investigue", "investigar",
+                    "resolver", "solucionar", "diagnosticar", "estratégia",
+                    "planejamento", "decisão", "compare", "avaliar",
+                    "problema", "problemas", "causa", "causas",
+                )
+            )
+            and not any(
+                action in prompt
+                for action in (
+                    "corrigir", "corrija", "implementar", "implemente", "editar", "edite",
+                    "modificar", "modifique", "mudar", "mude", "alterar", "altere",
+                    "adicionar", "adicione", "trocar", "troque", "atualizar", "atualize",
+                )
             )
         ):
             # Problemas abertos e decisões complexas convocam a mesa redonda
