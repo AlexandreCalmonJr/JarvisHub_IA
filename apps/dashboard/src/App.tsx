@@ -20,6 +20,7 @@ import { ToastContainer } from './components/common/Toast';
 import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
 import { CommandPalette } from './components/common/CommandPalette';
 import { pathForTab, tabFromLocation } from './router';
+import { getAccountStorageKey } from './services/accountScope';
 
 // Code splitting: cada tela é carregada sob demanda
 const Overview = lazy(() =>
@@ -148,7 +149,7 @@ const DashboardApp: React.FC = () => {
 
   // Verificação de primeiro acesso (First-Run Onboarding), rota e atalhos de teclado
   useEffect(() => {
-    const isCompleted = localStorage.getItem('jarvis_setup_completed');
+    const isCompleted = localStorage.getItem(getAccountStorageKey('jarvis_setup_completed'));
     if (isCompleted !== 'true') {
       setShowSetupWizard(true);
     }
