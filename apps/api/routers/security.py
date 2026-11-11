@@ -180,13 +180,18 @@ async def trigger_kill_switch(
 
 
 @router.get("/api/v1/security/cyber-shield-status")
-async def get_cyber_shield_status():
+async def get_cyber_shield_status(
+    principal: Principal = Depends(require_permission("security:read")),
+):
     """Retorna o status consolidado de blindagem cibernética do JARVIS."""
     return cyber_shield.get_security_status()
 
 
 @router.post("/api/v1/security/network-isolation")
-async def toggle_network_isolation_endpoint(payload: NetworkIsolationPayload):
+async def toggle_network_isolation_endpoint(
+    payload: NetworkIsolationPayload,
+    principal: Principal = Depends(require_admin),
+):
     """Ativa ou desativa o corte total de conexões externas de rede."""
     return cyber_shield.toggle_network_isolation(payload.isolated, reason=payload.reason)
 
@@ -241,9 +246,20 @@ async def revoke_mobile_device(
 
 @router.get("/api/v1/audit/logs")
 @router.get("/api/v1/security/audit-logs")
-async def list_audit_logs_endpoint(limit: int = 50, offset: int = 0, severity: str | None = None):
+async def list_audit_logs_endpoint(
+    limit: int = 50,
+    offset: int = 0,
+    severity: str | None = None,
+    principal: Principal = Depends(require_permission("audit:read")),
+):
     """Retorna eventos registrados na trilha de auditoria inviolável do sistema."""
-    events = security_core.audit.list_events()
+    # A trilha é partilhada pelo runtime, mas cada conta só recebe eventos
+    # cuja identidade de origem corresponde ao principal autenticado.
+    allowed_actors = {principal.subject_id, principal.display_id}
+    events = [
+        event for event in security_core.audit.list_events()
+        if getattr(event, "user_id", None) in allowed_actors
+    ]
     if severity:
         sev_clean = severity.upper()
         events = [
@@ -304,7 +320,9 @@ async def red_team_audit_endpoint(
 
 
 @router.get("/api/v1/security/policy-templates")
-async def list_security_policy_templates():
+async def list_security_policy_templates(
+    principal: Principal = Depends(require_permission("security:read")),
+):
     """Retorna templates de cabeçalhos de segurança, CSP e CORS estrito prontos para implantação."""
     return security_core.policy_generator.get_available_templates()
 
