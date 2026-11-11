@@ -4,7 +4,8 @@ from typing import Any
 from langgraph.checkpoint.memory import MemorySaver
 
 from services.model_runtime import ModelManager
-from services.security_core import SecurityCore
+from packages.contracts.approval import ApprovalStatus
+from services.security_core import PermissionDeniedError, SecurityCore
 
 from .graph import create_master_graph, execute_workspace_modification
 from .state import TaskState
@@ -88,6 +89,19 @@ class JarvisMaster:
             raise ValueError(f"Nenhum estado persistido encontrado para a tarefa '{task_id}'.")
 
         current_values = dict(checkpoint.values)
+        approval_id = current_values.get("approval_id")
+        approval = self.security_core.approval_engine.get_request(approval_id) if approval_id else None
+        if (
+            not approval
+            or approval.status != ApprovalStatus.APPROVED
+            or approval.task_id != task_id
+            or approval.operation != "file_write"
+            or approval.decided_by != approved_by
+        ):
+            raise PermissionDeniedError(
+                "Retomada bloqueada: aprovação humana ausente, pendente ou não vinculada a esta tarefa."
+            )
+
         current_values["approval_required"] = False
 
         mod_extra = ""
@@ -95,15 +109,14 @@ class JarvisMaster:
             self.workspace_service
             and current_values.get("classified_intent") == "code_modification"
         ):
-            try:
-                msg, _ = execute_workspace_modification(
-                    workspace_service=self.workspace_service,
-                    user_prompt=current_values.get("user_prompt", ""),
-                    project_id=current_values.get("project_id"),
-                )
-                mod_extra = f"\n\n{msg}"
-            except Exception as e:
-                mod_extra = f"\n\n[Aviso]: Não foi possível gravar alteração física no disco: {e}"
+            msg, _ = execute_workspace_modification(
+                workspace_service=self.workspace_service,
+                user_prompt=current_values.get("user_prompt", ""),
+                project_id=current_values.get("project_id"),
+                approval_id=approval_id,
+                task_id=task_id,
+            )
+            mod_extra = f"\n\n{msg}"
 
         current_values["final_summary"] = (
             f"Aprovação concedida por '{approved_by}'. A alteração foi autorizada e executada no sistema.{mod_extra}"
