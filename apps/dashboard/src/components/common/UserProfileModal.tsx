@@ -10,6 +10,7 @@ import {
   Database,
 } from 'lucide-react';
 import { fetchUserProfileApi, saveUserProfileApi, createSystemBackup } from '../../api';
+import { getAccountStorageKey } from '../../services/accountScope';
 import { notify } from './Toast';
 
 export interface UserProfileData {
@@ -42,7 +43,7 @@ export const USER_PROFILE_STORAGE_KEY = 'jarvis_user_profile_v1';
 
 export function getUserProfile(): UserProfileData {
   try {
-    const raw = localStorage.getItem(USER_PROFILE_STORAGE_KEY);
+    const raw = localStorage.getItem(getAccountStorageKey(USER_PROFILE_STORAGE_KEY));
     if (raw) {
       return { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
     }
@@ -52,7 +53,13 @@ export function getUserProfile(): UserProfileData {
 
 export function saveUserProfile(data: UserProfileData): void {
   try {
-    localStorage.setItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(data));
+    const safeProfile = {
+      ...data,
+      huggingfaceToken: '',
+      groqApiKey: '',
+      geminiApiKey: '',
+    };
+    localStorage.setItem(getAccountStorageKey(USER_PROFILE_STORAGE_KEY), JSON.stringify(safeProfile));
   } catch {}
 }
 
@@ -101,17 +108,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     localStorage.setItem('jarvis_experience_mode', experienceMode);
-    saveUserProfile(profile);
     try {
       await saveUserProfileApi(profile);
-    } catch {}
-
-    setSavedSuccess(true);
-    notify('Perfil e configurações salvos com sucesso!', 'success');
-    if (onProfileUpdated) {
-      onProfileUpdated(profile);
+      saveUserProfile(profile);
+      setSavedSuccess(true);
+      notify('Perfil e configurações da conta salvos com sucesso!', 'success');
+      if (onProfileUpdated) onProfileUpdated(profile);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch {
+      saveUserProfile(profile);
+      setSavedSuccess(false);
+      notify(
+        'Não foi possível sincronizar com o servidor. As preferências não secretas ficaram guardadas apenas neste navegador.',
+        'error',
+      );
     }
-    setTimeout(() => setSavedSuccess(false), 2500);
   };
 
   const handleBackupDatabase = async () => {
@@ -155,7 +166,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Perfil do Desenvolvedor & Preferências Globais"
+      title="Perfil e Preferências da Conta"
       maxWidth="lg"
     >
       {/* Navegação entre Abas do Perfil */}
