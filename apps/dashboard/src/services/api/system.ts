@@ -42,3 +42,38 @@ export async function createSystemBackup(): Promise<any> {
   if (!res.ok) throw new Error('Falha ao gerar backup');
   return res.json();
 }
+
+
+export interface InferenceTelemetryRecord {
+  id: string;
+  task_id?: string | null;
+  agent_role?: string | null;
+  model_name: string;
+  provider: string;
+  status: 'success' | 'failed';
+  feedback_rating?: number | null;
+}
+
+export async function fetchTaskInferenceTelemetry(taskId: string): Promise<InferenceTelemetryRecord[]> {
+  const res = await fetch(
+    `${API_BASE}/system/inference-telemetry?limit=100&task_id=${encodeURIComponent(taskId)}`
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao carregar avaliações da tarefa.' }));
+    throw new Error(err.detail || 'Falha ao carregar avaliações da tarefa.');
+  }
+  const data = await res.json();
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+export async function submitInferenceFeedback(inferenceId: string, rating: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/system/inference-feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inference_id: inferenceId, rating }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao registrar avaliação.' }));
+    throw new Error(err.detail || 'Falha ao registrar avaliação.');
+  }
+}
