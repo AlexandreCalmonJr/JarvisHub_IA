@@ -10,6 +10,7 @@ class ApprovalStatus(str, Enum):
     REJECTED = "rejected"
     REVOKED = "revoked"
     EXPIRED = "expired"
+    CONSUMED = "consumed"
 
 
 class ApprovalRequest(BaseModel):
