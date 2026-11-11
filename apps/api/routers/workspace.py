@@ -260,24 +260,51 @@ async def export_project_zip_endpoint(project_id: str):
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/dockerize")
-async def dockerize_project_endpoint(project_id: str):
-    """Gera automaticamente Dockerfile, docker-compose.yml e .dockerignore para o projeto."""
+async def dockerize_project_endpoint(
+    project_id: str,
+    approval_id: str | None = None,
+    principal: Principal = Depends(get_principal),
+):
+    """Gera ficheiros Docker somente após aprovação humana explícita."""
+    _require_human(principal)
     try:
+        project_dir = workspace_service.get_project_dir(project_id).resolve()
+        task_id = f"workspace:dockerize:{project_id}:{project_dir}"
+        pending = _workspace_approval(
+            approval_id=approval_id,
+            task_id=task_id,
+            operation="workspace_dockerize",
+            summary=f"Gerar Dockerfile, docker-compose.yml e .dockerignore no projeto {project_id}.",
+            resource=str(project_dir),
+        )
+        if pending:
+            return {"status": "approval_required", "approval_id": pending.id, "project_id": project_id}
         res = workspace_service.dockerize_project(project_id)
-        # Dispara notificação assíncrona se ativada
         try:
             await webhook_service.send_notification(
                 title=f"Projeto Dockerizado: {project_id}",
-                message=f"Ambiente Docker multi-stage criado com sucesso para {res.get('stack', 'Aplicação')}. Pronto para 'docker compose up --build'.",
+                message=f"Ambiente Docker criado para {res.get('stack', 'Aplicação')}.",
                 event_type="dockerize",
             )
         except Exception:
-            pass
+            logger.exception("Falha ao notificar dockerização do projeto %s", project_id)
+        security_core.audit.record_event(
+            operation="WORKSPACE_DOCKERIZE_APPROVED",
+            status="SUCCESS",
+            user_id=principal.display_id,
+            project_id=project_id,
+            parameters={"approval_id": approval_id},
+        )
         return res
-    except FileNotFoundError as fnf:
-        raise HTTPException(status_code=404, detail=str(fnf))
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Falha ao dockerizar projeto: {exc}")
+        logger.exception("Falha ao dockerizar projeto")
+        raise HTTPException(status_code=500, detail="Falha ao dockerizar projeto.") from exc
 
 
 @router.post("/api/v1/workspace/projects/{project_id}/open-folder")
