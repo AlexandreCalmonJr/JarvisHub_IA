@@ -248,6 +248,7 @@ async def delete_workspace_project_endpoint(
             operation="project_delete",
             summary=f"Excluir permanentemente o projeto {project_id} e todo o seu conteúdo.",
             resource=str(project_dir),
+            owner_user_id=principal.subject_id,
         )
         if pending:
             return {"status": "approval_required", "approval_id": pending.id, "project_id": project_id, "path": str(project_dir)}
@@ -306,6 +307,7 @@ async def dockerize_project_endpoint(
             operation="workspace_dockerize",
             summary=f"Gerar Dockerfile, docker-compose.yml e .dockerignore no projeto {project_id}.",
             resource=str(project_dir),
+            owner_user_id=principal.subject_id,
         )
         if pending:
             return {"status": "approval_required", "approval_id": pending.id, "project_id": project_id}
