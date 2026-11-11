@@ -30,7 +30,7 @@ test('test execution accepts only discovered project-relative files', () => {
 });
 
 test('project code execution is restricted until OS-level account isolation exists', () => {
-  assert.match(router, /run_project_tests_endpoint[\\s\\S]*?principal\.role != "admin"/);
+  assert.match(router, /run_project_tests_endpoint[\s\S]*?principal\.role != "admin"/);
 });
 
 test('test runner timeout is bounded at the API and service layers', () => {
