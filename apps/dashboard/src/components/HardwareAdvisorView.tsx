@@ -3,6 +3,7 @@ import {
   Zap,
   CheckCircle2,
   RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import {
   fetchHardwareProfile,
