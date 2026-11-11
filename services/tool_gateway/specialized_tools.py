@@ -237,14 +237,18 @@ def execute_scan_sast_patterns(
     target_path: str = ".",
 ) -> tuple[bool, str, str]:
     """Varre arquivos do projeto em busca de padrões de vulnerabilidade de código SAST."""
-    target_dir = (project_root / target_path).resolve()
-    if not target_dir.exists():
+    project_root = Path(project_root).resolve()
+    target_dir = _resolve_project_target(project_root, target_path)
+    if not target_dir.exists() or not target_dir.is_dir():
         return False, "", f"Caminho '{target_path}' não existe no projeto."
 
     findings: list[dict[str, Any]] = []
 
     for root, dirs, files in os.walk(target_dir):
-        dirs[:] = [d for d in dirs if d not in EXCLUDED_SCAN_DIRS]
+        dirs[:] = [
+            d for d in dirs
+            if d not in EXCLUDED_SCAN_DIRS and not (Path(root) / d).is_symlink()
+        ]
         for f in files:
             file_p = Path(root) / f
             if file_p.is_symlink():
