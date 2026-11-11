@@ -102,17 +102,19 @@ class ModelSelector:
                 (estimated_input_tokens / 1000.0) * max(0.0, float(input_rate))
                 + (estimated_output_tokens / 1000.0) * max(0.0, float(output_rate))
             )
+            stats = performance.get((metadata.name, provider, agent_role))
+            if stats is None:
+                stats = performance.get((metadata.name, provider, None))
+            if estimated_cost <= 0 and stats and int(stats.get("total_inferences", 0)) > 0:
+                estimated_cost = float(stats.get("average_cost_usd") or 0.0)
             candidate = ModelCandidate(
                 model_name=metadata.name,
                 provider=provider,
                 local=not is_cloud,
                 family=metadata.family,
                 context_length=metadata.context_length,
-                estimated_cost_usd=round(estimated_cost, 6),
+                estimated_cost_usd=round(max(0.0, estimated_cost), 6),
             )
-            stats = performance.get((candidate.model_name, candidate.provider, agent_role))
-            if stats is None:
-                stats = performance.get((candidate.model_name, candidate.provider, None))
             capability_score, capability_reason = self._capability_match(candidate, capability)
             if capability in {"vision", "image"} and capability_score == 0:
                 continue
