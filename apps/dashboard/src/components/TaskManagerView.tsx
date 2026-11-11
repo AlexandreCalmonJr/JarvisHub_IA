@@ -14,6 +14,7 @@ import {
 import { fetchTasks, deleteTask, purgeTasks } from '../api';
 import { notify } from './common/Toast';
 import { Modal } from './common/Modal';
+import { API_BASE } from '../services/api/client';
 
 const INTENT_MAP: Record<string, { label: string; color: string }> = {
   multi_agent_consensus: { label: 'Mesa Redonda / Consenso', color: 'badge-purple' },
@@ -40,6 +41,8 @@ export const TaskManagerView: React.FC = () => {
   const [purging, setPurging] = useState(false);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [canManageTasks, setCanManageTasks] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -56,7 +59,28 @@ export const TaskManagerView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadTasks();
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const permissions = Array.isArray(principal?.permissions) ? principal.permissions : [];
+        setCanManageTasks(
+          principal?.kind === 'human' &&
+          (permissions.includes('*') || permissions.includes('tasks:write'))
+        );
+        setRoleLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanManageTasks(false);
+          setRoleLoaded(true);
+        }
+      });
+    void loadTasks();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleCopy = (text: string, id: string) => {
@@ -74,6 +98,7 @@ export const TaskManagerView: React.FC = () => {
   };
 
   const handleDeleteTask = async (taskId: string) => {
+    if (!canManageTasks) return;
     setDeletingId(taskId);
     try {
       const success = await deleteTask(taskId);
@@ -91,6 +116,7 @@ export const TaskManagerView: React.FC = () => {
   };
 
   const handlePurgeOldTasks = async () => {
+    if (!canManageTasks) return;
     setPurging(true);
     try {
       const res = await purgeTasks(30);
@@ -132,7 +158,7 @@ export const TaskManagerView: React.FC = () => {
   const totalCount = tasks.length;
   const completedCount = tasks.filter((t) => t.is_completed).length;
   const pendingCount = totalCount - completedCount;
-  const successRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : null;
+  const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : null;
 
   const uniqueIntents = useMemo(() => {
     const set = new Set<string>();
@@ -143,7 +169,7 @@ export const TaskManagerView: React.FC = () => {
   }, [tasks]);
 
   const formatDate = (isoString?: string) => {
-    if (!isoString) return 'Data recente';
+    if (!isoString) return 'Data indisponível';
     try {
       const d = new Date(isoString);
       return d.toLocaleString('pt-PT', {
@@ -167,12 +193,12 @@ export const TaskManagerView: React.FC = () => {
             Gerenciador de Tarefas
           </h2>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
-            Histórico persistido no SQLite (WAL) de deliberações, execuções e checkpoints do monólito
+            Histórico de tarefas da sua conta, com filtros por intenção, projeto e sessão.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {totalCount > 0 && (
+          {canManageTasks && totalCount > 0 && (
             <button
               onClick={() => setShowPurgeModal(true)}
               className="btn btn-secondary"
@@ -194,6 +220,8 @@ export const TaskManagerView: React.FC = () => {
         </div>
       </div>
 
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões de gestão de tarefas…</div>}
+      {roleLoaded && !canManageTasks && <div className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>Modo de consulta: a remoção e a limpeza de tarefas exigem tasks:write.</div>}
       {loadError && (
         <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
           Não foi possível carregar as tarefas: {loadError}
@@ -229,7 +257,7 @@ export const TaskManagerView: React.FC = () => {
         <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              Em Execução / Pendentes
+              Não concluídas
             </span>
             <Clock size={18} color="#f59e0b" />
           </div>
@@ -241,12 +269,12 @@ export const TaskManagerView: React.FC = () => {
         <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              Taxa de Sucesso
+              Taxa de Conclusão
             </span>
             <Sparkles size={18} color="#06b6d4" />
           </div>
           <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '8px', color: '#38bdf8' }}>
-            {successRate === null ? '—' : `${successRate}%`}
+            {completionRate === null ? '—' : `${completionRate}%`}
           </div>
         </div>
       </div>
@@ -295,7 +323,7 @@ export const TaskManagerView: React.FC = () => {
               [
                 { id: 'ALL', label: 'Todas' },
                 { id: 'COMPLETED', label: 'Concluídas' },
-                { id: 'PENDING', label: 'Em Andamento' },
+                { id: 'PENDING', label: 'Não concluídas' },
               ] as const
             ).map((item) => (
               <button
@@ -394,7 +422,7 @@ export const TaskManagerView: React.FC = () => {
             Nenhuma tarefa encontrada
           </h3>
           <p style={{ fontSize: '0.84rem', marginTop: '6px' }}>
-            Inicie um fluxo técnico no <b>Chat Master</b> para gerar novas deliberações, planos e checkpoints.
+            As tarefas são registadas quando um fluxo é executado no Chat JARVIS.
           </p>
         </div>
       ) : (
@@ -441,7 +469,7 @@ export const TaskManagerView: React.FC = () => {
                         {mappedIntent.label}
                       </span>
                       <span className={`badge ${task.is_completed ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.72rem' }}>
-                        {task.is_completed ? 'Concluída' : 'Em Execução'}
+                        {task.is_completed ? 'Concluída' : 'Não concluída'}
                       </span>
                       {task.project_id && (
                         <span className="badge badge-purple" style={{ fontSize: '0.70rem' }}>
@@ -457,7 +485,7 @@ export const TaskManagerView: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span>ID:</span>
-                        <code style={{ color: '#e2e8f0', fontFamily: "'JetBrains Mono', monospace" }}>
+                        <code style={{ color: 'var(--text-primary)', fontFamily: "'JetBrains Mono', monospace" }}>
                           #{String(task.id || '').slice(0, 12)}
                         </code>
                         <button
@@ -473,7 +501,7 @@ export const TaskManagerView: React.FC = () => {
                       {task.session_id && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>Sessão:</span>
-                          <code style={{ color: '#818cf8', fontFamily: "'JetBrains Mono', monospace" }}>
+                          <code style={{ color: 'var(--accent-color)', fontFamily: "'JetBrains Mono', monospace" }}>
                             {String(task.session_id).slice(0, 14)}
                           </code>
                           <button
@@ -493,7 +521,7 @@ export const TaskManagerView: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
+                  {canManageTasks && <button
                     onClick={() => setConfirmDeleteId(task.id)}
                     className="btn btn-ghost"
                     style={{ fontSize: '0.75rem', padding: '6px 10px', color: '#f87171' }}
@@ -501,8 +529,8 @@ export const TaskManagerView: React.FC = () => {
                     disabled={isDeleting}
                   >
                     <Trash2 size={13} color="#f87171" />
-                    <span>{isDeleting ? 'Excluindo...' : 'Remover'}</span>
-                  </button>
+                    <span>{isDeleting ? 'A remover…' : 'Remover'}</span>
+                  </button>}
                 </div>
               </div>
             );
@@ -511,7 +539,7 @@ export const TaskManagerView: React.FC = () => {
       )}
 
       <Modal
-        isOpen={!!confirmDeleteId}
+        isOpen={canManageTasks && !!confirmDeleteId}
         onClose={() => setConfirmDeleteId(null)}
         title="Excluir registro de tarefa?"
         subtitle="Esta ação remove o registro da sua conta e não pode ser desfeita."
@@ -541,7 +569,7 @@ export const TaskManagerView: React.FC = () => {
       </Modal>
 
       {/* Modal de Confirmação para Expurgar Antigas */}
-      {showPurgeModal && (
+      {canManageTasks && showPurgeModal && (
         <div
           style={{
             position: 'fixed',
@@ -592,7 +620,7 @@ export const TaskManagerView: React.FC = () => {
               <button
                 onClick={handlePurgeOldTasks}
                 className="btn btn-danger"
-                style={{ fontSize: '0.80rem', padding: '6px 14px', backgroundColor: '#dc2626', color: 'var(--text-primary)' }}
+                style={{ fontSize: '0.80rem', padding: '6px 14px' }}
                 disabled={purging}
               >
                 {purging ? 'Expurgando...' : 'Confirmar Expurgo'}
