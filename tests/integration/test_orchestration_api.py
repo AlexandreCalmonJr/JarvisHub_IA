@@ -26,7 +26,20 @@ async def test_api_health_check():
 
 
 @pytest.mark.asyncio
-async def test_api_chat_analysis_planning():
+async def test_api_chat_analysis_planning(monkeypatch):
+    from types import SimpleNamespace
+
+    from apps.api.deps import model_manager
+
+    async def fake_generate(request):
+        return SimpleNamespace(
+            content=f"Parecer simulado para {request.task_id or 'tarefa'}",
+            prompt_tokens=10,
+            completion_tokens=20,
+            duration_ms=1.0,
+        )
+
+    monkeypatch.setattr(model_manager, "generate", fake_generate)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {"prompt": "Analisar a arquitetura de módulos e diagramas do projeto"}
