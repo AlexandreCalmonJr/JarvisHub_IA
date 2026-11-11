@@ -72,7 +72,7 @@ def test_account_ownership_migration_is_idempotent_after_restart(tmp_path):
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
 
-    assert [row["version"] for row in versions] == [1, 2]
+    assert [row["version"] for row in versions] == [1, 2, 3]
 
 
 def test_agent_memory_keys_are_independent_between_accounts(tmp_path):
