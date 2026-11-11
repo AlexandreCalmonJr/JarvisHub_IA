@@ -84,7 +84,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
-    return (localStorage.getItem('jarvis_experience_mode') as any) || 'technical';
+    return (localStorage.getItem(getAccountStorageKey('jarvis_experience_mode')) as any) || 'technical';
   });
 
   useEffect(() => {
@@ -107,7 +107,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    localStorage.setItem('jarvis_experience_mode', experienceMode);
+    localStorage.setItem(getAccountStorageKey('jarvis_experience_mode'), experienceMode);
     try {
       await saveUserProfileApi(profile);
       saveUserProfile(profile);
@@ -139,8 +139,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleClearHistory = () => {
     if (window.confirm('Tem certeza de que deseja apagar todo o histórico de conversas locais? Esta ação não pode ser desfeita.')) {
-      localStorage.removeItem('jarvis_chat_messages_v1');
-      localStorage.removeItem('jarvis_sessions_catalog_v1');
+      localStorage.removeItem(getAccountStorageKey('jarvis_chat_messages_v1'));
+      localStorage.removeItem(getAccountStorageKey('jarvis_sessions_catalog_v1'));
       notify('Histórico de conversas limpo com sucesso.', 'info');
       setTimeout(() => window.location.reload(), 600);
     }
@@ -148,7 +148,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleExportData = () => {
     try {
-      const messages = localStorage.getItem('jarvis_chat_messages_v1') || '[]';
+      const messages = localStorage.getItem(getAccountStorageKey('jarvis_chat_messages_v1')) || '[]';
       const blob = new Blob([messages], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
