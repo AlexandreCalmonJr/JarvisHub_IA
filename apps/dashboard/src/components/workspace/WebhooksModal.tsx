@@ -232,7 +232,7 @@ export const WebhooksModal: React.FC<WebhooksModalProps> = ({ isOpen, onClose })
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !!loadError}
               className="btn btn-primary"
               style={{ fontSize: '0.80rem', padding: '7px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
