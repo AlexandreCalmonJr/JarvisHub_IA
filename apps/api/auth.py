@@ -252,39 +252,44 @@ def required_permission(method: str, path: str) -> str | None:
 
 
 def write_private_file(path: Path, content: str) -> Path:
-    """Grava um segredo num arquivo com permissões restritas (best-effort por SO).
+    """Grava um segredo e só o publica depois de restringir as permissões.
 
-    O valor nunca é enviado para stdout/logs. No Windows, remove a herança de ACL
-    e concede acesso apenas ao utilizador atual. Em POSIX, aplica modo 0600.
+    Falhas ao proteger o arquivo são fatais: não deixa um segredo persistido
+    com ACL/permissões desconhecidas. O valor nunca é enviado para stdout/logs.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(content.rstrip("\n") + "\n", encoding="utf-8")
+    tmp_path = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
     try:
-        os.chmod(tmp_path, 0o600)
-    except OSError:
-        pass
-    os.replace(tmp_path, path)
-    if os.name == "nt":
-        username = os.environ.get("USERNAME") or os.environ.get("USER")
-        if username:
-            try:
-                subprocess.run(
-                    [
-                        "icacls",
-                        str(path),
-                        "/inheritance:r",
-                        "/grant:r",
-                        f"{username}:F",
-                    ],
-                    check=False,
-                    capture_output=True,
-                    timeout=10,
-                )
-            except (OSError, subprocess.SubprocessError):
-                pass
-    return path
+        tmp_path.write_text(content.rstrip("\n") + "\n", encoding="utf-8")
+        if os.name == "nt":
+            username = os.environ.get("USERNAME") or os.environ.get("USER")
+            if not username:
+                raise OSError("Não foi possível identificar o utilizador para proteger o segredo.")
+            domain = os.environ.get("USERDOMAIN", "").strip()
+            account = f"{domain}\\{username}" if domain else username
+            result = subprocess.run(
+                [
+                    "icacls",
+                    str(tmp_path),
+                    "/inheritance:r",
+                    "/grant:r",
+                    f"{account}:F",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                raise OSError("Não foi possível aplicar ACL restrita ao arquivo secreto.")
+        else:
+            os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)
+        return path
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 class AuthService:
