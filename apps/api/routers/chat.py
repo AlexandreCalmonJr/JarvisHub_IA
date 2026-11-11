@@ -305,17 +305,17 @@ async def chat_endpoint(
 async def chat_stream_endpoint(
     request: ChatRequest, principal: Principal = Depends(get_principal)
 ):
-    owner_user_id = _private_owner(principal)
-    if request.project_id and not db_manager.get_project(
-        request.project_id, owner_user_id=owner_user_id
-    ):
-        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     """
     Endpoint SSE para streaming de tokens em tempo real.
 
     Com ``engine='auto'`` (padrão), conversas usam o runtime real com memória e
     streaming; ações de código continuam no orquestrador, com aprovação humana.
     """
+    owner_user_id = _private_owner(principal)
+    if request.project_id and not db_manager.get_project(
+        request.project_id, owner_user_id=owner_user_id
+    ):
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     engine = await _resolve_engine(request)
 
     async def agent_generator():
