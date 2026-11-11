@@ -229,6 +229,9 @@ export const QualityStudioView: React.FC = () => {
               {runningTests ? 'Executando Suíte...' : 'Executar Testes'}
             </button>
           </div>
+          <div style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: '0.74rem' }}>
+            Por segurança, a execução de código está restrita a administradores até existir isolamento de processo por conta.
+          </div>
         </div>
 
         {/* Lista de Arquivos de Teste */}
