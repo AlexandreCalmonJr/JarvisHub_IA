@@ -189,10 +189,6 @@ if workspace_root.exists():
                 root_path=str(p_dir),
             )
 
-from services.model_runtime.key_vault import KeyVaultService
-
-key_vault = KeyVaultService()
-
 hybrid_router = HybridModelRouter(
     local_adapter=OllamaAdapter(),
     online_config=hybrid_config,
