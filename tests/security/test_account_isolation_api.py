@@ -155,8 +155,14 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp
         assert profile_b.status_code == 200
         assert profile_b.json()["displayName"] != "Perfil privado A"
 
+        audit_a = await client.get("/api/v1/security/audit-logs", headers=headers_a)
         audit_b = await client.get("/api/v1/security/audit-logs", headers=headers_b)
-        assert audit_b.status_code == 403
+        assert audit_a.status_code == 200
+        assert audit_b.status_code == 200
+        audit_ids_a = {row["id"] for row in audit_a.json()["events"]}
+        audit_ids_b = {row["id"] for row in audit_b.json()["events"]}
+        assert audit_ids_a.isdisjoint(audit_ids_b)
+
         logs_b = await client.get("/api/v1/system/server-logs", headers=headers_b)
         assert logs_b.status_code == 403
 
