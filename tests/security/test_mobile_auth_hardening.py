@@ -187,6 +187,7 @@ async def test_07_mobile_approval_decision_validated_identity():
     reg = security_core.device_auth.pair_device(
         "Smartphone Homologado",
         scopes=["approvals:read", "approvals:decide"],
+        owner_user_id="admin",
     )
     token = reg.device_token
     device_id = reg.device_id
