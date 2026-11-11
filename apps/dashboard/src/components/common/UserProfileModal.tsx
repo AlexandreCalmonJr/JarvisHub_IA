@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { fetchUserProfileApi, saveUserProfileApi, createSystemBackup } from '../../api';
 import { getAccountStorageKey } from '../../services/accountScope';
+import { API_BASE } from '../../services/api/client';
 import { notify } from './Toast';
 
 export interface UserProfileData {
@@ -80,10 +81,27 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
     const stored = localStorage.getItem(getAccountStorageKey('jarvis_experience_mode'));
     return stored === 'essential' || stored === 'advanced' ? stored : 'technical';
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (!cancelled) setIsAdmin(principal?.kind === 'human' && principal?.role === 'admin');
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -565,23 +583,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               gap: '12px',
             }}
           >
-            <div>
-              <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Backup do sistema (apenas administradores)</strong>
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Gera uma cópia do banco de dados do servidor. A API valida a permissão administrativa antes de executar a operação.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleBackupDatabase}
-              disabled={backingUp}
-              className="btn btn-secondary"
-              style={{ fontSize: '0.80rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Database size={14} color="var(--accent-color)" />
-              <span>{backingUp ? 'Gerando Backup...' : 'Criar Backup SQLite'}</span>
-            </button>
-          </div>
+            {isAdmin && (\n            <div>
+                <strong style={{ fontSize: '0.90rem', color: 'var(--text-primary)', display: 'block' }}>Backup do sistema (apenas administradores)</strong>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Gera uma cópia do banco de dados do servidor. A API valida a permissão administrativa antes de executar a operação.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleBackupDatabase}
+                disabled={backingUp}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.80rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Database size={14} color="var(--accent-color)" />
+                <span>{backingUp ? 'Gerando Backup...' : 'Criar Backup SQLite'}</span>
+              </button>
+            </div>\n          )}\n
 
           <div
             style={{
