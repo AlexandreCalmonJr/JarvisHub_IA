@@ -133,7 +133,7 @@ def _tool_specs() -> list[ToolSpec]:
             name="write_file",
             description=(
                 "Cria ou substitui completamente um arquivo de texto. Use edit_file para mudanças pontuais. "
-                "Exige aprovação humana em modo 'ask'."
+                "Exige aprovação humana em todos os modos."
             ),
             parameters={
                 "type": "object",
@@ -173,7 +173,7 @@ def _tool_specs() -> list[ToolSpec]:
             name="run_command",
             description=(
                 "Executa um comando de shell dentro da raiz do projeto (testes, build, linter, git). "
-                "Exige aprovação humana em modo 'ask'. Comandos destrutivos são bloqueados."
+                "Exige aprovação humana em todos os modos. Comandos destrutivos são bloqueados."
             ),
             parameters={
                 "type": "object",
@@ -213,7 +213,7 @@ def _tool_specs() -> list[ToolSpec]:
             description=(
                 "Cria um commit Git com todas as alterações do projeto (exceto backups .bak). "
                 "Use apenas depois de revisar o diff e validar os testes. Exige aprovação humana "
-                "em modo 'ask'."
+                "em todos os modos."
             ),
             parameters={
                 "type": "object",
