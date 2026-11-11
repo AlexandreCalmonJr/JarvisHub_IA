@@ -65,7 +65,7 @@ interface ProjectCardProps {
 
   onOpenFile: (projectId: string, filePath: string) => void;
 
-  onDeleteProject?: (projectId: string) => void;
+  onDeleteProject?: (projectId: string) => Promise<void> | void;
 
   onSelectForChat?: (projectId: string) => void;
   onOpenMemory?: (projectId: string) => void;
@@ -316,18 +316,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   };
 
-  const confirmDeleteAction = () => {
-
+  const confirmDeleteAction = async () => {
     setDeleting(true);
-
     setShowConfirmDelete(false);
-
-    if (onDeleteProject) {
-
-      onDeleteProject(project.id);
-
+    try {
+      await onDeleteProject?.(project.id);
+    } catch {
+      setDeleting(false);
     }
-
   };
 
   return (
