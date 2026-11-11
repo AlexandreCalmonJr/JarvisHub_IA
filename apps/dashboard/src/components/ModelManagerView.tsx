@@ -16,13 +16,14 @@ import { HybridGatewayConfig, ProviderCard } from './models/HybridGatewayConfig'
 import { HuggingFaceHubSection } from './models/HuggingFaceHubSection';
 import { LocalModelsGrid } from './models/LocalModelsGrid';
 import { KeyVaultManager } from './models/KeyVaultManager';
+import { ModelQualityPanel } from './models/ModelQualityPanel';
 
 export const ModelManagerView: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
-  const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub'>('vault');
+  const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub' | 'quality'>('vault');
 
   // Form State para Gateway Híbrido
   const [provider, setProvider] = useState<string>('gemini');
@@ -368,6 +369,25 @@ export const ModelManagerView: React.FC = () => {
           >
             Hugging Face Hub
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('quality')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.84rem',
+              fontWeight: 500,
+              backgroundColor: activeTab === 'quality' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: activeTab === 'quality' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'quality' ? '2px solid var(--accent-color)' : '2px solid transparent',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Qualidade & Aprendizagem
+          </button>
         </div>
 
         {/* Botões de Ação Global */}
@@ -460,6 +480,8 @@ export const ModelManagerView: React.FC = () => {
           onInstallModel={handleInstallModel}
         />
       )}
+
+      {activeTab === 'quality' && <ModelQualityPanel />}
 
       {/* Modal do Assistente de Configuração */}
       <SetupWizardModal
