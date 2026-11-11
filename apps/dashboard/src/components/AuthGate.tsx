@@ -167,6 +167,13 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               <button type="submit" disabled={busy} style={styles.button}>{busy ? 'A autenticar...' : 'Entrar no Jarvis'}</button>
             </form>
           ) : (
+            {mode === 'bootstrap' && (
+              <p style={styles.helpText}>
+                Na pasta do projeto, execute <code>python -m apps.api.auth_cli status</code>.
+                Se precisar de um novo token, execute <code>python -m apps.api.auth_cli bootstrap --ttl 600</code>
+                e copie o conteúdo do arquivo indicado pelo terminal. O token é de uso único.
+              </p>
+            )}
             <form onSubmit={submitLogin} style={styles.form}>
               <label style={styles.label} htmlFor="auth-token">{mode === 'bootstrap' ? 'Token inicial de ativação' : 'Token de administrador'}</label>
               <input id="auth-token" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Cole o token de acesso" style={styles.input} required />
@@ -255,6 +262,7 @@ const styles: Record<string, React.CSSProperties> = {
   muted: { color: '#94a3b8', fontSize: 13, lineHeight: 1.65, margin: '0 0 25px' },
   mutedSmall: { color: '#94a3b8', fontSize: 12, lineHeight: 1.55, margin: '0 0 18px' },
   form: { display: 'grid', gap: 10 },
+  helpText: { margin: '0 0 14px', color: '#93c5fd', fontSize: 11, lineHeight: 1.65 },
   userForm: { display: 'grid', gap: 8 },
   label: { color: '#cbd5e1', fontSize: 11, fontWeight: 650, marginTop: 6 },
   input: { width: '100%', boxSizing: 'border-box', padding: '12px 13px', borderRadius: 10, border: '1px solid #334155', background: '#0b1220', color: '#f8fafc', outline: 'none', fontSize: 13 },
