@@ -181,6 +181,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
               {error && <div role="alert" style={styles.error}>{error}</div>}
               <button type="submit" disabled={busy} style={styles.button}>{busy ? 'A autenticar...' : 'Validar acesso'}</button>
             </form>
+            </>
           )}
           <div style={styles.modeLinks}>
             <button type="button" onClick={() => { setMode('account'); setError(''); }}>Conta e palavra-passe</button>
