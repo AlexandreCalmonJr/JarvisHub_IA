@@ -569,7 +569,7 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - O carregamento do perfil é cancelável ao fechar o modal; o botão de gravação indica estado e impede submissões duplicadas.
 - O modo Essencial/Técnico/Avançado é uma preferência local por conta/navegador; não deve ser descrito como alteração global enquanto os módulos não aplicarem esse modo.
 - O perfil não recolhe nem persiste tokens de providers. A gestão de credenciais é encaminhada para o Gestor de Modelos/Cofre de Chaves, conforme as permissões.
-- O backup do banco é uma operação administrativa validada pela API; a interface não apresenta o caminho físico do servidor.
+- O backup do banco é uma operação administrativa validada pela API; a interface só apresenta a ação após confirmar em `/auth/me` que a sessão pertence a um utilizador humano com papel `admin`, e não apresenta o caminho físico do servidor.
 - Exportação e limpeza locais foram descritas com o respetivo âmbito. A limpeza percorre também caches locais de sessões, limitando-se ao sufixo da conta ativa.
 - O formulário e as opções de avatar receberam comportamento responsivo e estados visuais do design system.
 
