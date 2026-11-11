@@ -206,7 +206,12 @@ class KeyVaultService:
                 logger.info("Carregadas %d chaves do cofre de APIs.", len(self._keys))
                 return
             except Exception as exc:
-                logger.error("Falha ao ler o cofre de APIs cifrado: %s", exc)
+                self._keys.clear()
+                logger.error("Falha ao ler o cofre de APIs cifrado; inicialização bloqueada: %s", exc)
+                raise RuntimeError(
+                    "O KeyVault existente não pôde ser aberto com segurança. "
+                    "Não será ignorado nem substituído automaticamente."
+                ) from exc
 
         # Migração automática a partir do hybrid_gateway_config.json legado
         legacy_path = Path("data") / "hybrid_gateway_config.json"
