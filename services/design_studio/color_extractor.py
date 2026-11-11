@@ -14,13 +14,12 @@ logger = logging.getLogger("jarvis.design_studio")
 
 
 def _hex_to_rgb(hex_code: str) -> tuple[int, int, int]:
+    if not isinstance(hex_code, str) or not re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", hex_code):
+        raise ValueError("Informe uma cor hexadecimal válida (#RGB ou #RRGGBB).")
     clean = hex_code.lstrip("#")
     if len(clean) == 3:
-        clean = "".join(c * 2 for c in clean)
-    try:
-        return int(clean[0:2], 16), int(clean[2:4], 16), int(clean[4:6], 16)
-    except Exception:
-        return (99, 102, 241)
+        clean = "".join(channel * 2 for channel in clean)
+    return int(clean[0:2], 16), int(clean[2:4], 16), int(clean[4:6], 16)
 
 
 def _rgb_to_hex(r: int, g: int, b: int) -> str:
@@ -41,6 +40,8 @@ class DesignStudioService:
     def extract_color_palette(self, hex_primary: str, name: str = "custom") -> dict[str, Any]:
         """Gera escala completa de cores (50 a 900), contraste e variáveis CSS/Tailwind."""
         base_rgb = _hex_to_rgb(hex_primary)
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+            raise ValueError("O nome da paleta deve conter apenas letras, números, hífen ou sublinhado (até 40 caracteres).")
         white_rgb = (255, 255, 255)
         black_rgb = (10, 15, 26)
 
@@ -242,4 +243,6 @@ class DesignStudioService:
             },
         }
 
-        return templates.get(clean_type) or templates["feature_card"]
+        if clean_type not in templates:
+            raise ValueError("Tipo de componente não suportado.")
+        return templates[clean_type]
