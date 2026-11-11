@@ -681,3 +681,34 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Verificar que perfis auditor não executam scans, Red Team, alterações de políticas ou Kill Switch; confirmar acesso de leitura conforme permissões.
 - Avaliar a recuperação de referências locais a aprovações rejeitadas/expiradas e a apresentação de estado operacional do Cyber Shield.
 - Build, lint, testes de autorização, integração e responsividade não foram executados.
+
+## 18. Knowledge Vault e Gestor de Skills — isolamento e permissões
+
+**Estado:** alterações gravadas na branch de auditoria; testes e homologação permanecem pendentes.
+
+### 18.1 Knowledge Vault
+
+- A leitura e a pesquisa continuam disponíveis conforme `knowledge:read`; upload, indexação de pasta/texto e exclusão só aparecem para utilizadores humanos `admin` ou `developer`, alinhados a `knowledge:write`.
+- A interface valida o limite de 25 MB antes do upload; o limite do backend continua sendo a autoridade final.
+- A listagem distingue estado de leitura e gestão, não mostra exclusão nem CTA de upload a perfis de consulta.
+- A nomenclatura deixa explícito que a indexação de diretório ocorre no servidor JARVIS, não no computador do navegador.
+- Datas e cores foram alinhadas a `pt-PT` e aos tokens do design system.
+
+### 18.2 Gestor de Skills
+
+- O catálogo global deixa de receber Skills privadas carregadas do SQLite na inicialização.
+- Criação, importação, ativação, associação a agentes e exclusão de Skills privadas passam a operar exclusivamente sobre o registo da conta autenticada.
+- O prompt builder já recupera Skills privadas usando `owner_user_id`; a separação do catálogo evita colisões e mutações globais por identificadores privados.
+- A ativação e a associação de Skills globais continuam reservadas a administradores; developers podem gerir as Skills privadas da própria conta.
+- A política Ponytail é global e só pode ser alterada pelo administrador; os demais perfis veem o nível em modo de consulta.
+- Skills criadas/importadas passam novamente pela validação estática de instruções, integridade do hash e licença antes de serem persistidas.
+- Skills importadas ECC precisam declarar uma licença reconhecida no frontmatter; o sistema deixou de atribuir MIT automaticamente sem evidência.
+- IDs de Skills privadas que colidam com IDs do catálogo global são rejeitados.
+- A seleção de agentes no modal passou a usar controlos de botão acessíveis por teclado; os textos deixaram de afirmar uma quantidade fixa de agentes.
+
+### 18.3 Pendências específicas
+
+- Testar isolamento com duas contas que criem Skills com nomes iguais, incluindo ativação, associação, exclusão e injeção no prompt.
+- Verificar compatibilidade de Skills privadas já existentes no SQLite e comportamento de importações sem licença declarada.
+- Validar os perfis admin, developer e auditor nas duas páginas.
+- Executar build, lint, testes de autorização, RAG/owner scope e responsividade apenas na fase final de homologação.
