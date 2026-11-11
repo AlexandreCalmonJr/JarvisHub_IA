@@ -350,7 +350,7 @@ Concluir a Fase 1 com a leitura dos módulos pendentes e, em seguida, executar a
 - O grafo LangGraph propaga o owner autenticado para as nove chamadas de inferência identificadas.
 - `ModelManager.generate()` grava telemetria de sucesso e falha. Falhas de gravação da telemetria são registradas no log, mas não interrompem a inferência.
 - Endpoint autenticado `GET /api/v1/system/inference-telemetry`, que deriva o owner de `Principal.subject_id`; o cliente não pode escolher a conta consultada.
-- Testes unitários para isolamento por owner, exigência de identidade na consulta e ausência de campos de prompt/resposta/credencial no schema.
+- Testes unitários para isolamento por owner, exigência de identidade na consulta, ausência de campos de prompt/resposta/credencial no schema e gravação de sucesso/falha no ModelManager.
 
 ### 9.2 Proteções de privacidade
 
@@ -366,7 +366,7 @@ Concluir a Fase 1 com a leitura dos módulos pendentes e, em seguida, executar a
 - O streaming ainda não é instrumentado por este primeiro incremento.
 - Chamadas fora do grafo que não preencham `owner_user_id` ficam sem associação a uma conta.
 - Custo monetário e energia não são estimados. Só são expostos tokens e duração efetivamente fornecidos/medidos.
-- A atribuição de agent_role está sendo transportada pelo contrato, mas deve ser conferida em todos os caminhos de inferência.
+- As nove chamadas de inferência identificadas no grafo agora propagam owner_user_id e o papel real do especialista para a telemetria.
 
 ### 9.4 Validação
 
