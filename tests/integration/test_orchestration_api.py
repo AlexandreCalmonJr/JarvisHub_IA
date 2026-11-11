@@ -33,8 +33,10 @@ async def test_api_chat_analysis_planning():
         res = await client.post("/api/v1/chat", json=payload)
         assert res.status_code == 200
         data = res.json()
-        assert data["classified_intent"] == "architecture_analysis"
+        assert data["classified_intent"] == "multi_agent_consensus"
         assert AgentRole.SOFTWARE_ARCHITECT.value in data["selected_agents"]
+        assert AgentRole.CYBERSECURITY_ENGINEER.value in data["selected_agents"]
+        assert AgentRole.CODE_REVIEWER.value in data["selected_agents"]
         assert len(data["plan_steps"]) > 0
         assert data["is_completed"] is True
 
