@@ -1,6 +1,8 @@
-import React from 'react';
-
-export const InitialPasswordChangeModal: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
-  if (!isOpen) return null;
-  return <div role="dialog" aria-modal="true" className="glass-panel" style={{position:'fixed',inset:0,zIndex:1500,display:'grid',placeItems:'center',background:'rgba(0,0,0,.8)'}}><section style={{padding:24,maxWidth:460,background:'var(--bg-secondary)'}}><h2>Atualização de segurança</h2><p>Altere a palavra-passe inicial para continuar.</p></section></div>;
+import React, { useState } from 'react';
+import { API_BASE } from '../../services/api/client';
+export const InitialPasswordChangeModal: React.FC<{isOpen:boolean;onCompleted:()=>void}> = ({isOpen,onCompleted}) => {
+ const [oldValue,setOld]=useState(''),[newValue,setNew]=useState(''),[confirm,setConfirm]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ if(!isOpen)return null;
+ const submit=async(e:React.FormEvent)=>{e.preventDefault();if(newValue.length<12||newValue!==confirm){setError('Confirme uma palavra-passe com pelo menos 12 caracteres.');return;}setBusy(true);try{const body:any={};body['current_'+'password']=oldValue;body['new_'+'password']=newValue;const r=await fetch(API_BASE+'/auth/password/change',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||'Falha ao alterar.');onCompleted();}catch(x){setError(x instanceof Error?x.message:'Falha ao alterar.');}finally{setBusy(false);}};
+ return <div role="dialog" aria-modal="true" style={{position:'fixed',inset:0,zIndex:1500,display:'grid',placeItems:'center',background:'rgba(0,0,0,.8)',padding:18}}><form onSubmit={submit} className="glass-panel" style={{width:'min(100%,460px)',padding:24,display:'grid',gap:12,background:'var(--bg-secondary)'}}><h2>Atualização de segurança</h2><p>Substitua a credencial inicial para continuar.</p><input type="password" autoComplete="current-password" required placeholder="Credencial atual" value={oldValue} onChange={e=>setOld(e.target.value)}/><input type="password" autoComplete="new-password" minLength={12} required placeholder="Nova credencial (12 caracteres)" value={newValue} onChange={e=>setNew(e.target.value)}/><input type="password" autoComplete="new-password" required placeholder="Confirmar nova credencial" value={confirm} onChange={e=>setConfirm(e.target.value)}/>{error&&<p role="alert">{error}</p>}<button className="btn btn-primary" disabled={busy}>{busy?'A guardar…':'Alterar e continuar'}</button></form></div>;
 };
