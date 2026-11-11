@@ -1,0 +1,335 @@
+# Auditoria de integração — OpenJarvis + JARVIS AI Hub
+
+**Branch de trabalho:** `integration/openjarvis-audit`  
+**Branch-base:** `release/local-homologation`  
+**Commit-base observado:** `df3416503dcb509f87666a464aaa5fb268a52680`  
+**Data da auditoria inicial:** 2026-11-11  
+**Escopo deste registro:** Fase 0 (proteção) e primeira passagem da Fase 1 (auditoria do OpenJarvis).  
+**Regra:** este documento registra evidências do código e separa claramente implementação observada, documentação declarativa e pontos ainda não verificados.
+
+---
+
+## 1. Resumo executivo
+
+A branch exclusiva `integration/openjarvis-audit` foi criada a partir de `release/local-homologation`. Nenhum arquivo funcional, dependência ou configuração de execução do Hub foi alterado nesta etapa. A auditoria inicial confirma que o OpenJarvis possui componentes concretos e potencialmente reaproveitáveis em cinco áreas prioritárias:
+
+1. contratos e registries tipados para componentes substituíveis;
+2. abstração de engines e descoberta de modelos disponíveis;
+3. agentes com ciclos de ferramentas (Orchestrator/ReAct);
+4. traces, telemetria e agregação de métricas;
+5. memória híbrida e políticas de roteamento orientadas por resultados.
+
+O Hub já possui bases equivalentes em vários desses domínios: ModelManager/adapters/HybridModelRouter, LangGraph/Maestro, AutonomousAgentRuntime/ReAct, ToolGateway, SecurityCore, memória persistente e contratos de agentes. Portanto, a estratégia correta é **adaptar padrões e componentes pontuais**, não importar um segundo framework inteiro nem substituir LangGraph, Maestro, SecurityCore ou ToolGateway.
+
+Ainda não há decisão de copiar ou adicionar dependências. Essa decisão depende da matriz de compatibilidade e da auditoria detalhada do Hub.
+
+## 2. Fase 0 — proteção dos repositórios
+
+### 2.1 Estado Git observado
+
+| Item | Evidência | Resultado |
+|---|---|---|
+| Branch de homologação | `release/local-homologation` existe | Confirmada |
+| Branch exclusiva | `integration/openjarvis-audit` criada | Confirmada |
+| Origem da nova branch | `release/local-homologation` | Confirmada |
+| Commit de origem | `df3416503dcb509f87666a464aaa5fb268a52680` | Registrado |
+| Branch `main` | Comparação com homologação indica divergência | Não foi modificada |
+| Alterações funcionais nesta etapa | Nenhuma escrita em código de runtime | Confirmado |
+| Dependências instaladas/atualizadas | Nenhuma | Confirmado |
+
+Na comparação entre `main` e `release/local-homologation`, a homologação estava 11 commits à frente e 1 commit atrás da `main`. A nova branch foi criada a partir da homologação, não da `main`. Não realizar merge/rebase automático com a `main`.
+
+**Limitação importante:** o acesso GitHub permite observar commits e arquivos remotos, mas não mostra alterações não commitadas que possam existir na cópia local do Windows. Antes de qualquer operação Git local, preservar e verificar o estado local com `git status`; não executar `reset`, `clean`, checkout destrutivo ou sobrescrita de arquivos.
+
+### 2.2 Política de reversão
+
+- Cada módulo será implementado em commits pequenos e identificáveis nesta branch.
+- Não alterar `main` durante auditoria/homologação.
+- Não remover nem substituir implementações existentes antes de testes comparativos.
+- Para reverter um módulo, usar revert do commit específico após avaliar dependências posteriores; não apagar trabalho acumulado com reset.
+- Mudanças de schema exigem migração reversível e teste de dados existentes.
+
+## 3. Fase 1 — inventário técnico inicial do OpenJarvis
+
+### 3.1 Identidade e arquitetura
+
+O repositório consultado é `open-jarvis/OpenJarvis`, branch `main`. A documentação de arquitetura descreve um framework de pesquisa para IA on-device/local-first, organizado em abstrações para Intelligence, Engine, Agentic Logic, Memory e Learning. O código apresenta registries tipados e componentes Python, além de código Rust/PyO3 para partes do sistema.
+
+**Observação de auditoria:** alguns caminhos da árvore descrita em documentação antiga não correspondem à organização atual do código. Por exemplo, os backends de memória observados estão em `src/openjarvis/tools/storage/`, e as políticas de roteamento estão em `src/openjarvis/learning/routing/`. A integração deve seguir o código atual, não copiar caminhos de diagramas/documentos possivelmente desatualizados.
+
+### 3.2 Registry e contratos centrais
+
+**Arquivos examinados**
+- `src/openjarvis/core/registry.py`
+- `src/openjarvis/core/types.py`
+- `src/openjarvis/engine/_stubs.py`
+- `src/openjarvis/agents/_stubs.py`
+- `src/openjarvis/tools/_stubs.py`
+- `src/openjarvis/tools/storage/_stubs.py`
+
+**Implementação observada**
+- `RegistryBase[T]` fornece registro, consulta e instanciação de classes por chave.
+- Registries tipados separam Engine, Agent, Tool, Model, Memory e políticas.
+- Engines e agentes seguem contratos abstratos comuns.
+- O contrato de ferramenta contém especificação e execução, com um executor próprio.
+- A separação reduz a necessidade de alterar factories centrais a cada novo adaptador.
+
+**Oportunidade no Hub**
+- Avaliar um catálogo/registry de providers e capacidades para complementar o ModelManager atual.
+- Usar interfaces pequenas para adaptadores, sem criar uma segunda camada de DI ou um framework paralelo.
+- Manter permissões e identidade do Hub como autoridade; registro de classe não pode conceder permissão de execução.
+
+**Risco**
+- Um registry global em processo não resolve isolamento multiusuário. Configuração, instâncias, credenciais e estado operacional devem continuar vinculados ao usuário/tenant quando aplicável.
+
+### 3.3 Intelligence e engines de inferência
+
+**Arquivos examinados**
+- `src/openjarvis/intelligence/model_catalog.py`
+- `src/openjarvis/engine/_stubs.py`
+- `src/openjarvis/engine/_discovery.py`
+- `src/openjarvis/core/config.py`
+- Documentação `docs/architecture/overview.md`
+
+**Implementação/documentação observada**
+- Catálogo de modelos com metadados, incluindo capacidades e requisitos de hardware.
+- Descoberta de engines e modelos disponíveis em runtime.
+- Contrato uniforme de engine para geração, streaming, listagem de modelos e health check.
+- Backends documentados incluem Ollama, vLLM, SGLang, llama.cpp e providers cloud compatíveis.
+- Configuração de engine inclui preferência e cadeia de fallback.
+
+**Oportunidade no Hub**
+- Comparar o contrato `InferenceEngine` com `services/model_runtime/adapter.py`, `model_manager.py`, `hybrid_router.py` e `types.py`.
+- Extrair apenas metadados/capabilities e descoberta que estejam ausentes.
+- Criar testes de contrato que provem que adapters diferentes podem ser trocados sem alterar agentes.
+
+**Não fazer agora**
+- Não substituir o ModelManager/HybridModelRouter.
+- Não introduzir engines adicionais até a auditoria de compatibilidade, dependências e hardware.
+
+### 3.4 Agentes e autonomia
+
+**Arquivos examinados**
+- `src/openjarvis/agents/_stubs.py`
+- `src/openjarvis/agents/native_react.py`
+- `src/openjarvis/agents/orchestrator.py`
+- `tests/agents/test_native_react.py`
+- `src/openjarvis/sandbox/runner.py`
+
+**Implementação observada**
+- `BaseAgent` e `ToolUsingAgent` definem contratos reutilizáveis.
+- `NativeReActAgent` implementa ciclo Thought/Action/Observation.
+- `OrchestratorAgent` oferece loop multi-turn com function calling e modo estruturado.
+- O sistema oferece wrapper de agente em container via Docker/Podman.
+- Existe suíte de testes dedicada ao NativeReActAgent (arquivo examinado com 732 linhas).
+
+**Oportunidade no Hub**
+- Comparar limites de iteração, detecção de loops, timeout, cancelamento, tratamento de tool calls e evidências.
+- Aproveitar padrões de ciclo de execução e testes de contrato no `AutonomousAgentRuntime`.
+- Integrar com LangGraph como runtime especializado chamado pelo Maestro, se os contratos e a governança forem compatíveis.
+
+**Risco**
+- Não confiar em raciocínio do modelo para autorização. Toda chamada de ferramenta precisa continuar passando pelo ToolGateway, SecurityCore, RBAC e ApprovalEngine do Hub.
+- O sandbox do OpenJarvis não substitui automaticamente o sandbox e as políticas existentes do Hub.
+
+### 3.5 Memória e recuperação
+
+**Arquivos examinados**
+- `src/openjarvis/tools/storage/_stubs.py`
+- `src/openjarvis/tools/storage/hybrid.py`
+- `docs/architecture/overview.md`
+- Busca de código para backends SQLite/FTS5, FAISS, ColBERT e BM25.
+
+**Implementação/documentação observada**
+- Contrato comum de backend de memória.
+- Backend híbrido combina listas ranqueadas com Reciprocal Rank Fusion.
+- A documentação descreve SQLite/FTS5, FAISS, ColBERTv2, BM25 e recuperação híbrida.
+- Pipeline documentado inclui ingestão, chunking, embeddings, recuperação e atribuição de fontes.
+
+**Oportunidade no Hub**
+- Auditar `services/memory/` e o armazenamento atual para descobrir se falta busca lexical, vetorial ou fusão híbrida.
+- Se necessário, implementar primeiro uma interface de recuperação e um adaptador híbrido pequeno.
+- Preservar citações/origem dos trechos recuperados.
+
+**Bloqueio de segurança**
+- Os backends consultados não demonstram, por si só, isolamento por conta no padrão exigido pelo Hub. Não reutilizar banco/índice global sem particionamento e filtros de ownership garantidos no servidor.
+- Memórias, embeddings, documentos e resultados de busca precisam ser segregados por owner/tenant, com testes de acesso cruzado.
+
+### 3.6 Traces e observabilidade de execução
+
+**Arquivos examinados**
+- `src/openjarvis/traces/collector.py`
+- `src/openjarvis/traces/store.py`
+- `tests/traces/test_collector.py`
+
+**Implementação observada**
+- `TraceCollector` envolve um agente e captura eventos de inferência, ferramentas e memória.
+- Traces são persistidos em SQLite.
+- Há teste dedicado ao coletor (arquivo examinado com 419 linhas).
+- O trace registra sequência de etapas, em vez de apenas o texto final.
+
+**Oportunidade no Hub — prioridade alta**
+- Criar/fortalecer um trace de execução unificado com task_id, session_id, owner_user_id, agente selecionado/executado, modelo, engine, ferramenta, duração, tentativas, erro, aprovação e resultado.
+- Expor a diferença entre planejado, iniciado, concluído, falho e bloqueado.
+- Alimentar a UI com evidências reais, sem declarar execução de agente que não ocorreu.
+
+**Requisito**
+- Persistência e consulta dos traces devem filtrar ownership em todas as operações; não aceitar owner enviado pelo cliente como fonte de autoridade.
+
+### 3.7 Telemetria e métricas
+
+**Arquivos examinados**
+- `src/openjarvis/telemetry/wrapper.py`
+- `src/openjarvis/telemetry/store.py`
+- `src/openjarvis/telemetry/aggregator.py`
+
+**Implementação observada**
+- Wrapper instrumenta chamadas de inferência e publica registros de telemetria.
+- Store SQLite recebe registros e agrega métricas por modelo/engine.
+- Há separação entre captura e consulta agregada.
+
+**Oportunidade no Hub — prioridade alta**
+- Instrumentar ModelManager/adapters com duração, latência, tokens quando disponíveis, provider/engine, modelo, tentativas e status.
+- Mostrar custo somente quando o provider retornar dados confiáveis; não estimar silenciosamente.
+- Correlacionar métricas a task e owner, com filtros de privacidade.
+
+**Não comprovado nesta etapa**
+- Precisão/abrangência de métricas energéticas em todas as plataformas e engines.
+- Custo real de providers sem dados de faturamento ou tokenização fornecidos pelo provider.
+
+### 3.8 Learning e roteamento adaptativo
+
+**Arquivos examinados**
+- `src/openjarvis/learning/routing/learned_router.py`
+- Documentação `docs/architecture/learning.md` e `overview.md`.
+
+**Implementação/documentação observada**
+- Existe política de roteamento aprendido baseada em dados de traces e classes de consulta.
+- A documentação descreve políticas heurísticas e aprendidas e cita opções SFT/GRPO.
+- O código de roteamento aprendido combina seleção em runtime e atualização a partir de histórico.
+
+**Oportunidade no Hub**
+- Começar por recomendação/roteamento determinístico baseado em métricas reais e avaliações explícitas.
+- Fazer aprendizado por conta apenas com dados daquela conta, salvo consentimento e política de agregação anonimizadora explícita.
+- Versionar políticas e permitir rollback para roteamento padrão.
+
+**Limite**
+- Não tratar a presença de uma configuração GRPO como evidência de treinamento RL pronto. A implementação, os testes, os datasets e os requisitos de execução precisam ser auditados separadamente antes de qualquer uso.
+
+### 3.9 Ferramentas, MCP e segurança
+
+**Arquivos examinados**
+- `src/openjarvis/tools/_stubs.py`
+- `src/openjarvis/mcp/server.py`
+- `src/openjarvis/security/scanner.py`
+- `src/openjarvis/security/guardrails.py`
+- `src/openjarvis/security/audit.py`
+
+**Implementação observada**
+- Ferramentas possuem contrato, schema e executor.
+- MCP expõe ferramentas registradas por meio de protocolo próprio.
+- Guardrails envolvem engine e fazem varredura de segredos/PII.
+- Há auditoria de eventos de segurança com persistência SQLite e cadeia hash descrita no código.
+
+**Oportunidade no Hub**
+- Comparar catálogo e schemas com ToolGateway; adotar somente ferramentas ou padrões realmente ausentes.
+- Avaliar integração MCP atrás de um adaptador do ToolGateway, com allowlist por usuário e ferramenta.
+- Reaproveitar scanners como camada complementar, após análise de falsos positivos, dependências e política de retenção.
+
+**Risco crítico**
+- MCP não pode contornar o SecurityCore. Credenciais nunca devem ser armazenadas em registries globais ou prompts.
+- Scanners não substituem RBAC, validação de ownership, aprovação humana nem sandbox.
+
+### 3.10 Scheduler e agentes persistentes
+
+**Arquivos examinados**
+- `src/openjarvis/scheduler/scheduler.py`
+- `src/openjarvis/scheduler/store.py`
+- `tests/scheduler/test_scheduler.py`
+
+**Implementação observada**
+- Scheduler com agendamento once/interval/cron, armazenamento SQLite e logs de execução.
+- Testes específicos para o scheduler (arquivo examinado com 359 linhas).
+
+**Oportunidade no Hub**
+- Comparar com tarefas, automações e serviços em background já existentes antes de adicionar outro scheduler.
+- Se houver lacuna, adaptar o mecanismo para o modelo de tarefas do Hub, com owner, timezone, limites de concorrência, heartbeat, cancelamento, retomada e trilha de auditoria.
+
+**Bloqueio**
+- Uma tabela global de tarefas não é suficiente para o Hub. Toda tarefa agendada precisa pertencer a uma conta e executar sob permissões revalidadas no momento da execução.
+
+### 3.11 Licença, dependências e footprint
+
+- O arquivo `LICENSE` do OpenJarvis declara Apache License 2.0.
+- O `pyproject.toml` declara pacote Python e dependências/extra groups; há componentes Rust/PyO3 e dependências opcionais de desktop e outros recursos.
+- A existência de licença Apache 2.0 não elimina a obrigação de preservar avisos, atribuição, cópia da licença e avisos de alterações nos arquivos reutilizados.
+- Cada componente candidato exige inventário de dependências transitivas, compatibilidade com Python do Hub, licença das dependências, peso de instalação, suporte Windows e impacto no empacotamento.
+- Não foi instalada nenhuma dependência nesta auditoria.
+
+## 4. Matriz preliminar OpenJarvis → Hub
+
+| Área | OpenJarvis observado | Hub observado nesta primeira leitura | Decisão preliminar |
+|---|---|---|---|
+| Engines | ABC, registries, discovery, catálogo | ModelManager, adapters, HybridModelRouter, InferenceQueue | Comparar contratos; complementar discovery/capabilities se faltar |
+| Agentes | BaseAgent, Orchestrator, NativeReAct, sandbox | LangGraph/Maestro e AutonomousAgentRuntime/ReAct | Preservar; comparar ciclo, limites e testes |
+| Memória | SQLite/FTS5, FAISS, ColBERT, BM25, Hybrid | DatabaseManager/LayeredMemoryManager e memória de projeto | Auditar lacunas e ownership antes de qualquer adaptação |
+| Tools | BaseTool, executor, ToolRegistry, MCP | ToolGateway, registry, sandbox e SecurityCore | Preservar governança; avaliar adaptador MCP |
+| Traces | Collector + SQLite store + analyzer | Estado LangGraph e eventos de chat; trace unificado ainda precisa ser confirmado | Candidato forte a aprimoramento |
+| Telemetria | Wrapper + SQLite + agregador | Métricas operacionais existentes precisam ser mapeadas por código | Candidato forte a aprimoramento |
+| Learning | Learned router orientado por traces; opções experimentais | HybridModelRouter e políticas atuais a auditar | Começar com roteamento por evidência, sem RL |
+| Scheduler | Cron/interval/once com store | Serviços/tarefas existentes precisam ser inventariados | Não duplicar; adaptar somente se houver lacuna |
+| Segurança | Scanners, guardrails, audit log, sandbox | SecurityCore, RBAC, ApprovalEngine, ToolGateway, sandbox | Complementar, nunca substituir |
+| API/SDK | API FastAPI OpenAI-compatible e SDK | API FastAPI própria e streaming | Não importar servidor paralelo; mapear compatibilidade |
+| UI | CLI, GUI/desktop e web conforme módulos | Dashboard web e app Flutter | Não importar UI; priorizar integração no dashboard existente |
+
+**Status da matriz:** preliminar. “Hub observado” não significa que todas as rotas e casos de uso já passaram por teste. A auditoria detalhada do Hub ainda é a próxima etapa.
+
+## 5. Recomendações técnicas iniciais
+
+### P0 — provar a base antes de integrar
+1. Auditar ModelManager, adapters e HybridModelRouter contra o contrato de engine.
+2. Auditar o runtime ReAct e o ToolGateway juntos, incluindo falhas, loops, timeouts, cancelamento e aprovação.
+3. Mapear ownership real em banco, memória, traces, tarefas e APIs.
+4. Definir um contrato de trace de execução correlacionado com task/session/owner.
+
+### P1 — incorporar capacidades com maior retorno
+1. Telemetria uniforme em cada inferência e ferramenta.
+2. Trace completo de ponta a ponta.
+3. Catálogo de modelos com capabilities e descoberta de disponibilidade.
+4. Recuperação híbrida, somente se a auditoria provar lacuna real.
+5. Adaptador MCP governado pelo ToolGateway, se houver ferramentas que justifiquem.
+
+### P2 — somente após dados confiáveis
+1. Roteamento adaptativo por evidências.
+2. Agentes persistentes e scheduler unificado.
+3. Benchmarks de energia/eficiência.
+4. Aprendizado SFT/RL ou otimização automática, depois de datasets, métricas e gates de segurança.
+
+## 6. Critérios de aceite para qualquer componente importado/adaptado
+
+- Contrato e testes de compatibilidade aprovados.
+- Dependências e licenças revisadas.
+- Execução Windows/local-first validada.
+- Sem regressão em autenticação, RBAC, aprovação, sandbox ou ToolGateway.
+- Isolamento por owner testado por chamadas diretas à API.
+- Logs e traces não expõem segredos, prompts privados ou dados de outra conta.
+- Falhas são explícitas; não há fallback que simule sucesso.
+- UI diferencia selecionado, iniciado, concluído, falho e bloqueado.
+- Rollback documentado.
+- Testes executados e resultados registrados com commit e ambiente.
+
+## 7. Pontos pendentes para fechar a Fase 1
+
+1. Ler integralmente os módulos de discovery/model catalog e todos os adapters relevantes.
+2. Auditar ingestão, chunking, embeddings, SQLite/FTS5, FAISS, BM25 e Hybrid, inclusive dependências nativas.
+3. Auditar todas as políticas de learning, confirmando quais são implementadas, experimentais ou stubs.
+4. Examinar limites reais de segurança do executor de ferramentas, sandbox, scanners e MCP.
+5. Mapear testes por módulo e identificar testes que exigem engine, GPU, Docker, cloud ou credenciais.
+6. Examinar scheduler em condições de concorrência, retomada, timezone e execução interrompida.
+7. Fechar o inventário de dependências e licenças, incluindo Rust/PyO3 e extras opcionais.
+
+## 8. Próxima etapa
+
+Concluir a Fase 1 com a leitura dos módulos pendentes e, em seguida, executar a Fase 2: auditoria do Hub por backend, persistência, segurança, APIs, frontend e páginas/rotas. Só depois consolidar a matriz definitiva e desenhar os contratos de integração.
+
+**Estado desta entrega:** branch criada e relatório inicial versionado. Nenhuma integração funcional foi aplicada e nenhum teste de runtime foi declarado como executado.
