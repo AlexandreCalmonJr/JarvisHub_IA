@@ -26,6 +26,9 @@ class InferenceRequest(BaseModel):
     format_json: bool = False
     contains_sensitive_data: bool = False
     task_id: str | None = None
+    # Identidade definida pelo servidor; usada para segregar telemetria por conta.
+    owner_user_id: str | None = None
+    agent_role: str | None = None
     timeout_seconds: float = 180.0
     # Schema de ferramentas no formato OpenAI ({"type": "function", ...}) ou Anthropic.
     # O adaptador converte quando necessário; vazio desativa tool calling.
