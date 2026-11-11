@@ -86,6 +86,7 @@ async def decide_approval(
                 approved=payload.action == "approve",
                 decided_by=actor,
                 reason=payload.reason,
+                owner_user_id=owner,
             )
             return {
                 "status": "approved" if payload.action == "approve" else "rejected",
@@ -328,6 +329,7 @@ async def apply_security_policy_endpoint(
             tofile=f"b/{tmpl['filename']}",
         ))
         task_id = f"security-policy:{payload.project_id}:{payload.template_id}"
+        owner = _approval_owner(principal)
         if not payload.approval_id:
             approval = security_core.approval_engine.create_request(
                 task_id=task_id,
@@ -337,6 +339,7 @@ async def apply_security_policy_endpoint(
                 affected_resources=[str(target_file)],
                 proposed_diff=diff,
                 reversible=True,
+                owner_user_id=owner,
             )
             return {
                 "status": "approval_required",
@@ -346,7 +349,9 @@ async def apply_security_policy_endpoint(
                 "impact_summary": approval.impact_summary,
                 "diff": diff,
             }
-        approval = security_core.approval_engine.get_request(payload.approval_id)
+        approval = security_core.approval_engine.get_request(
+            payload.approval_id, owner_user_id=owner
+        )
         if (
             not approval
             or approval.status != ApprovalStatus.APPROVED
