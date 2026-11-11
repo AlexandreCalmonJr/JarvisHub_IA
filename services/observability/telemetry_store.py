@@ -227,6 +227,7 @@ class SqliteTelemetryStore:
                     "average_latency_ms": round(float(row["average_latency_ms"] or 0), 2),
                     "average_tokens": round(float(row["average_tokens"] or 0), 2),
                     "total_cost_usd": round(float(row["total_cost_usd"] or 0), 6),
+                    "average_cost_usd": round(float(row["total_cost_usd"] or 0) / total, 6) if total else 0.0,
                     "sample_sufficient": total >= safe_minimum_samples,
                     "routing_eligible": (
                         total >= safe_minimum_samples
