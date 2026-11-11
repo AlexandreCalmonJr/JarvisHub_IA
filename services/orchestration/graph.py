@@ -712,7 +712,6 @@ def create_master_graph(
                             skills_catalog=skills_catalog,
                             db_manager=db_manager,
                 owner_user_id=state.get("owner_user_id"),
-                agent_role=dev_role.value,
                             intent="project_creation",
                             user_prompt=user_prompt,
                             project_id=slug,
@@ -724,6 +723,7 @@ def create_master_graph(
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
+                        agent_role=dev_role.value,
                     )
                 )
                 dev_summary = dev_resp.content.strip()
@@ -752,7 +752,6 @@ def create_master_graph(
                             skills_catalog=skills_catalog,
                             db_manager=db_manager,
                 owner_user_id=state.get("owner_user_id"),
-                agent_role=qa_role.value,
                             intent="project_creation",
                             user_prompt=user_prompt,
                             project_id=slug,
@@ -764,6 +763,7 @@ def create_master_graph(
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
+                        agent_role=qa_role.value,
                     )
                 )
                 qa_summary = qa_resp.content.strip()
