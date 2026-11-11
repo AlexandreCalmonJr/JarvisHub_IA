@@ -72,4 +72,31 @@ def test_account_ownership_migration_is_idempotent_after_restart(tmp_path):
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
 
-    assert [row["version"] for row in versions] == [1]
+    assert [row["version"] for row in versions] == [1, 2]
+
+
+def test_agent_memory_keys_are_independent_between_accounts(tmp_path):
+    db = DatabaseManager(db_path=str(tmp_path / "agent-memory.db"))
+    db.set_agent_memory(
+        "jarvis_master", "preference", "tone", "Account A tone",
+        owner_user_id="account-a",
+    )
+    db.set_agent_memory(
+        "jarvis_master", "preference", "tone", "Account B tone",
+        owner_user_id="account-b",
+    )
+
+    a_memories = db.list_agent_memories(
+        agent_role="jarvis_master", owner_user_id="account-a"
+    )
+    b_memories = db.list_agent_memories(
+        agent_role="jarvis_master", owner_user_id="account-b"
+    )
+    assert [item["content"] for item in a_memories] == ["Account A tone"]
+    assert [item["content"] for item in b_memories] == ["Account B tone"]
+
+    memory_a_id = a_memories[0]["id"]
+    assert db.delete_agent_memory(memory_a_id, owner_user_id="account-b") is False
+    assert db.delete_agent_memory(memory_a_id, owner_user_id="account-a") is True
+    assert db.list_agent_memories(owner_user_id="account-a") == []
+    assert len(db.list_agent_memories(owner_user_id="account-b")) == 1
