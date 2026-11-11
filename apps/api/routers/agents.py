@@ -291,7 +291,7 @@ async def execute_tool_endpoint(
             request.project_id, str(project_root), mode=project_mode
         )
         result = await tool_gateway.execute_tool(
-            request, owner_user_id=owner_user_id
+            request, owner_user_id=owner_user_id, actor_role=principal.role
         )
         return result.model_dump()
     except PermissionError as exc:
