@@ -96,7 +96,7 @@ export const KnowledgeVaultView: React.FC = () => {
     if (!folderPath.trim()) return;
 
     setFolderIndexing(true);
-    notify(`Varrendo e indexando diretório no computador...`, 'info');
+    notify(`Varrendo e indexando diretório no servidor JARVIS...`, 'info');
     try {
       const res = await indexKnowledgeFolder(folderPath.trim(), folderCategory);
       notify(`Varredura concluída: ${res.indexed_count} arquivos indexados com sucesso!`, 'success');
