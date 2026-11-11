@@ -125,6 +125,7 @@ async def test_api_tasks_and_database_retention_and_export():
         state_dict={"classified_intent": "audit", "is_completed": True},
 
         project_id="proj_audit",
+        owner_user_id="admin",
 
     )
 
@@ -142,7 +143,7 @@ async def test_api_tasks_and_database_retention_and_export():
 
     # Test export
 
-    exported = db_manager.export_project_data("proj_audit")
+    exported = db_manager.export_project_data("proj_audit", owner_user_id="admin")
 
     assert exported["project"]["id"] == "proj_audit"
 
@@ -150,7 +151,7 @@ async def test_api_tasks_and_database_retention_and_export():
 
     # Test retention purge (purging with days_retention = 999 should delete 0 items from today)
 
-    purged = db_manager.purge_old_tasks(days_retention=999)
+    purged = db_manager.purge_old_tasks(days_retention=999, owner_user_id="admin")
 
     assert purged == 0
 
