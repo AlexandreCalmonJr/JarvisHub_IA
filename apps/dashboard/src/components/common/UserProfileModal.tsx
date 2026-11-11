@@ -90,6 +90,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
+    setIsAdmin(false);
     fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((principal) => {
