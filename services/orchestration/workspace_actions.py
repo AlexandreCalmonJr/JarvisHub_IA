@@ -136,11 +136,11 @@ def execute_workspace_modification(
         )
     ) or f"+ {target_file} atualizado"
 
+    preview = (
+        f"Pré-visualização da alteração proposta para {target_project}/{target_file}:\n"
+        f"```diff\n{diff_display}\n```"
+    )
     if preview_only:
-        preview = (
-            f"Pré-visualização da alteração proposta para {target_project}/{target_file}:\n"
-            f"```diff\n{diff_display}\n```"
-        )
         return (preview, [str(target_path)])
 
     if not approval_id or not task_id:
