@@ -110,7 +110,7 @@ export async function exportChatSessionMarkdown(sessionId: string): Promise<stri
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
-  const res = await fetch(`${API_BASE}/tasks/${taskId}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao excluir tarefa.' }));
     throw new Error(errorData.detail || 'Falha ao excluir tarefa.');
