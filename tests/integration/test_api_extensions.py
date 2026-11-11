@@ -236,6 +236,10 @@ async def test_api_project_memory():
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
 
+        db_manager.register_project(
+            "proj_mem_test", "Project Memory Test", "workspace/proj_mem_test",
+            owner_user_id="admin",
+        )
         # 1. Salvar diretriz de memória
 
         save_payload = {
