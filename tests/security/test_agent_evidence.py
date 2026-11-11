@@ -2,7 +2,7 @@ import pytest
 
 from packages.contracts.agent import AgentRole, AutonomousAgentMode, AutonomousAgentRunConfig
 from services.autonomous_agent.runtime import AutonomousAgentRuntime
-from services.coding_agent.types import ChatTurn, ToolResult
+from services.coding_agent.types import ToolResult
 from services.tool_gateway import ToolExecutionRequest
 
 
