@@ -117,6 +117,10 @@ const DashboardApp: React.FC = () => {
   const [targetChatSessionId, setTargetChatSessionId] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequestItem[]>([]);
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [approvalsLoading, setApprovalsLoading] = useState(true);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [approvalsError, setApprovalsError] = useState<string | null>(null);
   const [chatLoaded, setChatLoaded] = useState(
     () => tabFromLocation(window.location.pathname, window.location.search) === 'chat'
   );
@@ -181,16 +185,23 @@ const DashboardApp: React.FC = () => {
   }, []);
 
   const loadData = async () => {
-    try {
-      const [h, a] = await Promise.all([
-        fetchHealth().catch(() => null),
-        fetchApprovals().catch(() => []),
-      ]);
-      setHealth(h);
-      setApprovals(a);
-    } catch (e) {
-      console.error('Erro ao atualizar dados:', e);
+    setHealthLoading(true);
+    setApprovalsLoading(true);
+    const [healthResult, approvalsResult] = await Promise.allSettled([fetchHealth(), fetchApprovals()]);
+    if (healthResult.status === 'fulfilled') {
+      setHealth(healthResult.value);
+      setHealthError(null);
+    } else {
+      setHealthError(healthResult.reason instanceof Error ? healthResult.reason.message : 'Falha ao consultar a saúde do sistema.');
     }
+    setHealthLoading(false);
+    if (approvalsResult.status === 'fulfilled') {
+      setApprovals(approvalsResult.value);
+      setApprovalsError(null);
+    } else {
+      setApprovalsError(approvalsResult.reason instanceof Error ? approvalsResult.reason.message : 'Falha ao consultar aprovações.');
+    }
+    setApprovalsLoading(false);
   };
 
   useEffect(() => {
@@ -564,7 +575,7 @@ const DashboardApp: React.FC = () => {
             <NotFoundView onGoHome={() => navigate('overview')} />
           ) : (
           <Suspense fallback={<ViewFallback />}>
-            {activeTab === 'overview' && <Overview health={health} approvals={approvals} />}
+            {activeTab === 'overview' && <Overview health={health} approvals={approvals} healthLoading={healthLoading} approvalsLoading={approvalsLoading} healthError={healthError} approvalsError={approvalsError} />}
             {activeTab === 'coding' && <CodingAgentView />}
             {chatLoaded && (
               <div style={{ display: activeTab === 'chat' ? 'block' : 'none', height: '100%' }}>
