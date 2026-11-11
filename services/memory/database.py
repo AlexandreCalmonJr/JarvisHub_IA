@@ -380,6 +380,31 @@ class DatabaseManager:
                 (project_id, name, root_path, mode, now, now, owner_user_id),
             )
 
+    def get_project(
+        self, project_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
+        with self._get_connection() as conn:
+            if owner_user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM projects WHERE id = ? AND owner_user_id = ?",
+                    (project_id, owner_user_id),
+                ).fetchone()
+            return dict(row) if row else None
+
+    def list_projects(
+        self, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM projects WHERE owner_user_id IS ? ORDER BY updated_at DESC",
+                (owner_user_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     def save_task(
         self,
         task_id: str,
