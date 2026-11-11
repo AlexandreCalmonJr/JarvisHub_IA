@@ -51,6 +51,7 @@ class FakeDB:
                 "role": role,
                 "content": content,
                 "project_id": project_id,
+                "owner_user_id": owner_user_id,
             }
         )
 
@@ -115,7 +116,9 @@ class FakeMaster:
         self.db = db
         self.calls = []
 
-    async def execute_task(self, user_prompt, session_id=None, project_id=None):
+    async def execute_task(
+        self, user_prompt, session_id=None, project_id=None, owner_user_id=None
+    ):
         self.calls.append(
             {
                 "user_prompt": user_prompt,
