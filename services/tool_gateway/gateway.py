@@ -49,7 +49,7 @@ class ToolGateway:
     ) -> ToolExecutionResult:
         if not owner_user_id:
             raise PermissionDeniedError("A conta proprietária é obrigatória para executar ferramentas.")
-        if request.tool_name in {"run_tests", "run_linter", "duckdb_query"} and actor_role != "admin":
+        if request.tool_name in {"run_tests", "run_linter", "duckdb_query", "execute_command"} and actor_role != "admin":
             raise PermissionDeniedError(
                 "Esta ferramenta executa código ou acessa arquivos por SQL e está restrita ao administrador até existir isolamento de processo por conta."
             )
