@@ -461,26 +461,15 @@ def create_master_graph(
         )
         hybrid_default = getattr(getattr(model_manager.hybrid_router, "online_config", None), "default_model", "qwen/qwen3.8-27b") if is_hybrid_active else "auto"
 
-        if is_hybrid_active:
-            pref = prim_profile.preferred_model if prim_profile else "auto_hybrid"
-            if not pref or pref in ("auto", "auto_hybrid", "llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
-                model_name = hybrid_default
-            else:
-                model_name = pref
+        pref = prim_profile.preferred_model if prim_profile else ("auto_hybrid" if is_hybrid_active else "auto")
+        if not pref or pref in ("auto", "auto_hybrid"):
+            # Delega a escolha ao seletor governado do ModelManager.
+            model_name = "auto_hybrid" if is_hybrid_active else "auto"
+        elif is_hybrid_active and pref in ("llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
+            model_name = hybrid_default
         else:
-            model_name = prim_profile.preferred_model if prim_profile else "auto"
-            # Otimização Inteligente para CPU: Reaproveita modelo já residente na RAM para evitar swapping de 60s
-            if hasattr(model_manager, "get_loaded_models"):
-                try:
-                    loaded = await model_manager.get_loaded_models()
-                    if loaded:
-                        model_name = loaded[0]
-                    elif prim_profile and prim_profile.preferred_model:
-                        model_name = prim_profile.preferred_model
-                    else:
-                        model_name = "auto"
-                except Exception:
-                    model_name = prim_profile.preferred_model if prim_profile else "auto"
+            # Preferências explícitas e personalizadas do perfil são preservadas.
+            model_name = pref
 
         # Tenta inferir target_project se não especificado explicitamente
         if not project_id and workspace_service:
