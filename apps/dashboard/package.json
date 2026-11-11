@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test:router": "node --test scripts/router.test.mjs",
     "test:overview": "node --test scripts/overview.test.mjs",
-    "test:dashboard": "node --test scripts/*.test.mjs",
+    "test:dashboard": "node --test",
     "test:workspace": "node --test scripts/workspace.test.mjs",
     "test:coding": "node --test scripts/coding.test.mjs",
     "test:agents": "node --test scripts/agents.test.mjs",
