@@ -16,7 +16,7 @@ export const DesignStudioView: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'palette' | 'wcag' | 'components'>('palette');
 
   // Paleta de Cores
-  const [primaryHex, setPrimaryHex] = useState('#6366f1');
+  const [primaryHex, setPrimaryHex] = useState('#d97757');
   const [paletteName, setPaletteName] = useState('jarvis');
   const [paletteData, setPaletteData] = useState<any | null>(null);
   const [paletteLoading, setPaletteLoading] = useState(false);
