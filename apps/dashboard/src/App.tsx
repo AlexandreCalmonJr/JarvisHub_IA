@@ -536,14 +536,6 @@ const DashboardApp: React.FC = () => {
                 type="button"
                 className="btn btn-ghost"
                 style={{ padding: '3px 6px', color: 'var(--text-muted)' }}
-                title="Minimizar"
-              >
-                <Minus size={12} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ padding: '3px 6px', color: 'var(--text-muted)' }}
                 title="Maximizar"
                 onClick={() => {
                   if (!document.fullscreenElement) {
@@ -554,14 +546,6 @@ const DashboardApp: React.FC = () => {
                 }}
               >
                 <Square size={11} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ padding: '3px 6px', color: 'var(--text-muted)' }}
-                title="Fechar"
-              >
-                <CloseIcon size={12} />
               </button>
             </div>
           </div>
