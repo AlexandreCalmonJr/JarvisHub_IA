@@ -58,11 +58,19 @@ class SqliteTelemetryStore:
                     duration_ms REAL NOT NULL DEFAULT 0,
                     prompt_tokens INTEGER NOT NULL DEFAULT 0,
                     completion_tokens INTEGER NOT NULL DEFAULT 0,
+                    cost_usd REAL NOT NULL DEFAULT 0,
                     error_type TEXT,
                     created_at TEXT NOT NULL
                 )
                 """
             )
+            columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(inference_telemetry)")
+            }
+            if "cost_usd" not in columns:
+                conn.execute(
+                    "ALTER TABLE inference_telemetry ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0"
+                )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS model_selection_decisions (
@@ -110,6 +118,7 @@ class SqliteTelemetryStore:
         duration_ms: float,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
+        cost_usd: float = 0.0,
         error_type: str | None = None,
     ) -> str:
         if status not in {"success", "failed"}:
@@ -122,8 +131,8 @@ class SqliteTelemetryStore:
                 INSERT INTO inference_telemetry (
                     id, owner_user_id, task_id, agent_role, model_name, provider,
                     status, duration_ms, prompt_tokens, completion_tokens,
-                    error_type, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    cost_usd, error_type, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -136,6 +145,7 @@ class SqliteTelemetryStore:
                     max(0.0, float(duration_ms)),
                     max(0, int(prompt_tokens)),
                     max(0, int(completion_tokens)),
+                    max(0.0, float(cost_usd)),
                     error_type,
                     created_at,
                 ),
@@ -150,7 +160,7 @@ class SqliteTelemetryStore:
             rows = conn.execute(
                 """
                 SELECT id, task_id, agent_role, model_name, provider, status,
-                       duration_ms, prompt_tokens, completion_tokens, error_type, created_at
+                       duration_ms, prompt_tokens, completion_tokens, cost_usd, error_type, created_at
                 FROM inference_telemetry
                 WHERE owner_user_id = ?
                 ORDER BY created_at DESC
@@ -182,7 +192,8 @@ class SqliteTelemetryStore:
                        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful,
                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
                        COALESCE(AVG(CASE WHEN status = 'success' THEN duration_ms END), 0) AS average_latency_ms,
-                       COALESCE(AVG(CASE WHEN status = 'success' THEN prompt_tokens + completion_tokens END), 0) AS average_tokens
+                       COALESCE(AVG(CASE WHEN status = 'success' THEN prompt_tokens + completion_tokens END), 0) AS average_tokens,
+                       COALESCE(SUM(cost_usd), 0) AS total_cost_usd
                 FROM inference_telemetry
                 WHERE owner_user_id = ?
                 GROUP BY model_name, provider, agent_role
@@ -207,6 +218,7 @@ class SqliteTelemetryStore:
                     "success_rate": round(success_rate, 4),
                     "average_latency_ms": round(float(row["average_latency_ms"] or 0), 2),
                     "average_tokens": round(float(row["average_tokens"] or 0), 2),
+                    "total_cost_usd": round(float(row["total_cost_usd"] or 0), 6),
                     "sample_sufficient": total >= safe_minimum_samples,
                     "routing_eligible": (
                         total >= safe_minimum_samples
@@ -279,6 +291,7 @@ class SqliteTelemetryStore:
                        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successful,
                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
                        COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS total_tokens,
+                       COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
                        COALESCE(AVG(CASE WHEN status = 'success' THEN duration_ms END), 0) AS average_latency_ms
                 FROM inference_telemetry
                 WHERE owner_user_id = ?
@@ -290,5 +303,6 @@ class SqliteTelemetryStore:
             "successful": int(row["successful"] or 0),
             "failed": int(row["failed"] or 0),
             "total_tokens": int(row["total_tokens"] or 0),
+            "total_cost_usd": round(float(row["total_cost_usd"] or 0), 6),
             "average_latency_ms": round(float(row["average_latency_ms"] or 0), 2),
         }
