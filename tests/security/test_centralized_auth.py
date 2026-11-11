@@ -84,10 +84,9 @@ async def test_05_non_admin_forbidden_from_admin_endpoints():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Tenta cadastrar dispositivo móvel (operação restrita a admin)
-        res = await client.post(
-            "/api/v1/mobile/pair",
-            json={"device_name": "Invasor"},
+        # A listagem global de dispositivos continua restrita a administradores.
+        res = await client.get(
+            "/api/v1/mobile/devices",
             headers={"Authorization": f"Bearer {session.session_id}"},
         )
         assert res.status_code == 403
