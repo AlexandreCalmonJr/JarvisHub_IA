@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { BookOpen, Plus, Sparkles, RefreshCw } from 'lucide-react';
 import { fetchProjectMemory, saveProjectMemory } from '../../api';
+import { notify } from '../common/Toast';
 
 interface ProjectMemoryModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const ProjectMemoryModal: React.FC<ProjectMemoryModalProps> = ({
   const [memories, setMemories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [category, setCategory] = useState('coding_standard');
   const [key, setKey] = useState('');
   const [content, setContent] = useState('');
@@ -27,8 +29,9 @@ export const ProjectMemoryModal: React.FC<ProjectMemoryModalProps> = ({
     try {
       const data = await fetchProjectMemory(projectId);
       setMemories(data);
+      setLoadError(null);
     } catch (e) {
-      console.error('Falha ao carregar memórias do projeto:', e);
+      setLoadError(e instanceof Error ? e.message : 'Falha ao carregar memórias do projeto.');
     } finally {
       setLoading(false);
     }
@@ -55,7 +58,7 @@ export const ProjectMemoryModal: React.FC<ProjectMemoryModalProps> = ({
       setContent('');
       await loadMemories();
     } catch (e: any) {
-      alert(`Erro ao registrar memória: ${e.message}`);
+      notify(`Erro ao registrar memória: ${e.message}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -231,6 +234,11 @@ export const ProjectMemoryModal: React.FC<ProjectMemoryModalProps> = ({
             </button>
           </div>
 
+          {loadError && (
+            <div role="alert" style={{ marginBottom: '10px', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(248, 113, 113, 0.3)', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+              Não foi possível carregar as memórias: {loadError}
+            </div>
+          )}
           {loading ? (
             <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
               <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
