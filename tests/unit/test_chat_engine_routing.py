@@ -258,7 +258,7 @@ async def test_auto_falls_back_to_orchestrator_when_provider_unavailable(monkeyp
     _provider_available(monkeypatch, False)
 
     engine = await chat._resolve_engine(
-        ChatRequest(prompt="Qual é a capital da França?", engine="auto"), principal=Principal(subject_id="test-user", kind="human", role="developer")
+        ChatRequest(prompt="Qual é a capital da França?", engine="auto")
     )
 
     assert engine == "orchestrator"
@@ -279,7 +279,7 @@ async def test_explicit_orchestrator_wins_over_reachable_provider(monkeypatch):
     calls = _provider_available(monkeypatch, True)
 
     engine = await chat._resolve_engine(
-        ChatRequest(prompt="Qual é a capital da França?", engine="orchestrator"), principal=Principal(subject_id="test-user", kind="human", role="developer")
+        ChatRequest(prompt="Qual é a capital da França?", engine="orchestrator")
     )
 
     assert engine == "orchestrator"
