@@ -660,6 +660,157 @@ def create_master_graph(
                     "is_completed": False,
                 }
 
+            # As equipas Dev e QA produzem os seus pareceres antes da aprovação,
+            # mas não recebem autorização para criar ou alterar ficheiros.
+            dev_summary = f"Plano de implementação preparado para {name_clean}; a escrita aguarda aprovação."
+            dev_tokens = 0
+            dev_duration = 0.0
+            try:
+                dev_resp = await model_manager.generate(
+                    InferenceRequest(
+                        prompt=(
+                            f"Como Desenvolvedor Especialista, prepare o plano de implementação para "
+                            f"'{name_clean}' ({project_type}). Pedido: {user_prompt}. "
+                            "Descreva módulos, ficheiros previstos e dependências. Não execute nem grave ficheiros."
+                        ),
+                        system_prompt=build_specialist_prompt(
+                            agent_role=dev_role.value,
+                            agent_registry=agent_registry,
+                            skills_catalog=skills_catalog,
+                            db_manager=db_manager,
+                            intent="project_creation",
+                            user_prompt=user_prompt,
+                            project_id=slug,
+                            domain="frontend" if project_type in ("web", "flutter") else "backend",
+                        ),
+                        model_name=model_name,
+                        max_tokens=300,
+                        temperature=0.3,
+                        timeout_seconds=20.0,
+                        task_id=state.get("task_id"),
+                    )
+                )
+                dev_summary = dev_resp.content.strip()
+                dev_tokens = dev_resp.completion_tokens
+                dev_duration = dev_resp.duration_ms
+            except Exception as exc:
+                logger.info("Plano do Desenvolvedor Especialista indisponível: %s", exc)
+
+            qa_summary = (
+                f"Plano de QA preparado para {name_clean}: validar estrutura, execução, "
+                "dependências e cenários principais após a criação aprovada."
+            )
+            qa_tokens = 0
+            qa_duration = 0.0
+            try:
+                qa_resp = await model_manager.generate(
+                    InferenceRequest(
+                        prompt=(
+                            f"Como Engenheiro de QA, prepare critérios de aceitação e testes para "
+                            f"'{name_clean}' ({project_type}). Pedido: {user_prompt}. "
+                            "Não execute testes nem altere ficheiros."
+                        ),
+                        system_prompt=build_specialist_prompt(
+                            agent_role=qa_role.value,
+                            agent_registry=agent_registry,
+                            skills_catalog=skills_catalog,
+                            db_manager=db_manager,
+                            intent="project_creation",
+                            user_prompt=user_prompt,
+                            project_id=slug,
+                            domain="quality_assurance",
+                        ),
+                        model_name=model_name,
+                        max_tokens=300,
+                        temperature=0.2,
+                        timeout_seconds=20.0,
+                        task_id=state.get("task_id"),
+                    )
+                )
+                qa_summary = qa_resp.content.strip()
+                qa_tokens = qa_resp.completion_tokens
+                qa_duration = qa_resp.duration_ms
+            except Exception as exc:
+                logger.info("Plano de QA indisponível: %s", exc)
+
+            agent_outputs.extend([
+                AgentOutputContract(
+                    agent_role=arch_role.value,
+                    objective="Arquitetura do novo projeto",
+                    summary=arch_summary,
+                    evidence=["Análise de arquitetura concluída; sem escrita no workspace."],
+                    actions_taken=["Análise de requisitos", "Planeamento de arquitetura"],
+                    affected_files=[],
+                    tests_executed=[],
+                    risks=[],
+                    blockers=[],
+                    resource_usage=ResourceUsage(
+                        model_name=model_name,
+                        tokens_prompt=arch_p_tokens,
+                        tokens_completion=arch_c_tokens,
+                        duration_ms=arch_dur_ms,
+                    ),
+                    next_recommendation="Rever o plano e aprovar a criação do projeto.",
+                ).model_dump(),
+                AgentOutputContract(
+                    agent_role=dev_role.value,
+                    objective="Plano de implementação",
+                    summary=dev_summary,
+                    evidence=["Plano técnico preparado; nenhuma alteração física executada."],
+                    actions_taken=["Planeamento de módulos e ficheiros"],
+                    affected_files=[],
+                    tests_executed=[],
+                    risks=[],
+                    blockers=[],
+                    resource_usage=ResourceUsage(
+                        model_name=model_name,
+                        tokens_prompt=0,
+                        tokens_completion=dev_tokens,
+                        duration_ms=dev_duration,
+                    ),
+                    next_recommendation="Implementar após a aprovação humana.",
+                ).model_dump(),
+                AgentOutputContract(
+                    agent_role=qa_role.value,
+                    objective="Plano de qualidade e aceitação",
+                    summary=qa_summary,
+                    evidence=["Critérios de QA preparados; nenhum teste foi executado."],
+                    actions_taken=["Planeamento de critérios de aceitação"],
+                    affected_files=[],
+                    tests_executed=[],
+                    risks=[],
+                    blockers=[],
+                    resource_usage=ResourceUsage(
+                        model_name=model_name,
+                        tokens_prompt=0,
+                        tokens_completion=qa_tokens,
+                        duration_ms=qa_duration,
+                    ),
+                    next_recommendation="Executar testes após a criação aprovada.",
+                ).model_dump(),
+            ])
+            if is_security and sec_summary:
+                agent_outputs.append(
+                    AgentOutputContract(
+                        agent_role=sec_role.value,
+                        objective="Revisão defensiva do projeto",
+                        summary=sec_summary,
+                        evidence=["Revisão de requisitos de segurança; sem escrita no workspace."],
+                        actions_taken=["Análise defensiva e de ameaças"],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[],
+                        resource_usage=ResourceUsage(
+                            model_name=model_name,
+                            tokens_prompt=0,
+                            tokens_completion=0,
+                            duration_ms=0.0,
+                        ),
+                        next_recommendation="Validar os controlos durante a implementação aprovada.",
+                    ).model_dump()
+                )
+
             pending_project = {
                 "project_id": slug,
                 "name": name_clean,
@@ -696,6 +847,7 @@ def create_master_graph(
                 "approval_required": True,
                 "approval_id": approval.id,
                 "pending_project": pending_project,
+                "agent_outputs": agent_outputs,
                 "final_summary": (
                     f"Projeto '{name_clean}' preparado. A criação física aguarda aprovação humana."
                 ),
