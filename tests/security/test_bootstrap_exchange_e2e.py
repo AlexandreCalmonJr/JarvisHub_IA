@@ -1,7 +1,5 @@
 """E2E: bootstrap emitido por outro processo, login e chamada autenticada."""
 
-import os
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
