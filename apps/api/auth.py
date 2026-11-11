@@ -10,12 +10,16 @@ Princípios:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 import os
 import re
 import secrets
 import subprocess
 import time
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -287,7 +291,9 @@ class AuthService:
         self.admin_store = AdminCredentialStore(self.auth_dir / "admin.json")
         self.admin_token_path = self.auth_dir / "admin_token.txt"
         self.bootstrap_token_path = self.auth_dir / "bootstrap_token.txt"
+        self.bootstrap_state_path = self.auth_dir / "bootstrap_state.json"
         self._bootstrap_tokens: dict[str, float] = {}
+        self._bootstrap_lock = threading.Lock()
         self._attempts: dict[str, list[float]] = {}
         self._ensure_admin_credential()
         # Emite um bootstrap token de uso único no arranque, entregue apenas por
@@ -331,21 +337,73 @@ class AuthService:
         ttl_seconds: int | None = None,
         persist: bool = True,
     ) -> str:
-        ttl = ttl_seconds or int(os.environ.get("JARVIS_BOOTSTRAP_TTL", "600"))
+        ttl = ttl_seconds if ttl_seconds is not None else int(
+            os.environ.get("JARVIS_BOOTSTRAP_TTL", "600")
+        )
+        if ttl < 1 or ttl > 3600:
+            raise ValueError("A validade do bootstrap deve estar entre 1 e 3600 segundos.")
         token = f"jrv_boot_{secrets.token_urlsafe(32)}"
-        self._bootstrap_tokens[token] = time.time() + ttl
+        expires_at = time.time() + ttl
         if persist:
-            path = write_private_file(self.bootstrap_token_path, token)
+            # O launcher recebe o token no arquivo restrito; o servidor valida
+            # usando somente o hash e a expiração persistidos, inclusive quando
+            # a emissão foi feita por uma CLI em outro processo.
+            write_private_file(self.bootstrap_token_path, token)
+            state = {
+                "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+                "expires_at": expires_at,
+            }
+            write_private_file(self.bootstrap_state_path, json.dumps(state))
             logger.info(
-                "Bootstrap token de uso único emitido em %s (validade: %ss).", path, ttl
+                "Bootstrap token de uso único emitido em arquivo restrito (validade: %ss).",
+                ttl,
             )
+        else:
+            # Modo efêmero reservado a testes e chamadas internas do mesmo processo.
+            self._bootstrap_tokens[token] = expires_at
         return token
 
     def exchange_bootstrap_token(self, token: str) -> bool:
-        expires_at = self._bootstrap_tokens.pop(token, None)
-        if not expires_at:
+        if not token:
             return False
-        return time.time() <= expires_at
+
+        # Compatibilidade com tokens efêmeros explicitamente não persistidos.
+        expires_at = self._bootstrap_tokens.pop(token, None)
+        if expires_at is not None:
+            return time.time() <= expires_at
+
+        expected_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self._bootstrap_lock:
+            try:
+                state = json.loads(self.bootstrap_state_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                return False
+
+            stored_hash = str(state.get("token_hash", ""))
+            if not hmac.compare_digest(expected_hash, stored_hash):
+                return False
+
+            # Rename atómico: apenas um worker/processo consegue reivindicar
+            # o estado de uso único. Um token inválido não consome o bootstrap.
+            claim_path = self.bootstrap_state_path.with_name(
+                f"{self.bootstrap_state_path.name}.{secrets.token_hex(8)}.claim"
+            )
+            try:
+                os.replace(self.bootstrap_state_path, claim_path)
+            except OSError:
+                return False
+
+            try:
+                claimed = json.loads(claim_path.read_text(encoding="utf-8"))
+                claimed_hash = str(claimed.get("token_hash", ""))
+                valid_hash = hmac.compare_digest(expected_hash, claimed_hash)
+                valid_time = time.time() <= float(claimed.get("expires_at", 0))
+                return valid_hash and valid_time
+            except (OSError, ValueError, TypeError):
+                return False
+            finally:
+                claim_path.unlink(missing_ok=True)
+                self.bootstrap_token_path.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # Autenticação
