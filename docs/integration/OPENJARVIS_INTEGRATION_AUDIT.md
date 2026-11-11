@@ -820,3 +820,32 @@ Os testes desta etapa foram adicionados, mas ainda não foram executados.
 - Validar o comportamento do primeiro acesso em instalação limpa e com armazenamento local indisponível.
 - Confirmar o estado read-only do perfil auditor e a sincronização de perfil para developer/admin.
 - Build, lint, testes e validação visual permanecem reservados para a fase final de homologação.
+
+## 22. Escritório Virtual e Gerenciador de Tarefas
+
+**Estado:** correções incrementais gravadas na branch de auditoria; testes continuam pendentes.
+
+### 22.1 Escritório Virtual
+
+- A lista de mesas deixa de usar um catálogo estático de 26 agentes fictícios e passa a ser construída a partir de `GET /agents`.
+- Nome, missão, ferramentas permitidas, modo somente leitura, modelo preferido e chave atribuída são derivados dos dados devolvidos pela API.
+- Os departamentos são uma classificação visual por função/role; não alteram as permissões nem a identidade real do agente.
+- A animação 2.5D é identificada como ilustrativa. O indicador de atividade é neutro, pois esta página não recebe telemetria de execução em tempo real.
+- Atribuição de chave só é apresentada para perfis humanos com `agents:write`; o Cofre de Chaves só é consultado nesses perfis.
+- Auditores podem consultar agentes e capacidades, mas não alterar providers/chaves nem abrir uma conversa sem `chat:use`.
+- Os cartões passaram a ser botões acessíveis por teclado; IDs de chave deixam de ser mostrados nos cartões.
+
+### 22.2 Gerenciador de Tarefas
+
+- A listagem continua vinculada ao owner autenticado no backend.
+- Remoção individual e expurgo de tarefas antigas só aparecem para perfis com `tasks:write`; a API continua a validar a permissão e o owner.
+- Auditores mantêm consulta, pesquisa, filtros e cópia de identificadores.
+- A métrica foi renomeada de “Taxa de Sucesso” para “Taxa de Conclusão”, pois `is_completed` não distingue sucesso funcional de outras formas de conclusão.
+- Registos sem timestamp deixam de receber uma data fictícia; o estado pendente passa a ser descrito como “Não concluída”, sem presumir execução ativa.
+
+### 22.3 Pendências
+
+- Validar a classificação visual de cada role de agente e confirmar que nenhum agente do catálogo é omitido.
+- Testar Office com catálogo vazio, falha de API, cofre indisponível e perfis admin/developer/auditor.
+- Testar listagem, exclusão e expurgo de tarefas com duas contas e retenção de 30 dias.
+- Build, lint, testes e validação visual continuam pendentes para a fase final.
