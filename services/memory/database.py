@@ -293,21 +293,29 @@ class DatabaseManager:
 
 
     def register_project(
-        self, project_id: str, name: str, root_path: str, mode: str = "read_only"
+        self, project_id: str, name: str, root_path: str, mode: str = "read_only",
+        owner_user_id: str | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         with self._get_connection() as conn:
+            if owner_user_id is not None:
+                existing = conn.execute(
+                    "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                ).fetchone()
+                if existing and existing["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Projeto pertence a outra conta ou é um registo legado sem proprietário.")
             conn.execute(
                 """
-            INSERT INTO projects (id, name, root_path, mode, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name=excluded.name,
-                root_path=excluded.root_path,
-                mode=excluded.mode,
-                updated_at=excluded.updated_at
-            """,
-                (project_id, name, root_path, mode, now, now),
+                INSERT INTO projects (id, name, root_path, mode, created_at, updated_at, owner_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    root_path=excluded.root_path,
+                    mode=excluded.mode,
+                    updated_at=excluded.updated_at
+                WHERE projects.owner_user_id IS excluded.owner_user_id
+                """,
+                (project_id, name, root_path, mode, now, now, owner_user_id),
             )
 
     def save_task(
@@ -317,6 +325,7 @@ class DatabaseManager:
         prompt: str,
         state_dict: dict[str, Any],
         project_id: str | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         state_json = json.dumps(state_dict, default=str)
@@ -324,92 +333,124 @@ class DatabaseManager:
         is_completed = 1 if state_dict.get("is_completed") else 0
 
         with self._get_connection() as conn:
+            if owner_user_id is not None:
+                existing = conn.execute(
+                    "SELECT owner_user_id FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                if existing and existing["owner_user_id"] != owner_user_id:
+                    raise PermissionError("Tarefa pertence a outra conta ou é um registo legado sem proprietário.")
+                if project_id:
+                    project = conn.execute(
+                        "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
+                    ).fetchone()
+                    if not project or project["owner_user_id"] != owner_user_id:
+                        raise PermissionError("Projeto inexistente ou não pertence à conta autenticada.")
             conn.execute(
                 """
-            INSERT INTO tasks (id, session_id, project_id, prompt, intent, state_json, is_completed, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                prompt=excluded.prompt,
-                intent=excluded.intent,
-                state_json=excluded.state_json,
-                is_completed=excluded.is_completed,
-                created_at=excluded.created_at,
-                updated_at=excluded.updated_at
-            """,
+                INSERT INTO tasks (
+                    id, session_id, project_id, prompt, intent, state_json,
+                    is_completed, created_at, updated_at, owner_user_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    prompt=excluded.prompt,
+                    intent=excluded.intent,
+                    state_json=excluded.state_json,
+                    is_completed=excluded.is_completed,
+                    updated_at=excluded.updated_at
+                WHERE tasks.owner_user_id IS excluded.owner_user_id
+                """,
                 (
-                    task_id,
-                    session_id,
-                    project_id,
-                    prompt,
-                    intent,
-                    state_json,
-                    is_completed,
-                    now,
-                    now,
+                    task_id, session_id, project_id, prompt, intent, state_json,
+                    is_completed, now, now, owner_user_id,
                 ),
             )
 
-    def get_task(self, task_id: str) -> dict[str, Any] | None:
-        with self._get_connection() as conn:
-            cur = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
-            row = cur.fetchone()
-            if not row:
-                return None
-            data = dict(row)
-            data["state"] = json.loads(data["state_json"])
-            return data
+    @staticmethod
+    def _decode_task_row(row: sqlite3.Row) -> dict[str, Any]:
+        data = dict(row)
+        data["state"] = json.loads(data["state_json"])
+        return data
 
-    def list_tasks(self, limit: int = 50) -> list[dict[str, Any]]:
+    def get_task(
+        self, task_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT id, session_id, project_id, prompt, intent, is_completed, created_at FROM tasks ORDER BY created_at DESC LIMIT ?",
-                (limit,),
+            if owner_user_id is None:
+                row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM tasks WHERE id = ? AND owner_user_id = ?",
+                    (task_id, owner_user_id),
+                ).fetchone()
+            return self._decode_task_row(row) if row else None
+
+    def list_tasks(
+        self, limit: int = 50, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            query = "SELECT id, session_id, project_id, prompt, intent, is_completed, created_at FROM tasks"
+            params: list[Any] = []
+            if owner_user_id is not None:
+                query += " WHERE owner_user_id = ?"
+                params.append(owner_user_id)
+            query += " ORDER BY created_at DESC LIMIT ?"
+            params.append(max(1, min(limit, 500)))
+            return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def list_chat_sessions(
+        self, limit: int = 50, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT session_id, MIN(prompt) as first_prompt, COUNT(*) as task_count,
+                   MAX(created_at) as last_activity, MIN(intent) as first_intent
+            FROM tasks
+            WHERE session_id IS NOT NULL AND session_id != ''
+        """
+        params: list[Any] = []
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " GROUP BY session_id ORDER BY last_activity DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            result = []
+            for row in rows:
+                data = dict(row)
+                prompt = data.get("first_prompt") or "Conversa sem título"
+                data["title"] = (prompt[:55] + "...") if len(prompt) > 55 else prompt
+                result.append(data)
+            return result
+
+    def get_session_tasks(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM tasks WHERE session_id = ?"
+        params: list[Any] = [session_id]
+        if owner_user_id is not None:
+            query += " AND owner_user_id = ?"
+            params.append(owner_user_id)
+        query += " ORDER BY created_at ASC"
+        with self._get_connection() as conn:
+            return [self._decode_task_row(r) for r in conn.execute(query, params).fetchall()]
+
+    def delete_session(
+        self, session_id: str, owner_user_id: str | None = None
+    ) -> int:
+        with self._get_connection() as conn:
+            if owner_user_id is None:
+                conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
+                cur = conn.execute("DELETE FROM tasks WHERE session_id = ?", (session_id,))
+                return cur.rowcount
+            conn.execute(
+                "DELETE FROM chat_messages WHERE session_id = ? AND owner_user_id = ?",
+                (session_id, owner_user_id),
             )
-            return [dict(r) for r in cur.fetchall()]
-
-    def list_chat_sessions(self, limit: int = 50) -> list[dict[str, Any]]:
-        with self._get_connection() as conn:
             cur = conn.execute(
-                """
-                SELECT 
-                    session_id,
-                    MIN(prompt) as first_prompt,
-                    COUNT(*) as task_count,
-                    MAX(created_at) as last_activity,
-                    MIN(intent) as first_intent
-                FROM tasks
-                WHERE session_id IS NOT NULL AND session_id != ''
-                GROUP BY session_id
-                ORDER BY last_activity DESC
-                LIMIT ?
-                """,
-                (limit,),
+                "DELETE FROM tasks WHERE session_id = ? AND owner_user_id = ?",
+                (session_id, owner_user_id),
             )
-            rows = []
-            for r in cur.fetchall():
-                d = dict(r)
-                p = d.get("first_prompt") or "Conversa sem título"
-                d["title"] = (p[:55] + "...") if len(p) > 55 else p
-                rows.append(d)
-            return rows
-
-    def get_session_tasks(self, session_id: str) -> list[dict[str, Any]]:
-        with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT * FROM tasks WHERE session_id = ? ORDER BY created_at ASC",
-                (session_id,),
-            )
-            tasks = []
-            for r in cur.fetchall():
-                d = dict(r)
-                d["state"] = json.loads(d["state_json"])
-                tasks.append(d)
-            return tasks
-
-    def delete_session(self, session_id: str) -> int:
-        with self._get_connection() as conn:
-            conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
-            cur = conn.execute("DELETE FROM tasks WHERE session_id = ?", (session_id,))
             return cur.rowcount
 
     # --- Mensagens individuais do agente de código (histórico fiel) ---
