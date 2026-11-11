@@ -81,6 +81,7 @@ async def test_03_valid_device_token_access():
     reg = security_core.device_auth.pair_device(
         "Tablet de Operações",
         scopes=["chat:read", "chat:use", "system:read", "approvals:read", "workspace:read"],
+        owner_user_id="admin",
     )
     token = reg.device_token
 
