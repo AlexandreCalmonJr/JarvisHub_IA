@@ -49,6 +49,19 @@ class ModelSelector:
             return 0, "capacidade visual não comprovada"
         return 35, "modelo disponível para uso geral"
 
+    @staticmethod
+    def _normalize_capability(task_capability: str | None, agent_role: str | None) -> str:
+        if task_capability:
+            return task_capability.strip().lower()
+        role = (agent_role or "").lower()
+        if any(term in role for term in ("developer", "coder", "devops", "programmer", "software_engineer")):
+            return "code"
+        if any(term in role for term in ("auditor", "architect", "security", "threat", "analyst", "qa", "quality")):
+            return "reasoning"
+        if any(term in role for term in ("vision", "image", "multimodal")):
+            return "vision"
+        return "general"
+
     def select(
         self,
         *,
@@ -61,7 +74,7 @@ class ModelSelector:
         contains_sensitive_data: bool,
         has_external_data_approval: bool,
     ) -> ModelSelection:
-        capability = (task_capability or agent_role or "general").lower()
+        capability = self._normalize_capability(task_capability, agent_role)
         performance: dict[tuple[str, str, str | None], dict[str, Any]] = {}
         if telemetry_store and owner_user_id:
             for row in telemetry_store.performance_by_model_for_owner(owner_user_id):
