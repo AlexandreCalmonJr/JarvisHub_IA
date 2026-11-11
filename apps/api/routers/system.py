@@ -16,6 +16,7 @@ from apps.api.deps import (
     log_buffer,
     db_manager,
     webhook_service,
+    telemetry_store,
     hybrid_config,
     save_hybrid_config_to_disk,
     HYBRID_CONFIG_PATH,
@@ -76,6 +77,20 @@ async def health_details(
             },
             "kill_switch": {"global_killed": security_core.kill_switch.is_global_killed()},
         },
+    }
+
+
+
+
+@router.get("/api/v1/system/inference-telemetry")
+async def get_inference_telemetry(
+    limit: int = 50,
+    principal: Principal = Depends(require_permission("system:read")),
+):
+    """Retorna métricas de inferência exclusivamente da conta autenticada."""
+    return {
+        "summary": telemetry_store.summary_for_owner(principal.subject_id),
+        "records": telemetry_store.list_for_owner(principal.subject_id, limit=limit),
     }
 
 
