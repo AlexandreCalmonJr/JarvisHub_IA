@@ -134,7 +134,7 @@ class EngineeringIntelligenceService:
         total_tasks = 0
         if self.db:
             tasks = self.db.list_tasks(limit=100, owner_user_id=owner_user_id)
-            total_tasks = len(tasks)
+            total_tasks = sum(1 for task in tasks if task.get("is_completed"))
 
         # Estimativa de tokens processados localmente (ex: ~4.000 tokens por tarefa de engenharia)
         estimated_tokens = total_tasks * 4500
