@@ -9,6 +9,7 @@ from .hybrid_router import (
 )
 from .inference_queue import InferenceQueue, InferenceQueueError
 from .model_manager import ModelManager
+from .model_selector import ModelCandidate, ModelSelection, ModelSelector
 from .types import (
     InferenceRequest,
     InferenceResponse,
@@ -27,6 +28,9 @@ __all__ = [
     "InferenceResponse",
     "MockAdapter",
     "ModelManager",
+    "ModelCandidate",
+    "ModelSelection",
+    "ModelSelector",
     "ModelMetadata",
     "ModelProvider",
     "ModelRoleMapping",
