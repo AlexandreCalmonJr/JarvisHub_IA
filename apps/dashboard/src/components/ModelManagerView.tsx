@@ -376,6 +376,10 @@ export const ModelManagerView: React.FC = () => {
               </span>
             )}
           </button>}
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('hub')}
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
