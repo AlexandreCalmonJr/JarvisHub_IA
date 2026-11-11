@@ -113,6 +113,7 @@ app.include_router(studios.router)
 app.include_router(coding.router)
 app.include_router(mcp.router)
 app.include_router(voice.router)
+app.include_router(learning.router)
 
 # Monta aplicativo mobile Flutter (PWA) se compilado
 mobile_dist = Path("apps/mobile/build/web")
