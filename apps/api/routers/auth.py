@@ -266,6 +266,14 @@ async def me(principal: Principal = Depends(get_principal)):
     payload["must_change_password"] = bool(
         principal.kind == "human"
         and principal.subject_id.casefold() == "admin"
+        and not principal.via_admin_token
+        and environment not in {"prod", "production"}
+        and auth_service.user_store.authenticate(principal.subject_id, "jarvishub")
+    )
+    environment = __import__("os").environ.get("JARVIS_ENVIRONMENT", __import__("os").environ.get("JARVIS_ENV", "development")).strip().lower()
+    payload["must_change_password"] = bool(
+        principal.kind == "human"
+        and principal.subject_id.casefold() == "admin"
         and environment not in {"prod", "production"}
         and auth_service.user_store.authenticate(principal.subject_id, "jarvishub")
     )
