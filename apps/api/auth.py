@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse
 
 from apps.api.deps import data_dir, security_core
 from packages.contracts.security import AuditEventSeverity
-from services.security_core.auth_store import AdminCredentialStore
+from services.security_core.auth_store import AdminCredentialStore, UserCredentialStore
 
 logger = logging.getLogger("jarvis.api.auth")
 
@@ -298,6 +298,7 @@ class AuthService:
         self.auth_dir = Path(auth_dir)
         self.auth_dir.mkdir(parents=True, exist_ok=True)
         self.admin_store = AdminCredentialStore(self.auth_dir / "admin.json")
+        self.user_store = UserCredentialStore(self.auth_dir / "users.sqlite3")
         self.admin_token_path = self.auth_dir / "admin_token.txt"
         self.bootstrap_token_path = self.auth_dir / "bootstrap_token.txt"
         self.bootstrap_state_path = self.auth_dir / "bootstrap_state.json"
@@ -521,6 +522,12 @@ class AuthService:
         if token.startswith("sess_"):
             return self.security.sessions.validate_session(token)
         return None
+
+    def login_with_password(self, username: str, password: str):
+        user = self.user_store.authenticate(username.strip(), password)
+        if not user:
+            return None
+        return self.create_session(user["username"], user["role"])
 
     def login_with_bootstrap(self, token: str):
         if not self.exchange_bootstrap_token(token):
