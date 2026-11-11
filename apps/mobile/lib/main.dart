@@ -529,15 +529,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               width: double.infinity,
               color: const Color(0xFFF59E0B),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.black, size: 18),
-                  SizedBox(width: 8),
-                  Expanded(
+                  const Icon(Icons.warning_amber_rounded, color: Colors.black, size: 18),
+                  const SizedBox(width: 8),
+                  const Expanded(
                     child: Text(
-                      'Não Emparelhado: adicione o token nas configurações para autorizar operações.',
+                      'Dispositivo ainda não emparelhado. Configure o token para autorizar o acesso.',
                       style: TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
+                  ),
+                  TextButton(
+                    onPressed: () => _openSettings(context),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('Emparelhar agora', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
