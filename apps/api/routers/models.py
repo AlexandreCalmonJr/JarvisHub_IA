@@ -64,30 +64,7 @@ async def list_models_endpoint(principal=Depends(get_principal)):
     except Exception as exc:
         logger.debug("Não foi possível atualizar o inventário local de modelos: %s", exc)
 
-    if not installed_local:
-        installed_local = [
-            {
-                "name": "llama3.2:3b",
-                "role": "Master, Orquestração e JSON",
-                "speed": "10.29 t/s",
-                "context": 131072,
-                "status": "ready",
-            },
-            {
-                "name": "qwen2.5-coder:7b",
-                "role": "Fullstack Coding, Refatoração e Diffs",
-                "speed": "4.80 t/s",
-                "context": 32768,
-                "status": "ready",
-            },
-            {
-                "name": "qwen2.5:7b",
-                "role": "Arquitetura, Raciocínio Complexo e QA",
-                "speed": "4.50 t/s",
-                "context": 32768,
-                "status": "ready",
-            },
-        ]
+    # Lista vazia significa que nenhum modelo local foi confirmado como instalado.
 
     # Modelos online disponíveis e configurados no Model Manager
     online_models = []
