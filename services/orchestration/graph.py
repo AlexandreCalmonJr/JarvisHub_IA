@@ -649,6 +649,60 @@ def create_master_graph(
                     slug, name_clean, f"Portal completo de Cibersegurança e Inteligência de Ameaças para '{user_prompt}'"
                 )
 
+            # Projeto novo também é uma escrita no Workspace: nenhuma pasta/arquivo
+            # é criada antes da aprovação humana vinculada ao caminho e payload proposto.
+            project_root = workspace_service.get_project_dir(slug).resolve()
+            if project_root.exists():
+                return {
+                    "policy_violations": [
+                        f"O projeto '{slug}' já existe. Selecione um identificador novo ou trate a atualização como modificação aprovada."
+                    ],
+                    "final_summary": f"Criação bloqueada: o projeto '{slug}' já existe.",
+                    "is_completed": False,
+                }
+
+            pending_project = {
+                "project_id": slug,
+                "name": name_clean,
+                "description": (
+                    f"Projeto {project_type.upper()} criado pelo JARVIS AI HUB "
+                    f"a partir do pedido: '{state['user_prompt']}'"
+                ),
+                "project_type": project_type,
+                "files": custom_files if custom_files else None,
+            }
+            approval_preview = json.dumps(
+                {
+                    "project_id": slug,
+                    "name": name_clean,
+                    "project_type": project_type,
+                    "files": custom_files or "Scaffold padrão do tipo selecionado",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            approval = security_core.approval_engine.create_request(
+                task_id=state["task_id"],
+                agent_role=AgentRole.JARVIS_MASTER.value,
+                operation="project_create",
+                impact_summary=(
+                    f"Criar projeto {project_type.upper()} '{name_clean}' no Workspace "
+                    f"com base no pedido: {state['user_prompt']}"
+                ),
+                affected_resources=[str(project_root)],
+                proposed_diff=approval_preview,
+                reversible=True,
+            )
+            return {
+                "approval_required": True,
+                "approval_id": approval.id,
+                "pending_project": pending_project,
+                "final_summary": (
+                    f"Projeto '{name_clean}' preparado. A criação física aguarda aprovação humana."
+                ),
+                "is_completed": False,
+            }
+
             scaffold_res = workspace_service.scaffold_project(
                 project_id=slug,
                 name=name_clean,
