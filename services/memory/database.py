@@ -1011,10 +1011,22 @@ class DatabaseManager:
                 configs[r_dict["role"]] = r_dict
             return configs
 
-    def get_user_profile(self) -> dict[str, Any]:
-        """Recupera dados de perfil do desenvolvedor persistidos no SQLite."""
+    @staticmethod
+    def _account_setting_key(key: str, owner_user_id: str | None) -> str:
+        if owner_user_id is None:
+            return key
+        owner_hash = hashlib.sha256(owner_user_id.encode("utf-8")).hexdigest()[:20]
+        return f"account:{owner_hash}:{key}"
+
+    def get_user_profile(
+        self, owner_user_id: str | None = None
+    ) -> dict[str, Any]:
+        """Recupera perfil privado da conta, sem recorrer a valores globais legados."""
+        setting_key = self._account_setting_key("developer_profile", owner_user_id)
         with self._get_connection() as conn:
-            row = conn.execute("SELECT value_json FROM user_settings WHERE key = 'developer_profile'").fetchone()
+            row = conn.execute(
+                "SELECT value_json FROM user_settings WHERE key = ?", (setting_key,)
+            ).fetchone()
             if row:
                 try:
                     return json.loads(row["value_json"])
@@ -1032,18 +1044,21 @@ class DatabaseManager:
             "geminiApiKey": "",
         }
 
-    def set_user_profile(self, profile: dict[str, Any]) -> None:
-        """Salva configurações e preferências do desenvolvedor no banco SQLite."""
+    def set_user_profile(
+        self, profile: dict[str, Any], owner_user_id: str | None = None
+    ) -> None:
+        """Salva preferências no espaço privado da conta autenticada."""
         now = datetime.now(UTC).isoformat()
         val_str = json.dumps(profile)
+        setting_key = self._account_setting_key("developer_profile", owner_user_id)
         with self._get_connection() as conn:
             conn.execute(
                 """
                 INSERT INTO user_settings (key, value_json, updated_at)
-                VALUES ('developer_profile', ?, ?)
+                VALUES (?, ?, ?)
                 ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
                 """,
-                (val_str, now),
+                (setting_key, val_str, now),
             )
 
     def get_cached_inference(self, prompt_hash: str) -> str | None:
