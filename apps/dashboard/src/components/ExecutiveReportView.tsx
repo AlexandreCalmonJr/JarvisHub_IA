@@ -136,6 +136,7 @@ export const ExecutiveReportView: React.FC = () => {
             PROJETO:
           </label>
           <select
+            disabled={projectsLoading || projects.length === 0}
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
             style={{
@@ -278,8 +279,7 @@ export const ExecutiveReportView: React.FC = () => {
               <Printer size={14} />
               Imprimir / PDF
             </button>
-            {!reportLoading && !reportError && !reportMarkdown && <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Selecione um projeto para gerar o relatório.</div>}
-        {reportMarkdown && (
+            {reportMarkdown && (
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(reportMarkdown);
@@ -296,6 +296,9 @@ export const ExecutiveReportView: React.FC = () => {
           </div>
         </div>
 
+        {!reportLoading && !reportError && !reportMarkdown && (
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>Selecione um projeto para gerar o relatório.</div>
+        )}
         {reportMarkdown && (
           <pre
             style={{
