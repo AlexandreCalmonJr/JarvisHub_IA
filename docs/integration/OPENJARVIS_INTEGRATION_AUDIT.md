@@ -454,3 +454,45 @@ Foram adicionados testes unitários para:
 - isolamento do histórico de decisões entre contas.
 
 Os testes **não foram executados** nesta etapa. A consulta ao GitHub não retornou workflows de CI para os caminhos comuns verificados, nem execuções associadas ao commit de integração. A validação deve ocorrer no ambiente local/homologação antes de ativar esta estratégia em produção.
+
+
+## 12. Quarta etapa — otimização de custo e aprendizagem operacional
+
+**Estado:** implementação inicial no código concluída; testes e validação de runtime pendentes.
+
+### 12.1 Estimativa e contabilização de custos
+
+- O seletor recebe as tarifas por 1.000 tokens do provedor configurado no HybridModelRouter e estima o custo de cada candidato externo com base no tamanho aproximado da entrada e no limite de saída solicitado.
+- A pontuação compara custos estimados entre candidatos elegíveis, aplicando penalidade relativa ao candidato mais caro. A estimativa é indicativa; o custo real depende do usage retornado pelo provedor.
+- O HybridModelRouter continua a reservar orçamento antes da chamada e liquidar a reserva com tokens reportados pelo provedor.
+- O custo real da inferência externa bem-sucedida passa a acompanhar a resposta e a telemetria.
+- A tabela `inference_telemetry` recebe `cost_usd`; a migração adiciona a coluna às bases existentes sem apagar dados.
+- O histórico de seleção guarda também `estimated_cost_usd`. O endpoint privado de telemetria já devolve o total por conta, por modelo e por decisão.
+- Chamadas locais e chamadas sem custo confirmado ficam com custo zero; isso não significa que energia ou custo de hardware tenham sido medidos.
+
+### 12.2 Política explícita local versus híbrida
+
+- `model_name="auto"` significa seleção apenas entre modelos locais.
+- `model_name="auto_hybrid"` permite incluir o modelo do gateway online quando este estiver habilitado.
+- A seleção híbrida continua sujeita à contenção de dados sensíveis, aprovação humana, reserva de orçamento e fallback do HybridModelRouter.
+- A escolha local define `force_local` para impedir redirecionamento silencioso ao gateway.
+
+### 12.3 Aprendizagem operacional e limites
+
+- O seletor utiliza histórico privado por owner de taxa de sucesso e latência, e agora considera também o custo estimado da solicitação.
+- A telemetria agrega custos reais confirmados por modelo e owner, permitindo evolução posterior da política.
+- Esta etapa **não implementa aprendizagem por qualidade semântica**: não há ainda avaliação explícita do usuário, score de qualidade validado nem treinamento/ajuste automático de pesos.
+- Não há otimização de energia, custo de infraestrutura local ou preço por modelo individual quando o provedor não fornece uma tarifa específica.
+- Falhas externas sem usage reportado podem ter custo real não conhecido pelo sistema; a telemetria não inventa esse valor.
+- Tarifas são as configuradas no gateway ou presets existentes, não uma consulta dinâmica a preços atuais dos fornecedores.
+
+### 12.4 Critérios de homologação
+
+- Verificar migração de bancos SQLite antigos e novos.
+- Confirmar que `auto` nunca envia inferência ao gateway e que `auto_hybrid` só o faz quando habilitado.
+- Conferir custo estimado versus custo real reportado pelo provedor.
+- Confirmar isolamento de totais, decisões e histórico por owner.
+- Testar fallback local quando o orçamento não permite a chamada externa.
+- Testar streaming separadamente: a contabilização de custo e telemetria de streaming ainda não foi completada nesta etapa.
+
+Os testes adicionados/atualizados permanecem pendentes de execução no ambiente de homologação.
