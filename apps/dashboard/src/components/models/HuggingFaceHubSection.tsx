@@ -9,6 +9,7 @@ interface Props {
   downloadProgress: number;
   downloadStatusText: string;
   agentRecommendations: Record<string, { model: string; reason: string }>;
+  canInstall?: boolean;
   isModelInstalled: (tag: string) => boolean;
   onSearchChange: (value: string) => void;
   onSearchSubmit: (event?: React.FormEvent) => void;
@@ -19,7 +20,7 @@ interface Props {
 export const HuggingFaceHubSection: React.FC<Props> = (props) => {
   const {
     curatedModels, searchResults, searchQuery, isSearching, downloadingModelId,
-    downloadProgress, downloadStatusText, agentRecommendations, isModelInstalled,
+    downloadProgress, downloadStatusText, agentRecommendations, canInstall = false, isModelInstalled,
     onSearchChange, onSearchSubmit, onClearSearch, onInstallModel,
   } = props;
   const list = searchQuery.trim() ? searchResults : curatedModels;
@@ -31,7 +32,7 @@ export const HuggingFaceHubSection: React.FC<Props> = (props) => {
     <section className="glass-card" style={{ padding: 22, borderRadius: 16, display: 'grid', gap: 16 }}>
       <header>
         <h3 style={{ color: 'var(--text-primary)', margin: 0, fontSize: 20 }}>Hugging Face Hub</h3>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '6px 0 0' }}>Descubra modelos e envie a instalação para o Ollama.</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '6px 0 0' }}>Descubra modelos compatíveis. A instalação no servidor é reservada a administradores.</p>
       </header>
       <form onSubmit={onSearchSubmit} style={{ display: 'flex', gap: 8 }}>
         <input value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Pesquisar modelos, tarefas ou famílias…" style={inputStyle} />
@@ -60,9 +61,13 @@ export const HuggingFaceHubSection: React.FC<Props> = (props) => {
                 <span style={{ color: 'var(--text-muted)', fontSize: 11, overflowWrap: 'anywhere' }}>{tag}</span>
                 {model.description && <p style={{ color: 'var(--text-secondary)', fontSize: 12, margin: 0 }}>{model.description}</p>}
                 {recommendation && <small style={{ color: 'var(--accent-color)' }}>Recomendado: {recommendation.reason}</small>}
-                <button type="button" className="btn btn-secondary" disabled={installed || Boolean(downloadingModelId) || !tag} onClick={() => onInstallModel(tag, name)}>
-                  {installed ? 'Já instalado' : downloadingModelId === tag ? 'A instalar…' : 'Instalar modelo'}
-                </button>
+                {canInstall ? (
+                  <button type="button" className="btn btn-secondary" disabled={installed || Boolean(downloadingModelId) || !tag} onClick={() => onInstallModel(tag, name)}>
+                    {installed ? 'Já instalado' : downloadingModelId === tag ? 'A instalar…' : 'Instalar modelo'}
+                  </button>
+                ) : (
+                  <small style={{ color: 'var(--text-muted)' }}>Instalação disponível apenas para administradores.</small>
+                )}
               </article>
             );
           })}

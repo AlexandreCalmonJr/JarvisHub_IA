@@ -21,9 +21,11 @@ import { ModelQualityPanel } from './models/ModelQualityPanel';
 export const ModelManagerView: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
-  const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub' | 'quality'>('vault');
+  const [activeTab, setActiveTab] = useState<'vault' | 'local' | 'hybrid' | 'hub' | 'quality'>('local');
 
   // Form State para Gateway Híbrido
   const [provider, setProvider] = useState<string>('gemini');
@@ -50,12 +52,12 @@ export const ModelManagerView: React.FC = () => {
   const [downloadStatusText, setDownloadStatusText] = useState<string>('');
   const [agentRecommendations, setAgentRecommendations] = useState<Record<string, { model: string; reason: string }>>({});
 
-  const loadData = async () => {
+  const loadData = async (includeAdminConfig = isAdmin) => {
     setLoading(true);
     try {
       const results = await Promise.allSettled([
         fetchModels(),
-        fetchHybridConfig(),
+        includeAdminConfig ? fetchHybridConfig() : Promise.resolve(null),
         fetchCuratedHuggingFaceModels(),
         fetchAgentModelRecommendations(),
       ]);
@@ -65,14 +67,14 @@ export const ModelManagerView: React.FC = () => {
       if (modelsResult.status === 'fulfilled') setData(modelsResult.value);
       else { setData(null); failures.push(modelsResult.reason instanceof Error ? modelsResult.reason.message : 'Falha ao consultar modelos.'); }
 
-      if (hybridResult.status === 'fulfilled') {
+      if (hybridResult.status === 'fulfilled' && hybridResult.value) {
         const hybridRes = hybridResult.value;
         setProvider(hybridRes.provider_name || 'gemini');
         setEnabled(Boolean(hybridRes.enabled));
         setDefaultModel(hybridRes.default_model || 'gemini-1.5-flash');
         setBaseUrl(hybridRes.base_url || '');
         setMaxBudget(hybridRes.max_budget_usd || 5.0);
-      } else failures.push(hybridResult.reason instanceof Error ? hybridResult.reason.message : 'Falha ao consultar gateway híbrido.');
+      } else if (includeAdminConfig && hybridResult.status === 'rejected') failures.push(hybridResult.reason instanceof Error ? hybridResult.reason.message : 'Falha ao consultar gateway híbrido.');
 
       if (curatedResult.status === 'fulfilled') setHfCurated(curatedResult.value);
       else failures.push(curatedResult.reason instanceof Error ? curatedResult.reason.message : 'Falha ao consultar Hugging Face.');
@@ -89,7 +91,27 @@ export const ModelManagerView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const admin = principal?.kind === 'human' && principal?.role === 'admin';
+        setIsAdmin(admin);
+        setActiveTab(admin ? 'vault' : 'local');
+        setRoleLoaded(true);
+        void loadData(admin);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsAdmin(false);
+        setActiveTab('local');
+        setRoleLoaded(true);
+        void loadData(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleProviderSelect = (card: ProviderCard) => {
@@ -261,13 +283,17 @@ export const ModelManagerView: React.FC = () => {
     }
   };
 
-  const isOnlineActive = data?.hybrid_gateway?.enabled;
+  const isOnlineActive = isAdmin && Boolean(data?.hybrid_gateway?.enabled);
   const currentSpend = data?.hybrid_gateway?.current_spend_usd || 0;
   const budgetMax = data?.hybrid_gateway?.max_budget_usd || maxBudget || 5.0;
   const budgetPercent = Math.min(100, Math.round((currentSpend / budgetMax) * 100));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1280px', margin: '0 auto' }}>
+      {!roleLoaded ? (
+        <div role="status" className="glass-panel" style={{ padding: '28px', color: 'var(--text-secondary)' }}>A verificar permissões do Gestor de Modelos…</div>
+      ) : (
+      <>
       {loadError && (
         <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
           Algumas informações não puderam ser carregadas: {loadError}
@@ -289,7 +315,7 @@ export const ModelManagerView: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
+          {isAdmin && <button
             type="button"
             onClick={() => setActiveTab('vault')}
             style={{
@@ -306,7 +332,7 @@ export const ModelManagerView: React.FC = () => {
             }}
           >
             Cofre de Chaves (KeyVault)
-          </button>
+          </button>}
 
           <button
             type="button"
@@ -327,7 +353,7 @@ export const ModelManagerView: React.FC = () => {
             Modelos Locais ({data?.models?.length || 0})
           </button>
 
-          <button
+          {isAdmin && <button
             type="button"
             onClick={() => setActiveTab('hybrid')}
             style={{
@@ -349,11 +375,7 @@ export const ModelManagerView: React.FC = () => {
                 ONLINE
               </span>
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('hub')}
+          </button>}
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
@@ -392,14 +414,14 @@ export const ModelManagerView: React.FC = () => {
 
         {/* Botões de Ação Global */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
+          {isAdmin && <button
             type="button"
             onClick={() => setShowWizard(true)}
             className="btn btn-secondary"
             style={{ fontSize: '0.8rem', padding: '6px 12px' }}
           >
             Assistente Rápido
-          </button>
+          </button>}
           <button
             type="button"
             onClick={loadData}
@@ -414,12 +436,12 @@ export const ModelManagerView: React.FC = () => {
       </div>
 
       {/* Conteúdo Aba 0: Cofre de Chaves de API (KeyVault) */}
-      {activeTab === 'vault' && <KeyVaultManager />}
+      {isAdmin && activeTab === 'vault' && <KeyVaultManager />}
 
       {/* Conteúdo Aba 1: Modelos Locais & Status do Sistema */}
       {activeTab === 'local' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <ModelStatusHero
+          {isAdmin && <ModelStatusHero
             isOnlineActive={Boolean(isOnlineActive)}
             loading={loading}
             currentSpend={currentSpend}
@@ -428,13 +450,13 @@ export const ModelManagerView: React.FC = () => {
             providerName={data?.hybrid_gateway?.provider}
             onOpenWizard={() => setShowWizard(true)}
             onRefresh={loadData}
-          />
+          />}
           <LocalModelsGrid models={data?.models} />
         </div>
       )}
 
       {/* Conteúdo Aba 2: Gateway Híbrido & Conexão em Nuvem */}
-      {activeTab === 'hybrid' && (
+      {isAdmin && activeTab === 'hybrid' && (
         <HybridGatewayConfig
           provider={provider}
           enabled={enabled}
@@ -470,6 +492,7 @@ export const ModelManagerView: React.FC = () => {
           downloadProgress={downloadProgress}
           downloadStatusText={downloadStatusText}
           agentRecommendations={agentRecommendations}
+          canInstall={isAdmin}
           isModelInstalled={isModelInstalled}
           onSearchChange={(q) => setHfSearchQuery(q)}
           onSearchSubmit={handleSearchHf}
@@ -484,11 +507,13 @@ export const ModelManagerView: React.FC = () => {
       {activeTab === 'quality' && <ModelQualityPanel />}
 
       {/* Modal do Assistente de Configuração */}
-      <SetupWizardModal
+      {isAdmin && <SetupWizardModal
         isOpen={showWizard}
         onClose={() => setShowWizard(false)}
         onCompleted={loadData}
-      />
+      />}
+      </>
+      )}
     </div>
   );
 };

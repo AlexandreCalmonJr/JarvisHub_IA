@@ -66,25 +66,16 @@ async def list_models_endpoint(principal=Depends(get_principal)):
 
     # Lista vazia significa que nenhum modelo local foi confirmado como instalado.
 
-    # Modelos online disponíveis e configurados no Model Manager
+    # Só anuncia um modelo online quando o gateway está ativo e a credencial correspondente existe.
     online_models = []
-    if cfg.default_model:
+    active_key = key_vault.get_key(cfg.key_id) if cfg.key_id else None
+    if cfg.enabled and active_key and active_key.is_active and cfg.default_model:
         online_models.append({
             "name": cfg.default_model,
             "provider": cfg.provider_name,
             "is_default": True,
-            "label": f"{cfg.default_model} ({cfg.provider_name.upper()} — Ativo no Gateway)",
+            "label": f"{cfg.default_model} ({cfg.provider_name.upper()} — configurado e ativo)",
         })
-    for preset in PROVIDER_PRESETS:
-        p_id = preset.get("id")
-        def_m = preset.get("default_model")
-        if def_m and def_m != cfg.default_model:
-            online_models.append({
-                "name": def_m,
-                "provider": p_id,
-                "is_default": False,
-                "label": f"{def_m} ({preset.get('name')})",
-            })
 
     return {
         "models": installed_local,
@@ -231,7 +222,7 @@ async def search_huggingface_endpoint(q: str = "", limit: int = 10, principal=De
 
 @router.get("/api/v1/models/agent-recommendations")
 async def get_agent_recommendations_endpoint(principal=Depends(get_principal)):
-    """Retorna a matriz de modelo ótimo do Hugging Face para cada um dos 26 especialistas."""
+    """Retorna recomendações de modelos para os papéis de agente registados."""
     return AGENT_MODEL_RECOMMENDATIONS
 
 

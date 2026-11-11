@@ -61,7 +61,7 @@ export const HybridGatewayConfig: React.FC<Props> = (props) => {
           <button key={item.id} type="button" onClick={() => onProviderSelect(item)} style={{
             textAlign: 'left', padding: 13, borderRadius: 10, cursor: 'pointer',
             border: provider === item.id ? '1px solid var(--accent-color)' : '1px solid var(--border-color)',
-            background: provider === item.id ? 'rgba(59,130,246,.10)' : 'var(--bg-secondary)',
+            background: provider === item.id ? 'var(--accent-glow)' : 'var(--bg-secondary)',
             color: 'var(--text-primary)',
           }}>
             <strong style={{ fontSize: 13 }}>{item.name}</strong>
