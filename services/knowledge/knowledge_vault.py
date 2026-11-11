@@ -203,9 +203,9 @@ class KnowledgeVaultService:
                 continue
             try:
                 res = self.index_file(p, category=category, owner_user_id=owner_user_id)
-                    indexed_files.append(res)
-                except Exception as exc:
-                    skipped_files.append({"file": p.name, "error": str(exc)})
+                indexed_files.append(res)
+            except Exception as exc:
+                skipped_files.append({"file": p.name, "error": str(exc)})
 
         return {
             "status": "completed",
