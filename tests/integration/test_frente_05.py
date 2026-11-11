@@ -2,7 +2,7 @@ import io
 import zipfile
 import pytest
 from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service
+from apps.api.main import app, workspace_service, db_manager
 
 
 @pytest.mark.asyncio
@@ -27,6 +27,10 @@ async def test_frente_05_export_clean_project_zip():
 
     (proj_dir / "__pycache__").mkdir()
     (proj_dir / "__pycache__" / "cached.pyc").write_bytes(b"\x00\x01\x02")
+
+    db_manager.register_project(
+        proj_id, "Front 5 ZIP Test", str(proj_dir), owner_user_id="admin"
+    )
 
     # 3. Chama o endpoint de exportação ZIP
     transport = ASGITransport(app=app)
