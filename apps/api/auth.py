@@ -140,6 +140,7 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     ({"GET"}, re.compile(r"^/api/v1/system/server-logs(?:/stream)?$"), "system:logs"),
     ({"POST"}, re.compile(r"^/api/v1/system/server-logs/clear$"), "system:write"),
     ({"GET"}, re.compile(r"^/api/v1/system/resources$"), "system:read"),
+    ({"GET"}, re.compile(r"^/api/v1/system/inference-telemetry$"), "system:read"),
     ({"POST"}, re.compile(r"^/api/v1/system/backup$"), "system:write"),
     ({"GET"}, re.compile(r"^/api/v1/system/webhooks$"), "system:read"),
     ({"POST"}, re.compile(r"^/api/v1/system/webhooks(?:/test)?$"), "system:write"),
