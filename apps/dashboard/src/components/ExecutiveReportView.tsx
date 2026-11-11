@@ -169,27 +169,27 @@ export const ExecutiveReportView: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '16px' }}>
           <div className="glass-card" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Economia em Nuvem</span>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Economia Estimada em Nuvem</span>
               <DollarSign size={16} color="#34d399" />
             </div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
               US$ {roiData.cost_saved_usd}
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Aprox. R$ {roiData.cost_saved_brl} poupados em APIs
+              Aprox. R$ {roiData.cost_saved_brl}; estimativa com 4.500 tokens por tarefa
             </div>
           </div>
 
           <div className="glass-card" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tempo Poupado</span>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tempo Potencialmente Poupado</span>
               <Clock size={16} color="var(--accent-color)" />
             </div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, color: 'var(--accent-color)', fontFamily: 'var(--font-mono)' }}>
               {roiData.engineering_hours_saved}h
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Horas de engenharia automatizadas
+              Estimativa de 0,42h por tarefa concluída
             </div>
           </div>
 
