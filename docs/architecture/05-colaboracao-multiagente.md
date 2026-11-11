@@ -6,7 +6,7 @@ O utilizador conversa com o JarvisMaster. O orquestrador seleciona especialistas
 
 ## Mesa redonda com revisão entre pares
 
-O fluxo `multi_agent_consensus` executa os especialistas em sequência deliberada:
+Pedidos complexos com intenção de análise, investigação, diagnóstico, resolução de problemas ou avaliação podem convocar a mesa redonda automaticamente. O utilizador também pode pedir explicitamente uma deliberação. O fluxo `multi_agent_consensus` executa os especialistas em sequência deliberada:
 
 1. O primeiro especialista produz o parecer inicial.
 2. O segundo recebe o resumo do primeiro através de `previous_outputs` no prompt especializado. Deve avaliar e contestar o parecer anterior.
