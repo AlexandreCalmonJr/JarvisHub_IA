@@ -179,12 +179,12 @@ const DashboardApp: React.FC = () => {
 
   useEffect(() => {
     if (!authLoaded || authKind !== 'human' || authRole !== 'admin') return;
-    try {
-      const isCompleted = localStorage.getItem(getAccountStorageKey('jarvis_setup_completed'));
-      if (isCompleted !== 'true') setShowSetupWizard(true);
-    } catch {
-      // Sem armazenamento local, não iniciar automaticamente o wizard.
-    }
+    let cancelled = false;
+    fetch(`${API_BASE}/system/onboarding`, { credentials: 'include' })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((status) => { if (!cancelled) setShowSetupWizard(status?.completed !== true); })
+      .catch(() => { if (!cancelled) setShowSetupWizard(false); });
+    return () => { cancelled = true; };
   }, [authLoaded, authKind, authRole]);
 
   const navigate = (tab: string) => {

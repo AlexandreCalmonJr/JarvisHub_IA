@@ -11,7 +11,7 @@ import {
   X,
   Server,
 } from 'lucide-react';
-import { getAccountStorageKey } from '../../services/accountScope';
+import { API_BASE } from '../../services/api/client';
 
 interface SetupWizardModalProps {
   isOpen: boolean;
@@ -25,6 +25,23 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
 
   const [saving, setSaving] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  const [environmentStatus, setEnvironmentStatus] = useState<any>(null);
+  const [checkingEnvironment, setCheckingEnvironment] = useState(false);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setCheckingEnvironment(true);
+    fetch(`${API_BASE}/system/onboarding`, { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Não foi possível consultar o estado do servidor.');
+        return response.json();
+      })
+      .then((status) => { if (!cancelled) setEnvironmentStatus(status); })
+      .catch((error) => { if (!cancelled) setFinishError(error.message || 'Falha ao verificar o ambiente.'); })
+      .finally(() => { if (!cancelled) setCheckingEnvironment(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   const handleFinish = async () => {
     setSaving(true);
@@ -33,7 +50,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
       if (mode !== 'local') {
         throw new Error('A configuração de provedores na nuvem ficará disponível após a implantação do Cofre Privado por Conta.');
       }
-      localStorage.setItem(getAccountStorageKey('jarvis_setup_completed'), 'true');
+      const response = await fetch(`${API_BASE}/system/onboarding/complete`, { method: 'POST', credentials: 'include' });
+      if (!response.ok) throw new Error('O servidor não confirmou a conclusão da configuração.');
       if (onCompleted) onCompleted();
       onClose();
     } catch (e: any) {
@@ -284,6 +302,15 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 </p>
               </div>
 
+              <div className="glass-panel" style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                <div><strong style={{ color: 'var(--text-primary)', fontSize: '.8rem' }}>Verificação do ambiente</strong><div style={{ color: 'var(--text-muted)', fontSize: '.72rem', marginTop: 4 }}>{checkingEnvironment ? 'A consultar o servidor…' : 'Estado recebido do backend'}</div></div>
+                {[
+                  ['Base de dados', environmentStatus?.database_available],
+                  ['Modelo local', environmentStatus?.local_model_available],
+                  ['Cofre cifrado', environmentStatus?.vault_encryption_ready],
+                  ['Provider cloud', environmentStatus?.hybrid_provider_enabled],
+                ].map(([label, ready]) => <div key={String(label)} style={{ fontSize: '.78rem', color: 'var(--text-secondary)' }}>{label}: <strong style={{ color: ready === true ? 'var(--success-color)' : ready === false ? 'var(--warning-color)' : 'var(--text-muted)' }}>{ready === true ? 'Disponível' : ready === false ? 'Não configurado' : 'A verificar'}</strong></div>)}
+              </div>
               {mode === 'cloud' ? (
                 <div role="status" style={{ padding: '18px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
                   O Cofre Privado por Conta está em implementação. A configuração global de APIs permanece bloqueada neste assistente para impedir que uma conta altere ou utilize credenciais compartilhadas.
