@@ -16,7 +16,7 @@ export async function fetchUserProfileApi(): Promise<{
 } | null> {
   const response = await fetch(`${API_BASE}/user/profile`, { credentials: 'include' });
   const stored = await handleApiResponse<Partial<AccountProfilePayload>>(response, 'Falha ao carregar perfil da conta.');
-  const instructionParts = (stored.customInstructions || '').split(/\\n\\s*\\n/);
+  const instructionParts = (stored.customInstructions || '').split(/\n\s*\n/);
   return {
     displayName: stored.displayName,
     avatarIcon: stored.avatarIcon,
@@ -24,7 +24,7 @@ export async function fetchUserProfileApi(): Promise<{
     seniorityLevel: stored.seniorityLevel,
     responseStyle: stored.responseStyle,
     userBackground: instructionParts[0] || '',
-    responseGuidelines: instructionParts.slice(1).join('\\n\\n'),
+    responseGuidelines: instructionParts.slice(1).join('\n\n'),
   };
 }
 
