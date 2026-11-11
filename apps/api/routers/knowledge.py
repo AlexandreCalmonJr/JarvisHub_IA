@@ -90,7 +90,7 @@ async def upload_knowledge_document_endpoint(
     owner = _private_owner(principal)
     upload_dir = _owner_upload_dir(owner)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = Path((file.filename or "upload.bin").replace("\\\\", "/")).name
+    safe_name = Path((file.filename or "upload.bin").replace(chr(92), "/")).name
     target_path = upload_dir / safe_name
     if target_path.is_symlink():
         raise HTTPException(status_code=403, detail="Destino de upload não permitido.")
