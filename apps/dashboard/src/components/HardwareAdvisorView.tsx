@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../services/api/client';
 import {
   Zap,
   CheckCircle2,
@@ -18,6 +19,8 @@ import { InstalledModelsEvaluation } from './hardware/InstalledModelsEvaluation'
 
 export const HardwareAdvisorView: React.FC = () => {
   const [data, setData] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [performanceError, setPerformanceError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -32,6 +35,7 @@ export const HardwareAdvisorView: React.FC = () => {
   const [perfSaving, setPerfSaving] = useState<boolean>(false);
 
   const loadProfile = async () => {
+    if (!isAdmin) return;
     setLoading(true);
     const [hardwareResult, performanceResult] = await Promise.allSettled([
       fetchHardwareProfile(),
@@ -48,7 +52,8 @@ export const HardwareAdvisorView: React.FC = () => {
       const perf = performanceResult.value;
       setPerfProfile(perf);
       setSelectedMode(perf.mode || 'auto');
-      setSelectedThreads(perf.cpu_threads || 6);
+      const logicalCores = Math.max(1, Number(perf.logical_cores) || 1);
+      setSelectedThreads(Math.max(1, Math.min(Number(perf.cpu_threads) || Math.min(6, logicalCores), logicalCores)));
       setPerformanceError(null);
     } else {
       setPerfProfile(null);
@@ -58,6 +63,7 @@ export const HardwareAdvisorView: React.FC = () => {
   };
 
   const handleSavePerformance = async () => {
+    if (!isAdmin || !perfProfile) return;
     setPerfSaving(true);
     try {
       const updated = await setPerformanceMode(selectedMode, selectedThreads);
@@ -74,10 +80,31 @@ export const HardwareAdvisorView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadProfile();
+    let cancelled = false;
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((principal) => {
+        if (cancelled) return;
+        const admin = principal?.kind === 'human' && principal?.role === 'admin';
+        setIsAdmin(admin);
+        setRoleLoaded(true);
+        if (admin) void loadProfile();
+        else setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAdmin(false);
+          setRoleLoaded(true);
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleApplyOptimal = async () => {
+    if (!isAdmin || !window.confirm('Aplicar as recomendações ao perfil global dos agentes? Esta operação altera a configuração de modelos de todo o servidor.')) return;
     setApplying(true);
     setApplySuccess(null);
     setActionError(null);
@@ -93,10 +120,23 @@ export const HardwareAdvisorView: React.FC = () => {
     }
   };
 
+  if (!roleLoaded) {
+    return <div role="status" className="glass-panel" style={{ padding: '24px', color: 'var(--text-secondary)' }}>A verificar permissões do diagnóstico de hardware…</div>;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.1rem' }}>Diagnóstico de Hardware</h2>
+        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.84rem' }}>O diagnóstico da máquina anfitriã e as alterações globais de desempenho estão disponíveis apenas para administradores.</p>
+      </div>
+    );
+  }
+
   if (loading && !data) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--text-secondary)' }}>
-        <RefreshCw size={28} className="spin" style={{ margin: '0 auto 16px', color: '#818cf8' }} />
+        <RefreshCw size={28} className="spin" style={{ margin: '0 auto 16px', color: 'var(--accent-color)' }} />
         <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Diagnosticando Hardware do Computador...</h3>
         <p style={{ fontSize: '0.84rem', marginTop: '6px' }}>
           Identificando processador, memória RAM, aceleradores gráficos e modelos Ollama locais
@@ -227,14 +267,14 @@ export const HardwareAdvisorView: React.FC = () => {
               <span>{applying ? 'Aplicando Otimização...' : '⚡ Aplicar Otimização Recomendada'}</span>
             </button>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              Ajusta o Maestro para llama3.2:3b e timeouts ideais
+              Aplica os modelos recomendados pelo diagnóstico e atualiza as configurações globais dos agentes.
             </span>
           </div>
         </div>
       </div>
 
       {/* Painel de Controle Dinâmico de Threads e Modo de Energia */}
-      <OllamaPerformancePanel
+      {perfProfile ? <OllamaPerformancePanel
         perfProfile={perfProfile}
         selectedMode={selectedMode}
         setSelectedMode={setSelectedMode}
@@ -242,7 +282,7 @@ export const HardwareAdvisorView: React.FC = () => {
         setSelectedThreads={setSelectedThreads}
         onSave={handleSavePerformance}
         saving={perfSaving}
-      />
+      /> : <div className="glass-panel" style={{ padding: '16px', color: 'var(--text-secondary)' }}>O perfil de desempenho não está disponível; não é possível guardar alterações até obter uma leitura válida do hardware.</div>}
 
       {/* Grid com os 3 Componentes Físicos (CPU, RAM, GPU) */}
       <HardwareSpecsCards cpu={cpu} ram={ram} gpu={gpu} />

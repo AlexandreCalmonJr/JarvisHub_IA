@@ -26,8 +26,8 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
       style={{
         padding: '20px 24px',
         borderRadius: '14px',
-        border: '1px solid rgba(56, 189, 248, 0.25)',
-        backgroundColor: 'rgba(15, 23, 42, 0.85)',
+        border: '1px solid var(--border-accent)',
+        backgroundColor: 'var(--bg-secondary)',
         display: 'flex',
         flexDirection: 'column',
         gap: '18px',
@@ -43,9 +43,9 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Sliders size={20} color="#38bdf8" />
+          <Sliders size={20} color="var(--accent-color)" />
           <div>
-            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
               Aceleração de Hardware & Controle de Threads do Ollama
             </h4>
             <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', margin: 0 }}>
@@ -129,15 +129,16 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
                 key={m.id}
                 type="button"
                 onClick={() => setSelectedMode(m.id)}
+                aria-pressed={isSelected}
                 style={{
                   padding: '12px 14px',
                   borderRadius: '10px',
                   textAlign: 'left',
                   backgroundColor: isSelected
-                    ? 'rgba(56, 189, 248, 0.15)'
+                    ? 'var(--accent-glow)'
                     : 'rgba(255, 255, 255, 0.03)',
                   border: isSelected
-                    ? '1px solid #38bdf8'
+                    ? '1px solid var(--border-accent)'
                     : '1px solid rgba(255, 255, 255, 0.08)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -147,7 +148,7 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
                   style={{
                     fontSize: '0.86rem',
                     fontWeight: 700,
-                    color: isSelected ? '#38bdf8' : '#e2e8f0',
+                    color: isSelected ? 'var(--accent-color)' : 'var(--text-primary)',
                     marginBottom: '4px',
                   }}
                 >
@@ -188,26 +189,26 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
             style={{
               fontSize: '0.80rem',
               fontWeight: 700,
-              color: '#38bdf8',
+              color: 'var(--accent-color)',
               padding: '2px 8px',
               borderRadius: '6px',
-              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              backgroundColor: 'var(--accent-glow)',
             }}
           >
-            {selectedThreads} de {perfProfile?.logical_cores || 8} Threads Ativas
+            {selectedThreads} de {perfProfile?.logical_cores || '—'} Threads Ativas
           </span>
         </div>
 
         <input
           type="range"
           min={1}
-          max={perfProfile?.logical_cores || 8}
+          max={Math.max(1, Number(perfProfile?.logical_cores) || 1)}
           step={1}
           value={selectedThreads}
           onChange={(e) => setSelectedThreads(Number(e.target.value))}
           style={{
             width: '100%',
-            accentColor: '#38bdf8',
+            accentColor: 'var(--accent-color)',
             cursor: 'pointer',
             height: '6px',
           }}
@@ -224,7 +225,7 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
         >
           <span>1 Thread (Ultraleve)</span>
           <span>Recomendado: 4 a 6 Threads</span>
-          <span>{perfProfile?.logical_cores || 8} Threads (100% da CPU)</span>
+          <span>{perfProfile?.logical_cores || '—'} Threads disponíveis</span>
         </div>
 
         <p
@@ -236,9 +237,7 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
             lineHeight: 1.4,
           }}
         >
-          💡 <strong>Recomendação técnica para Intel Core i5:</strong> Reservar 4 a 6 threads deixa
-          núcleos dedicados para o Windows, navegador e VS Code continuarem 100% fluidos e sem
-          engasgos durante a geração de código.
+          💡 <strong>Recomendação:</strong> ajuste o limite de threads de acordo com a carga de trabalho e reserve capacidade para o sistema operativo e as restantes aplicações.
         </p>
       </div>
 
@@ -255,7 +254,6 @@ export const OllamaPerformancePanel: React.FC<OllamaPerformancePanelProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
           }}
         >
           <CheckCircle2 size={15} />
