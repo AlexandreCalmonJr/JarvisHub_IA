@@ -554,11 +554,17 @@ class ProjectWorkspaceService:
         project_dir.mkdir(parents=True, exist_ok=True)
 
         if files and database != "none":
-            raise ValueError("A opção database só pode ser usada com o scaffold Python padrão.")
+            raise ValueError("A opção database só pode ser usada com scaffolds padrão.")
         if not files:
             p_type = (project_type or "web").lower()
             if p_type in ("python", "py", "fastapi"):
                 files = self._generate_default_python_scaffold(
+                    project_id, name, description, database=database
+                )
+            elif p_type in ("node", "nodejs", "javascript", "typescript", "express"):
+                if database not in {"none", "sqlite"}:
+                    raise ValueError("O scaffold Node oferece database='none' ou database='sqlite'.")
+                files = self.scaffolder._generate_default_node_scaffold(
                     project_id, name, description, database=database
                 )
             elif p_type in ("java", "spring", "maven"):

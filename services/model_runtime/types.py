@@ -23,6 +23,7 @@ class InferenceRequest(BaseModel):
     model_name: str = ModelRoleMapping.DEFAULT_MASTER.value
     temperature: float = 0.2
     max_tokens: int | None = 2048
+    stop_sequences: list[str] = Field(default_factory=list, max_length=4)
     format_json: bool = False
     contains_sensitive_data: bool = False
     task_id: str | None = None
@@ -49,6 +50,7 @@ class InferenceResponse(BaseModel):
     cost_usd: float = 0.0
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     finish_reason: str = "stop"
+    cache_hit: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

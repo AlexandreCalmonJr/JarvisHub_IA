@@ -14,6 +14,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "read_file",
             "list_directory",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -46,6 +47,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "generate_sbom",
             "sql_query_explain",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -74,6 +76,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "glob_find",
             "grep_search",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -100,6 +103,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "grep_search",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -127,6 +131,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "glob_find",
             "grep_search",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -154,6 +159,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "glob_find",
             "grep_search",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -187,6 +193,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "git_diff",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -222,6 +229,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "sql_query_explain",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -256,6 +264,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "scan_sast_patterns",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -286,6 +295,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "scan_sast_patterns",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -317,6 +327,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "execute_command",
             "run_tests",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -344,6 +355,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "duckdb_query",
             "sql_query_explain",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -376,6 +388,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "run_tests",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -410,6 +423,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "git_diff",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -443,6 +457,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "generate_sbom",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -469,6 +484,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "grep_search",
             "execute_command",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -499,6 +515,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "generate_sbom",
             "query_audit",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -530,6 +547,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "git_status",
             "git_diff",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -557,6 +575,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "inspect_dependencies",
             "generate_sbom",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -589,6 +608,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "inspect_dependencies",
             "generate_sbom",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -619,6 +639,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "scan_sast_patterns",
             "inspect_dependencies",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -648,6 +669,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "scan_secrets",
             "scan_sast_patterns",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -678,6 +700,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "generate_sbom",
             "scan_secrets",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -705,6 +728,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "query_audit",
             "scan_secrets",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -733,6 +757,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "scan_sast_patterns",
             "execute_command",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(
@@ -760,6 +785,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "scan_secrets",
             "duckdb_query",
             "web_search",
+            "web_read",
             "vector_search",
         ],
         system_prompt=(

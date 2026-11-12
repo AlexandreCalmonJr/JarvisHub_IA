@@ -68,7 +68,8 @@ async def test_agent_config_and_memories_api(monkeypatch):
         # Sem provedor configurado no CI, o endpoint deve falhar explicitamente.
         # Nunca deve fabricar uma resposta de sucesso para o playground.
         assert play_resp.status_code == 503
-        assert "provedor de IA está indisponível" in play_resp.json()["detail"]
+        assert play_resp.json()["detail"]["code"] == "provider_unavailable"
+        assert "provedor de IA está indisponível" in play_resp.json()["detail"]["message"]
 
 
 @pytest.mark.asyncio
@@ -79,6 +80,7 @@ async def test_agent_playground_maps_inference_token_usage(monkeypatch):
 
     async def fake_generate(request, has_external_data_approval=False):
         assert request.agent_role == "qa_engineer"
+        assert request.max_tokens == 256
         return InferenceResponse(
             content="Resposta de teste.",
             model_name="modelo-teste",
@@ -101,3 +103,5 @@ async def test_agent_playground_maps_inference_token_usage(monkeypatch):
     assert body["model_used"] == "modelo-teste"
     assert body["tokens_prompt"] == 123
     assert body["tokens_completion"] == 45
+    assert body["prompt_tokens"] == 123
+    assert body["completion_tokens"] == 45

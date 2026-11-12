@@ -256,6 +256,8 @@ class OllamaAdapter(BaseModelAdapter):
             payload["format"] = "json"
 
         payload["options"]["num_predict"] = request.max_tokens if request.max_tokens else 1024
+        if request.stop_sequences:
+            payload["options"]["stop"] = request.stop_sequences
         payload["options"]["num_ctx"] = self.context_window or (
             2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
         )
@@ -315,6 +317,8 @@ class OllamaAdapter(BaseModelAdapter):
             payload["system"] = request.system_prompt
 
         payload["options"]["num_predict"] = request.max_tokens if request.max_tokens else 1024
+        if request.stop_sequences:
+            payload["options"]["stop"] = request.stop_sequences
         payload["options"]["num_ctx"] = self.context_window or (
             2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
         )
@@ -639,6 +643,8 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                 payload["system"] = safe_system
             if request.temperature is not None:
                 payload["temperature"] = request.temperature
+            if request.stop_sequences:
+                payload["stop_sequences"] = request.stop_sequences
             anthropic_tools = _to_anthropic_tools(request.tools)
             if anthropic_tools:
                 payload["tools"] = anthropic_tools
@@ -690,6 +696,8 @@ class UniversalOnlineAdapter(BaseModelAdapter):
             }
             if request.max_tokens:
                 payload["max_tokens"] = request.max_tokens
+            if request.stop_sequences:
+                payload["stop"] = request.stop_sequences
             if request.format_json:
                 payload["response_format"] = {"type": "json_object"}
             if request.tools:

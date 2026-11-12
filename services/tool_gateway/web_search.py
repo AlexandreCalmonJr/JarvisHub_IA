@@ -13,12 +13,15 @@ from __future__ import annotations
 import html
 import ipaddress
 import logging
+import os
 import re
 import socket
 import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from html.parser import HTMLParser
+from typing import ClassVar
 
 import httpx
 
@@ -55,6 +58,84 @@ class SearchUnavailableError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
+# Leitura segura de pÃ¡ginas
+# ---------------------------------------------------------------------------
+class PageReadUnavailableError(RuntimeError):
+    """Leitura de pÃ¡gina bloqueada por polÃ­tica ou indisponÃ­vel."""
+
+
+@dataclass
+class PageReadResult:
+    url: str
+    title: str
+    text: str
+    truncated: bool
+    retrieved_at: str
+
+    def to_dict(self) -> dict[str, str | bool]:
+        return {
+            "url": self.url,
+            "title": self.title,
+            "text": self.text,
+            "truncated": self.truncated,
+            "retrieved_at": self.retrieved_at,
+        }
+
+
+class _PageTextParser(HTMLParser):
+    _SKIP_TAGS: ClassVar[set[str]] = {
+        "script",
+        "style",
+        "noscript",
+        "svg",
+        "nav",
+        "header",
+        "footer",
+    }
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.title_parts: list[str] = []
+        self._skip_depth = 0
+        self._in_title = False
+
+    def handle_starttag(self, tag: str, _attrs):
+        tag = tag.casefold()
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+        elif tag == "title":
+            self._in_title = True
+        elif tag in {"p", "br", "div", "li", "h1", "h2", "h3", "tr"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str):
+        tag = tag.casefold()
+        if tag in self._SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+        elif tag == "title":
+            self._in_title = False
+        elif tag in {"p", "div", "li", "h1", "h2", "h3", "tr"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str):
+        if self._skip_depth:
+            return
+        if self._in_title:
+            self.title_parts.append(data)
+        else:
+            self.parts.append(data)
+
+    @property
+    def title(self) -> str:
+        return " ".join(" ".join(self.title_parts).split())[:300]
+
+    @property
+    def text(self) -> str:
+        return " ".join("".join(self.parts).split())
+
+
+# ---------------------------------------------------------------------------
 # SSRF Guard (Blindagem de Rede Estrita)
 # ---------------------------------------------------------------------------
 _BLOCKED_HOSTNAMES = {
@@ -87,6 +168,10 @@ def is_safe_public_url(target_url: str) -> bool:
         parsed = urllib.parse.urlsplit(target_url)
         if parsed.scheme not in {"http", "https"}:
             return False
+        if parsed.username is not None or parsed.password is not None:
+            return False
+        if parsed.port not in {None, 80, 443}:
+            return False
 
         hostname = (parsed.hostname or "").strip().lower()
         if not hostname or hostname in _BLOCKED_HOSTNAMES:
@@ -96,12 +181,15 @@ def is_safe_public_url(target_url: str) -> bool:
         addr_infos = socket.getaddrinfo(
             hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
         )
+        if not addr_infos:
+            return False
         for item in addr_infos:
             ip_str = item[4][0]
             try:
                 ip_obj = ipaddress.ip_address(ip_str)
                 if (
-                    ip_obj.is_private
+                    not ip_obj.is_global
+                    or ip_obj.is_private
                     or ip_obj.is_loopback
                     or ip_obj.is_link_local
                     or ip_obj.is_reserved
@@ -164,9 +252,134 @@ class SafeWebSearchEngine:
     DEFAULT_TIMEOUT_SECONDS = 4.5
     MAX_SNIPPET_LENGTH = 320
     CACHE_TTL_SECONDS = 12 * 60
+    MAX_PAGE_BYTES = 512_000
+    MAX_PAGE_CHARS = 20_000
+    MAX_PAGE_REDIRECTS = 3
+    MAX_PAGE_TIMEOUT_SECONDS = 8.0
 
-    def __init__(self):
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None):
         self._cache: dict[str, tuple[float, list[SearchResult]]] = {}
+        self._transport = transport
+
+    @staticmethod
+    def _page_allowed_hosts() -> set[str]:
+        configured = os.getenv("JARVIS_WEB_READ_ALLOWED_HOSTS", "")
+        hosts: set[str] = set()
+        for item in configured.split(","):
+            host = item.strip().lower().rstrip(".")
+            if host:
+                try:
+                    hosts.add(host.encode("idna").decode("ascii"))
+                except UnicodeError:
+                    continue
+        return hosts
+
+    def _validate_page_target(self, target_url: str, allowed_hosts: set[str]) -> str:
+        if not allowed_hosts:
+            raise PageReadUnavailableError(
+                "Leitura de páginas desativada: configure JARVIS_WEB_READ_ALLOWED_HOSTS."
+            )
+        if not is_safe_public_url(target_url):
+            raise PageReadUnavailableError("URL bloqueada pela política de rede segura.")
+        parsed = urllib.parse.urlsplit(target_url)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        try:
+            host = host.encode("idna").decode("ascii")
+        except UnicodeError as exc:
+            raise PageReadUnavailableError("Host inválido.") from exc
+        if not any(host == allowed or host.endswith("." + allowed) for allowed in allowed_hosts):
+            raise PageReadUnavailableError("Host fora da allowlist de leitura web.")
+        return urllib.parse.urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, "")
+        )
+
+    async def read_page(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float = MAX_PAGE_TIMEOUT_SECONDS,
+        max_bytes: int = MAX_PAGE_BYTES,
+    ) -> PageReadResult:
+        """Fetch a small public HTML/text page from explicitly allowed hosts."""
+        if cyber_shield.network_isolated:
+            cyber_shield.blocked_outbound_attempts += 1
+            raise PermissionError("Leitura de página bloqueada: isolamento de rede ativo.")
+
+        allowed_hosts = self._page_allowed_hosts()
+        current_url = self._validate_page_target(url.strip(), allowed_hosts)
+        timeout = max(0.5, min(float(timeout_seconds), self.MAX_PAGE_TIMEOUT_SECONDS))
+        byte_limit = max(1024, min(int(max_bytes), self.MAX_PAGE_BYTES))
+        headers = {
+            "User-Agent": "JARVIS-AI-Hub/3.0 (safe page reader)",
+            "Accept": "text/html,application/xhtml+xml,text/plain",
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                follow_redirects=False,
+                trust_env=False,
+                transport=self._transport,
+            ) as client:
+                for redirect_index in range(self.MAX_PAGE_REDIRECTS + 1):
+                    current_url = self._validate_page_target(current_url, allowed_hosts)
+                    async with client.stream("GET", current_url, headers=headers) as response:
+                        if response.status_code in {301, 302, 303, 307, 308}:
+                            location = response.headers.get("location")
+                            if not location or redirect_index == self.MAX_PAGE_REDIRECTS:
+                                raise PageReadUnavailableError(
+                                    "A página excedeu o limite de redirecionamentos."
+                                )
+                            current_url = urllib.parse.urljoin(current_url, location)
+                            continue
+                        if response.status_code != 200:
+                            raise PageReadUnavailableError(
+                                f"Leitura da página indisponível (HTTP {response.status_code})."
+                            )
+                        media_type = (
+                            response.headers.get("content-type", "").split(";")[0].strip().lower()
+                        )
+                        if media_type not in {"text/html", "application/xhtml+xml", "text/plain"}:
+                            raise PageReadUnavailableError("Tipo de conteúdo não permitido.")
+                        content_length = response.headers.get("content-length", "")
+                        truncated = content_length.isdigit() and int(content_length) > byte_limit
+                        body = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            room = byte_limit - len(body)
+                            if len(chunk) > room:
+                                body.extend(chunk[:room])
+                                truncated = True
+                                break
+                            body.extend(chunk)
+                        encoding = response.encoding or "utf-8"
+                        raw_text = bytes(body).decode(encoding, errors="replace")
+                        if media_type == "text/plain":
+                            title = ""
+                            text = " ".join(raw_text.split())
+                        else:
+                            parser = _PageTextParser()
+                            parser.feed(raw_text)
+                            title = parser.title
+                            text = parser.text
+                        if len(text) > self.MAX_PAGE_CHARS:
+                            text = text[: self.MAX_PAGE_CHARS]
+                            truncated = True
+                        if not text:
+                            raise PageReadUnavailableError("A página não contém texto legível.")
+                        return PageReadResult(
+                            url=current_url,
+                            title=title,
+                            text=text,
+                            truncated=truncated,
+                            retrieved_at=datetime.now(UTC).isoformat(),
+                        )
+        except PageReadUnavailableError:
+            raise
+        except (httpx.TimeoutException, TimeoutError) as exc:
+            raise PageReadUnavailableError("Tempo limite na leitura da página.") from exc
+        except httpx.HTTPError as exc:
+            raise PageReadUnavailableError("Falha de conexão ao ler a página.") from exc
+        raise PageReadUnavailableError("A página não foi encontrada após redirecionamentos.")
 
     async def search(
         self,

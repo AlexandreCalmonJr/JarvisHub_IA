@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 import time
 from typing import Any
@@ -27,6 +29,7 @@ class ModelManager:
         audit_trail: AuditTrail | None = None,
         hybrid_router: Any = None,
         telemetry_store: Any = None,
+        inference_cache: Any = None,
     ):
         self.adapter = adapter or OllamaAdapter()
         self.queue = InferenceQueue(max_concurrent=max_concurrent_inferences)
@@ -34,7 +37,41 @@ class ModelManager:
         self.audit_trail = audit_trail
         self.hybrid_router = hybrid_router
         self.telemetry_store = telemetry_store
+        self.inference_cache = inference_cache
         self.model_selector = ModelSelector()
+
+    def _cache_hash(self, request: InferenceRequest) -> str:
+        """Owner-, model- and context-bound key for deterministic local requests."""
+        payload = {
+            "version": 2,
+            "owner_user_id": request.owner_user_id,
+            "agent_role": request.agent_role,
+            "task_capability": request.task_capability,
+            "model_name": request.model_name,
+            "prompt": request.prompt,
+            "system_prompt": request.system_prompt,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+            "stop_sequences": request.stop_sequences,
+            "format_json": request.format_json,
+        }
+        canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def _cache_is_allowed(self, request: InferenceRequest) -> bool:
+        if (
+            not self.inference_cache
+            or not request.owner_user_id
+            or request.contains_sensitive_data
+            or request.temperature != 0
+            or request.tools
+            or request.tool_choice
+            or request.task_id
+            or request.key_id
+        ):
+            return False
+        online_config = getattr(self.hybrid_router, "online_config", None)
+        return not (online_config and online_config.enabled and not request.force_local)
 
     def set_cpu_threads(self, threads: int | None) -> None:
         """Configura dinamicamente o número de threads do Ollama no adaptador ativo."""
@@ -195,6 +232,34 @@ class ModelManager:
         request = self._apply_owner_default_key(request)
         request = await self._prepare_model_selection(request, has_external_data_approval)
 
+        cache_hash = self._cache_hash(request) if self._cache_is_allowed(request) else None
+        if cache_hash:
+            try:
+                cached_text = self.inference_cache.get_cached_inference(cache_hash)
+            except Exception:
+                logger.exception("Falha ao consultar o cache de inferência; continuando sem cache.")
+                cached_text = None
+            if cached_text is not None:
+                self._record_telemetry(
+                    request=request,
+                    provider="ollama_local",
+                    status="success",
+                    duration_ms=0.0,
+                    model_name=request.model_name,
+                )
+                if self.audit_trail:
+                    self.audit_trail.record_event(
+                        operation="INFERENCE_CACHE_HIT",
+                        status="SUCCESS",
+                        parameters={"model": request.model_name, "cache_hit": True},
+                        severity=AuditEventSeverity.INFO,
+                    )
+                return InferenceResponse(
+                    content=cached_text,
+                    model_name=request.model_name,
+                    cache_hit=True,
+                )
+
         # 2. Execução protegida pela fila de concorrência com suporte a Hybrid Gateway
         used_provider = "ollama_local"
         started_at = time.perf_counter()
@@ -237,6 +302,24 @@ class ModelManager:
             cost_usd=response.cost_usd,
             model_name=response.model_name,
         )
+
+        if (
+            cache_hash
+            and used_provider.startswith("ollama_local")
+            and response.content.strip()
+            and not response.tool_calls
+        ):
+            try:
+                self.inference_cache.set_cached_inference(
+                    cache_hash,
+                    prompt=request.prompt,
+                    model_name=response.model_name,
+                    response=response.content,
+                )
+            except Exception:
+                logger.exception(
+                    "Falha ao gravar a inferência em cache; a resposta não foi afetada."
+                )
 
         # 3. Registo em auditoria
         if self.audit_trail:

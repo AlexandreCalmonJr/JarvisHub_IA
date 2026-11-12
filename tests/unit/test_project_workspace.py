@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from agents.registry import AgentRegistry
@@ -196,6 +197,32 @@ def test_python_sqlite_scaffold_is_persistent_and_inspectable_readonly(tmp_path)
     assert generated_tests.returncode == 0, generated_tests.stdout + generated_tests.stderr
 
 
+def test_node_prisma_sqlite_scaffold_contains_api_database_and_test_setup(tmp_path):
+    workspace_service = ProjectWorkspaceService(security_core=SecurityCore(), base_dir=tmp_path)
+    result = workspace_service.scaffold_project(
+        project_id="node-sqlite-api",
+        name="Node SQLite API",
+        project_type="node",
+        database="sqlite",
+    )
+    project_dir = tmp_path / "node-sqlite-api"
+    assert result["database"] == "sqlite"
+    assert {
+        "package.json",
+        "tsconfig.json",
+        "prisma/schema.prisma",
+        "prisma/seed.ts",
+        "src/db.ts",
+        "src/app.ts",
+        "tests/database.test.ts",
+        ".env.example",
+    } <= set(result["files_created"])
+    package = json.loads((project_dir / "package.json").read_text(encoding="utf-8"))
+    assert "prisma db push" in package["scripts"]["db:setup"]
+    assert "npm run db:setup" in package["scripts"]["test"]
+    assert "provider = \"sqlite\"" in (project_dir / "prisma/schema.prisma").read_text(
+        encoding="utf-8"
+    )
 def test_multilang_scaffolding_and_workspace_management(tmp_path):
     security_core = SecurityCore()
     workspace_service = ProjectWorkspaceService(security_core=security_core, base_dir=tmp_path)

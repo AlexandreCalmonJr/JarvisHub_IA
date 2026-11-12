@@ -1179,13 +1179,20 @@ class DatabaseManager:
                 (setting_key, val_str, now),
             )
 
-    def get_cached_inference(self, prompt_hash: str) -> str | None:
-        """Busca resposta em cache local para evitar inferência repetida na CPU."""
+    def get_cached_inference(self, prompt_hash: str, max_age_hours: int = 24) -> str | None:
+        """Busca resposta recente no cache local; entradas antigas são removidas."""
+        cutoff = (datetime.now(UTC) - timedelta(hours=max(1, max_age_hours))).isoformat()
         with self._get_connection() as conn:
             row = conn.execute(
-                "SELECT response_text FROM inference_cache WHERE prompt_hash = ?", (prompt_hash,)
+                "SELECT response_text, created_at FROM inference_cache WHERE prompt_hash = ?",
+                (prompt_hash,),
             ).fetchone()
             if row:
+                if row["created_at"] < cutoff:
+                    conn.execute(
+                        "DELETE FROM inference_cache WHERE prompt_hash = ?", (prompt_hash,)
+                    )
+                    return None
                 conn.execute(
                     "UPDATE inference_cache SET hit_count = hit_count + 1 WHERE prompt_hash = ?",
                     (prompt_hash,),
@@ -1196,15 +1203,15 @@ class DatabaseManager:
     def set_cached_inference(
         self, prompt_hash: str, prompt: str, model_name: str, response: str
     ) -> None:
-        """Armazena resposta no cache local SQLite."""
+        """Armazena resposta no cache local sem persistir o prompt em texto claro."""
         now = datetime.now(UTC).isoformat()
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO inference_cache (prompt_hash, prompt, model_name, response_text, created_at, hit_count)
+                INSERT OR REPLACE INTO inference_cache (prompt_hash, prompt, model_name, response_text, created_at, hit_count)
                 VALUES (?, ?, ?, ?, ?, 1)
                 """,
-                (prompt_hash, prompt[:500], model_name, response, now),
+                (prompt_hash, f"[redacted:{prompt_hash[:16]}]", model_name, response, now),
             )
 
     def create_database_backup(self, backup_dir: Path | str = "backups") -> str:

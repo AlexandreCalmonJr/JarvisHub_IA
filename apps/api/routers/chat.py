@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from apps.api.auth import Principal, get_principal
 from apps.api.deps import chat_runtime, db_manager, jarvis_master
+from apps.api.error_codes import classify_error
 from apps.api.schemas import ChatRequest
 from services.coding_agent import ChatRunConfig, ProviderError
 from services.orchestration.state import TaskState
@@ -17,16 +18,6 @@ from services.security_core.permission_engine import PermissionDeniedError
 
 logger = logging.getLogger("jarvis.api.chat")
 router = APIRouter(tags=["chat"])
-
-
-def _error_code(exc: Exception) -> str:
-    if isinstance(exc, PermissionDeniedError):
-        return "policy_denied"
-    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or "timeout" in str(exc).casefold():
-        return "timeout"
-    if isinstance(exc, ProviderError):
-        return "provider_unavailable"
-    return "internal"
 
 
 # Ações que exigem a governança do orquestrador/Coding Agent: escrita em disco,
@@ -479,7 +470,7 @@ async def chat_stream_endpoint(request: ChatRequest, principal: Principal = Depe
             yield f"data: {done_json}\n\n"
 
         except Exception as exc:
-            err_json = json.dumps({"type": "error", "code": _error_code(exc), "error": str(exc)})
+            err_json = json.dumps({"type": "error", "code": classify_error(exc), "error": str(exc)})
             yield f"data: {err_json}\n\n"
 
     generator = agent_generator if engine == "agent" else orchestrator_generator

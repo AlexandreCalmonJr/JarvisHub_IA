@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -3284,6 +3285,133 @@ O arquivo APK gerado ficará em `build/app/outputs/flutter-apk/app-release.apk`.
             "test/widget_test.dart": widget_test,
             "README.md": readme_md,
         }
+
+    def _generate_default_node_scaffold(
+        self, project_id: str, name: str, description: str, database: str = "none"
+    ) -> dict[str, str]:
+        """Gera API Express em TypeScript, com SQLite/Prisma opcional."""
+        title = name or project_id.replace("-", " ").title()
+        desc = description or f"API Express em TypeScript para {title}."
+        sqlite = database == "sqlite"
+        package = {
+            "name": re.sub(r"[^a-z0-9-]", "-", project_id.lower()).strip("-") or "jarvis-app",
+            "version": "1.0.0",
+            "private": True,
+            "description": desc,
+            "type": "module",
+            "engines": {"node": ">=20"},
+            "scripts": {
+                "dev": "tsx watch src/server.ts",
+                "build": "tsc",
+                "start": "node dist/server.js",
+                "test": ("npm run db:setup && node --import tsx --test" if sqlite else "node --import tsx --test"),
+                **({"db:setup": "prisma db push && tsx prisma/seed.ts"} if sqlite else {}),
+            },
+            "dependencies": {"express": "^5.1.0", **({"@prisma/client": "^6.16.2"} if sqlite else {})},
+            "devDependencies": {
+                "@types/express": "^5.0.3",
+                "@types/node": "^22.18.6",
+                "tsx": "^4.20.5",
+                "typescript": "^5.9.2",
+                **({"prisma": "^6.16.2"} if sqlite else {}),
+            },
+        }
+        files = {
+            "package.json": json.dumps(package, ensure_ascii=False, indent=2) + "\n",
+            "tsconfig.json": json.dumps({"compilerOptions": {"target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext", "outDir": "dist", "rootDir": ".", "strict": True, "esModuleInterop": True, "skipLibCheck": True}, "include": ["src/**/*.ts"]}, indent=2) + "\n",
+            ".gitignore": "node_modules/\ndist/\n.env\n*.db\n*.db-journal\n",
+            ".env.example": 'DATABASE_URL="file:./dev.db"\nPORT=3000\n' if sqlite else "PORT=3000\n",
+            "src/app.ts": '''import express from "express";
+
+export const app = express();
+app.use(express.json({ limit: "64kb" }));
+app.get("/health", (_request, response) => response.json({ status: "ok" }));
+''',
+            "src/server.ts": '''import { app } from "./app.js";
+
+const port = Number(process.env.PORT ?? 3000);
+app.listen(port, "127.0.0.1", () => console.log(`API listening on ${port}`));
+''',
+            "tests/health.test.ts": '''import assert from "node:assert/strict";
+import { test } from "node:test";
+import { app } from "../src/app.js";
+
+test("health endpoint returns ok", async () => {
+  const server = app.listen(0, "127.0.0.1");
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const response = await fetch(`http://127.0.0.1:${address.port}/health`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status: "ok" });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+''',
+            "README.md": f"# {title}\n\n{desc}\n\n## Uso\n\n```bash\nnpm install\n" + ("cp .env.example .env\nnpm run db:setup\n" if sqlite else "") + "npm run dev\n```\n\n`GET /health` verifica a API. Execute `npm test` para validar o scaffold.\n",
+        }
+        if sqlite:
+            files.update({
+                "prisma/schema.prisma": '''generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Item {
+  id          Int    @id @default(autoincrement())
+  title       String
+  description String?
+  priority    Int    @default(1)
+  createdAt   DateTime @default(now())
+}
+''',
+                "prisma/seed.ts": '''import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+try {
+  await prisma.item.upsert({ where: { id: 1 }, update: {}, create: { id: 1, title: "Configurar ambiente inicial", description: "Item de exemplo", priority: 1 } });
+} finally {
+  await prisma.$disconnect();
+}
+''',
+                "src/db.ts": '''import { PrismaClient } from "@prisma/client";
+
+export const prisma = new PrismaClient();
+''',
+                "src/app.ts": '''import express from "express";
+import { prisma } from "./db.js";
+
+export const app = express();
+app.use(express.json({ limit: "64kb" }));
+app.get("/health", (_request, response) => response.json({ status: "ok" }));
+app.get("/items", async (_request, response) => response.json(await prisma.item.findMany({ orderBy: { id: "asc" } })));
+app.post("/items", async (request, response) => {
+  const title = typeof request.body?.title === "string" ? request.body.title.trim() : "";
+  if (title.length < 2 || title.length > 100) return response.status(400).json({ error: "title must contain 2 to 100 characters" });
+  const item = await prisma.item.create({ data: { title, description: typeof request.body.description === "string" ? request.body.description : null } });
+  return response.status(201).json(item);
+});
+''',
+                "tests/database.test.ts": '''import assert from "node:assert/strict";
+import { test } from "node:test";
+import { prisma } from "../src/db.js";
+
+test("SQLite persists an item", async () => {
+  try {
+    const item = await prisma.item.create({ data: { title: `Teste ${Date.now()}` } });
+    assert.equal((await prisma.item.findUnique({ where: { id: item.id } }))?.title, item.title);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+''',
+            })
+        return files
 
     def _generate_default_python_scaffold(
         self, project_id: str, name: str, description: str, database: str = "none"

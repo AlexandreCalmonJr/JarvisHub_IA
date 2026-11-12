@@ -648,6 +648,10 @@ def create_master_graph(
                 project_type = "python"
                 prefix = "py"
                 dev_role = AgentRole.BACKEND_DEVELOPER
+            elif any(w in p_lower for w in ("node.js", "nodejs", "node", "express", "typescript", "javascript")):
+                project_type = "node"
+                prefix = "node"
+                dev_role = AgentRole.BACKEND_DEVELOPER
             elif any(w in p_lower for w in ("java", "spring", "maven", "gradle")):
                 project_type = "java"
                 prefix = "java"
@@ -1120,7 +1124,7 @@ def create_master_graph(
                 "project_type": project_type,
                 "database": (
                     "sqlite"
-                    if project_type in {"python", "py", "fastapi"}
+                    if project_type in {"python", "py", "fastapi", "node"}
                     and re.search(r"\bsqlite(?:3)?\b", state["user_prompt"], re.IGNORECASE)
                     else "none"
                 ),

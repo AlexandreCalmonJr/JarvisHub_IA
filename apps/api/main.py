@@ -27,6 +27,7 @@ from apps.api.routers import (
     auth,
     chat,
     coding,
+    data_pipeline,
     hardware,
     knowledge,
     learning,
@@ -114,6 +115,7 @@ app.include_router(knowledge.router)
 app.include_router(security.router)
 app.include_router(studios.router)
 app.include_router(coding.router)
+app.include_router(data_pipeline.router)
 app.include_router(mcp.router)
 app.include_router(voice.router)
 app.include_router(learning.router)

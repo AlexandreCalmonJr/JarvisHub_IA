@@ -196,13 +196,25 @@ class AutonomousAgentRuntime:
             iterations = iteration
             if self._is_cancelled(task_id):
                 err = "Execução interrompida pelo Kill Switch de segurança."
-                yield {"type": "error", "task_id": task_id, "agent_role": role.value, "error": err}
+                yield {
+                    "type": "error",
+                    "code": "policy_denied",
+                    "task_id": task_id,
+                    "agent_role": role.value,
+                    "error": err,
+                }
                 break
 
             remaining = deadline - time.perf_counter()
             if remaining <= 1.0:
                 err = f"Tempo limite de {config.timeout_seconds:.0f}s excedido durante a execução."
-                yield {"type": "error", "task_id": task_id, "agent_role": role.value, "error": err}
+                yield {
+                    "type": "error",
+                    "code": "timeout",
+                    "task_id": task_id,
+                    "agent_role": role.value,
+                    "error": err,
+                }
                 break
 
             yield {"type": "thinking", "iteration": iteration, "agent_role": role.value}
@@ -226,6 +238,9 @@ class AutonomousAgentRuntime:
                 )
                 yield {
                     "type": "error",
+                    "code": "timeout"
+                    if "timeout" in str(exc).casefold() or "tempo limite" in str(exc).casefold()
+                    else "provider_unavailable",
                     "task_id": task_id,
                     "agent_role": role.value,
                     "error": str(exc),
@@ -235,7 +250,13 @@ class AutonomousAgentRuntime:
                 raise
             except Exception as exc:
                 err = f"Falha inesperada no provedor: {exc}"
-                yield {"type": "error", "task_id": task_id, "agent_role": role.value, "error": err}
+                yield {
+                    "type": "error",
+                    "code": "internal",
+                    "task_id": task_id,
+                    "agent_role": role.value,
+                    "error": err,
+                }
                 break
 
             if reply.content and reply.content.strip():

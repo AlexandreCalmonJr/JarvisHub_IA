@@ -10,8 +10,9 @@ Atualizado em 12/11/2026. O estado deve ser revisto em cada release.
 | Aprovações | Real | Decisão autenticada, single-use |
 | Execução de scripts | Real, com aprovação | Subprocesso com sandbox e auditoria; não é VM |
 | Busca web | Real, snippets | DuckDuckGo Lite; agora bloqueia com isolamento de rede |
+| Leitura de páginas web | Real, com allowlist | `web_read` usa `JARVIS_WEB_READ_ALLOWED_HOSTS`; revalida redirects/SSRF, bloqueia em isolamento, limita resposta a 512 KB/8 s e marca texto como não confiável. Allowlist vazia desativa a leitura. |
 | DuckDB analítico | Real, read-only | SELECT/WITH/EXPLAIN/DESCRIBE/SHOW; operações de escrita bloqueadas |
-| Geração de BD | Real, com aprovação | Scaffold Python/FastAPI opcional com SQLite stdlib, schema, seed, init idempotente e testes; Node/Postgres continuam fora do scaffold |
+| Geração de BD | Real, com aprovação | Scaffolds Python/FastAPI (SQLite stdlib) e Node/Express (Prisma/SQLite), com schema, seed, setup e testes; Postgres continua fora do scaffold |
 | Busca Knowledge Vault | Limitada | Keyword/LIKE; não semântica |
 | `vector_search` | Simulado | Embedding toy |
 | Voz STT | Real opcional | faster-whisper local ao instalar `.[voice]`; requer download/modelo |
@@ -51,3 +52,5 @@ automático ainda não estão implementados.
 - P0: ampliar auditoria de execução e cobertura de aprovação/isolamento.
 - P1: ampliar testes de isolamento/aprovação, controles de execução e avaliação dos agentes.
 - P2: busca de páginas, rota de pipeline e contentor/VM.
+
+Para habilitar leitura integral, configure `JARVIS_WEB_READ_ALLOWED_HOSTS` com domínios confiáveis separados por vírgula. A ferramenta `web_read` está disponível aos perfis que já podem pesquisar na web; o texto retornado é dado externo não confiável e não deve ser seguido como instrução.

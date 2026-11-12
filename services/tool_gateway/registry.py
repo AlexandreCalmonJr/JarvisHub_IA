@@ -49,6 +49,12 @@ PERMITTED_TOOLS: dict[str, ToolDefinition] = {
         category=ToolCategory.SEARCH,
         requires_approval=False,
     ),
+    "web_read": ToolDefinition(
+        name="web_read",
+        description="Lê páginas públicas de hosts explicitamente autorizados, com proteção SSRF e limite de tamanho/tempo; conteúdo externo é não confiável.",
+        category=ToolCategory.SEARCH,
+        requires_approval=False,
+    ),
     "duckdb_query": ToolDefinition(
         name="duckdb_query",
         description="Executa consulta analítica SQL em alta performance com o motor colunar DuckDB embutido sobre arquivos ou bancos.",

@@ -47,6 +47,14 @@ class ModelSelector:
             if any(term in identity for term in ("reason", "r1", "qwq", "thinking", "deepseek")):
                 return 50, "especialização em raciocínio"
             return 20, "capacidade geral de análise"
+        if capability in {"writing", "writing_assistance", "creative_writing"}:
+            if candidate.model_name.lower().startswith("qwen2.5:") or any(
+                term in identity for term in ("writer", "command-r")
+            ):
+                return 50, "especializaÃ§Ã£o em escrita"
+            if "phi3.5" in identity:
+                return 0, "evitado para escrita ou saÃ­da estruturada"
+            return 20, "modelo genÃ©rico para escrita"
         if capability in {"vision", "image"}:
             if any(term in identity for term in ("vision", "llava", "qwen-vl", "gemini")):
                 return 50, "indício de capacidade visual pelo catálogo"

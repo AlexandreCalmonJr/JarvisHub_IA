@@ -22,6 +22,11 @@ from apps.api.deps import (
     skills_catalog,
     tool_gateway,
 )
+from apps.api.error_codes import (
+    classify_error,
+    classify_error_message,
+    http_status_for_error_code,
+)
 from apps.api.schemas import (
     AgentConfigUpdateRequest,
     AgentMemoryCreateRequest,
@@ -268,12 +273,12 @@ async def agent_playground_endpoint(
         prompt=payload.prompt,
         system_prompt=prompt,
         model_name=route.model or profile.preferred_model,
-        max_tokens=256,
-        temperature=0.3,
         timeout_seconds=300.0,
         owner_user_id=owner_user_id,
         agent_role=clean_role,
         key_id=route.key_id,
+        max_tokens=payload.max_tokens,
+        temperature=payload.temperature,
     )
     try:
         resp = await model_manager.generate(req)
@@ -283,9 +288,15 @@ async def agent_playground_endpoint(
         t_comp = resp.completion_tokens
     except Exception as exc:
         logger.exception("Falha no playground do especialista %s", clean_role)
+        code = classify_error(exc)
         raise HTTPException(
-            status_code=503,
-            detail="O provedor de IA está indisponível. O especialista não foi executado.",
+            status_code=http_status_for_error_code(code),
+            detail={
+                "code": code,
+                "message": "O provedor de IA está indisponível. O especialista não foi executado."
+                if code == "provider_unavailable"
+                else "O especialista não concluiu a solicitação.",
+            },
         ) from exc
 
     return {
@@ -295,6 +306,8 @@ async def agent_playground_endpoint(
         "model_used": m_used,
         "tokens_prompt": t_prompt,
         "tokens_completion": t_comp,
+        "prompt_tokens": t_prompt,
+        "completion_tokens": t_comp,
     }
 
 
@@ -485,6 +498,8 @@ async def stream_agent_execution_endpoint(
         await lock.acquire()
         try:
             async for event in autonomous_agent_runtime.run_stream(config):
+                if event.get("type") == "error":
+                    event.setdefault("code", classify_error_message(str(event.get("error", ""))))
                 yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
         except asyncio.CancelledError:
             logger.info(
@@ -495,7 +510,9 @@ async def stream_agent_execution_endpoint(
             raise
         except Exception as exc:
             logger.exception("Falha na execução do especialista %s", agent_role.value)
-            yield f"data: {json.dumps({'type': 'error', 'error': f'Falha interna do especialista: {exc}'})}\n\n"
+            yield (
+                f"data: {json.dumps({'type': 'error', 'code': classify_error(exc), 'error': f'Falha interna do especialista: {exc}'})}\n\n"
+            )
         finally:
             if lock.locked():
                 lock.release()
@@ -564,5 +581,18 @@ async def execute_agent_task_endpoint(
         include_history=payload.include_history,
     )
 
-    contract = await autonomous_agent_runtime.run_task(config)
+    try:
+        contract = await autonomous_agent_runtime.run_task(config)
+    except Exception as exc:
+        code = classify_error(exc)
+        logger.exception("Falha na tarefa do especialista %s", agent_role.value)
+        message = (
+            "O provedor de IA está indisponível."
+            if code == "provider_unavailable"
+            else "O especialista não concluiu a tarefa."
+        )
+        raise HTTPException(
+            status_code=http_status_for_error_code(code),
+            detail={"code": code, "message": message},
+        ) from exc
     return contract.model_dump()

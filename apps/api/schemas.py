@@ -191,6 +191,8 @@ class AgentMemoryCreateRequest(BaseModel):
 class AgentPlaygroundRequest(BaseModel):
     prompt: str = Field(..., description="Instrução direta ao especialista")
     project_id: str | None = Field(None, description="Projeto associado opcional")
+    max_tokens: int = Field(default=256, ge=32, le=1024)
+    temperature: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
 class AgentRouteUpdateRequest(BaseModel):

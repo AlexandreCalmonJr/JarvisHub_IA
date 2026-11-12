@@ -2,7 +2,7 @@
 
 > **Versão:** 1.0
 > **Data:** 12/11/2026
-> **Estado:** em execução; baseline, P0, CAP-01/04/05–08/10–13, partes de PERF-01/02, PERF-07/08, V0 e GOV-01 implementados; várias fases ainda em aberto
+> **Estado:** Fase 0 validada localmente (smoke autenticado pendente); Fase 1 SEC/REL concluída; CAP-01/04/05–09/10–13, SIM-07, PERF-02/05–08, QUAL-01/02, V0 e GOV-01 implementados; demais fases em aberto
 > **Âmbito:** verificar, corrigir, otimizar e evoluir o que já existe, incluindo o programa de voz
 > **Documento relacionado:** [VOICE_ASSISTANT.md](./VOICE_ASSISTANT.md)
 
@@ -161,13 +161,13 @@ Saber exatamente onde estamos, com números e evidência.
 
 | ID | Tarefa | Esforço |
 |---|---|---|
-| BASE-01 | Correr a suite completa: `.venv\Scripts\python.exe -m pytest -q` | 0,5d |
-| BASE-02 | Ruff (lint/format) e `tsc --noEmit` + `npm run build` | 0,5d |
-| BASE-03 | Promover o runner temporário a `scripts/smoke_agents.py` (`list`, `run`, `run-all`, `run-rest`) | 0,5d |
-| BASE-04 | Criar `docs/CAPABILITIES.md` com a matriz Real/Limitado/Simulado | 0,5d |
-| BASE-05 | Registar baseline: sucesso, latência por agente, tokens, modelos, 503/timeout | 0,5d |
-| BASE-06 | Matriz de auth/RBAC/isolamento e revisão de segredos no repo | 0,5d |
-| BASE-07 | Backup de `data/jarvis.db` antes de qualquer migração | 0,25d |
+| BASE-01 | ✅ Suite pytest completa | Revalidação final: 399 passed em 168,56 s após as mudanças de confiabilidade. | 0,5d |
+| BASE-02 | ✅ Ruff, TypeScript e build | Ruff global e `npm run build` (inclui `tsc`): passaram nesta rodada. | 0,5d |
+| BASE-03 | ✅ Runner de smoke dos agentes | `scripts/smoke_agents.py` suporta `list`, `run`, `run-all` e `run-rest`; execução autenticada atual pendente. | 0,5d |
+| BASE-04 | ✅ Matriz de capacidades | `docs/CAPABILITIES.md` documenta estado real, limitado e simulado. | 0,5d |
+| BASE-05 | 🟡 Baseline por agente | Suite/build registrados; 26/26 consta como verificação anterior. Smoke atual com latência/tokens/modelos e 503/timeout aguarda credencial administrativa. | 0,5d |
+| BASE-06 | ✅ Revisão de auth/RBAC e segredos | Revisão de `tests/security/`, middleware fail-closed e regras RBAC; varredura de 585 arquivos rastreados encontrou apenas padrões em fixtures de teste; `data/auth` não é versionado. | 0,5d |
+| BASE-07 | ✅ Backup SQLite | `data/jarvis.db.preplan.bak` preservado; banco atual e backup passaram `PRAGMA integrity_check`. | 0,25d |
 
 ### Entregáveis
 
@@ -198,21 +198,21 @@ O que já existe não pode falhar nem ser contornado de forma silenciosa.
 
 | ID | Tarefa | Detalhe | Esforço |
 |---|---|---|
-| SEC-01 | `web_search` respeitar isolamento | Consultar `cyber_shield.network_isolated` no motor ou nos call sites; devolver motivo explícito; teste com mock que falha se houver HTTP | 0,5–1d |
-| SEC-02 | `duckdb_query` read-only | Allowlist `SELECT`/`WITH`/`EXPLAIN`/`DESCRIBE`/`SHOW`; bloquear `COPY`, `ATTACH`, `INSTALL`, `LOAD`, `CREATE`, `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`; teste com `COPY ... TO` | 0,5–1d |
-| SEC-03 | Endurecer padrões destrutivos | Windows e Unix; manter como primeiro filtro | 0,5d |
-| SEC-04 | Auditoria de execução | Registar utilizador, projeto, comando, decisão, duração, exit code e saída redigida | 1d |
-| SEC-05 | Testes de aprovação | Escrita, rollback, criação de projeto, coding agent; expirada, cancelada e reutilizada | 1–1,5d |
-| SEC-06 | Isolamento entre contas | Ampliar testes para todos os endpoints novos | 1d |
+| SEC-01 | ✅ `web_search` respeita isolamento | Bloqueia antes de HTTP quando isolamento está ativo; teste fixture confirma zero chamadas externas. | 0,5–1d |
+| SEC-02 | ✅ DuckDB read-only | Allowlist de leitura; `COPY ... TO` e múltiplas instruções bloqueados em regressão. | 0,5–1d |
+| SEC-03 | ✅ Padrões destrutivos | Filtros Windows/Unix aplicados antes da execução; cobertura de sandbox e ferramentas passou. | 0,5d |
+| SEC-04 | ✅ Auditoria de execução | Comando, projeto, decisão, duração, exit code e saída redigida persistidos no evento de auditoria. | 1d |
+| SEC-05 | ✅ Ciclo de aprovação | Cobertura para uso único, escopo/diff, expiração, rollback e isolamento do aprovador. | 1–1,5d |
+| SEC-06 | ✅ Isolamento entre contas | Testes de segurança e API cobrem leitura, alteração e propriedade de dados privados. | 1d |
 
 ### 6.2 Confiabilidade
 
 | ID | Tarefa | Detalhe | Esforço |
 |---|---|---|
-| REL-01 | Contratos de resposta | `InferenceResponse` ↔ `AgentOutput`; `prompt_tokens` vs `tokens_prompt` | 1d |
-| REL-02 | Paridade playground/stream/task | Mesmo agente, modelo, tokens e erros coerentes | 1d |
-| REL-03 | Testes SSE | Primeiro token, cancelamento, timeout, erro do provedor, libertação de lock | 1d |
-| REL-04 | Erros padronizados | `provider_unavailable`, `timeout`, `policy_denied`, `internal`; frontend distingue | 1d |
+| REL-01 | ✅ Contratos de resposta | Playground mantém aliases `tokens_prompt`/`tokens_completion` e expõe também `prompt_tokens`/`completion_tokens`; tarefas retornam contrato estruturado. | 1d |
+| REL-02 | ✅ Paridade playground/stream/task | Rotas usam perfil e rota da conta; playground aceita limite de tokens configurável, limites e erros preservam códigos coerentes. | 1d |
+| REL-03 | ✅ Confiabilidade SSE | Testes cobrem primeiro token, cancelamento, timeout, falha do provedor e liberação do lock para nova chamada. | 1d |
+| REL-04 | ✅ Erros padronizados | Chat, playground, tarefa e SSE distinguem `provider_unavailable`, `timeout`, `policy_denied` e `internal`. | 1d |
 
 ### Aceite
 
@@ -265,7 +265,7 @@ O que já existe não pode falhar nem ser contornado de forma silenciosa.
 | CAP-06 | ✅ Resultado com fonte e timestamp; indicador no chat | Concluído: fontes e data expostas no stream/chat |
 | CAP-07 | ✅ Falha explícita “busca indisponível” | Concluído: erro próprio e sem instruir o modelo a inventar resultados |
 | CAP-08 | ✅ Testes de parsing com fixtures locais | Concluído: parsing, cache e indisponibilidade cobertos |
-| CAP-09 | 🟡 Leitura de páginas completas com allowlist e limite (P2) | 2–3d |
+| CAP-09 | ✅ Leitura de páginas completas: `web_read` nos dois gateways, allowlist, SSRF/redirect revalidado, isolamento, timeout 8 s, limite 512 KB e aviso de conteúdo não confiável. | Implementado |
 
 ### 7.3 Execução de scripts — UX e controlo
 
@@ -296,11 +296,11 @@ Reduzir latência e uso de CPU sem perder qualidade.
 | ID | Tarefa | Detalhe | Esforço |
 |---|---|---|
 | PERF-01 | 🟡 Reduzir prompts | Contexto de projeto só em intents de projeto; memórias, skills e histórico limitados. Meta 400–800 tokens ainda depende de medição no benchmark. | Parcial |
-| PERF-02 | 🟡 Limitar geração | Playground fixo em 256; tarefas com default e máximo 1.024. Stop sequences ainda pendentes. | Parcial |
+| PERF-02 | ✅ Limitar geração | Playground fixo em 256; tarefas com default e máximo 1.024; stop sequences limitadas a quatro e encaminhadas aos adaptadores Ollama, OpenAI-compatíveis e Anthropic. | Implementado |
 | PERF-03 | 🟡 Afinar Ollama | `keep_alive` e `num_ctx` 2k–8k configuráveis por ambiente; `OLLAMA_NUM_PARALLEL=1` e warm-up ainda pendentes | Parcial |
 | PERF-04 | Agrupar por modelo | Evitar troca constante e recarregamento | 1d |
-| PERF-05 | Roteamento por capacidade | Código → `qwen2.5-coder:7b`; raciocínio → `deepseek-r1:1.5b`; escrita → `qwen2.5:7b`; evitar `phi3.5` em tarefas estruturadas | 1d |
-| PERF-06 | Cache de inferência | Validar e usar `inference_cache` para prompts idempotentes | 1d |
+| PERF-05 | ✅ Roteamento por capacidade | Seleção determinística entre modelos disponíveis com preferência por código, raciocínio e escrita; validada com inventário sintético. Os modelos-alvo são preferências, não garantias de disponibilidade. | Implementado |
+| PERF-06 | ✅ Cache de inferência | Cache local com chave por proprietário/modelo/contexto, somente temperatura 0, sem ferramentas, dados sensíveis ou provedor externo; prompts não são persistidos em texto claro e entradas expiram em 24 h. | Implementado |
 | PERF-07 | ✅ SQLite | WAL + índices em `chat_messages(session_id)`, `knowledge_vault`, `tasks` já inicializados | Implementado |
 | PERF-08 | ✅ Benchmark | `scripts/bench_agents.py` com 3 prompts fixos por agente; TTFT, tokens/s, total e p95 | Implementado; execução exige API e token |
 
@@ -327,8 +327,8 @@ Resolver respostas fora do tema e definir o modelo certo por agente.
 
 | ID | Tarefa | Detalhe | Esforço |
 |---|---|---|
-| QUAL-01 | Harness de avaliação | `scripts/eval_agents.py`; rubrica 1–5: relevância, aderência ao papel, formato, ferramentas, alucinação | 1,5d |
-| QUAL-02 | Casos de teste | 3–5 prompts por agente, incluindo “não sei / fora do âmbito” | 2d |
+| QUAL-01 | ✅ Harness de avaliação | scripts/eval_agents.py executa cenários autenticados via SSE, captura resumo/ferramentas e exporta rubrica 1–5 editável; aceita papel individual ou todos e retomada. | Implementado |
+| QUAL-02 | ✅ Casos de teste | Três casos reproduzíveis por perfil: aplicação da missão, resposta estruturada e pedido fora do escopo. Avaliação humana ainda necessária para pontuar qualidade. | Implementado |
 | QUAL-03 | Corrigir prompts | Piores desempenhos; exemplos curtos; limites explícitos | 1,5d |
 | QUAL-04 | Modelo predefinido por agente | Com base no benchmark, em vez de `auto_hybrid` cego | 1d |
 | QUAL-05 | Validação de output | Schema + comprimento; uma tentativa de reparação | 1d |
@@ -356,7 +356,7 @@ Resolver respostas fora do tema e definir o modelo certo por agente.
 | SIM-04 | `vector_search` real | Trocar embedding toy por modelo local | 1–2d |
 | SIM-05 | Supervisor proativo real | Substituir achados simulados por dependências, lint, testes e segredos | 2–3d |
 | SIM-06 | Quality Studio real | Executar Playwright, não só gerar o teste | 2–3d |
-| SIM-07 | 🟡 Leitura de páginas web | Allowlist, limite de tamanho, timeout | 2–3d |
+| SIM-07 | ✅ Leitura de páginas web | Allowlist, SSRF, timeout e limite reutilizados por `web_read`. | 2–3d |
 | SIM-08 | 🟡 Execução em contentor/VM | Isolamento mais forte que subprocesso | 1 semana+ |
 
 ### Aceite por item
