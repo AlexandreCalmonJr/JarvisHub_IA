@@ -12,6 +12,7 @@ import {
   Check,
   Sparkles,
 } from 'lucide-react';
+import { getSeverityLabel } from '../types';
 
 export const DesignStudioView: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'palette' | 'wcag' | 'components'>('components');
@@ -382,7 +383,7 @@ export const DesignStudioView: React.FC = () => {
                         <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.85rem' }}>
                           Linha {f.line} — <code style={{ color: 'var(--accent-color)' }}>{f.rule}</code>
                         </span>
-                        <span className="badge badge-warning">{f.severity}</span>
+                        <span className="badge badge-warning">{getSeverityLabel(f.severity)}</span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{f.description}</div>
                       <code style={{ fontSize: '0.75rem', backgroundColor: '#161514', padding: '6px 8px', borderRadius: '4px', color: '#fca5a5', fontFamily: 'var(--font-mono)', border: '1px solid var(--border-color)' }}>

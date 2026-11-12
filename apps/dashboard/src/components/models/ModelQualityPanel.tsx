@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Star, TrendingUp, Info } from 'lucide-react';
 import { fetchModelQualitySummary } from '../../services/api/system';
 import type { ModelQualitySummary } from '../../services/api/system';
+import { getAgentLabel, getModelLabel } from '../../types';
 
 export const ModelQualityPanel: React.FC = () => {
   const [rows, setRows] = useState<ModelQualitySummary[]>([]);
@@ -52,8 +53,8 @@ export const ModelQualityPanel: React.FC = () => {
           {rows.map((row) => (
             <div key={`${row.model_name}:${row.provider}:${row.agent_role || 'general'}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
               <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                <strong style={{ color: 'var(--text-primary)', fontSize: '0.82rem' }}>{row.model_name}</strong>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{row.agent_role || 'Papel geral'} · {row.provider}</span>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.82rem' }}>{getModelLabel(row.model_name)}</strong>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{row.agent_role ? getAgentLabel(row.agent_role) : 'Papel geral'} · {row.provider}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 600 }}>

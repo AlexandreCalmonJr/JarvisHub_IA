@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal } from '../common/Modal';
-import { AgentInfo, getAgentLabel, getToolLabel } from '../../types';
+import { AgentInfo, getAgentLabel, getModelLabel, getToolLabel } from '../../types';
 import {
   Settings,
   Sparkles,
@@ -34,7 +34,7 @@ export const AgentActionsModal: React.FC<AgentActionsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={`Ações do Especialista — ${getAgentLabel(agent.role)}`}
-      subtitle={`Papel lógico: ${agent.role} | Modo: ${agent.is_read_only ? 'Somente Leitura' : 'Edição Propositiva'}`}
+      subtitle={`Modo: ${agent.is_read_only ? 'Somente Leitura' : 'Edição Propositiva'}`}
       icon={<Sparkles size={20} color="var(--accent-color)" />}
       maxWidth="md"
       footer={
@@ -65,7 +65,7 @@ export const AgentActionsModal: React.FC<AgentActionsModalProps> = ({
             <div>
               <div style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>Modelo em Execução:</div>
               <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                {isHybrid ? '🌐 Modo Híbrido Automático (Padrão)' : `💻 ${agent.preferred_model}`}
+                {isHybrid ? `🌐 ${getModelLabel(agent.preferred_model)} (Padrão)` : `💻 ${getModelLabel(agent.preferred_model)}`}
               </div>
             </div>
           </div>

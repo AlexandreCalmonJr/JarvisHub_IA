@@ -29,6 +29,7 @@ import { fetchWorkspaceProjects } from '../services/api';
 import { notify } from './common/Toast';
 import { getAccountStorageKey } from '../services/accountScope';
 import { API_BASE } from '../services/api/client';
+import { getOperationLabel, getProjectTypeLabel, getRiskLabel, getToolLabel } from '../types';
 
 type Mode = 'plan' | 'ask' | 'auto';
 
@@ -363,8 +364,8 @@ export const CodingAgentView: React.FC = () => {
         kind: 'info',
         text:
           action === 'approve'
-            ? `Operação ${pendingApproval.operation} aprovada pela conta autenticada.`
-            : `Operação ${pendingApproval.operation} rejeitada pela conta autenticada.`,
+            ? `Operação ${getOperationLabel(pendingApproval.operation)} aprovada pela conta autenticada.`
+            : `Operação ${getOperationLabel(pendingApproval.operation)} rejeitada pela conta autenticada.`,
       });
       setPendingApproval(null);
     } catch (err: any) {
@@ -453,10 +454,10 @@ export const CodingAgentView: React.FC = () => {
         <div key={entry.id} style={styles.toolCard}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <Terminal size={14} color={color} />
-            <strong style={{ fontSize: '0.82rem', color }}>{entry.name}</strong>
+            <strong style={{ fontSize: '0.82rem', color }} title={entry.name}>{getToolLabel(entry.name)}</strong>
             {entry.risk && (
               <span style={{ ...styles.riskBadge, color: RISK_COLORS[entry.risk] || '#94a3b8', borderColor: `${RISK_COLORS[entry.risk] || '#94a3b8'}55` }}>
-                {entry.risk}
+                {getRiskLabel(entry.risk)}
               </span>
             )}
             {entry.denied && <span style={{ fontSize: '0.72rem', color: '#f87171' }}>negado</span>}
@@ -521,7 +522,7 @@ export const CodingAgentView: React.FC = () => {
             <option value="">Selecione um projeto...</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name || p.id} ({p.project_type || 'projeto'})
+                {p.name || p.id} ({getProjectTypeLabel(p.project_type)})
               </option>
             ))}
           </select>
@@ -606,9 +607,9 @@ export const CodingAgentView: React.FC = () => {
             {tools.map((tool) => (
               <div key={tool.name} style={styles.toolItem}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <code style={{ fontSize: '0.78rem', color: 'var(--text-primary)' }}>{tool.name}</code>
+                  <code style={{ fontSize: '0.78rem', color: 'var(--text-primary)' }} title={tool.name}>{getToolLabel(tool.name)}</code>
                   <span style={{ ...styles.riskBadge, color: RISK_COLORS[tool.risk] || '#94a3b8', borderColor: `${RISK_COLORS[tool.risk] || '#94a3b8'}55` }}>
-                    {tool.risk}
+                    {getRiskLabel(tool.risk)}
                   </span>
                   {tool.requires_approval && <ShieldAlert size={12} color="#fbbf24" />}
                 </div>
@@ -667,7 +668,7 @@ export const CodingAgentView: React.FC = () => {
               <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>Aprovação necessária</span>
               <h4 style={{ fontSize: '0.98rem', fontWeight: 700, marginTop: '8px' }}>{pendingApproval.impact_summary}</h4>
               <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Operação: <strong style={{ color: 'var(--accent-color)' }}>{pendingApproval.operation}</strong> • ID: #{pendingApproval.id.slice(0, 10)}
+                Operação: <strong style={{ color: 'var(--accent-color)' }}>{getOperationLabel(pendingApproval.operation)}</strong> • ID: #{pendingApproval.id.slice(0, 10)}
                 {pendingApproval.reversible === false ? ' • irreversível' : ' • reversível'}
               </div>
             </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, KeyRound, RotateCcw, Route } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { AgentInfo, getAgentLabel } from '../../types';
+import { AgentInfo, getAgentLabel, humanizeLabel } from '../../types';
 import {
   deleteAgentRoute,
   fetchAgentRoutes,
@@ -267,7 +267,7 @@ export const AgentRouteModal: React.FC<AgentRouteModalProps> = ({
               >
                 {keys.map((key) => (
                   <option key={key.key_id} value={key.key_id}>
-                    {key.label || key.key_id} · {(key.provider || key.provider_name || '').toUpperCase()}
+                    {key.label || humanizeLabel(key.key_id)} · {(key.provider || key.provider_name || '').toUpperCase()}
                     {key.is_default ? ' · predefinida' : ''}
                   </option>
                 ))}

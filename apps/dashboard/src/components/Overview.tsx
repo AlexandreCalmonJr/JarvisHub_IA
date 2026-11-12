@@ -1,5 +1,5 @@
 import React from 'react';
-import { SystemHealth, ApprovalRequestItem } from '../types';
+import { SystemHealth, ApprovalRequestItem, getStatusLabel } from '../types';
 
 interface OverviewProps {
   health: SystemHealth | null;
@@ -15,7 +15,7 @@ const statusLabel = (status?: string) => {
   const normalized = status.toLowerCase();
   if (['operational', 'healthy', 'ready', 'active'].includes(normalized)) return 'Operacional';
   if (['offline', 'degraded', 'error', 'failed'].includes(normalized)) return 'Indisponível';
-  return status;
+  return getStatusLabel(status);
 };
 
 const statusColor = (status?: string) => {

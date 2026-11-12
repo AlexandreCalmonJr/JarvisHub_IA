@@ -1,5 +1,6 @@
 import React from 'react';
 import { FileText, Trash2, BookOpen, Upload, RefreshCw } from 'lucide-react';
+import { getCategoryLabel, getFileTypeLabel } from '../../types';
 
 interface DocumentListGridProps {
   documents: any[];
@@ -136,10 +137,10 @@ export const DocumentListGrid: React.FC<DocumentListGridProps> = ({
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
                   <span className="badge badge-info" style={{ fontSize: '0.68rem' }}>
-                    {doc.file_type || 'Tipo desconhecido'}
+                    {getFileTypeLabel(doc.file_type)}
                   </span>
                   <span className="badge" style={{ fontSize: '0.68rem' }}>
-                    {doc.category || 'geral'}
+                    {getCategoryLabel(doc.category)}
                   </span>
                   <span
                     style={{

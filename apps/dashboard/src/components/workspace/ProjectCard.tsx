@@ -36,6 +36,7 @@ import { notify } from '../common/Toast';
 
 
 import { ProjectActionsModal } from './ProjectActionsModal';
+import { humanizeLabel } from '../../types';
 
 interface ProjectCardProps {
 
@@ -398,7 +399,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
               <h3 className="claude-serif-title" style={{ fontSize: '1.1rem', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
 
-                {project.name || project.id}
+                {project.name || humanizeLabel(project.id)}
 
               </h3>
 

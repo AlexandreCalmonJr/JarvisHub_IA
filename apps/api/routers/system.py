@@ -8,7 +8,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from apps.api.auth import Principal, get_principal, require_admin, require_permission
+from apps.api.auth import (
+    Principal,
+    auth_service,
+    get_principal,
+    require_admin,
+    require_permission,
+)
 from apps.api.deps import (
     data_dir,
     db_manager,
@@ -41,12 +47,16 @@ async def root():
     }
 
 
+@router.get("/health")
 @router.get("/api/v1/system/health")
 async def health_check(request: Request):
-    """Disponibilidade básica para anônimos; estado detalhado com componentes quando autenticado."""
+    """Disponibilidade básica para anónimos; estado detalhado com componentes quando autenticado."""
     ollama_ok = await model_manager.check_health()
     status_str = "healthy" if ollama_ok else "degraded"
     principal = getattr(request.state, "principal", None)
+    if principal is None:
+        # /health fica fora do AuthMiddleware; autentica aqui para manter o detalhe.
+        principal = auth_service.authenticate(request)
     if principal is not None:
         return {
             "status": status_str,

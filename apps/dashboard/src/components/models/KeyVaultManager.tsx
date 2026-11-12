@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { deleteVaultKey, fetchKeyVault, KeyVaultItem, registerVaultKey, setDefaultVaultKey, testVaultKey } from '../../services/api/models';
+import { humanizeLabel } from '../../types';
 
 const providers = ['openai', 'gemini', 'groq', 'deepseek', 'anthropic', 'custom'];
 
@@ -113,9 +114,9 @@ export const KeyVaultManager: React.FC = () => {
         {loading ? <p style={{ color: 'var(--text-muted)' }}>A carregar credenciais…</p> : keys.length === 0 ? <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>O cofre ainda não contém credenciais.</p> : keys.map((item) => (
           <article key={item.key_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: 13, borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
             <div style={{ minWidth: 0 }}>
-              <strong style={{ color: 'var(--text-primary)', display: 'block' }}>{item.label || item.key_id}</strong>
+              <strong style={{ color: 'var(--text-primary)', display: 'block' }}>{item.label || humanizeLabel(item.key_id)}</strong>
               <small style={{ color: 'var(--text-muted)' }}>
-                {item.provider || item.provider_name} · {item.key_id} · {item.masked_key}
+                {item.provider || item.provider_name} · {item.masked_key}
                 {item.owner_user_id ? ' · Conta' : ' · Global'}
                 {item.is_default ? ' · predefinida da conta' : ''}
               </small>

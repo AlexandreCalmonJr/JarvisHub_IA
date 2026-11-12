@@ -13,7 +13,7 @@ import {
   Loader2,
   Check,
 } from 'lucide-react';
-import { TaskStateResponse, getAgentLabel } from '../../types';
+import { TaskStateResponse, getAgentLabel, getModelLabel, humanizeLabel } from '../../types';
 import { CanvasArtifact } from './ArtifactCanvas';
 import { MarkdownMessage } from './MarkdownMessage';
 import { openWorkspaceFolder } from '../../services/api/workspace';
@@ -359,7 +359,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ color: 'var(--text-muted)' }}>Intenção:</span>
                       <span className="badge badge-info" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
-                        {INTENT_LABELS[task.classified_intent] || task.classified_intent}
+                        {INTENT_LABELS[task.classified_intent] || humanizeLabel(task.classified_intent)}
                       </span>
                     </div>
                   )}
@@ -548,7 +548,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                         {record.agent_role ? getAgentLabel(record.agent_role) : 'Especialista'}
                       </span>
                       <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                        {record.model_name} · {record.provider}
+                        {getModelLabel(record.model_name)} · {record.provider}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -564,7 +564,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                             disabled={feedbackLoadingId === record.id}
                             onClick={() => handleInferenceRating(record.id, rating)}
                             title={`Avaliar com ${rating} de 5`}
-                            aria-label={`Avaliar ${record.model_name} com ${rating} de 5`}
+                            aria-label={`Avaliar ${getModelLabel(record.model_name)} com ${rating} de 5`}
                             style={{
                               border: '1px solid var(--border-color)',
                               borderRadius: '6px',

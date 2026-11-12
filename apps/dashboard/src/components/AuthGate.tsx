@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useState } from 'react';
 import { clearActiveAccountScope, setActiveAccountScope } from '../services/accountScope';
+import { getUserRoleLabel } from '../types';
 
 type LoginMode = 'account' | 'admin' | 'bootstrap';
 
@@ -251,7 +252,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
       {children}
       <div style={styles.sessionPill}>
         <span style={styles.sessionDot} />
-        <span>{session?.user_id || session?.subject_id || 'Sessão ativa'} · {session?.role || 'utilizador'}</span>
+        <span>{session?.user_id || session?.subject_id || 'Sessão ativa'} · {getUserRoleLabel(session?.role)}</span>
         {(session?.role === 'admin' || session?.role === 'developer') && (
           <button type="button" onClick={() => { setDeviceOpen(true); setDeviceToken(''); setDeviceError(''); }} style={styles.pillButton}>
             Conectar Android
@@ -333,7 +334,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
             <h3 style={styles.listTitle}>Contas registadas</h3>
             <div style={styles.userList}>
               {users.map((user) => <div key={user.username} style={styles.userRow}>
-                <div><b>{user.display_name}</b><span style={styles.userMeta}>@{user.username} · {user.role}</span></div>
+                <div><b>{user.display_name}</b><span style={styles.userMeta}>@{user.username} · {getUserRoleLabel(user.role)}</span></div>
                 <div style={styles.userActions}>
                   <button type="button" disabled={accessBusy} onClick={() => void resetUserPassword(user)} style={styles.resetButton}>Redefinir senha</button>
                   <button type="button" disabled={accessBusy} onClick={() => void toggleUser(user)} style={user.is_active ? styles.disableButton : styles.enableButton}>{user.is_active ? 'Desativar' : 'Ativar'}</button>

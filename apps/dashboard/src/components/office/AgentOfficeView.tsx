@@ -8,7 +8,7 @@ import {
   Key,
 } from 'lucide-react';
 import { fetchAgents, updateAgentConfig, fetchKeyVault, KeyVaultItem } from '../../api';
-import { getAgentLabel } from '../../types';
+import { getAgentLabel, getModelLabel, humanizeLabel } from '../../types';
 import type { AgentInfo } from '../../types';
 import { notify } from '../common/Toast';
 import { AgentOfficeCanvas } from './AgentOfficeCanvas';
@@ -654,10 +654,10 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                 onChange={(e) => setActiveKeySelection(e.target.value)}
                 style={{ fontSize: '0.84rem', padding: '8px 10px', backgroundColor: 'var(--bg-primary)' }}
               >
-                <option value="">(Padrão) auto_hybrid — Roteamento Inteligente</option>
+                <option value="">(Padrão) 🌐 Roteamento Híbrido Automático — Motor Inteligente</option>
                 {Array.isArray(vaultKeys) && vaultKeys.map((k) => (
                   <option key={k.key_id} value={k.key_id}>
-                    🔑 {(k.provider_name || (k as any).provider || 'AI').toUpperCase()} — {k.key_id} {(k.preferred_model || (k as any).default_model) ? `(${k.preferred_model || (k as any).default_model})` : ''}
+                    🔑 {(k.provider_name || (k as any).provider || 'AI').toUpperCase()} — {k.label || humanizeLabel(k.key_id)} {(k.preferred_model || (k as any).default_model) ? `(${getModelLabel(k.preferred_model || (k as any).default_model)})` : ''}
                   </option>
                 ))}
               </select>

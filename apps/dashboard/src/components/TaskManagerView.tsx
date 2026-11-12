@@ -15,6 +15,7 @@ import { fetchTasks, deleteTask, purgeTasks } from '../api';
 import { notify } from './common/Toast';
 import { Modal } from './common/Modal';
 import { API_BASE } from '../services/api/client';
+import { humanizeLabel } from '../types';
 
 const INTENT_MAP: Record<string, { label: string; color: string }> = {
   multi_agent_consensus: { label: 'Mesa Redonda / Consenso', color: 'badge-purple' },
@@ -473,7 +474,7 @@ export const TaskManagerView: React.FC = () => {
                       </span>
                       {task.project_id && (
                         <span className="badge badge-purple" style={{ fontSize: '0.70rem' }}>
-                          Projeto: {task.project_id}
+                          Projeto: {humanizeLabel(task.project_id)}
                         </span>
                       )}
                     </div>

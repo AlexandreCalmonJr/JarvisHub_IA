@@ -1,17 +1,17 @@
 import hashlib
 import logging
-from fastapi import APIRouter, HTTPException, Response, Depends
-from fastapi.responses import HTMLResponse
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from apps.api.auth import Principal, get_principal
-from apps.api.deps import security_core
-
+from apps.api.deps import db_manager, security_core, webhook_service, workspace_service
 from apps.api.schemas import (
-    WriteProjectFilePayload,
     ImportFolderPayload,
     ProjectMemoryRequest,
+    WriteProjectFilePayload,
 )
-from apps.api.deps import workspace_service, webhook_service, db_manager
 from services.security_core import PermissionDeniedError
 
 logger = logging.getLogger("jarvis.api.workspace")
@@ -391,7 +391,53 @@ async def open_project_code_endpoint(
         raise HTTPException(status_code=500, detail=f"Falha ao abrir no VS Code: {exc}")
 
 
+_PREVIEW_ASSET_SUFFIXES = {
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".mjs",
+    ".json",
+    ".map",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".avif",
+    ".ico",
+    ".bmp",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".mp3",
+    ".mp4",
+    ".webm",
+    ".ogg",
+    ".wav",
+    ".wasm",
+    ".txt",
+    ".xml",
+    ".pdf",
+}
+
+
 @router.get("/api/v1/workspace/projects/{project_id}/preview")
+async def redirect_project_preview_endpoint(
+    project_id: str, principal: Principal = Depends(get_principal)
+):
+    """Redireciona para a barra final, necessária para resolver assets relativos."""
+    _require_owned_project(project_id, principal)
+    return RedirectResponse(
+        url=f"/api/v1/workspace/projects/{quote(project_id, safe='')}/preview/",
+        status_code=307,
+    )
+
+
+@router.get("/api/v1/workspace/projects/{project_id}/preview/")
 async def get_project_preview_endpoint(
     project_id: str, principal: Principal = Depends(get_principal)
 ):
@@ -402,6 +448,25 @@ async def get_project_preview_endpoint(
         return HTMLResponse(content=content)
     except Exception as exc:
         raise HTTPException(status_code=404, detail=f"Preview não disponível (index.html não encontrado): {exc}")
+
+
+@router.get("/api/v1/workspace/projects/{project_id}/preview/{asset_path:path}")
+async def get_project_preview_asset_endpoint(
+    project_id: str,
+    asset_path: str,
+    principal: Principal = Depends(get_principal),
+):
+    """Serve os assets estáticos referenciados pelo preview (CSS, JS, imagens)."""
+    _require_owned_project(project_id, principal)
+    project_dir = workspace_service.get_project_dir(project_id).resolve()
+    try:
+        target = (project_dir / asset_path).resolve()
+        target.relative_to(project_dir)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Recurso fora do projeto.")
+    if target.suffix.lower() not in _PREVIEW_ASSET_SUFFIXES or not target.is_file():
+        raise HTTPException(status_code=404, detail="Recurso do preview não encontrado.")
+    return FileResponse(target)
 
 
 @router.post("/api/v1/workspace/import")

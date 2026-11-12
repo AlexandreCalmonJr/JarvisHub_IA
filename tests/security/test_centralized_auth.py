@@ -221,6 +221,12 @@ async def test_10_dashboard_and_public_routes_accessible_without_auth():
         assert res_health.status_code == 200
         assert "status" in res_health.json()
 
+        # Alias público: mesma disponibilidade, sem detalhes para anónimos.
+        res_health_alias = await client.get("/health", headers={"x-no-auth": "1"})
+        assert res_health_alias.status_code == 200
+        assert "status" in res_health_alias.json()
+        assert "components" not in res_health_alias.json()
+
         # Rota de frontend SPA / dashboard estático
         res_dash = await client.get("/", headers={"x-no-auth": "1"})
         assert res_dash.status_code == 200

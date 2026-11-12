@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
-import { AgentInfo, AgentMemoryItem, getAgentLabel, getToolLabel, getToolDescription } from '../../types';
+import { AgentInfo, AgentMemoryItem, getAgentLabel, getMemoryCategoryLabel, getToolLabel, getToolDescription, humanizeLabel } from '../../types';
 import {
   updateAgentConfig,
   fetchAgentMemories,
@@ -608,11 +608,11 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                     outline: 'none',
                   }}
                 >
-                  <option value="coding_style">coding_style (Estilo de Código)</option>
-                  <option value="test_preference">test_preference (Padrão de Teste)</option>
-                  <option value="architecture_rule">architecture_rule (Regra Arquitetural)</option>
-                  <option value="security_policy">security_policy (Diretriz de Segurança)</option>
-                  <option value="user_preference">user_preference (Preferência do Usuário)</option>
+                  <option value="coding_style">Estilo de Código</option>
+                  <option value="test_preference">Padrão de Teste</option>
+                  <option value="architecture_rule">Regra Arquitetural</option>
+                  <option value="security_policy">Diretriz de Segurança</option>
+                  <option value="user_preference">Preferência do Usuário</option>
                 </select>
                 <input
                   type="text"
@@ -713,9 +713,9 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                             fontWeight: 600,
                           }}
                         >
-                          {m.category}
+                          {getMemoryCategoryLabel(m.category)}
                         </span>
-                        <strong style={{ fontSize: '0.84rem', color: 'var(--text-primary)' }}>{m.key}</strong>
+                        <strong style={{ fontSize: '0.84rem', color: 'var(--text-primary)' }} title={m.key}>{humanizeLabel(m.key)}</strong>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                           Importância: {m.importance}/5
                         </span>

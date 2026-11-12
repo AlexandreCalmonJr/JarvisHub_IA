@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { fetchModels } from '../../api';
 import { getAccountStorageKey } from '../../services/accountScope';
+import { humanizeLabel } from '../../types';
 
 export interface RealChatModel {
   id: string;
@@ -162,7 +163,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FolderGit2 size={13} color="var(--accent-color)" />
             <span>
-              Projeto Ativo: <strong>{activeProjectName || activeProjectId}</strong> (comandos modificarão arquivos deste diretório)
+              Projeto Ativo: <strong>{activeProjectName || humanizeLabel(activeProjectId)}</strong> (comandos modificarão arquivos deste diretório)
             </span>
           </div>
           <button

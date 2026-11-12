@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { importExternalFolder } from '../../api';
+import { getProjectTypeLabel } from '../../types';
 
 interface ChatProjectModalProps {
   isOpen: boolean;
@@ -121,7 +122,7 @@ export const ChatProjectModal: React.FC<ChatProjectModalProps> = ({
                             </span>
                             {p.project_type && (
                               <span className="badge badge-info" style={{ fontSize: '0.66rem' }}>
-                                {p.project_type.toUpperCase()}
+                                {getProjectTypeLabel(p.project_type)}
                               </span>
                             )}
                           </div>

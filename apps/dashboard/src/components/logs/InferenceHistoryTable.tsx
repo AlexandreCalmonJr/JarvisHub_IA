@@ -1,5 +1,6 @@
 import React from 'react';
 import { Layers } from 'lucide-react';
+import { getAgentLabel, getModelLabel } from '../../types';
 
 interface InferenceHistoryTableProps {
   recentInferences: any[];
@@ -75,13 +76,13 @@ export const InferenceHistoryTable: React.FC<InferenceHistoryTableProps> = ({
                   >
                     {new Date(inf.timestamp).toLocaleTimeString()}
                   </td>
-                  <td style={{ padding: '8px 10px', fontWeight: 600 }}>{inf.agent_role}</td>
+                  <td style={{ padding: '8px 10px', fontWeight: 600 }}>{getAgentLabel(inf.agent_role)}</td>
                   <td style={{ padding: '8px 10px' }}>
                     <span
                       className="badge badge-purple"
                       style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem' }}
                     >
-                      {inf.model_name}
+                      {getModelLabel(inf.model_name)}
                     </span>
                   </td>
                   <td

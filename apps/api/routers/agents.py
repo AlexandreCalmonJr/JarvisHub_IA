@@ -269,8 +269,8 @@ async def agent_playground_endpoint(
         resp = await model_manager.generate(req)
         content = resp.content
         m_used = resp.model_name
-        t_prompt = resp.tokens_prompt
-        t_comp = resp.tokens_completion
+        t_prompt = resp.prompt_tokens
+        t_comp = resp.completion_tokens
     except Exception as exc:
         logger.exception("Falha no playground do especialista %s", clean_role)
         raise HTTPException(

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { triggerKillSwitch, fetchAuditLogs } from '../../api';
 import { API_BASE } from '../../services/api/client';
+import { getOperationLabel, getSeverityLabel, getStatusLabel } from '../../types';
 
 interface ContainmentAuditSectionProps {
   onRefresh: () => void;
@@ -312,10 +313,10 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
                     )}
                     <div style={{ minWidth: 0 }}>
                       <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {log.operation}
+                        {getOperationLabel(log.operation)}
                       </span>
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                        Status: <code>{log.status}</code> {log.reason && `• ${log.reason}`}
+                        Status: <code>{getStatusLabel(log.status)}</code> {log.reason && `• ${log.reason}`}
                       </div>
                     </div>
                   </div>
@@ -329,7 +330,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
                           : 'badge-info'
                       }`}
                     >
-                      {log.severity}
+                      {getSeverityLabel(log.severity)}
                     </span>
                     <span
                       style={{

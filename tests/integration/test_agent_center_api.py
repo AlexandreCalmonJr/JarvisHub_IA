@@ -63,3 +63,35 @@ async def test_agent_config_and_memories_api():
         # Nunca deve fabricar uma resposta de sucesso para o playground.
         assert play_resp.status_code == 503
         assert "provedor de IA está indisponível" in play_resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_agent_playground_maps_inference_token_usage(monkeypatch):
+    """O playground deve devolver os tokens reais da inferência, não um 503."""
+    from apps.api.deps import model_manager
+    from services.model_runtime.types import InferenceResponse
+
+    async def fake_generate(request, has_external_data_approval=False):
+        assert request.agent_role == "qa_engineer"
+        return InferenceResponse(
+            content="Resposta de teste.",
+            model_name="modelo-teste",
+            prompt_tokens=123,
+            completion_tokens=45,
+        )
+
+    monkeypatch.setattr(model_manager, "generate", fake_generate)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        play_resp = await ac.post(
+            "/api/v1/agents/qa_engineer/playground",
+            json={"prompt": "Responda apenas com uma frase curta."},
+        )
+
+    assert play_resp.status_code == 200
+    body = play_resp.json()
+    assert body["response"] == "Resposta de teste."
+    assert body["model_used"] == "modelo-teste"
+    assert body["tokens_prompt"] == 123
+    assert body["tokens_completion"] == 45

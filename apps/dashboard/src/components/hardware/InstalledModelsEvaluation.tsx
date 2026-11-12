@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
+import { getModelLabel } from '../../types';
 
 interface InstalledModelsEvaluationProps {
   modelsEval: any[];
@@ -66,7 +67,7 @@ export const InstalledModelsEvaluation: React.FC<InstalledModelsEvaluationProps>
                     color: 'var(--text-primary)',
                   }}
                 >
-                  {m.model_name}
+                  {getModelLabel(m.model_name)}
                 </span>
                 <span className={`badge ${m.badge_color}`} style={{ fontSize: '0.70rem' }}>
                   {m.badge}

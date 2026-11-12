@@ -15,6 +15,7 @@ import {
   fetchSecurityPolicyTemplates,
   applySecurityPolicy,
 } from '../../api';
+import { getFindingTypeLabel, getSeverityLabel } from '../../types';
 
 export const DevSecOpsSection: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
@@ -344,7 +345,7 @@ export const DevSecOpsSection: React.FC = () => {
                           : 'badge-info'
                       }`}
                     >
-                      {f.severity}
+                      {getSeverityLabel(f.severity)}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
@@ -444,7 +445,7 @@ export const DevSecOpsSection: React.FC = () => {
                         fontSize: '0.88rem',
                       }}
                     >
-                      {f.file}:{f.line} — <code style={{ color: 'var(--accent-color)' }}>{f.type}</code>
+                      {f.file}:{f.line} — <code style={{ color: 'var(--accent-color)' }} title={f.type}>{getFindingTypeLabel(f.type)}</code>
                     </div>
                     <span
                       className={`badge ${
@@ -455,7 +456,7 @@ export const DevSecOpsSection: React.FC = () => {
                           : 'badge-info'
                       }`}
                     >
-                      {f.severity}
+                      {getSeverityLabel(f.severity)}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>

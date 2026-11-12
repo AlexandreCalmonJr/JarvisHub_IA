@@ -20,6 +20,7 @@ import {
   Flame,
   AlertCircle,
 } from 'lucide-react';
+import { getCategoryLabel } from '../types';
 
 export const QualityStudioView: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
@@ -498,7 +499,7 @@ export const QualityStudioView: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{c.name}</span>
                   <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>
-                    {c.category}
+                    {getCategoryLabel(c.category)}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{c.expected_behavior}</div>

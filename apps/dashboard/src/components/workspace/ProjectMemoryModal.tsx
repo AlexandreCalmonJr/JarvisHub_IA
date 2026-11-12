@@ -3,6 +3,7 @@ import { Modal } from '../common/Modal';
 import { BookOpen, Plus, Sparkles, RefreshCw } from 'lucide-react';
 import { fetchProjectMemory, saveProjectMemory } from '../../api';
 import { notify } from '../common/Toast';
+import { humanizeLabel } from '../../types';
 
 interface ProjectMemoryModalProps {
   isOpen: boolean;
@@ -276,8 +277,8 @@ export const ProjectMemoryModal: React.FC<ProjectMemoryModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {getCategoryBadge(m.category)}
-                      <code style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                        {m.key}
+                      <code style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 600 }} title={m.key}>
+                        {humanizeLabel(m.key)}
                       </code>
                     </div>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
-import { AgentInfo, getAgentLabel } from '../../types';
+import { AgentInfo, getAgentLabel, getModelLabel, getToolLabel } from '../../types';
 import {
   fetchAgentHistory,
   runAutonomousAgentStream,
@@ -147,7 +147,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
             accumulatedText = (event.content as string) || '';
             setCurrentAssistantText(accumulatedText);
           } else if (event.type === 'tool_call') {
-            setCurrentToolStatus(`Executando ferramenta: ${event.name}...`);
+            setCurrentToolStatus(`Executando ferramenta: ${getToolLabel(event.name)}...`);
             const toolCallItem: TimelineItem = {
               id: `tc-${Date.now()}-${Math.random()}`,
               sender: 'tool',
@@ -246,7 +246,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
               fontFamily: 'monospace',
             }}
           >
-            {agent.preferred_model}
+            {getModelLabel(agent.preferred_model)}
           </span>
           {agent.is_read_only ? (
             <span
@@ -442,7 +442,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                       border: '1px solid rgba(255, 255, 255, 0.08)',
                     }}
                   >
-                    {tool}
+                    {getToolLabel(tool)}
                   </span>
                 ))}
                 {(agent.allowed_tools?.length || 0) > 8 && (
@@ -499,7 +499,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                       }}
                     >
                       <Wrench size={12} color={item.toolSuccess === false ? '#ef4444' : '#818cf8'} />
-                      <strong>{item.toolName}</strong>
+                      <strong title={item.toolName}>{getToolLabel(item.toolName)}</strong>
                       {item.toolSuccess !== undefined && (
                         <span>{item.toolSuccess ? '✓ Sucesso' : '✗ Falha'}</span>
                       )}
@@ -549,7 +549,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                         <span>Parecer Executivo Formal ({getAgentLabel(c.agent_role)})</span>
                       </div>
                       <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
-                        {c.resource_usage?.model_name || agent.preferred_model} • {Math.round(c.resource_usage?.duration_ms || 0)}ms
+                        {getModelLabel(c.resource_usage?.model_name || agent.preferred_model)} • {Math.round(c.resource_usage?.duration_ms || 0)}ms
                       </span>
                     </div>
 
@@ -588,7 +588,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                     {item.modelUsed && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontFamily: 'monospace' }}>
                         <Cpu size={10} />
-                        {item.modelUsed}
+                        {getModelLabel(item.modelUsed)}
                       </span>
                     )}
                     <span>• {item.timestamp}</span>

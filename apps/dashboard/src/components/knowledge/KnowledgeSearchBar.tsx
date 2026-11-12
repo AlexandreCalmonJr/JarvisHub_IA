@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search, Sparkles, RefreshCw } from 'lucide-react';
+import { getCategoryLabel } from '../../types';
 
 interface KnowledgeSearchBarProps {
   searchQuery: string;
@@ -116,7 +117,7 @@ export const KnowledgeSearchBar: React.FC<KnowledgeSearchBarProps> = ({
                     📄 {res.doc_name} (Bloco #{(Number(res.chunk_index) || 0) + 1})
                   </span>
                   <span className="badge badge-purple" style={{ fontSize: '0.68rem' }}>
-                    {res.category}
+                    {getCategoryLabel(res.category)}
                   </span>
                 </div>
                 <p

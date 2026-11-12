@@ -13,6 +13,7 @@ import {
   Sparkles,
   Check,
 } from 'lucide-react';
+import { humanizeLabel } from '../../types';
 
 interface ProjectActionsModalProps {
   isOpen: boolean;
@@ -68,8 +69,8 @@ export const ProjectActionsModal: React.FC<ProjectActionsModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Central de Ações — ${project.name || project.id}`}
-      subtitle={`Gerenciamento integrado do workspace: ${project.id}`}
+      title={`Central de Ações — ${project.name || humanizeLabel(project.id)}`}
+      subtitle={`Gerenciamento integrado do workspace: ${project.name || humanizeLabel(project.id)}`}
       icon={<Sparkles size={20} color="var(--accent-color)" />}
       maxWidth="lg"
       footer={
@@ -97,7 +98,7 @@ export const ProjectActionsModal: React.FC<ProjectActionsModalProps> = ({
         >
           <div>
             <div style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {project.name || project.id}
+              {project.name || humanizeLabel(project.id)}
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', wordBreak: 'break-all' }}>
               <code>{fullPath}</code>

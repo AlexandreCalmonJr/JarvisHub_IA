@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AgentInfo, getAgentLabel, getToolLabel, getToolDescription } from '../types';
+import { AgentInfo, getAgentLabel, getModelLabel, getToolLabel, getToolDescription } from '../types';
 import { fetchAgents, updateAgentConfig } from '../api';
 import { notify } from './common/Toast';
 import { AgentActionsModal } from './agents/AgentActionsModal';
@@ -25,7 +25,7 @@ export const AgentCenterView: React.FC = () => {
     const handleResetAgentToHybrid = async (role: string) => {
     try {
       await updateAgentConfig(role, { preferred_model: 'auto_hybrid' });
-      notify(`Especialista '${role}' restaurado para o Modo Híbrido!`, 'success');
+      notify(`Especialista '${getAgentLabel(role)}' restaurado para o Modo Híbrido!`, 'success');
       await loadAgents();
     } catch (err: any) {
       notify(`Erro ao restaurar especialista: ${err.message}`, 'error');
@@ -313,7 +313,7 @@ export const AgentCenterView: React.FC = () => {
                       fontWeight: 500,
                     }}
                   >
-                    {agent.preferred_model}
+                    {getModelLabel(agent.preferred_model)}
                   </span>
                 )}
               </div>
