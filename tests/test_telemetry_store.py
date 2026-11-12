@@ -255,18 +255,22 @@ def test_quality_feedback_is_owner_scoped_and_only_for_successful_inferences(tmp
         status="failed",
         duration_ms=100,
     )
-    assert store.record_quality_feedback(
-        owner_user_id="user-a", inference_id=inference_id, rating=5
-    ) is True
-    assert store.record_quality_feedback(
-        owner_user_id="user-a", inference_id=inference_id, rating=4
-    ) is True
-    assert store.record_quality_feedback(
-        owner_user_id="user-b", inference_id=inference_id, rating=1
-    ) is False
-    assert store.record_quality_feedback(
-        owner_user_id="user-a", inference_id=failed_id, rating=5
-    ) is False
+    assert (
+        store.record_quality_feedback(owner_user_id="user-a", inference_id=inference_id, rating=5)
+        is True
+    )
+    assert (
+        store.record_quality_feedback(owner_user_id="user-a", inference_id=inference_id, rating=4)
+        is True
+    )
+    assert (
+        store.record_quality_feedback(owner_user_id="user-b", inference_id=inference_id, rating=1)
+        is False
+    )
+    assert (
+        store.record_quality_feedback(owner_user_id="user-a", inference_id=failed_id, rating=5)
+        is False
+    )
 
     quality = store.quality_by_model_for_owner("user-a")
     assert len(quality) == 1
@@ -313,9 +317,7 @@ def test_task_scoped_telemetry_includes_saved_feedback_rating(tmp_path):
         status="success",
         duration_ms=10,
     )
-    store.record_quality_feedback(
-        owner_user_id="account-a", inference_id=first_id, rating=5
-    )
+    store.record_quality_feedback(owner_user_id="account-a", inference_id=first_id, rating=5)
 
     records = store.list_for_owner("account-a", task_id="task-one")
     assert len(records) == 1

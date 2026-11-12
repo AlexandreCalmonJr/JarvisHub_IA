@@ -2,6 +2,7 @@
 JARVIS AI HUB - Backend Studio: SQLite Playground somente leitura.
 O banco deve ser um arquivo relativo dentro do projeto pertencente à conta.
 """
+
 import logging
 import re
 import sqlite3
@@ -39,7 +40,7 @@ class SQLPlaygroundService:
     def _connect_readonly(target: Path) -> sqlite3.Connection:
         conn = sqlite3.connect(f"{target.as_uri()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
-        conn.execute('PRAGMA query_only = ON')
+        conn.execute("PRAGMA query_only = ON")
         # Evita que uma consulta exploratória monopolize o processo da API.
         conn.set_progress_handler(lambda: 1, 250000)
         return conn
@@ -58,11 +59,13 @@ class SQLPlaygroundService:
                     resolved.relative_to(project_dir)
                     if not resolved.is_file():
                         continue
-                    databases.append({
-                        "name": file_path.name,
-                        "relative_path": file_path.relative_to(project_dir).as_posix(),
-                        "size_kb": round(resolved.stat().st_size / 1024, 1),
-                    })
+                    databases.append(
+                        {
+                            "name": file_path.name,
+                            "relative_path": file_path.relative_to(project_dir).as_posix(),
+                            "size_kb": round(resolved.stat().st_size / 1024, 1),
+                        }
+                    )
                 except (OSError, ValueError):
                     # Symlinks que escapem da pasta do projeto são ignorados.
                     continue
@@ -82,23 +85,37 @@ class SQLPlaygroundService:
                 table_name = table["name"]
                 quoted = '"' + table_name.replace('"', '""') + '"'
                 cur.execute(f"PRAGMA table_info({quoted})")
-                columns = [{
-                    "cid": col["cid"], "name": col["name"],
-                    "type": col["type"] or "TEXT",
-                    "notnull": bool(col["notnull"]), "pk": bool(col["pk"]),
-                } for col in cur.fetchall()]
+                columns = [
+                    {
+                        "cid": col["cid"],
+                        "name": col["name"],
+                        "type": col["type"] or "TEXT",
+                        "notnull": bool(col["notnull"]),
+                        "pk": bool(col["pk"]),
+                    }
+                    for col in cur.fetchall()
+                ]
                 cur.execute(f"SELECT COUNT(*) FROM {quoted}")
                 row_count = cur.fetchone()[0]
                 cur.execute(f"PRAGMA index_list({quoted})")
                 indexes = [index["name"] for index in cur.fetchall()]
-                tables.append({
-                    "name": table_name, "row_count": row_count,
-                    "columns": columns, "indexes": indexes,
-                    "schema_sql": table["sql"] or "",
-                })
+                tables.append(
+                    {
+                        "name": table_name,
+                        "row_count": row_count,
+                        "columns": columns,
+                        "indexes": indexes,
+                        "schema_sql": table["sql"] or "",
+                    }
+                )
         finally:
             conn.close()
-        return {"database": target.name, "path": db_path, "tables_count": len(tables), "tables": tables}
+        return {
+            "database": target.name,
+            "path": db_path,
+            "tables_count": len(tables),
+            "tables": tables,
+        }
 
     def execute_query(
         self, db_path: str, query: str, project_id: str | None = None, limit: int = 200
@@ -141,7 +158,8 @@ class SQLPlaygroundService:
             }
         except Exception as exc:
             return {
-                "success": False, "error": str(exc),
+                "success": False,
+                "error": str(exc),
                 "duration_ms": round((time.perf_counter() - started) * 1000.0, 2),
                 "read_only": True,
             }
@@ -173,27 +191,32 @@ class SQLPlaygroundService:
                 if match:
                     is_table_scan = True
                     table_name = match.group(1)
-                    suggestions.append({
-                        "type": "MISSING_INDEX", "table": table_name,
-                        "severity": "WARNING",
-                        "recommendation": (
-                            f"A consulta faz varredura completa na tabela '{table_name}'. "
-                            "Avalie índices nas colunas usadas em WHERE/JOIN."
-                        ),
-                        "example_sql": f"CREATE INDEX idx_{table_name}_perf ON {table_name}(coluna_aqui);",
-                    })
+                    suggestions.append(
+                        {
+                            "type": "MISSING_INDEX",
+                            "table": table_name,
+                            "severity": "WARNING",
+                            "recommendation": (
+                                f"A consulta faz varredura completa na tabela '{table_name}'. "
+                                "Avalie índices nas colunas usadas em WHERE/JOIN."
+                            ),
+                            "example_sql": f"CREATE INDEX idx_{table_name}_perf ON {table_name}(coluna_aqui);",
+                        }
+                    )
         except Exception as exc:
             return {"status": "error", "error": str(exc), "plan": [], "suggestions": []}
         finally:
             conn.close()
         score = 60 if is_table_scan else 95
         return {
-            "status": "audited", "score": score,
+            "status": "audited",
+            "score": score,
             "verdict": (
                 "Atenção: consulta com varredura completa. Avalie índices."
-                if is_table_scan else
-                "A consulta não apresentou varredura completa de tabela."
+                if is_table_scan
+                else "A consulta não apresentou varredura completa de tabela."
             ),
             "is_table_scan": is_table_scan,
-            "plan_steps": plan_steps, "suggestions": suggestions,
+            "plan_steps": plan_steps,
+            "suggestions": suggestions,
         }

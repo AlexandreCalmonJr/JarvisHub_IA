@@ -4,6 +4,7 @@
 This script measures SQLite only. It is not an HTTP/API or model-inference benchmark.
 Run: python scripts/benchmark_sqlite.py --reads 1000 --writes 300 --readers 15 --writers 8
 """
+
 from __future__ import annotations
 
 import argparse

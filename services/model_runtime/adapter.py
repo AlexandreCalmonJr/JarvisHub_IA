@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from typing import Any
@@ -32,6 +33,7 @@ def _to_anthropic_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             )
     return converted
+
 
 try:
     from services.observability import inference_tracker
@@ -119,6 +121,12 @@ class OllamaAdapter(BaseModelAdapter):
     def __init__(self, base_url: str = "http://127.0.0.1:11434"):
         self.base_url = base_url.rstrip("/")
         self.cpu_threads: int | None = None
+        self.keep_alive = os.getenv("JARVIS_OLLAMA_KEEP_ALIVE", "15m").strip() or "15m"
+        try:
+            configured_ctx = int(os.getenv("JARVIS_OLLAMA_NUM_CTX", "0"))
+        except ValueError:
+            configured_ctx = 0
+        self.context_window = configured_ctx if 2048 <= configured_ctx <= 8192 else None
 
     def set_cpu_threads(self, threads: int | None) -> None:
         """Define o limite máximo de threads de CPU para inferência local no Ollama."""
@@ -147,7 +155,6 @@ class OllamaAdapter(BaseModelAdapter):
                 return res.status_code == 200
         except Exception:
             return False
-
 
     async def health_check(self) -> bool:
         try:
@@ -238,7 +245,7 @@ class OllamaAdapter(BaseModelAdapter):
             "model": resolved_model,
             "prompt": request.prompt,
             "stream": False,
-            "keep_alive": "15m",
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": request.temperature,
             },
@@ -247,9 +254,11 @@ class OllamaAdapter(BaseModelAdapter):
             payload["system"] = request.system_prompt
         if request.format_json:
             payload["format"] = "json"
-        
+
         payload["options"]["num_predict"] = request.max_tokens if request.max_tokens else 1024
-        payload["options"]["num_ctx"] = 2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
+        payload["options"]["num_ctx"] = self.context_window or (
+            2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
+        )
         if self.cpu_threads and self.cpu_threads > 0:
             payload["options"]["num_thread"] = self.cpu_threads
 
@@ -299,42 +308,46 @@ class OllamaAdapter(BaseModelAdapter):
             "model": resolved_model,
             "prompt": request.prompt,
             "stream": True,
-            "keep_alive": "15m",
+            "keep_alive": self.keep_alive,
             "options": {"temperature": request.temperature},
         }
         if request.system_prompt:
             payload["system"] = request.system_prompt
-        
+
         payload["options"]["num_predict"] = request.max_tokens if request.max_tokens else 1024
-        payload["options"]["num_ctx"] = 2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
+        payload["options"]["num_ctx"] = self.context_window or (
+            2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
+        )
         if self.cpu_threads and self.cpu_threads > 0:
             payload["options"]["num_thread"] = self.cpu_threads
 
         start_time = time.perf_counter()
-        async with httpx.AsyncClient(timeout=request.timeout_seconds) as client:
-            async with client.stream("POST", f"{self.base_url}/api/generate", json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                        text = chunk.get("response", "")
-                        if text:
-                            yield text
-                        if chunk.get("done") and inference_tracker:
-                            elapsed = time.perf_counter() - start_time
-                            inference_tracker.record_inference(
-                                model_name=request.model_name,
-                                agent_role="Maestro Stream",
-                                elapsed_seconds=elapsed,
-                                prompt_tokens=chunk.get("prompt_eval_count", 0),
-                                completion_tokens=chunk.get("eval_count", 0),
-                                status="success",
-                                provider="ollama_local",
-                            )
-                    except Exception:
-                        logger.debug("Falha ao registar métricas de inferência.", exc_info=True)
+        async with (
+            httpx.AsyncClient(timeout=request.timeout_seconds) as client,
+            client.stream("POST", f"{self.base_url}/api/generate", json=payload) as response,
+        ):
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                    text = chunk.get("response", "")
+                    if text:
+                        yield text
+                    if chunk.get("done") and inference_tracker:
+                        elapsed = time.perf_counter() - start_time
+                        inference_tracker.record_inference(
+                            model_name=request.model_name,
+                            agent_role="Maestro Stream",
+                            elapsed_seconds=elapsed,
+                            prompt_tokens=chunk.get("prompt_eval_count", 0),
+                            completion_tokens=chunk.get("eval_count", 0),
+                            status="success",
+                            provider="ollama_local",
+                        )
+                except Exception:
+                    logger.debug("Falha ao registar métricas de inferência.", exc_info=True)
 
 
 class MockAdapter(BaseModelAdapter):
@@ -486,7 +499,11 @@ class UniversalOnlineAdapter(BaseModelAdapter):
     async def test_connection(self) -> dict[str, Any]:
         """Testa conectividade e validação da chave API com uma chamada ultraleve."""
         if not self.api_key:
-            return {"success": False, "provider": self.provider_name, "error": "Chave de API não informada."}
+            return {
+                "success": False,
+                "provider": self.provider_name,
+                "error": "Chave de API não informada.",
+            }
 
         test_req = InferenceRequest(
             prompt="ping",
@@ -518,7 +535,11 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                     err_msg += str(hse)
             return {"success": False, "provider": self.provider_name, "error": err_msg}
         except Exception as exc:
-            return {"success": False, "provider": self.provider_name, "error": f"Falha de conexão: {exc}"}
+            return {
+                "success": False,
+                "provider": self.provider_name,
+                "error": f"Falha de conexão: {exc}",
+            }
 
     async def resolve_model_name(self, requested: str) -> str:
         """Resolve dinamicamente o modelo local real instalado no Ollama.
@@ -576,13 +597,16 @@ class UniversalOnlineAdapter(BaseModelAdapter):
 
     async def generate(self, request: InferenceRequest) -> InferenceResponse:
         if not self.api_key:
-            raise ValueError(f"Chave de API não configurada para o provedor '{self.provider_name}'.")
+            raise ValueError(
+                f"Chave de API não configurada para o provedor '{self.provider_name}'."
+            )
 
         # Inspeção e Blindagem Cibernética DLP antes da saída externa
         safe_prompt = request.prompt
         safe_system = request.system_prompt
         try:
             from services.security_core import cyber_shield
+
             safe_prompt, _ = cyber_shield.inspect_and_sanitize_outbound(request.prompt)
             if safe_system:
                 safe_system, _ = cyber_shield.inspect_and_sanitize_outbound(safe_system)
@@ -646,9 +670,7 @@ class UniversalOnlineAdapter(BaseModelAdapter):
             usage = data.get("usage", {})
             prompt_tokens = usage.get("input_tokens", 0)
             completion_tokens = usage.get("output_tokens", 0)
-            finish_reason = str(
-                data.get("stop_reason") or ("tool_calls" if tool_calls else "stop")
-            )
+            finish_reason = str(data.get("stop_reason") or ("tool_calls" if tool_calls else "stop"))
 
         # Provedores compatíveis com o protocolo OpenAI (OpenAI, Gemini OpenAI-compat, Groq, DeepSeek, etc.)
         else:
@@ -707,7 +729,9 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                 or ("tool_calls" if tool_calls else "stop")
             )
 
-        tokens_per_second = round(completion_tokens / (duration_ms / 1000.0), 2) if duration_ms > 0 else 0.0
+        tokens_per_second = (
+            round(completion_tokens / (duration_ms / 1000.0), 2) if duration_ms > 0 else 0.0
+        )
 
         if inference_tracker:
             inference_tracker.record_inference(
@@ -733,7 +757,9 @@ class UniversalOnlineAdapter(BaseModelAdapter):
 
     async def generate_stream(self, request: InferenceRequest):
         if not self.api_key:
-            raise ValueError(f"Chave de API não configurada para o provedor '{self.provider_name}'.")
+            raise ValueError(
+                f"Chave de API não configurada para o provedor '{self.provider_name}'."
+            )
 
         self.last_stream_usage = None
 
@@ -750,6 +776,7 @@ class UniversalOnlineAdapter(BaseModelAdapter):
         safe_system = request.system_prompt
         try:
             from services.security_core import cyber_shield
+
             safe_prompt, _ = cyber_shield.inspect_and_sanitize_outbound(request.prompt)
             if safe_system:
                 safe_system, _ = cyber_shield.inspect_and_sanitize_outbound(safe_system)
@@ -778,50 +805,51 @@ class UniversalOnlineAdapter(BaseModelAdapter):
             if anthropic_tools:
                 payload["tools"] = anthropic_tools
 
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(timeout=timeout) as client,
+                client.stream(
                     "POST", f"{self.base_url}/messages", headers=headers, json=payload
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line or not line.startswith("data:"):
-                            continue
-                        data_str = line[5:].strip()
-                        if not data_str:
-                            continue
-                        try:
-                            event = json.loads(data_str)
-                        except Exception:
-                            logger.debug("Evento SSE inválido ignorado.", exc_info=True)
-                            continue
-                        if event.get("type") == "message_start":
-                            usage = (event.get("message") or {}).get("usage") or {}
-                            if usage:
-                                self.last_stream_usage = {
-                                    "prompt_tokens": int(usage.get("input_tokens") or 0),
-                                    "completion_tokens": int(usage.get("output_tokens") or 0),
-                                }
-                            continue
-                        if event.get("type") == "message_delta":
-                            usage = event.get("usage") or {}
-                            if usage:
-                                current = self.last_stream_usage or {
-                                    "prompt_tokens": 0,
-                                    "completion_tokens": 0,
-                                }
-                                current["completion_tokens"] = int(
-                                    usage.get("output_tokens")
-                                    or current["completion_tokens"]
-                                )
-                                self.last_stream_usage = current
-                            continue
-                        if event.get("type") == "content_block_delta":
-                            delta = event.get("delta") or {}
-                            if delta.get("type") == "text_delta":
-                                text = delta.get("text", "")
-                                if text:
-                                    streamed_chars += len(text)
-                                    yield text
+                ) as response,
+            ):
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if not data_str:
+                        continue
+                    try:
+                        event = json.loads(data_str)
+                    except Exception:
+                        logger.debug("Evento SSE inválido ignorado.", exc_info=True)
+                        continue
+                    if event.get("type") == "message_start":
+                        usage = (event.get("message") or {}).get("usage") or {}
+                        if usage:
+                            self.last_stream_usage = {
+                                "prompt_tokens": int(usage.get("input_tokens") or 0),
+                                "completion_tokens": int(usage.get("output_tokens") or 0),
+                            }
+                        continue
+                    if event.get("type") == "message_delta":
+                        usage = event.get("usage") or {}
+                        if usage:
+                            current = self.last_stream_usage or {
+                                "prompt_tokens": 0,
+                                "completion_tokens": 0,
+                            }
+                            current["completion_tokens"] = int(
+                                usage.get("output_tokens") or current["completion_tokens"]
+                            )
+                            self.last_stream_usage = current
+                        continue
+                    if event.get("type") == "content_block_delta":
+                        delta = event.get("delta") or {}
+                        if delta.get("type") == "text_delta":
+                            text = delta.get("text", "")
+                            if text:
+                                streamed_chars += len(text)
+                                yield text
 
             if inference_tracker:
                 elapsed = time.perf_counter() - start_time
@@ -858,41 +886,43 @@ class UniversalOnlineAdapter(BaseModelAdapter):
             payload["tool_choice"] = request.tool_choice or "auto"
 
         url = f"{self.base_url}/chat/completions"
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", url, headers=headers, json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data_str = line[6:].strip()
-                    if data_str == "[DONE]":
-                        if inference_tracker:
-                            elapsed = time.perf_counter() - start_time
-                            approx_tokens = max(1, streamed_chars // 4)
-                            inference_tracker.record_inference(
-                                model_name=target_model,
-                                agent_role="Maestro Híbrido Stream",
-                                elapsed_seconds=elapsed,
-                                prompt_tokens=len(safe_prompt) // 4,
-                                completion_tokens=approx_tokens,
-                                status="success",
-                                provider=self.provider_name,
-                            )
-                        break
-                    try:
-                        chunk = json.loads(data_str)
-                        usage = chunk.get("usage")
-                        if isinstance(usage, dict) and usage:
-                            self.last_stream_usage = {
-                                "prompt_tokens": int(usage.get("prompt_tokens") or 0),
-                                "completion_tokens": int(usage.get("completion_tokens") or 0),
-                            }
-                        choices = chunk.get("choices", [])
-                        if choices:
-                            delta = choices[0].get("delta", {})
-                            text = delta.get("content", "")
-                            if text:
-                                streamed_chars += len(text)
-                                yield text
-                    except Exception:
-                        logger.debug("Fluxo de streaming interrompido.", exc_info=True)
+        async with (
+            httpx.AsyncClient(timeout=timeout) as client,
+            client.stream("POST", url, headers=headers, json=payload) as response,
+        ):
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                data_str = line[6:].strip()
+                if data_str == "[DONE]":
+                    if inference_tracker:
+                        elapsed = time.perf_counter() - start_time
+                        approx_tokens = max(1, streamed_chars // 4)
+                        inference_tracker.record_inference(
+                            model_name=target_model,
+                            agent_role="Maestro Híbrido Stream",
+                            elapsed_seconds=elapsed,
+                            prompt_tokens=len(safe_prompt) // 4,
+                            completion_tokens=approx_tokens,
+                            status="success",
+                            provider=self.provider_name,
+                        )
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    usage = chunk.get("usage")
+                    if isinstance(usage, dict) and usage:
+                        self.last_stream_usage = {
+                            "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                            "completion_tokens": int(usage.get("completion_tokens") or 0),
+                        }
+                    choices = chunk.get("choices", [])
+                    if choices:
+                        delta = choices[0].get("delta", {})
+                        text = delta.get("content", "")
+                        if text:
+                            streamed_chars += len(text)
+                            yield text
+                except Exception:
+                    logger.debug("Fluxo de streaming interrompido.", exc_info=True)

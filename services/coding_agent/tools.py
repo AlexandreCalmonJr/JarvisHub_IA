@@ -8,6 +8,7 @@ modo ``auto``), mas continuam confinadas ao diretório autorizado do projeto.
 from __future__ import annotations
 
 import fnmatch
+import json
 import logging
 import os
 import re
@@ -38,9 +39,13 @@ MAX_READ_LINES = 800
 MAX_GREP_FILE_BYTES = 2_000_000
 
 DANGEROUS_COMMAND_PATTERNS = [
-    r"\brm\s+-rf\s+/(?:\s|$)",
-    r"\brm\s+-rf\s+~",
-    r"\bdel\s+/[fsq]\b.*[a-zA-Z]:\\",
+    r"\brm\s+-[a-zA-Z]*(?:rf|fr)[a-zA-Z]*\s+",
+    r"\bdel\s+/[fsq](?:\s+/[fsq])*\s+",
+    r"\b(?:rd|rmdir)\b[^\n]*\s/s\b",
+    r"\bremove-item\b(?=[^;\n]*(?:-recurse|-r)\b)",
+    r"\bget-childitem\b(?=[^;\n]*\|[^;\n]*\bremove-item\b)(?=[^;\n]*(?:-recurse|-r)\b)",
+    r"\bfind\b[^\n]*\s-delete\b",
+    r"\bshred\b",
     r"\bformat\s+[a-zA-Z]:",
     r"\bmkfs(?:\.\w+)?\b",
     r"\bshutdown\b",
@@ -78,9 +83,20 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Caminho relativo à raiz do projeto."},
-                    "offset": {"type": "integer", "description": "Linha inicial (1-based).", "default": 1},
-                    "limit": {"type": "integer", "description": "Máximo de linhas.", "default": 400},
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho relativo à raiz do projeto.",
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Linha inicial (1-based).",
+                        "default": 1,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Máximo de linhas.",
+                        "default": 400,
+                    },
                 },
                 "required": ["path"],
             },
@@ -92,7 +108,11 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Caminho relativo (padrão: raiz).", "default": "."},
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho relativo (padrão: raiz).",
+                        "default": ".",
+                    },
                 },
                 "required": [],
             },
@@ -104,8 +124,15 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Padrão glob relativo ao projeto."},
-                    "path": {"type": "string", "description": "Diretório base relativo.", "default": "."},
+                    "pattern": {
+                        "type": "string",
+                        "description": "Padrão glob relativo ao projeto.",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Diretório base relativo.",
+                        "default": ".",
+                    },
                 },
                 "required": ["pattern"],
             },
@@ -121,9 +148,21 @@ def _tool_specs() -> list[ToolSpec]:
                 "type": "object",
                 "properties": {
                     "pattern": {"type": "string", "description": "Expressão regular (Python re)."},
-                    "path": {"type": "string", "description": "Diretório base relativo.", "default": "."},
-                    "include": {"type": "string", "description": "Filtro glob de arquivos (ex.: '*.py').", "default": "*"},
-                    "max_results": {"type": "integer", "description": "Máximo de ocorrências.", "default": 80},
+                    "path": {
+                        "type": "string",
+                        "description": "Diretório base relativo.",
+                        "default": ".",
+                    },
+                    "include": {
+                        "type": "string",
+                        "description": "Filtro glob de arquivos (ex.: '*.py').",
+                        "default": "*",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Máximo de ocorrências.",
+                        "default": 80,
+                    },
                 },
                 "required": ["pattern"],
             },
@@ -138,7 +177,10 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Caminho relativo à raiz do projeto."},
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho relativo à raiz do projeto.",
+                    },
                     "content": {"type": "string", "description": "Conteúdo completo do arquivo."},
                 },
                 "required": ["path", "content"],
@@ -155,7 +197,10 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Caminho relativo à raiz do projeto."},
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho relativo à raiz do projeto.",
+                    },
                     "old_string": {"type": "string", "description": "Trecho exato a localizar."},
                     "new_string": {"type": "string", "description": "Novo trecho."},
                     "replace_all": {
@@ -202,7 +247,11 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Arquivo específico (opcional).", "default": ""},
+                    "path": {
+                        "type": "string",
+                        "description": "Arquivo específico (opcional).",
+                        "default": "",
+                    },
                 },
                 "required": [],
             },
@@ -243,8 +292,15 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "sql": {"type": "string", "description": "Comando SQL analítico a ser executado no DuckDB."},
-                    "max_rows": {"type": "integer", "description": "Número máximo de linhas retornadas.", "default": 50},
+                    "sql": {
+                        "type": "string",
+                        "description": "Comando SQL analítico a ser executado no DuckDB.",
+                    },
+                    "max_rows": {
+                        "type": "integer",
+                        "description": "Número máximo de linhas retornadas.",
+                        "default": 50,
+                    },
                 },
                 "required": ["sql"],
             },
@@ -256,7 +312,11 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Subdiretório a auditar (padrão: raiz).", "default": "."},
+                    "path": {
+                        "type": "string",
+                        "description": "Subdiretório a auditar (padrão: raiz).",
+                        "default": ".",
+                    },
                 },
                 "required": [],
             },
@@ -268,7 +328,11 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Subdiretório a auditar (padrão: raiz).", "default": "."},
+                    "path": {
+                        "type": "string",
+                        "description": "Subdiretório a auditar (padrão: raiz).",
+                        "default": ".",
+                    },
                 },
                 "required": [],
             },
@@ -292,8 +356,15 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "sql": {"type": "string", "description": "Consulta SQL para auditar o plano de execução."},
-                    "db_filename": {"type": "string", "description": "Nome do arquivo do banco SQLite.", "default": "jarvis.db"},
+                    "sql": {
+                        "type": "string",
+                        "description": "Consulta SQL para auditar o plano de execução.",
+                    },
+                    "db_filename": {
+                        "type": "string",
+                        "description": "Nome do arquivo do banco SQLite.",
+                        "default": "jarvis.db",
+                    },
                 },
                 "required": ["sql"],
             },
@@ -305,8 +376,15 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Padrão glob relativo ao projeto."},
-                    "path": {"type": "string", "description": "Diretório base relativo.", "default": "."},
+                    "pattern": {
+                        "type": "string",
+                        "description": "Padrão glob relativo ao projeto.",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Diretório base relativo.",
+                        "default": ".",
+                    },
                 },
                 "required": ["pattern"],
             },
@@ -319,9 +397,21 @@ def _tool_specs() -> list[ToolSpec]:
                 "type": "object",
                 "properties": {
                     "pattern": {"type": "string", "description": "Expressão regular (Python re)."},
-                    "path": {"type": "string", "description": "Diretório base relativo.", "default": "."},
-                    "include": {"type": "string", "description": "Filtro glob de arquivos (ex.: '*.py').", "default": "*"},
-                    "max_results": {"type": "integer", "description": "Máximo de ocorrências.", "default": 80},
+                    "path": {
+                        "type": "string",
+                        "description": "Diretório base relativo.",
+                        "default": ".",
+                    },
+                    "include": {
+                        "type": "string",
+                        "description": "Filtro glob de arquivos (ex.: '*.py').",
+                        "default": "*",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Máximo de ocorrências.",
+                        "default": 80,
+                    },
                 },
                 "required": ["pattern"],
             },
@@ -334,7 +424,11 @@ def _tool_specs() -> list[ToolSpec]:
                 "type": "object",
                 "properties": {
                     "command": {"type": "string", "description": "Comando shell a executar."},
-                    "timeout_seconds": {"type": "number", "description": "Timeout em segundos.", "default": 60.0},
+                    "timeout_seconds": {
+                        "type": "number",
+                        "description": "Timeout em segundos.",
+                        "default": 60.0,
+                    },
                 },
                 "required": ["command"],
             },
@@ -347,9 +441,20 @@ def _tool_specs() -> list[ToolSpec]:
             parameters={
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Texto ou termo de busca semântica."},
-                    "table": {"type": "string", "description": "Tabela de vetores (padrão: project_vectors).", "default": "project_vectors"},
-                    "top_k": {"type": "integer", "description": "Número de itens similares.", "default": 5},
+                    "query": {
+                        "type": "string",
+                        "description": "Texto ou termo de busca semântica.",
+                    },
+                    "table": {
+                        "type": "string",
+                        "description": "Tabela de vetores (padrão: project_vectors).",
+                        "default": "project_vectors",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Número de itens similares.",
+                        "default": 5,
+                    },
                 },
                 "required": ["query"],
             },
@@ -469,8 +574,10 @@ class CodingToolExecutor:
                 raise ValueError(
                     f"O trecho aparece {occurrences} vezes. Inclua mais contexto ou use replace_all=true."
                 )
-            updated = content.replace(old_string, new_string) if replace_all else content.replace(
-                old_string, new_string, 1
+            updated = (
+                content.replace(old_string, new_string)
+                if replace_all
+                else content.replace(old_string, new_string, 1)
             )
             root = self._project_root(project_id)
             rel_norm = path.relative_to(root).as_posix()
@@ -478,8 +585,7 @@ class CodingToolExecutor:
             return {
                 "operation": "EDIT_FILE",
                 "impact_summary": (
-                    f"Editar '{rel_norm}' "
-                    f"({occurrences if replace_all else 1} substituição(ões))."
+                    f"Editar '{rel_norm}' ({occurrences if replace_all else 1} substituição(ões))."
                 ),
                 "affected_resources": [rel_norm],
                 "proposed_diff": diff,
@@ -496,11 +602,21 @@ class CodingToolExecutor:
                     raise PermissionDeniedError(
                         "Comando bloqueado pela política de segurança (padrão destrutivo detectado)."
                     )
+            timeout = max(1, min(int(call.arguments.get("timeout_seconds") or 120), 600))
+            root = self._project_root(project_id)
+            preview = {
+                "mode": "dry_run",
+                "command": command,
+                "cwd": str(root),
+                "timeout_seconds": timeout,
+                "risk": "exec",
+                "effect": "O comando ainda não foi executado; a execução só começa após aprovação.",
+            }
             return {
                 "operation": "RUN_COMMAND",
                 "impact_summary": f"Executar comando no projeto: `{command}`",
                 "affected_resources": [f"shell:{command}"],
-                "proposed_diff": None,
+                "proposed_diff": json.dumps(preview, ensure_ascii=False, indent=2),
                 "reversible": False,
             }
 
@@ -512,7 +628,7 @@ class CodingToolExecutor:
                 self._resolve(project_id, rel)
             return {
                 "operation": "GIT_COMMIT",
-                "impact_summary": f"Criar commit Git: \"{message}\"",
+                "impact_summary": f'Criar commit Git: "{message}"',
                 "affected_resources": paths or ["."],
                 "proposed_diff": None,
                 "reversible": False,
@@ -522,8 +638,6 @@ class CodingToolExecutor:
             spec = self.external[call.name][0]
             if not spec.requires_approval:
                 return None
-            import json
-
             try:
                 arguments = json.dumps(call.arguments, ensure_ascii=False)
             except Exception:
@@ -540,7 +654,9 @@ class CodingToolExecutor:
 
         return None
 
-    async def execute(self, call: ToolCall, project_id: str) -> ToolResult:
+    async def execute(
+        self, call: ToolCall, project_id: str, owner_user_id: str | None = None
+    ) -> ToolResult:
         started = time.perf_counter()
         spec = self.get_spec(call.name)
         if not spec:
@@ -562,9 +678,40 @@ class CodingToolExecutor:
             result.call_id = call.id
             result.name = call.name
             result.duration_ms = (time.perf_counter() - started) * 1000.0
-            self._audit(call.name, project_id, "SUCCESS", result.changed_files)
+            audit_parameters = {"changed_files": result.changed_files}
+            if call.name in {"run_command", "execute_command"}:
+                audit_parameters = {
+                    "command": str(call.arguments.get("command", ""))[:2000],
+                    "timeout_seconds": call.arguments.get("timeout_seconds"),
+                    "duration_ms": result.duration_ms,
+                    "exit_code": result.exit_code,
+                    "output_redacted": result.output[:2000],
+                    "error": result.error,
+                }
+            self._audit(
+                call.name,
+                project_id,
+                "SUCCESS" if result.success else "FAILED",
+                result.changed_files,
+                reason=result.error,
+                parameters=audit_parameters,
+                user_id=owner_user_id,
+            )
             return result
-        except PermissionDeniedError:
+        except PermissionDeniedError as exc:
+            self._audit(
+                call.name,
+                project_id,
+                "DENIED",
+                reason=str(exc),
+                parameters={
+                    "command": str(call.arguments.get("command", ""))[:2000]
+                    if call.name in {"run_command", "execute_command"}
+                    else None,
+                    "arguments": call.arguments,
+                },
+                user_id=owner_user_id,
+            )
             raise
         except Exception as exc:
             result = ToolResult(
@@ -574,7 +721,14 @@ class CodingToolExecutor:
                 error=str(exc),
                 duration_ms=(time.perf_counter() - started) * 1000.0,
             )
-            self._audit(call.name, project_id, "FAILED", reason=str(exc))
+            self._audit(
+                call.name,
+                project_id,
+                "FAILED",
+                reason=str(exc),
+                parameters={"arguments": call.arguments},
+                user_id=owner_user_id,
+            )
             return result
 
     # ------------------------------------------------------------------
@@ -622,6 +776,8 @@ class CodingToolExecutor:
         status: str,
         changed_files: list[str] | None = None,
         reason: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        user_id: str | None = None,
     ) -> None:
         if not self.security_core.audit:
             return
@@ -633,8 +789,11 @@ class CodingToolExecutor:
                 status=status,
                 project_id=project_id,
                 tool_name=tool_name,
-                parameters={"changed_files": changed_files or []},
-                severity=AuditEventSeverity.INFO if status == "SUCCESS" else AuditEventSeverity.WARNING,
+                user_id=user_id,
+                parameters=parameters or {"changed_files": changed_files or []},
+                severity=AuditEventSeverity.INFO
+                if status == "SUCCESS"
+                else AuditEventSeverity.WARNING,
                 reason=reason,
             )
         except Exception as exc:
@@ -681,7 +840,9 @@ class CodingToolExecutor:
                 entries.append(f"[DIR ] {item.relative_to(root).as_posix()}/")
             else:
                 try:
-                    entries.append(f"[FILE] {item.relative_to(root).as_posix()} ({item.stat().st_size} bytes)")
+                    entries.append(
+                        f"[FILE] {item.relative_to(root).as_posix()} ({item.stat().st_size} bytes)"
+                    )
                 except OSError:
                     entries.append(f"[FILE] {item.relative_to(root).as_posix()}")
         return ToolResult(
@@ -709,7 +870,9 @@ class CodingToolExecutor:
             call_id="",
             name="glob",
             success=True,
-            output="\n".join(sorted(matches)) if matches else "Nenhum arquivo corresponde ao padrão.",
+            output="\n".join(sorted(matches))
+            if matches
+            else "Nenhum arquivo corresponde ao padrão.",
         )
 
     async def _run_grep(self, args: dict[str, Any], project_id: str) -> ToolResult:
@@ -807,8 +970,10 @@ class CodingToolExecutor:
             raise ValueError(
                 f"O trecho aparece {occurrences} vezes. Inclua mais contexto ou use replace_all=true."
             )
-        updated = content.replace(old_string, new_string) if replace_all else content.replace(
-            old_string, new_string, 1
+        updated = (
+            content.replace(old_string, new_string)
+            if replace_all
+            else content.replace(old_string, new_string, 1)
         )
         backup = path.with_suffix(path.suffix + ".bak")
         backup.write_text(content, encoding="utf-8")
@@ -836,9 +1001,7 @@ class CodingToolExecutor:
         if self.workspace_service is not None and hasattr(
             self.workspace_service, "run_shell_command"
         ):
-            return await self.workspace_service.run_shell_command(
-                command, cwd, timeout_seconds
-            )
+            return await self.workspace_service.run_shell_command(command, cwd, timeout_seconds)
         raise RuntimeError("Executor de shell indisponível.")
 
     async def _run_run_command(self, args: dict[str, Any], project_id: str) -> ToolResult:
@@ -852,9 +1015,7 @@ class CodingToolExecutor:
                     "Comando bloqueado pela política de segurança (padrão destrutivo detectado)."
                 )
         timeout = max(1, min(int(args.get("timeout_seconds") or 120), 600))
-        exit_code, stdout, stderr, duration = await self._run_shell(
-            command, project_id, timeout
-        )
+        exit_code, stdout, stderr, duration = await self._run_shell(command, project_id, timeout)
         output = stdout
         if stderr:
             output += f"\n[stderr]\n{stderr}"
@@ -862,6 +1023,7 @@ class CodingToolExecutor:
             call_id="",
             name="run_command",
             success=exit_code == 0,
+            exit_code=exit_code,
             output=output,
             error=None if exit_code == 0 else f"Comando terminou com código {exit_code}.",
             duration_ms=duration,
@@ -886,9 +1048,7 @@ class CodingToolExecutor:
         if requested:
             safe = self._resolve(project_id, requested)
             command += f' -- "{safe.name}"'
-        exit_code, stdout, stderr, duration = await self._run_shell(
-            command, project_id, 30
-        )
+        exit_code, stdout, stderr, duration = await self._run_shell(command, project_id, 30)
         output = stdout or "Nenhuma alteração não commitada."
         return ToolResult(
             call_id="",
@@ -913,9 +1073,7 @@ class CodingToolExecutor:
             f'":(exclude)**/*.bak" ":(exclude)*.bak" '
             f'&& git commit -m "{message}"'
         )
-        exit_code, stdout, stderr, duration = await self._run_shell(
-            command, project_id, 60
-        )
+        exit_code, stdout, stderr, duration = await self._run_shell(command, project_id, 60)
         output = stdout
         if stderr:
             output += f"\n[stderr]\n{stderr}"
@@ -1027,12 +1185,16 @@ class CodingToolExecutor:
             vec = [float(ord(c) % 17) / 10.0 for c in query_text[:128]]
             if len(vec) < 128:
                 vec.extend([0.0] * (128 - len(vec)))
-        matches = vector_memory_manager.search_similar(table_name=table, query_vector=vec, top_k=top_k)
+        matches = vector_memory_manager.search_similar(
+            table_name=table, query_vector=vec, top_k=top_k
+        )
         return ToolResult(
             call_id="",
             name="vector_search",
             success=True,
-            output=json.dumps(matches, indent=2, ensure_ascii=False) if matches else "Nenhum vetor correspondente.",
+            output=json.dumps(matches, indent=2, ensure_ascii=False)
+            if matches
+            else "Nenhum vetor correspondente.",
         )
 
     async def _run_web_search(self, args: dict[str, Any], project_id: str) -> ToolResult:

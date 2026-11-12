@@ -15,6 +15,7 @@ from typing import Any
 
 logger = logging.getLogger("jarvis.tools.specialized")
 
+
 def _resolve_project_target(project_root: Path, target_path: str) -> Path:
     """Resolve um caminho relativo sem permitir escapes ou symlinks externos."""
     root = Path(project_root).resolve()
@@ -46,6 +47,7 @@ EXCLUDED_SCAN_DIRS = {
 # 1. DuckDB Analítico (Cientista de Dados & Business Intelligence)
 # -------------------------------------------------------------------------
 
+
 def execute_duckdb_query(
     sql: str,
     project_root: Path,
@@ -55,6 +57,22 @@ def execute_duckdb_query(
     Executa consulta analítica SQL em alta performance com o motor DuckDB embutido.
     Suporta consultas diretas em arquivos CSV, Parquet e JSON do projeto.
     """
+    # This tool is classified as READ. Reject anything except one read-only
+    # statement before DuckDB can access files or invoke extension commands.
+    normalized = re.sub(r"--[^\n]*|/\*.*?\*/", " ", sql, flags=re.DOTALL).strip()
+    statements = [part.strip() for part in normalized.split(";") if part.strip()]
+    if len(statements) != 1:
+        return False, "", "Apenas uma instrução SQL somente leitura é permitida."
+    statement = statements[0]
+    first_word = re.match(r"(?is)^(SELECT|WITH|EXPLAIN|DESCRIBE|DESC|SHOW)\b", statement)
+    if not first_word:
+        return False, "", "Consulta bloqueada: use SELECT, WITH, EXPLAIN, DESCRIBE ou SHOW."
+    forbidden = re.compile(
+        r"(?i)\b(COPY|ATTACH|DETACH|INSTALL|LOAD|CREATE|INSERT|UPDATE|DELETE|DROP|ALTER|EXPORT|IMPORT|PRAGMA|CALL|SET|RESET|TRUNCATE|VACUUM|CHECKPOINT)\b"
+    )
+    if forbidden.search(statement):
+        return False, "", "Consulta bloqueada: comandos com efeitos colaterais não são permitidos."
+
     try:
         import duckdb
     except ImportError:
@@ -137,8 +155,7 @@ def execute_scan_secrets(
 
     for root, dirs, files in os.walk(target_dir):
         dirs[:] = [
-            d for d in dirs
-            if d not in EXCLUDED_SCAN_DIRS and not (Path(root) / d).is_symlink()
+            d for d in dirs if d not in EXCLUDED_SCAN_DIRS and not (Path(root) / d).is_symlink()
         ]
         for f in files:
             file_p = Path(root) / f
@@ -170,16 +187,22 @@ def execute_scan_secrets(
                             else "***"
                         )
                         rel_file = str(file_p.relative_to(project_root))
-                        findings.append({
-                            "file": rel_file,
-                            "line": line_idx,
-                            "type": pattern_name,
-                            "severity": severity,
-                            "sample": line.strip()[:120].replace(matched_val, masked),
-                        })
+                        findings.append(
+                            {
+                                "file": rel_file,
+                                "line": line_idx,
+                                "type": pattern_name,
+                                "severity": severity,
+                                "sample": line.strip()[:120].replace(matched_val, masked),
+                            }
+                        )
 
     if not findings:
-        return True, "✅ Scan de Segredos Concluído: Nenhum segredo ou credencial exposta foi detectada.", ""
+        return (
+            True,
+            "✅ Scan de Segredos Concluído: Nenhum segredo ou credencial exposta foi detectada.",
+            "",
+        )
 
     md_lines = [
         f"⚠️ **Scan de Segredos**: Detectadas {len(findings)} ocorrências potencialmente vulneráveis:\n",
@@ -207,7 +230,10 @@ SAST_PATTERNS: list[tuple[str, re.Pattern, str, str]] = [
     ),
     (
         "Injeção de Comando de Sistema",
-        re.compile(r"""\bos\.system\s*\(|\bsubprocess\.(?:Popen|call|run)\s*\(.*shell\s*=\s*True""", re.IGNORECASE),
+        re.compile(
+            r"""\bos\.system\s*\(|\bsubprocess\.(?:Popen|call|run)\s*\(.*shell\s*=\s*True""",
+            re.IGNORECASE,
+        ),
         "CWE-78: Execução de comando shell com interpolação de strings.",
         "Crítica",
     ),
@@ -225,7 +251,9 @@ SAST_PATTERNS: list[tuple[str, re.Pattern, str, str]] = [
     ),
     (
         "Desativação de Verificação SSL",
-        re.compile(r"""verify\s*=\s*False|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0['"]?""", re.IGNORECASE),
+        re.compile(
+            r"""verify\s*=\s*False|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0['"]?""", re.IGNORECASE
+        ),
         "CWE-295: Validação de certificado TLS desabilitada.",
         "Média",
     ),
@@ -246,8 +274,7 @@ def execute_scan_sast_patterns(
 
     for root, dirs, files in os.walk(target_dir):
         dirs[:] = [
-            d for d in dirs
-            if d not in EXCLUDED_SCAN_DIRS and not (Path(root) / d).is_symlink()
+            d for d in dirs if d not in EXCLUDED_SCAN_DIRS and not (Path(root) / d).is_symlink()
         ]
         for f in files:
             file_p = Path(root) / f
@@ -271,17 +298,23 @@ def execute_scan_sast_patterns(
                 for name, regex, desc, severity in SAST_PATTERNS:
                     if regex.search(line):
                         rel_file = str(file_p.relative_to(project_root))
-                        findings.append({
-                            "file": rel_file,
-                            "line": line_idx,
-                            "name": name,
-                            "desc": desc,
-                            "severity": severity,
-                            "snippet": line.strip()[:100],
-                        })
+                        findings.append(
+                            {
+                                "file": rel_file,
+                                "line": line_idx,
+                                "name": name,
+                                "desc": desc,
+                                "severity": severity,
+                                "snippet": line.strip()[:100],
+                            }
+                        )
 
     if not findings:
-        return True, "✅ Auditoria SAST Concluída: Nenhum padrão de vulnerabilidade OWASP Top 10 identificado.", ""
+        return (
+            True,
+            "✅ Auditoria SAST Concluída: Nenhum padrão de vulnerabilidade OWASP Top 10 identificado.",
+            "",
+        )
 
     md_lines = [
         f"🛡️ **Auditoria SAST**: Identificados {len(findings)} pontos de atenção no código:\n",
@@ -300,6 +333,7 @@ def execute_scan_sast_patterns(
 # 4. Inspeção de Dependências & Geração de SBOM (Supply Chain)
 # -------------------------------------------------------------------------
 
+
 def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
     """Inspeciona manifestos de dependência contidos no projeto."""
     project_root = Path(project_root).resolve()
@@ -317,7 +351,7 @@ def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
             if line and not line.startswith("#"):
                 parts = re.split(r"[><=~]", line, 1)
                 name = parts[0].strip()
-                version = line[len(name):].strip()
+                version = line[len(name) :].strip()
                 deps.append({"package": name, "version": version or "any", "ecosystem": "pypi"})
         manifests["requirements.txt"] = deps
 
@@ -337,10 +371,16 @@ def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
                 if "]" in line:
                     in_deps = False
                     continue
-                clean = line.strip().strip('",\'')
+                clean = line.strip().strip("\",'")
                 if clean:
                     parts = re.split(r"[><=~]", clean, 1)
-                    deps.append({"package": parts[0].strip(), "version": clean[len(parts[0].strip()):], "ecosystem": "pypi"})
+                    deps.append(
+                        {
+                            "package": parts[0].strip(),
+                            "version": clean[len(parts[0].strip()) :],
+                            "ecosystem": "pypi",
+                        }
+                    )
         if deps:
             manifests["pyproject.toml"] = deps
 
@@ -363,7 +403,11 @@ def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
             logger.debug("Falha ao analisar package.json: %s", exc)
 
     if not manifests:
-        return True, "Nenhum manifesto de dependências detectado na raiz do projeto (requirements.txt, package.json, pyproject.toml).", ""
+        return (
+            True,
+            "Nenhum manifesto de dependências detectado na raiz do projeto (requirements.txt, package.json, pyproject.toml).",
+            "",
+        )
 
     lines = ["📦 **Inventário de Dependências do Projeto**:\n"]
     for m_name, deps in manifests.items():
@@ -392,7 +436,13 @@ def execute_generate_sbom(project_root: Path) -> tuple[bool, str, str]:
                 "name": project_root.name,
                 "type": "application",
             },
-            "tools": [{"vendor": "JARVIS AI Hub", "name": "Software Supply Chain Specialist", "version": "2.0.0"}],
+            "tools": [
+                {
+                    "vendor": "JARVIS AI Hub",
+                    "name": "Software Supply Chain Specialist",
+                    "version": "2.0.0",
+                }
+            ],
         },
         "components": [],
     }
@@ -409,13 +459,15 @@ def execute_generate_sbom(project_root: Path) -> tuple[bool, str, str]:
             if line and not line.startswith("#"):
                 parts = re.split(r"[><=~]", line, 1)
                 pkg = parts[0].strip()
-                ver = line[len(pkg):].strip()
-                sbom_doc["components"].append({
-                    "type": "library",
-                    "name": pkg,
-                    "version": ver or "latest",
-                    "purl": f"pkg:pypi/{pkg}",
-                })
+                ver = line[len(pkg) :].strip()
+                sbom_doc["components"].append(
+                    {
+                        "type": "library",
+                        "name": pkg,
+                        "version": ver or "latest",
+                        "purl": f"pkg:pypi/{pkg}",
+                    }
+                )
 
     output_json = json.dumps(sbom_doc, indent=2, ensure_ascii=False)
     summary = f"📋 **SBOM Gerado com Sucesso** ({len(sbom_doc['components'])} componentes catalogados):\n\n```json\n{output_json}\n```"
@@ -425,6 +477,7 @@ def execute_generate_sbom(project_root: Path) -> tuple[bool, str, str]:
 # -------------------------------------------------------------------------
 # 5. Auditoria de Queries SQL (EXPLAIN QUERY PLAN)
 # -------------------------------------------------------------------------
+
 
 def execute_sql_query_explain(
     sql: str,
@@ -466,7 +519,9 @@ def execute_sql_query_explain(
             lines.append(f"| {row[0]} | {row[1]} | {detail} |")
 
         if has_table_scan:
-            lines.append("\n> **Full Table Scan Detectado**: avalie índices nas colunas usadas no filtro `WHERE`.")
+            lines.append(
+                "\n> **Full Table Scan Detectado**: avalie índices nas colunas usadas no filtro `WHERE`."
+            )
         else:
             lines.append("\n> **Plano otimizado**: não foi detectada varredura completa de tabela.")
         return True, "\n".join(lines), ""
@@ -481,6 +536,7 @@ def execute_sql_query_explain(
 # 6. Memória Semântica Vetorial (LanceDB)
 # -------------------------------------------------------------------------
 
+
 class VectorMemoryManager:
     """Gerencia índices vetoriais embutidos locais via LanceDB para os agentes."""
 
@@ -492,6 +548,7 @@ class VectorMemoryManager:
     def _get_db(self):
         if self._db is None:
             import lancedb
+
             self._db = lancedb.connect(str(self.db_dir))
         return self._db
 

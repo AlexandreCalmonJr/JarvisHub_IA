@@ -26,7 +26,7 @@ export async function streamChatMessage(
   onChunk?: (token: string) => void,
   onMeta?: (meta: any) => void,
   onDone?: (done: any) => void,
-  onError?: (err: string) => void,
+  onError?: (err: string, code?: string) => void,
   onStatus?: (status: any) => void,
   signal?: AbortSignal,
   model?: string
@@ -65,7 +65,7 @@ export async function streamChatMessage(
         else if (payload.type === 'token' && onChunk) onChunk(payload.chunk);
         else if (payload.type === 'done' && onDone) onDone(payload);
         else if (payload.type === 'status' && onStatus) onStatus(payload);
-        else if (payload.type === 'error' && onError) onError(payload.error);
+        else if (payload.type === 'error' && onError) onError(payload.error, payload.code);
       } catch (e) {
         console.warn('Erro ao processar chunk SSE:', e);
       }

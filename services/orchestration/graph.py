@@ -52,16 +52,16 @@ def get_agent_label(role: str | AgentRole) -> str:
     return AGENT_ROLE_LABELS.get(val_clean, val.replace("_", " ").title())
 
 
-
+from .heuristic_engine import generate_heuristic_technical_response
 from .prompt_builder import INTENT_DOMAIN_MAP, build_specialist_prompt
 from .workspace_actions import execute_workspace_modification
 
 __all__ = [
-    "create_master_graph",
-    "build_specialist_prompt",
-    "generate_heuristic_technical_response",
-    "execute_workspace_modification",
     "INTENT_DOMAIN_MAP",
+    "build_specialist_prompt",
+    "create_master_graph",
+    "execute_workspace_modification",
+    "generate_heuristic_technical_response",
 ]
 
 
@@ -154,7 +154,21 @@ def create_master_graph(
             )
         ):
             intent = "multi_agent_consensus"
-            if any(w in prompt for w in ("ingles", "inglês", "idioma", "idiomas", "estudo", "estudar", "aprender", "carreira", "pesquisa", "educação")):
+            if any(
+                w in prompt
+                for w in (
+                    "ingles",
+                    "inglês",
+                    "idioma",
+                    "idiomas",
+                    "estudo",
+                    "estudar",
+                    "aprender",
+                    "carreira",
+                    "pesquisa",
+                    "educação",
+                )
+            ):
                 agents = [
                     AgentRole.RESEARCH_ANALYST.value,
                     AgentRole.PROJECT_MANAGER.value,
@@ -218,7 +232,22 @@ def create_master_graph(
             )
         ):
             intent = "project_creation"
-            if any(w in prompt for w in ("segurança", "seguranca", "cyber", "ciber", "owasp", "threat", "soc", "shield", "pentest", "vulnerabilidade", "firewall")):
+            if any(
+                w in prompt
+                for w in (
+                    "segurança",
+                    "seguranca",
+                    "cyber",
+                    "ciber",
+                    "owasp",
+                    "threat",
+                    "soc",
+                    "shield",
+                    "pentest",
+                    "vulnerabilidade",
+                    "firewall",
+                )
+            ):
                 agents = [
                     AgentRole.JARVIS_MASTER.value,
                     AgentRole.CYBERSECURITY_ENGINEER.value,
@@ -237,18 +266,46 @@ def create_master_graph(
             and any(
                 marker in prompt
                 for marker in (
-                    "analise", "análise", "analisar", "investigue", "investigar",
-                    "resolver", "solucionar", "diagnosticar", "estratégia",
-                    "planejamento", "decisão", "compare", "avaliar",
-                    "problema", "problemas", "causa", "causas",
+                    "analise",
+                    "análise",
+                    "analisar",
+                    "investigue",
+                    "investigar",
+                    "resolver",
+                    "solucionar",
+                    "diagnosticar",
+                    "estratégia",
+                    "planejamento",
+                    "decisão",
+                    "compare",
+                    "avaliar",
+                    "problema",
+                    "problemas",
+                    "causa",
+                    "causas",
                 )
             )
             and not any(
                 action in prompt
                 for action in (
-                    "corrigir", "corrija", "implementar", "implemente", "editar", "edite",
-                    "modificar", "modifique", "mudar", "mude", "alterar", "altere",
-                    "adicionar", "adicione", "trocar", "troque", "atualizar", "atualize",
+                    "corrigir",
+                    "corrija",
+                    "implementar",
+                    "implemente",
+                    "editar",
+                    "edite",
+                    "modificar",
+                    "modifique",
+                    "mudar",
+                    "mude",
+                    "alterar",
+                    "altere",
+                    "adicionar",
+                    "adicione",
+                    "trocar",
+                    "troque",
+                    "atualizar",
+                    "atualize",
                 )
             )
         ):
@@ -298,17 +355,69 @@ def create_master_graph(
         elif any(
             w in prompt
             for w in (
-                "python", "pyhton", "javascript", "typescript", "java", "c#", "csharp", "golang", "kotlin", "rust",
-                "react", "flutter", "dart", "docker", "fastapi", "sql", "sqlite", "postgres", "mongodb",
-                "api", "backend", "frontend", "git", "programar", "linguagem", "algoritmo", "codigo", "código",
-                "ti", "tecnologia", "computação", "computacao", "arquitetura", "infraestrutura", "sistemas"
+                "python",
+                "pyhton",
+                "javascript",
+                "typescript",
+                "java",
+                "c#",
+                "csharp",
+                "golang",
+                "kotlin",
+                "rust",
+                "react",
+                "flutter",
+                "dart",
+                "docker",
+                "fastapi",
+                "sql",
+                "sqlite",
+                "postgres",
+                "mongodb",
+                "api",
+                "backend",
+                "frontend",
+                "git",
+                "programar",
+                "linguagem",
+                "algoritmo",
+                "codigo",
+                "código",
+                "ti",
+                "tecnologia",
+                "computação",
+                "computacao",
+                "arquitetura",
+                "infraestrutura",
+                "sistemas",
             )
         ) and any(
             q in prompt
             for q in (
-                "como", "o que", "oque", "quero saber", "me fale", "me explique", "ensine", "aprender",
-                "tutorial", "diferença", "qual", "quais", "por que", "porque", "exemplo", "guia", "documentação",
-                "principais", "bibliotecas", "frameworks", "começar", "iniciar", "entender", "saber"
+                "como",
+                "o que",
+                "oque",
+                "quero saber",
+                "me fale",
+                "me explique",
+                "ensine",
+                "aprender",
+                "tutorial",
+                "diferença",
+                "qual",
+                "quais",
+                "por que",
+                "porque",
+                "exemplo",
+                "guia",
+                "documentação",
+                "principais",
+                "bibliotecas",
+                "frameworks",
+                "começar",
+                "iniciar",
+                "entender",
+                "saber",
             )
         ):
             intent = "code_explanation"
@@ -333,7 +442,21 @@ def create_master_graph(
             ]
         elif intent == "project_creation":
             p_low = prompt.lower()
-            if any(w in p_low for w in ("segurança", "seguranca", "cyber", "ciber", "owasp", "threat", "soc", "shield", "pentest", "vulnerabilidade")):
+            if any(
+                w in p_low
+                for w in (
+                    "segurança",
+                    "seguranca",
+                    "cyber",
+                    "ciber",
+                    "owasp",
+                    "threat",
+                    "soc",
+                    "shield",
+                    "pentest",
+                    "vulnerabilidade",
+                )
+            ):
                 steps = [
                     "1. Convocar Mesa Redonda com JARVIS Maestro, Cibersegurança, Arquiteto, Dev Frontend e QA.",
                     "2. Auditoria de Cibersegurança & Conformidade OWASP Top 10 (Engenheiro de Cibersegurança).",
@@ -459,9 +582,21 @@ def create_master_graph(
             and getattr(model_manager.hybrid_router, "online_config", None)
             and model_manager.hybrid_router.online_config.enabled
         )
-        hybrid_default = getattr(getattr(model_manager.hybrid_router, "online_config", None), "default_model", "qwen/qwen3.8-27b") if is_hybrid_active else "auto"
+        hybrid_default = (
+            getattr(
+                getattr(model_manager.hybrid_router, "online_config", None),
+                "default_model",
+                "qwen/qwen3.8-27b",
+            )
+            if is_hybrid_active
+            else "auto"
+        )
 
-        pref = prim_profile.preferred_model if prim_profile else ("auto_hybrid" if is_hybrid_active else "auto")
+        pref = (
+            prim_profile.preferred_model
+            if prim_profile
+            else ("auto_hybrid" if is_hybrid_active else "auto")
+        )
         if not pref or pref in ("auto", "auto_hybrid"):
             # Delega a escolha ao seletor governado do ModelManager.
             model_name = "auto_hybrid" if is_hybrid_active else "auto"
@@ -471,13 +606,9 @@ def create_master_graph(
             # Preferências explícitas e personalizadas do perfil são preservadas.
             model_name = pref
 
-        key_vault = getattr(
-            getattr(model_manager, "hybrid_router", None), "key_vault", None
-        )
+        key_vault = getattr(getattr(model_manager, "hybrid_router", None), "key_vault", None)
 
-        def _route_for(
-            role_name: str, profile_obj: Any, fallback_model: str
-        ) -> Any:
+        def _route_for(role_name: str, profile_obj: Any, fallback_model: str) -> Any:
             return resolve_account_agent_route(
                 db_manager=db_manager,
                 key_vault=key_vault,
@@ -498,7 +629,11 @@ def create_master_graph(
                 for prj in workspace_service.list_available_projects():
                     p_id = prj["id"].lower()
                     p_norm = p_id.replace("-", " ")
-                    if p_id in p_lower or p_norm in p_lower or any(part in p_lower for part in p_id.split("-") if len(part) > 3):
+                    if (
+                        p_id in p_lower
+                        or p_norm in p_lower
+                        or any(part in p_lower for part in p_id.split("-") if len(part) > 3)
+                    ):
                         project_id = prj["id"]
                         break
             except Exception as exc:
@@ -521,7 +656,10 @@ def create_master_graph(
                 project_type = "csharp"
                 prefix = "cs"
                 dev_role = AgentRole.BACKEND_DEVELOPER
-            elif any(w in p_lower for w in ("golang", "go ", "em go", "projeto go", "api em go", "app em go")):
+            elif any(
+                w in p_lower
+                for w in ("golang", "go ", "em go", "projeto go", "api em go", "app em go")
+            ):
                 project_type = "go"
                 prefix = "go"
                 dev_role = AgentRole.BACKEND_DEVELOPER
@@ -529,7 +667,10 @@ def create_master_graph(
                 project_type = "kotlin"
                 prefix = "kt"
                 dev_role = AgentRole.BACKEND_DEVELOPER
-            elif any(w in p_lower for w in ("mobile", "app", "aplicativo", "flutter", "celular", "apk", "android")):
+            elif any(
+                w in p_lower
+                for w in ("mobile", "app", "aplicativo", "flutter", "celular", "apk", "android")
+            ):
                 project_type = "flutter"
                 prefix = "app"
                 dev_role = AgentRole.FRONTEND_MOBILE_DEVELOPER
@@ -543,21 +684,75 @@ def create_master_graph(
             sec_role = AgentRole.CYBERSECURITY_ENGINEER
 
             slug = None
-            is_english = any(k in p_lower for k in ("ingles", "inglês", "english", "exercicios", "exercício", "exercicio", "quiz", "praticas", "prática"))
-            is_security = any(k in p_lower for k in ("segurança", "seguranca", "cyber", "ciber", "owasp", "threat", "soc", "shield", "pentest", "vulnerabilidade", "firewall", "antivirus"))
+            is_english = any(
+                k in p_lower
+                for k in (
+                    "ingles",
+                    "inglês",
+                    "english",
+                    "exercicios",
+                    "exercício",
+                    "exercicio",
+                    "quiz",
+                    "praticas",
+                    "prática",
+                )
+            )
+            is_security = any(
+                k in p_lower
+                for k in (
+                    "segurança",
+                    "seguranca",
+                    "cyber",
+                    "ciber",
+                    "owasp",
+                    "threat",
+                    "soc",
+                    "shield",
+                    "pentest",
+                    "vulnerabilidade",
+                    "firewall",
+                    "antivirus",
+                )
+            )
 
             if is_english:
                 slug = "site-exercicios-ingles"
                 state["selected_agents"] = [arch_role.value, dev_role.value, qa_role.value]
             elif is_security:
                 slug = "site-seguranca"
-                state["selected_agents"] = [AgentRole.JARVIS_MASTER.value, sec_role.value, arch_role.value, dev_role.value, qa_role.value]
+                state["selected_agents"] = [
+                    AgentRole.JARVIS_MASTER.value,
+                    sec_role.value,
+                    arch_role.value,
+                    dev_role.value,
+                    qa_role.value,
+                ]
             else:
                 state["selected_agents"] = [arch_role.value, dev_role.value, qa_role.value]
                 for kw in (
-                    "cafeteria", "cafe", "restaurante", "pizzaria", "portfolio", "loja", "blog",
-                    "ecommerce", "clinica", "barbearia", "padaria", "hotel", "academia", "tarefas",
-                    "financeiro", "educacao", "cursos", "dashboard", "api", "backend", "service", "auth"
+                    "cafeteria",
+                    "cafe",
+                    "restaurante",
+                    "pizzaria",
+                    "portfolio",
+                    "loja",
+                    "blog",
+                    "ecommerce",
+                    "clinica",
+                    "barbearia",
+                    "padaria",
+                    "hotel",
+                    "academia",
+                    "tarefas",
+                    "financeiro",
+                    "educacao",
+                    "cursos",
+                    "dashboard",
+                    "api",
+                    "backend",
+                    "service",
+                    "auth",
                 ):
                     if kw in p_lower:
                         slug = f"{prefix}-{kw}"
@@ -565,13 +760,47 @@ def create_master_graph(
             if not slug:
                 words = re.findall(r"[a-zA-Z0-9]+", p_lower)
                 filtered = [
-                    w for w in words
-                    if w not in (
-                        "criar", "cria", "crie", "fazer", "um", "uma", "site", "para", "mim", "com",
-                        "de", "e", "novo", "projeto", "web", "pagina", "simples", "app", "aplicativo",
-                        "mobile", "flutter", "celular", "podemos", "pode", "consigo", "realizar",
-                        "praticas", "pratica", "como", "fazer", "python", "java", "csharp", "dotnet",
-                        "go", "golang", "kotlin"
+                    w
+                    for w in words
+                    if w
+                    not in (
+                        "criar",
+                        "cria",
+                        "crie",
+                        "fazer",
+                        "um",
+                        "uma",
+                        "site",
+                        "para",
+                        "mim",
+                        "com",
+                        "de",
+                        "e",
+                        "novo",
+                        "projeto",
+                        "web",
+                        "pagina",
+                        "simples",
+                        "app",
+                        "aplicativo",
+                        "mobile",
+                        "flutter",
+                        "celular",
+                        "podemos",
+                        "pode",
+                        "consigo",
+                        "realizar",
+                        "praticas",
+                        "pratica",
+                        "como",
+                        "fazer",
+                        "python",
+                        "java",
+                        "csharp",
+                        "dotnet",
+                        "go",
+                        "golang",
+                        "kotlin",
                     )
                 ]
                 if filtered:
@@ -594,9 +823,7 @@ def create_master_graph(
                 project_id=slug,
                 domain="frontend" if project_type in ("web", "flutter") else "backend",
             )
-            arch_profile = (
-                agent_registry.get_profile(arch_role) if agent_registry else None
-            )
+            arch_profile = agent_registry.get_profile(arch_role) if agent_registry else None
             arch_route = _route_for(arch_role.value, arch_profile, model_name)
             arch_model = arch_route.model or model_name
             arch_req = InferenceRequest(
@@ -660,9 +887,7 @@ def create_master_graph(
                     project_id=slug,
                     domain="security",
                 )
-                sec_profile = (
-                    agent_registry.get_profile(sec_role) if agent_registry else None
-                )
+                sec_profile = agent_registry.get_profile(sec_role) if agent_registry else None
                 sec_route = _route_for(sec_role.value, sec_profile, model_name)
                 sec_req = InferenceRequest(
                     prompt=(
@@ -695,11 +920,15 @@ def create_master_graph(
             custom_files: dict[str, str] = {}
             if project_type == "web" and is_english:
                 custom_files = workspace_service._generate_english_practice_web_scaffold(
-                    slug, name_clean, f"Plataforma completa de exercícios e prática de inglês para '{user_prompt}'"
+                    slug,
+                    name_clean,
+                    f"Plataforma completa de exercícios e prática de inglês para '{user_prompt}'",
                 )
             elif project_type == "web" and is_security:
                 custom_files = workspace_service.scaffolder._generate_security_web_scaffold(
-                    slug, name_clean, f"Portal completo de Cibersegurança e Inteligência de Ameaças para '{user_prompt}'"
+                    slug,
+                    name_clean,
+                    f"Portal completo de Cibersegurança e Inteligência de Ameaças para '{user_prompt}'",
                 )
 
             # Projeto novo também é uma escrita no Workspace: nenhuma pasta/arquivo
@@ -716,12 +945,12 @@ def create_master_graph(
 
             # As equipas Dev e QA produzem os seus pareceres antes da aprovação,
             # mas não recebem autorização para criar ou alterar ficheiros.
-            dev_summary = f"Plano de implementação preparado para {name_clean}; a escrita aguarda aprovação."
+            dev_summary = (
+                f"Plano de implementação preparado para {name_clean}; a escrita aguarda aprovação."
+            )
             dev_tokens = 0
             dev_duration = 0.0
-            dev_profile = (
-                agent_registry.get_profile(dev_role) if agent_registry else None
-            )
+            dev_profile = agent_registry.get_profile(dev_role) if agent_registry else None
             dev_route = _route_for(dev_role.value, dev_profile, model_name)
             try:
                 dev_resp = await model_manager.generate(
@@ -764,9 +993,7 @@ def create_master_graph(
             )
             qa_tokens = 0
             qa_duration = 0.0
-            qa_profile = (
-                agent_registry.get_profile(qa_role) if agent_registry else None
-            )
+            qa_profile = agent_registry.get_profile(qa_role) if agent_registry else None
             qa_route = _route_for(qa_role.value, qa_profile, model_name)
             try:
                 qa_resp = await model_manager.generate(
@@ -803,62 +1030,64 @@ def create_master_graph(
             except Exception as exc:
                 logger.info("Plano de QA indisponível: %s", exc)
 
-            agent_outputs.extend([
-                AgentOutputContract(
-                    agent_role=arch_role.value,
-                    objective="Arquitetura do novo projeto",
-                    summary=arch_summary,
-                    evidence=["Análise de arquitetura concluída; sem escrita no workspace."],
-                    actions_taken=["Análise de requisitos", "Planeamento de arquitetura"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=model_name,
-                        tokens_prompt=arch_p_tokens,
-                        tokens_completion=arch_c_tokens,
-                        duration_ms=arch_dur_ms,
-                    ),
-                    next_recommendation="Rever o plano e aprovar a criação do projeto.",
-                ).model_dump(),
-                AgentOutputContract(
-                    agent_role=dev_role.value,
-                    objective="Plano de implementação",
-                    summary=dev_summary,
-                    evidence=["Plano técnico preparado; nenhuma alteração física executada."],
-                    actions_taken=["Planeamento de módulos e ficheiros"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=model_name,
-                        tokens_prompt=0,
-                        tokens_completion=dev_tokens,
-                        duration_ms=dev_duration,
-                    ),
-                    next_recommendation="Implementar após a aprovação humana.",
-                ).model_dump(),
-                AgentOutputContract(
-                    agent_role=qa_role.value,
-                    objective="Plano de qualidade e aceitação",
-                    summary=qa_summary,
-                    evidence=["Critérios de QA preparados; nenhum teste foi executado."],
-                    actions_taken=["Planeamento de critérios de aceitação"],
-                    affected_files=[],
-                    tests_executed=[],
-                    risks=[],
-                    blockers=[],
-                    resource_usage=ResourceUsage(
-                        model_name=model_name,
-                        tokens_prompt=0,
-                        tokens_completion=qa_tokens,
-                        duration_ms=qa_duration,
-                    ),
-                    next_recommendation="Executar testes após a criação aprovada.",
-                ).model_dump(),
-            ])
+            agent_outputs.extend(
+                [
+                    AgentOutputContract(
+                        agent_role=arch_role.value,
+                        objective="Arquitetura do novo projeto",
+                        summary=arch_summary,
+                        evidence=["Análise de arquitetura concluída; sem escrita no workspace."],
+                        actions_taken=["Análise de requisitos", "Planeamento de arquitetura"],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[],
+                        resource_usage=ResourceUsage(
+                            model_name=model_name,
+                            tokens_prompt=arch_p_tokens,
+                            tokens_completion=arch_c_tokens,
+                            duration_ms=arch_dur_ms,
+                        ),
+                        next_recommendation="Rever o plano e aprovar a criação do projeto.",
+                    ).model_dump(),
+                    AgentOutputContract(
+                        agent_role=dev_role.value,
+                        objective="Plano de implementação",
+                        summary=dev_summary,
+                        evidence=["Plano técnico preparado; nenhuma alteração física executada."],
+                        actions_taken=["Planeamento de módulos e ficheiros"],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[],
+                        resource_usage=ResourceUsage(
+                            model_name=model_name,
+                            tokens_prompt=0,
+                            tokens_completion=dev_tokens,
+                            duration_ms=dev_duration,
+                        ),
+                        next_recommendation="Implementar após a aprovação humana.",
+                    ).model_dump(),
+                    AgentOutputContract(
+                        agent_role=qa_role.value,
+                        objective="Plano de qualidade e aceitação",
+                        summary=qa_summary,
+                        evidence=["Critérios de QA preparados; nenhum teste foi executado."],
+                        actions_taken=["Planeamento de critérios de aceitação"],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[],
+                        resource_usage=ResourceUsage(
+                            model_name=model_name,
+                            tokens_prompt=0,
+                            tokens_completion=qa_tokens,
+                            duration_ms=qa_duration,
+                        ),
+                        next_recommendation="Executar testes após a criação aprovada.",
+                    ).model_dump(),
+                ]
+            )
             if is_security and sec_summary:
                 agent_outputs.append(
                     AgentOutputContract(
@@ -889,6 +1118,12 @@ def create_master_graph(
                     f"a partir do pedido: '{state['user_prompt']}'"
                 ),
                 "project_type": project_type,
+                "database": (
+                    "sqlite"
+                    if project_type in {"python", "py", "fastapi"}
+                    and re.search(r"\bsqlite(?:3)?\b", state["user_prompt"], re.IGNORECASE)
+                    else "none"
+                ),
                 "files": custom_files if custom_files else None,
             }
             approval_preview = json.dumps(
@@ -896,6 +1131,7 @@ def create_master_graph(
                     "project_id": slug,
                     "name": name_clean,
                     "project_type": project_type,
+                    "database": pending_project["database"],
                     "files": custom_files or "Scaffold padrão do tipo selecionado",
                 },
                 ensure_ascii=False,
@@ -958,7 +1194,16 @@ def create_master_graph(
         # 3. Interação conversacional inteligente (Diálogo, Dúvidas gerais, Planejamento)
         elif intent == "conversation":
             p_stripped = user_prompt.strip().lower()
-            if p_stripped in ("oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hello", "hi"):
+            if p_stripped in (
+                "oi",
+                "olá",
+                "ola",
+                "bom dia",
+                "boa tarde",
+                "boa noite",
+                "hello",
+                "hi",
+            ):
                 llm_text = (
                     "Olá! Estou online com meus 26 especialistas técnicos prontos para colaborar.\n\n"
                     "Como posso te ajudar hoje? Posso criar projetos, debater arquitetura, auditar código ou responder qualquer pergunta técnica."
@@ -1015,13 +1260,30 @@ def create_master_graph(
 
         # 4. Mesa Redonda Multi-Agente (Deliberação & Consenso entre 3 Especialistas)
         elif intent == "multi_agent_consensus":
-            clean_prompt = user_prompt.replace("/debate", "").replace("/roundtable", "").replace("/consenso", "").strip()
+            clean_prompt = (
+                user_prompt.replace("/debate", "")
+                .replace("/roundtable", "")
+                .replace("/consenso", "")
+                .strip()
+            )
             if not clean_prompt:
                 clean_prompt = "Debatam a estratégia ideal e plano de ação para o desafio atual."
 
             is_educational = any(
                 w in clean_prompt.lower()
-                for w in ("ingles", "inglês", "idioma", "idiomas", "estudo", "estudar", "aprender", "carreira", "pesquisa", "educação", "rotina")
+                for w in (
+                    "ingles",
+                    "inglês",
+                    "idioma",
+                    "idiomas",
+                    "estudo",
+                    "estudar",
+                    "aprender",
+                    "carreira",
+                    "pesquisa",
+                    "educação",
+                    "rotina",
+                )
             )
 
             if is_educational:
@@ -1122,7 +1384,9 @@ def create_master_graph(
                 try:
                     specialist_response = await model_manager.generate(specialist_request)
                 except Exception as exc:
-                    logger.exception("Especialista %s falhou na tarefa %s", specialist_role, state.get("task_id"))
+                    logger.exception(
+                        "Especialista %s falhou na tarefa %s", specialist_role, state.get("task_id")
+                    )
                     raise RuntimeError(
                         f"O especialista {specialist_role} não conseguiu executar sua etapa: {exc}"
                     ) from exc
@@ -1131,10 +1395,12 @@ def create_master_graph(
                     raise RuntimeError(
                         f"O especialista {specialist_role} retornou uma resposta vazia."
                     )
-                peer_outputs.append({
-                    "agent_role": specialist_role,
-                    "summary": specialist_text,
-                })
+                peer_outputs.append(
+                    {
+                        "agent_role": specialist_role,
+                        "summary": specialist_text,
+                    }
+                )
                 peer_contracts.append(
                     AgentOutputContract(
                         agent_role=specialist_role,
@@ -1149,7 +1415,8 @@ def create_master_graph(
                         resource_usage=ResourceUsage(
                             model_name=specialist_model,
                             tokens_prompt=getattr(specialist_response, "prompt_tokens", 0) or 0,
-                            tokens_completion=getattr(specialist_response, "completion_tokens", 0) or 0,
+                            tokens_completion=getattr(specialist_response, "completion_tokens", 0)
+                            or 0,
                             duration_ms=getattr(specialist_response, "duration_ms", 0.0) or 0.0,
                         ),
                         next_recommendation="Aguardar a consolidação do JARVIS Maestro.",
@@ -1159,12 +1426,11 @@ def create_master_graph(
             master_prompt = (
                 f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\\n\\n"
                 + "\\n\\n".join(
-                    f"Parecer de {item['agent_role']}:\\n{item['summary']}"
-                    for item in peer_outputs
+                    f"Parecer de {item['agent_role']}:\\n{item['summary']}" for item in peer_outputs
                 )
                 + "\\n\\nCompare as recomendações, identifique convergências e divergências, "
-                  "resolva conflitos com justificativa e apresente um plano final. "
-                  "Não invente consenso, testes, ferramentas, evidências ou ações que não ocorreram."
+                "resolva conflitos com justificativa e apresente um plano final. "
+                "Não invente consenso, testes, ferramentas, evidências ou ações que não ocorreram."
             )
             master_system = build_specialist_prompt(
                 agent_role=AgentRole.JARVIS_MASTER.value,
@@ -1179,13 +1445,9 @@ def create_master_graph(
                 previous_outputs=peer_outputs,
             )
             master_profile = (
-                agent_registry.get_profile(AgentRole.JARVIS_MASTER)
-                if agent_registry
-                else None
+                agent_registry.get_profile(AgentRole.JARVIS_MASTER) if agent_registry else None
             )
-            master_route = _route_for(
-                AgentRole.JARVIS_MASTER.value, master_profile, model_name
-            )
+            master_route = _route_for(AgentRole.JARVIS_MASTER.value, master_profile, model_name)
             try:
                 master_response = await model_manager.generate(
                     InferenceRequest(
@@ -1202,7 +1464,9 @@ def create_master_graph(
                     )
                 )
             except Exception as exc:
-                logger.exception("Síntese do JARVIS Maestro falhou na tarefa %s", state.get("task_id"))
+                logger.exception(
+                    "Síntese do JARVIS Maestro falhou na tarefa %s", state.get("task_id")
+                )
                 raise RuntimeError(
                     f"O JARVIS Maestro não conseguiu consolidar os pareceres: {exc}"
                 ) from exc
@@ -1227,8 +1491,12 @@ def create_master_graph(
                     agent_role=AgentRole.JARVIS_MASTER,
                     objective="Consolidação dos pareceres realmente produzidos pelos especialistas.",
                     summary=master_summary,
-                    evidence=["Síntese gerada após receber os pareceres dos especialistas convocados."],
-                    actions_taken=["Comparou os pareceres e consolidou convergências, divergências e recomendações."],
+                    evidence=[
+                        "Síntese gerada após receber os pareceres dos especialistas convocados."
+                    ],
+                    actions_taken=[
+                        "Comparou os pareceres e consolidou convergências, divergências e recomendações."
+                    ],
                     affected_files=[],
                     tests_executed=[],
                     risks=[],
@@ -1258,7 +1526,12 @@ def create_master_graph(
                 domain=domain,
             )
             # Otimização de latência: em CPU local, limita tokens de resposta para entrega veloz (<10s)
-            req_max_tokens = 600 if not is_hybrid_active and intent in ("conversation", "general_planning", "code_explanation") else 1200
+            req_max_tokens = (
+                600
+                if not is_hybrid_active
+                and intent in ("conversation", "general_planning", "code_explanation")
+                else 1200
+            )
             inference_req = InferenceRequest(
                 prompt=user_prompt,
                 system_prompt=system_prompt,
@@ -1311,18 +1584,14 @@ def create_master_graph(
         # Delegação sequencial real para todos os especialistas selecionados.
         # Não depende de provedor híbrido: também funciona com modelos locais.
         secondary_agents = (
-            selected[1:]
-            if intent not in ("project_creation", "multi_agent_consensus")
-            else []
+            selected[1:] if intent not in ("project_creation", "multi_agent_consensus") else []
         )
         execution_errors: list[str] = []
         for secondary_role in secondary_agents:
             try:
                 role_enum = AgentRole(secondary_role)
             except Exception:
-                execution_errors.append(
-                    f"Especialista desconhecido no catálogo: {secondary_role}"
-                )
+                execution_errors.append(f"Especialista desconhecido no catálogo: {secondary_role}")
                 continue
 
             secondary_profile = None
@@ -1394,7 +1663,8 @@ def create_master_graph(
                         resource_usage=ResourceUsage(
                             model_name=secondary_model,
                             tokens_prompt=getattr(secondary_response, "prompt_tokens", 0) or 0,
-                            tokens_completion=getattr(secondary_response, "completion_tokens", 0) or 0,
+                            tokens_completion=getattr(secondary_response, "completion_tokens", 0)
+                            or 0,
                             duration_ms=getattr(secondary_response, "duration_ms", 0.0) or 0.0,
                         ),
                         next_recommendation="Aguardar a consolidação do JARVIS Maestro.",
@@ -1429,7 +1699,9 @@ def create_master_graph(
             "is_completed": not execution_errors,
         }
         if execution_errors:
-            res_dict["error"] = "Uma ou mais etapas delegadas falharam: " + "; ".join(execution_errors)
+            res_dict["error"] = "Uma ou mais etapas delegadas falharam: " + "; ".join(
+                execution_errors
+            )
         if "llm_text" in locals() and llm_text:
             res_dict["final_summary"] = llm_text
         elif agent_outputs:
@@ -1447,7 +1719,9 @@ def create_master_graph(
                 out["summary"] = healed_summary
                 evidence_list = out.get("evidence")
                 if isinstance(evidence_list, list):
-                    evidence_list.append(f"Auto-correção sintática aplicada: {len(corrections)} correções")
+                    evidence_list.append(
+                        f"Auto-correção sintática aplicada: {len(corrections)} correções"
+                    )
             contract = AgentOutputContract(**out)
             validated.append(contract.model_dump())
         res: dict[str, Any] = {"agent_outputs": validated}
@@ -1481,11 +1755,7 @@ def create_master_graph(
         if state.get("error"):
             partial = state.get("final_summary") or "A execução multiagente não foi concluída."
             return {
-                "final_summary": (
-                    partial
-                    + "\\n\\n**Execução parcial:** "
-                    + str(state["error"])
-                ),
+                "final_summary": (partial + "\\n\\n**Execução parcial:** " + str(state["error"])),
                 "is_completed": False,
             }
 
@@ -1498,7 +1768,10 @@ def create_master_graph(
 
         # O resumo final é direto, conversacional e limpo (estilo Claude / ChatGPT / Gemini)
         # Detalhes técnicos e pareceres de cada especialista são visualizados no accordion de raciocínio
-        return {"final_summary": primary_summary or "Operação concluída com sucesso.", "is_completed": True}
+        return {
+            "final_summary": primary_summary or "Operação concluída com sucesso.",
+            "is_completed": True,
+        }
 
     def route_after_policy(state: TaskState) -> str:
         if state.get("approval_required") or state.get("policy_violations"):

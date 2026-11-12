@@ -38,7 +38,9 @@ class ModelSelector:
     def _capability_match(candidate: ModelCandidate, capability: str) -> tuple[int, str]:
         identity = f"{candidate.model_name} {candidate.family}".lower()
         if capability in {"code", "coding", "development", "software"}:
-            if any(term in identity for term in ("coder", "code", "codestral", "starcoder", "devstral")):
+            if any(
+                term in identity for term in ("coder", "code", "codestral", "starcoder", "devstral")
+            ):
                 return 50, "especialização em código"
             return 15, "modelo genérico para tarefa de código"
         if capability in {"reasoning", "analysis", "research", "planning"}:
@@ -56,9 +58,15 @@ class ModelSelector:
         if task_capability:
             return task_capability.strip().lower()
         role = (agent_role or "").lower()
-        if any(term in role for term in ("developer", "coder", "devops", "programmer", "software_engineer")):
+        if any(
+            term in role
+            for term in ("developer", "coder", "devops", "programmer", "software_engineer")
+        ):
             return "code"
-        if any(term in role for term in ("auditor", "architect", "security", "threat", "analyst", "qa", "quality")):
+        if any(
+            term in role
+            for term in ("auditor", "architect", "security", "threat", "analyst", "qa", "quality")
+        ):
             return "reasoning"
         if any(term in role for term in ("vision", "image", "multimodal")):
             return "vision"
@@ -107,11 +115,12 @@ class ModelSelector:
                 continue
             if is_cloud and contains_sensitive_data and not has_external_data_approval:
                 continue
-            input_rate, output_rate = pricing.get(metadata.family, (0.0, 0.0)) if is_cloud else (0.0, 0.0)
-            estimated_cost = (
-                (estimated_input_tokens / 1000.0) * max(0.0, float(input_rate))
-                + (estimated_output_tokens / 1000.0) * max(0.0, float(output_rate))
+            input_rate, output_rate = (
+                pricing.get(metadata.family, (0.0, 0.0)) if is_cloud else (0.0, 0.0)
             )
+            estimated_cost = (estimated_input_tokens / 1000.0) * max(0.0, float(input_rate)) + (
+                estimated_output_tokens / 1000.0
+            ) * max(0.0, float(output_rate))
             stats = performance.get((metadata.name, provider, agent_role))
             if stats is None:
                 stats = performance.get((metadata.name, provider, None))
@@ -134,7 +143,8 @@ class ModelSelector:
             raise RuntimeError("Nenhum modelo disponível atende às políticas de seleção.")
 
         eligible = [
-            item for item in candidates
+            item
+            for item in candidates
             if item[1]
             and item[1].get("sample_sufficient")
             and float(item[1].get("success_rate", 0)) >= self.MINIMUM_SUCCESS_RATE
@@ -182,7 +192,9 @@ class ModelSelector:
             if candidate.estimated_cost_usd > 0 and max_estimated_cost > 0:
                 cost_penalty = 15 * (candidate.estimated_cost_usd / max_estimated_cost)
                 score -= cost_penalty
-                reasons.append(f"custo estimado ${candidate.estimated_cost_usd:.6f} (penalidade {cost_penalty:.1f})")
+                reasons.append(
+                    f"custo estimado ${candidate.estimated_cost_usd:.6f} (penalidade {cost_penalty:.1f})"
+                )
             else:
                 reasons.append("sem custo externo estimado")
             selection = ModelSelection(

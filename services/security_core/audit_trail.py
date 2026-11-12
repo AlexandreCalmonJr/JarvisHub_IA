@@ -33,9 +33,7 @@ class AuditTrail:
             return
         try:
             sev_val = (
-                event.severity.value
-                if hasattr(event.severity, "value")
-                else str(event.severity)
+                event.severity.value if hasattr(event.severity, "value") else str(event.severity)
             )
             self.db_manager.save_audit_event(
                 id=event.id,

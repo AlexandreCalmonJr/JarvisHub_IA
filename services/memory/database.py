@@ -258,13 +258,17 @@ class DatabaseManager:
             """
         )
 
-        version_one = conn.execute(
-            "SELECT 1 FROM schema_migrations WHERE version = 1"
-        ).fetchone()
+        version_one = conn.execute("SELECT 1 FROM schema_migrations WHERE version = 1").fetchone()
         if not version_one:
             private_tables = (
-                "projects", "tasks", "chat_messages", "approvals",
-                "project_memory", "agent_memories", "user_skills", "knowledge_vault",
+                "projects",
+                "tasks",
+                "chat_messages",
+                "approvals",
+                "project_memory",
+                "agent_memories",
+                "user_skills",
+                "knowledge_vault",
             )
             conn.execute("SAVEPOINT account_ownership_migration")
             try:
@@ -292,9 +296,7 @@ class DatabaseManager:
                 conn.execute("RELEASE SAVEPOINT account_ownership_migration")
                 raise
 
-        version_two = conn.execute(
-            "SELECT 1 FROM schema_migrations WHERE version = 2"
-        ).fetchone()
+        version_two = conn.execute("SELECT 1 FROM schema_migrations WHERE version = 2").fetchone()
         if not version_two:
             # A antiga UNIQUE(agent_role, category, key) misturava todas as contas.
             # Reconstruímos a tabela para permitir a mesma chave em contas distintas,
@@ -329,15 +331,10 @@ class DatabaseManager:
                     """
                 )
                 conn.execute("DROP TABLE agent_memories")
+                conn.execute("ALTER TABLE agent_memories_new RENAME TO agent_memories")
+                conn.execute("CREATE INDEX idx_agent_memories_role ON agent_memories(agent_role)")
                 conn.execute(
-                    "ALTER TABLE agent_memories_new RENAME TO agent_memories"
-                )
-                conn.execute(
-                    "CREATE INDEX idx_agent_memories_role ON agent_memories(agent_role)"
-                )
-                conn.execute(
-                    "CREATE INDEX idx_agent_memories_owner_user "
-                    "ON agent_memories(owner_user_id)"
+                    "CREATE INDEX idx_agent_memories_owner_user ON agent_memories(owner_user_id)"
                 )
                 conn.execute(
                     """
@@ -366,19 +363,15 @@ class DatabaseManager:
                 conn.execute("RELEASE SAVEPOINT agent_memory_owner_migration")
                 raise
 
-        version_three = conn.execute(
-            "SELECT 1 FROM schema_migrations WHERE version = 3"
-        ).fetchone()
+        version_three = conn.execute("SELECT 1 FROM schema_migrations WHERE version = 3").fetchone()
         if not version_three:
             columns = {
-                row["name"]
-                for row in conn.execute("PRAGMA table_info(mobile_devices)").fetchall()
+                row["name"] for row in conn.execute("PRAGMA table_info(mobile_devices)").fetchall()
             }
             if "owner_user_id" not in columns:
                 conn.execute("ALTER TABLE mobile_devices ADD COLUMN owner_user_id TEXT")
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_devices_owner_user "
-                "ON mobile_devices(owner_user_id)"
+                "CREATE INDEX IF NOT EXISTS idx_devices_owner_user ON mobile_devices(owner_user_id)"
             )
             conn.execute(
                 """
@@ -389,7 +382,11 @@ class DatabaseManager:
             )
 
     def register_project(
-        self, project_id: str, name: str, root_path: str, mode: str = "read_only",
+        self,
+        project_id: str,
+        name: str,
+        root_path: str,
+        mode: str = "read_only",
         owner_user_id: str | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
@@ -399,7 +396,9 @@ class DatabaseManager:
                     "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
                 ).fetchone()
                 if existing and existing["owner_user_id"] != owner_user_id:
-                    raise PermissionError("Projeto pertence a outra conta ou é um registo legado sem proprietário.")
+                    raise PermissionError(
+                        "Projeto pertence a outra conta ou é um registo legado sem proprietário."
+                    )
             conn.execute(
                 """
                 INSERT INTO projects (id, name, root_path, mode, created_at, updated_at, owner_user_id)
@@ -419,9 +418,7 @@ class DatabaseManager:
     ) -> dict[str, Any] | None:
         with self._get_connection() as conn:
             if owner_user_id is None:
-                row = conn.execute(
-                    "SELECT * FROM projects WHERE id = ?", (project_id,)
-                ).fetchone()
+                row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
             else:
                 row = conn.execute(
                     "SELECT * FROM projects WHERE id = ? AND owner_user_id = ?",
@@ -429,9 +426,7 @@ class DatabaseManager:
                 ).fetchone()
             return dict(row) if row else None
 
-    def list_projects(
-        self, owner_user_id: str | None = None
-    ) -> list[dict[str, Any]]:
+    def list_projects(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
                 "SELECT * FROM projects WHERE owner_user_id IS ? ORDER BY updated_at DESC",
@@ -459,13 +454,17 @@ class DatabaseManager:
                     "SELECT owner_user_id FROM tasks WHERE id = ?", (task_id,)
                 ).fetchone()
                 if existing and existing["owner_user_id"] != owner_user_id:
-                    raise PermissionError("Tarefa pertence a outra conta ou é um registo legado sem proprietário.")
+                    raise PermissionError(
+                        "Tarefa pertence a outra conta ou é um registo legado sem proprietário."
+                    )
                 if project_id:
                     project = conn.execute(
                         "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
                     ).fetchone()
                     if not project or project["owner_user_id"] != owner_user_id:
-                        raise PermissionError("Projeto inexistente ou não pertence à conta autenticada.")
+                        raise PermissionError(
+                            "Projeto inexistente ou não pertence à conta autenticada."
+                        )
             conn.execute(
                 """
                 INSERT INTO tasks (
@@ -482,8 +481,16 @@ class DatabaseManager:
                 WHERE tasks.owner_user_id IS excluded.owner_user_id
                 """,
                 (
-                    task_id, session_id, project_id, prompt, intent, state_json,
-                    is_completed, now, now, owner_user_id,
+                    task_id,
+                    session_id,
+                    project_id,
+                    prompt,
+                    intent,
+                    state_json,
+                    is_completed,
+                    now,
+                    now,
+                    owner_user_id,
                 ),
             )
 
@@ -493,9 +500,7 @@ class DatabaseManager:
         data["state"] = json.loads(data["state_json"])
         return data
 
-    def get_task(
-        self, task_id: str, owner_user_id: str | None = None
-    ) -> dict[str, Any] | None:
+    def get_task(self, task_id: str, owner_user_id: str | None = None) -> dict[str, Any] | None:
         with self._get_connection() as conn:
             if owner_user_id is None:
                 row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
@@ -506,9 +511,7 @@ class DatabaseManager:
                 ).fetchone()
             return self._decode_task_row(row) if row else None
 
-    def list_tasks(
-        self, limit: int = 50, owner_user_id: str | None = None
-    ) -> list[dict[str, Any]]:
+    def list_tasks(self, limit: int = 50, owner_user_id: str | None = None) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
             query = "SELECT id, session_id, project_id, prompt, intent, is_completed, created_at FROM tasks"
             params: list[Any] = []
@@ -556,9 +559,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             return [self._decode_task_row(r) for r in conn.execute(query, params).fetchall()]
 
-    def delete_session(
-        self, session_id: str, owner_user_id: str | None = None
-    ) -> int:
+    def delete_session(self, session_id: str, owner_user_id: str | None = None) -> int:
         with self._get_connection() as conn:
             if owner_user_id is None:
                 conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
@@ -577,10 +578,14 @@ class DatabaseManager:
     # --- Mensagens individuais do agente de código (histórico fiel) ---
 
     def add_chat_message(
-        self, session_id: str, role: str, content: str = "",
+        self,
+        session_id: str,
+        role: str,
+        content: str = "",
         project_id: str | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
-        tool_call_id: str | None = None, tool_name: str | None = None,
+        tool_call_id: str | None = None,
+        tool_name: str | None = None,
         owner_user_id: str | None = None,
     ) -> int:
         """Persiste mensagem vinculada à conta quando owner_user_id é fornecido."""
@@ -592,7 +597,9 @@ class DatabaseManager:
                     "SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)
                 ).fetchone()
                 if not project or project["owner_user_id"] != owner_user_id:
-                    raise PermissionError("Projeto inexistente ou não pertence à conta autenticada.")
+                    raise PermissionError(
+                        "Projeto inexistente ou não pertence à conta autenticada."
+                    )
             cur = conn.execute(
                 """
                 INSERT INTO chat_messages (
@@ -600,19 +607,31 @@ class DatabaseManager:
                     tool_call_id, tool_name, created_at, owner_user_id
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, project_id, role, content, tool_calls_json,
-                 tool_call_id, tool_name, now, owner_user_id),
+                (
+                    session_id,
+                    project_id,
+                    role,
+                    content,
+                    tool_calls_json,
+                    tool_call_id,
+                    tool_name,
+                    now,
+                    owner_user_id,
+                ),
             )
             return int(cur.lastrowid or 0)
 
     def list_chat_messages(
-        self, session_id: str, limit: int = 200, ascending: bool = True,
+        self,
+        session_id: str,
+        limit: int = 200,
+        ascending: bool = True,
         owner_user_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recupera mensagens somente da conta solicitante quando informada."""
         limit = max(1, min(limit, 1000))
         order = "ASC" if ascending else "DESC"
-        query = f"""
+        query = """
             SELECT id, session_id, project_id, role, content, tool_calls_json,
                    tool_call_id, tool_name, created_at
             FROM chat_messages WHERE session_id = ?
@@ -636,9 +655,7 @@ class DatabaseManager:
             result.append(data)
         return result
 
-    def clear_session_messages(
-        self, session_id: str, owner_user_id: str | None = None
-    ) -> int:
+    def clear_session_messages(self, session_id: str, owner_user_id: str | None = None) -> int:
         with self._get_connection() as conn:
             if owner_user_id is None:
                 cur = conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
@@ -682,16 +699,14 @@ class DatabaseManager:
             results.append(data)
         return results
 
-    def export_session_markdown(
-        self, session_id: str, owner_user_id: str | None = None
-    ) -> str:
+    def export_session_markdown(self, session_id: str, owner_user_id: str | None = None) -> str:
         """Exporta somente tarefas pertencentes à conta solicitante."""
         tasks = self.get_session_tasks(session_id, owner_user_id=owner_user_id)
         if not tasks:
             return f"# Sessão {session_id}\n\nNenhuma interação encontrada para esta sessão."
 
         lines = [
-            f"# 📜 Histórico de Sessão JARVIS AI Hub",
+            "# 📜 Histórico de Sessão JARVIS AI Hub",
             f"**Sessão ID:** `{session_id}`  ",
             f"**Total de Interações:** {len(tasks)}  ",
             f"**Exportado em:** {datetime.now(UTC).strftime('%d/%m/%Y %H:%M:%S UTC')}\n",
@@ -708,7 +723,9 @@ class DatabaseManager:
             agents = state.get("selected_agents", [])
 
             lines.append(f"## 👤 Interação #{idx} • {created[:19].replace('T', ' ')}")
-            lines.append(f"**Intenção:** `{intent}` | **Especialistas:** `{', '.join(agents) or 'JARVIS Master'}`\n")
+            lines.append(
+                f"**Intenção:** `{intent}` | **Especialistas:** `{', '.join(agents) or 'JARVIS Master'}`\n"
+            )
             lines.append("### 💬 Solicitação do Usuário:")
             lines.append(f"> {prompt}\n")
 
@@ -733,9 +750,7 @@ class DatabaseManager:
 
         return "\n".join(lines)
 
-    def purge_old_tasks(
-        self, days_retention: int = 30, owner_user_id: str | None = None
-    ) -> int:
+    def purge_old_tasks(self, days_retention: int = 30, owner_user_id: str | None = None) -> int:
         cutoff = (datetime.now(UTC) - timedelta(days=days_retention)).isoformat()
         with self._get_connection() as conn:
             if owner_user_id is None:
@@ -747,9 +762,7 @@ class DatabaseManager:
                 )
             return cur.rowcount
 
-    def delete_task(
-        self, task_id: str, owner_user_id: str | None = None
-    ) -> bool:
+    def delete_task(self, task_id: str, owner_user_id: str | None = None) -> bool:
         with self._get_connection() as conn:
             if owner_user_id is None:
                 cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
@@ -765,9 +778,7 @@ class DatabaseManager:
     ) -> dict[str, Any]:
         with self._get_connection() as conn:
             if owner_user_id is None:
-                proj = conn.execute(
-                    "SELECT * FROM projects WHERE id = ?", (project_id,)
-                ).fetchone()
+                proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
                 owner_filter = ""
                 params: tuple[Any, ...] = (project_id,)
             else:
@@ -806,6 +817,7 @@ class DatabaseManager:
         owner_user_id: str | None = None,
     ) -> None:
         import uuid
+
         now = datetime.now(UTC).isoformat()
         mem_id = f"mem-{uuid.uuid4().hex[:8]}"
         sources_json = json.dumps(sources or [])
@@ -881,12 +893,21 @@ class DatabaseManager:
     ) -> str:
         """Guarda memória do agente no espaço privado da conta ou no legado."""
         import uuid
+
         now = datetime.now(UTC).isoformat()
         mem_id = f"amem-{uuid.uuid4().hex[:8]}"
         clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
         values = (
-            mem_id, clean_role, category.lower(), key.strip(), content.strip(),
-            context, max(1, min(5, importance)), now, now, owner_user_id,
+            mem_id,
+            clean_role,
+            category.lower(),
+            key.strip(),
+            content.strip(),
+            context,
+            max(1, min(5, importance)),
+            now,
+            now,
+            owner_user_id,
         )
         with self._get_connection() as conn:
             if owner_user_id is None:
@@ -946,9 +967,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             return [dict(row) for row in conn.execute(query, params).fetchall()]
 
-    def delete_agent_memory(
-        self, memory_id: str, owner_user_id: str | None = None
-    ) -> bool:
+    def delete_agent_memory(self, memory_id: str, owner_user_id: str | None = None) -> bool:
         with self._get_connection() as conn:
             cur = conn.execute(
                 "DELETE FROM agent_memories WHERE id = ? AND owner_user_id IS ?",
@@ -956,9 +975,7 @@ class DatabaseManager:
             )
             return cur.rowcount > 0
 
-    def clear_agent_memories(
-        self, agent_role: str, owner_user_id: str | None = None
-    ) -> int:
+    def clear_agent_memories(self, agent_role: str, owner_user_id: str | None = None) -> int:
         clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
         with self._get_connection() as conn:
             cur = conn.execute(
@@ -982,12 +999,35 @@ class DatabaseManager:
         tools_json = json.dumps(allowed_tools) if allowed_tools is not None else None
 
         with self._get_connection() as conn:
-            existing = conn.execute("SELECT system_prompt, preferred_model, allowed_tools_json, is_read_only, assigned_key_id FROM agent_configs WHERE role = ?", (clean_role,)).fetchone()
-            ro_val = (1 if is_read_only else 0) if is_read_only is not None else (existing["is_read_only"] if existing and "is_read_only" in existing.keys() else 1)
-            cur_key = assigned_key_id if assigned_key_id is not None else (existing["assigned_key_id"] if existing and "assigned_key_id" in existing.keys() else None)
+            existing = conn.execute(
+                "SELECT system_prompt, preferred_model, allowed_tools_json, is_read_only, assigned_key_id FROM agent_configs WHERE role = ?",
+                (clean_role,),
+            ).fetchone()
+            ro_val = (
+                (1 if is_read_only else 0)
+                if is_read_only is not None
+                else (
+                    existing["is_read_only"]
+                    if existing and "is_read_only" in existing.keys()  # noqa: SIM118 - sqlite3.Row membership checks values, keys() checks schema.
+                    else 1
+                )
+            )
+            cur_key = (
+                assigned_key_id
+                if assigned_key_id is not None
+                else (
+                    existing["assigned_key_id"]
+                    if existing and "assigned_key_id" in existing.keys()  # noqa: SIM118 - sqlite3.Row membership checks values, keys() checks schema.
+                    else None
+                )
+            )
             if existing:
-                cur_prompt = system_prompt if system_prompt is not None else existing["system_prompt"]
-                cur_model = preferred_model if preferred_model is not None else existing["preferred_model"]
+                cur_prompt = (
+                    system_prompt if system_prompt is not None else existing["system_prompt"]
+                )
+                cur_model = (
+                    preferred_model if preferred_model is not None else existing["preferred_model"]
+                )
                 cur_tools = tools_json if tools_json is not None else existing["allowed_tools_json"]
                 conn.execute(
                     """
@@ -1009,7 +1049,9 @@ class DatabaseManager:
     def get_agent_configs(self) -> dict[str, dict[str, Any]]:
         """Recupera todas as customizações salvas de especialistas."""
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT role, system_prompt, preferred_model, allowed_tools_json, is_read_only, assigned_key_id, updated_at FROM agent_configs")
+            cur = conn.execute(
+                "SELECT role, system_prompt, preferred_model, allowed_tools_json, is_read_only, assigned_key_id, updated_at FROM agent_configs"
+            )
             configs: dict[str, dict[str, Any]] = {}
             for row in cur.fetchall():
                 r_dict = dict(row)
@@ -1047,9 +1089,7 @@ class DatabaseManager:
                 (owner_user_id, clean_role, key_id, model, now),
             )
 
-    def get_agent_route(
-        self, agent_role: str, owner_user_id: str
-    ) -> dict[str, Any] | None:
+    def get_agent_route(self, agent_role: str, owner_user_id: str) -> dict[str, Any] | None:
         """Devolve a rota da conta para o especialista, se existir."""
         clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
         with self._get_connection() as conn:
@@ -1097,9 +1137,7 @@ class DatabaseManager:
         owner_hash = hashlib.sha256(owner_user_id.encode("utf-8")).hexdigest()[:20]
         return f"account:{owner_hash}:{key}"
 
-    def get_user_profile(
-        self, owner_user_id: str | None = None
-    ) -> dict[str, Any]:
+    def get_user_profile(self, owner_user_id: str | None = None) -> dict[str, Any]:
         """Recupera perfil privado da conta, sem recorrer a valores globais legados."""
         setting_key = self._account_setting_key("developer_profile", owner_user_id)
         with self._get_connection() as conn:
@@ -1110,7 +1148,10 @@ class DatabaseManager:
                 try:
                     return json.loads(row["value_json"])
                 except Exception:
-                    logger.debug("Perfil de desenvolvedor inválido no banco; a usar predefinições.", exc_info=True)
+                    logger.debug(
+                        "Perfil de desenvolvedor inválido no banco; a usar predefinições.",
+                        exc_info=True,
+                    )
         return {
             "displayName": "Desenvolvedor",
             "avatarIcon": "💻",
@@ -1123,9 +1164,7 @@ class DatabaseManager:
             "geminiApiKey": "",
         }
 
-    def set_user_profile(
-        self, profile: dict[str, Any], owner_user_id: str | None = None
-    ) -> None:
+    def set_user_profile(self, profile: dict[str, Any], owner_user_id: str | None = None) -> None:
         """Salva preferências no espaço privado da conta autenticada."""
         now = datetime.now(UTC).isoformat()
         val_str = json.dumps(profile)
@@ -1143,13 +1182,20 @@ class DatabaseManager:
     def get_cached_inference(self, prompt_hash: str) -> str | None:
         """Busca resposta em cache local para evitar inferência repetida na CPU."""
         with self._get_connection() as conn:
-            row = conn.execute("SELECT response_text FROM inference_cache WHERE prompt_hash = ?", (prompt_hash,)).fetchone()
+            row = conn.execute(
+                "SELECT response_text FROM inference_cache WHERE prompt_hash = ?", (prompt_hash,)
+            ).fetchone()
             if row:
-                conn.execute("UPDATE inference_cache SET hit_count = hit_count + 1 WHERE prompt_hash = ?", (prompt_hash,))
+                conn.execute(
+                    "UPDATE inference_cache SET hit_count = hit_count + 1 WHERE prompt_hash = ?",
+                    (prompt_hash,),
+                )
                 return row["response_text"]
         return None
 
-    def set_cached_inference(self, prompt_hash: str, prompt: str, model_name: str, response: str) -> None:
+    def set_cached_inference(
+        self, prompt_hash: str, prompt: str, model_name: str, response: str
+    ) -> None:
         """Armazena resposta no cache local SQLite."""
         now = datetime.now(UTC).isoformat()
         with self._get_connection() as conn:
@@ -1168,9 +1214,8 @@ class DatabaseManager:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_file = b_dir / f"jarvis_backup_{timestamp}.db"
 
-        with self._get_connection() as src_conn:
-            with sqlite3.connect(str(backup_file)) as dst_conn:
-                src_conn.backup(dst_conn)
+        with self._get_connection() as src_conn, sqlite3.connect(str(backup_file)) as dst_conn:
+            src_conn.backup(dst_conn)
 
         return str(backup_file.resolve())
 
@@ -1179,7 +1224,9 @@ class DatabaseManager:
     def get_ponytail_level(self) -> str:
         """Retorna o nível ativo do Modo Ponytail ('off', 'lite', 'senior', 'ultra')."""
         with self._get_connection() as conn:
-            row = conn.execute("SELECT value_json FROM user_settings WHERE key = 'ponytail_level'").fetchone()
+            row = conn.execute(
+                "SELECT value_json FROM user_settings WHERE key = 'ponytail_level'"
+            ).fetchone()
             if row:
                 try:
                     return json.loads(row["value_json"])
@@ -1204,12 +1251,17 @@ class DatabaseManager:
     def get_hardware_performance_config(self) -> dict[str, Any]:
         """Recupera as preferências de desempenho de hardware e threads do Ollama."""
         with self._get_connection() as conn:
-            row = conn.execute("SELECT value_json FROM user_settings WHERE key = 'hardware_performance'").fetchone()
+            row = conn.execute(
+                "SELECT value_json FROM user_settings WHERE key = 'hardware_performance'"
+            ).fetchone()
             if row:
                 try:
                     return json.loads(row["value_json"])
                 except Exception:
-                    logger.debug("Configuração de hardware inválida no banco; a usar predefinições.", exc_info=True)
+                    logger.debug(
+                        "Configuração de hardware inválida no banco; a usar predefinições.",
+                        exc_info=True,
+                    )
         return {
             "mode": "auto",
             "cpu_threads": 6,
@@ -1243,7 +1295,9 @@ class DatabaseManager:
                 "SELECT owner_user_id FROM user_skills WHERE id = ?", (skill["id"],)
             ).fetchone()
             if existing and existing["owner_user_id"] != owner_user_id:
-                raise PermissionError("Skill pertence a outra conta ou é um registo legado sem proprietário.")
+                raise PermissionError(
+                    "Skill pertence a outra conta ou é um registo legado sem proprietário."
+                )
             conn.execute(
                 """
                 INSERT INTO user_skills (
@@ -1280,9 +1334,7 @@ class DatabaseManager:
             )
         return skill
 
-    def list_user_skills(
-        self, owner_user_id: str | None = None
-    ) -> list[dict[str, Any]]:
+    def list_user_skills(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
         """Retorna apenas skills da conta solicitante."""
         with self._get_connection() as conn:
             rows = conn.execute(
@@ -1310,9 +1362,7 @@ class DatabaseManager:
             ).fetchone()
         return dict(row) if row else None
 
-    def delete_user_skill(
-        self, skill_id: str, owner_user_id: str | None = None
-    ) -> bool:
+    def delete_user_skill(self, skill_id: str, owner_user_id: str | None = None) -> bool:
         """Remove uma skill apenas da conta proprietária."""
         with self._get_connection() as conn:
             cur = conn.execute(
@@ -1359,16 +1409,22 @@ class DatabaseManager:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        chunk_id, doc_name, file_type, category, idx, chunk.strip(),
-                        file_size_formatted, source_path, now, owner_user_id,
+                        chunk_id,
+                        doc_name,
+                        file_type,
+                        category,
+                        idx,
+                        chunk.strip(),
+                        file_size_formatted,
+                        source_path,
+                        now,
+                        owner_user_id,
                     ),
                 )
                 inserted_count += 1
         return inserted_count
 
-    def list_knowledge_documents(
-        self, owner_user_id: str | None = None
-    ) -> list[dict[str, Any]]:
+    def list_knowledge_documents(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
         """Lista somente documentos do proprietário informado."""
         with self._get_connection() as conn:
             rows = conn.execute(
@@ -1384,9 +1440,7 @@ class DatabaseManager:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def delete_knowledge_document(
-        self, doc_name: str, owner_user_id: str | None = None
-    ) -> bool:
+    def delete_knowledge_document(self, doc_name: str, owner_user_id: str | None = None) -> bool:
         """Exclui chunks somente do documento pertencente à conta."""
         with self._get_connection() as conn:
             cur = conn.execute(
@@ -1484,9 +1538,20 @@ class DatabaseManager:
                 WHERE approvals.owner_user_id IS excluded.owner_user_id
                 """,
                 (
-                    id, task_id, agent_role, operation, impact_summary, resources_json,
-                    proposed_diff, rev_int, status, req_at, dec_at, decided_by,
-                    decision_reason, owner_user_id,
+                    id,
+                    task_id,
+                    agent_role,
+                    operation,
+                    impact_summary,
+                    resources_json,
+                    proposed_diff,
+                    rev_int,
+                    status,
+                    req_at,
+                    dec_at,
+                    decided_by,
+                    decision_reason,
+                    owner_user_id,
                 ),
             )
 
@@ -1507,9 +1572,7 @@ class DatabaseManager:
             return None
         result = dict(row)
         try:
-            result["affected_resources"] = json.loads(
-                result.get("affected_resources_json") or "[]"
-            )
+            result["affected_resources"] = json.loads(result.get("affected_resources_json") or "[]")
         except Exception:
             result["affected_resources"] = []
         result["reversible"] = bool(result.get("reversible", 1))
@@ -1533,24 +1596,19 @@ class DatabaseManager:
         for row in rows:
             item = dict(row)
             try:
-                item["affected_resources"] = json.loads(
-                    item.get("affected_resources_json") or "[]"
-                )
+                item["affected_resources"] = json.loads(item.get("affected_resources_json") or "[]")
             except Exception:
                 item["affected_resources"] = []
             item["reversible"] = bool(item.get("reversible", 1))
             result.append(item)
         return result
 
-    def consume_approved_approval(
-        self, approval_id: str, owner_user_id: str | None = None
-    ) -> bool:
+    def consume_approved_approval(self, approval_id: str, owner_user_id: str | None = None) -> bool:
         """Consome atomicamente uma aprovação da conta solicitante."""
         with self._get_connection() as conn:
             if owner_user_id is None:
                 cur = conn.execute(
-                    "UPDATE approvals SET status = 'consumed' "
-                    "WHERE id = ? AND status = 'approved'",
+                    "UPDATE approvals SET status = 'consumed' WHERE id = ? AND status = 'approved'",
                     (approval_id,),
                 )
             else:
@@ -1624,7 +1682,16 @@ class DatabaseManager:
                     last_seen_at=excluded.last_seen_at,
                     owner_user_id=COALESCE(mobile_devices.owner_user_id, excluded.owner_user_id)
                 """,
-                (device_id, device_name, token_hash, scopes_json, rev_int, p_at, ls_at, owner_user_id),
+                (
+                    device_id,
+                    device_name,
+                    token_hash,
+                    scopes_json,
+                    rev_int,
+                    p_at,
+                    ls_at,
+                    owner_user_id,
+                ),
             )
 
     def get_device(self, device_id: str) -> dict[str, Any] | None:
@@ -1643,9 +1710,7 @@ class DatabaseManager:
 
     def get_device_by_token_hash(self, token_hash: str) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT * FROM mobile_devices WHERE token_hash = ?", (token_hash,)
-            )
+            cur = conn.execute("SELECT * FROM mobile_devices WHERE token_hash = ?", (token_hash,))
             row = cur.fetchone()
             if not row:
                 return None
@@ -1754,9 +1819,7 @@ class DatabaseManager:
 
     def get_session(self, session_id: str) -> dict[str, Any] | None:
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT * FROM user_sessions WHERE session_id = ?", (session_id,)
-            )
+            cur = conn.execute("SELECT * FROM user_sessions WHERE session_id = ?", (session_id,))
             row = cur.fetchone()
             if not row:
                 return None
@@ -1842,11 +1905,7 @@ class DatabaseManager:
         parameters_redacted: dict[str, Any] | None = None,
         reason: str | None = None,
     ) -> None:
-        ts = (
-            timestamp.isoformat()
-            if isinstance(timestamp, datetime)
-            else str(timestamp)
-        )
+        ts = timestamp.isoformat() if isinstance(timestamp, datetime) else str(timestamp)
         params_json = json.dumps(parameters_redacted or {})
         with self._get_connection() as conn:
             conn.execute(
@@ -1911,6 +1970,3 @@ class DatabaseManager:
                     item["parameters_redacted"] = {}
                 result.append(item)
             return result
-
-
-

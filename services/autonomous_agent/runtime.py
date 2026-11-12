@@ -83,13 +83,9 @@ class AutonomousAgentRuntime:
         self.key_vault = key_vault
         self.skills_manager = skills_manager
 
-    def _build_provider(
-        self, key_id: str | None, owner_user_id: str | None
-    ) -> ChatProvider:
+    def _build_provider(self, key_id: str | None, owner_user_id: str | None) -> ChatProvider:
         """Constrói o provider com a credencial da conta quando disponível."""
-        if self.routed_provider_factory is None or (
-            key_id is None and owner_user_id is None
-        ):
+        if self.routed_provider_factory is None or (key_id is None and owner_user_id is None):
             return self.provider_factory()
         try:
             return self.routed_provider_factory(key_id, owner_user_id)
@@ -102,9 +98,7 @@ class AutonomousAgentRuntime:
     # ------------------------------------------------------------------
     # Streaming / SSE Engine
     # ------------------------------------------------------------------
-    async def run_stream(
-        self, config: AutonomousAgentRunConfig
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def run_stream(self, config: AutonomousAgentRunConfig) -> AsyncIterator[dict[str, Any]]:
         """Gera eventos de execução ReAct em streaming para o especialista solicitado."""
         task_id = f"task-{uuid.uuid4().hex[:12]}"
         session_id = config.session_id or f"ses-{config.agent_role.value}-{uuid.uuid4().hex[:8]}"
@@ -165,15 +159,9 @@ class AutonomousAgentRuntime:
 
         commands = detect_project_commands(project_root) if project_root else {}
         commands_txt = (
-            "\n".join(f"- {name}: `{cmd}`" for name, cmd in commands.items())
-            if commands
-            else ""
+            "\n".join(f"- {name}: `{cmd}`" for name, cmd in commands.items()) if commands else ""
         )
-        project_ctx = (
-            build_project_context(project_root, config.project_id)
-            if project_root
-            else ""
-        )
+        project_ctx = build_project_context(project_root, config.project_id) if project_root else ""
 
         system_prompt = agent_instance.build_system_prompt(
             mode=config.mode,
@@ -186,7 +174,9 @@ class AutonomousAgentRuntime:
         messages: list[ChatTurn] = [ChatTurn(role="system", content=system_prompt)]
         messages.extend(history)
         messages.append(ChatTurn(role="user", content=config.prompt))
-        self._persist(session_id, config.project_id, "user", config.prompt, owner_user_id=config.owner_user_id)
+        self._persist(
+            session_id, config.project_id, "user", config.prompt, owner_user_id=config.owner_user_id
+        )
 
         # 3. Filtragem de Ferramentas Exclusivas do Especialista
         available_tools = self._tools_for_specialist(profile.allowed_tools, config.mode)
@@ -227,8 +217,19 @@ class AutonomousAgentRuntime:
                     timeout_seconds=min(remaining, config.timeout_seconds),
                 )
             except ProviderError as exc:
-                self._persist(session_id, config.project_id, "assistant", f"[erro do provedor] {exc}", owner_user_id=config.owner_user_id)
-                yield {"type": "error", "task_id": task_id, "agent_role": role.value, "error": str(exc)}
+                self._persist(
+                    session_id,
+                    config.project_id,
+                    "assistant",
+                    f"[erro do provedor] {exc}",
+                    owner_user_id=config.owner_user_id,
+                )
+                yield {
+                    "type": "error",
+                    "task_id": task_id,
+                    "agent_role": role.value,
+                    "error": str(exc),
+                }
                 break
             except asyncio.CancelledError:
                 raise
@@ -247,7 +248,13 @@ class AutonomousAgentRuntime:
 
             if not reply.tool_calls:
                 final_content = reply.content.strip()
-                self._persist(session_id, config.project_id, "assistant", reply.content, owner_user_id=config.owner_user_id)
+                self._persist(
+                    session_id,
+                    config.project_id,
+                    "assistant",
+                    reply.content,
+                    owner_user_id=config.owner_user_id,
+                )
                 break
 
             messages.append(
@@ -375,7 +382,16 @@ class AutonomousAgentRuntime:
                 error=f"A ferramenta '{call.name}' não está autorizada no perfil do agente '{role.value}'.",
             )
             async for event in self._finish_tool(
-                tool_result, config, role, messages, actions_taken, evidence_collected, affected_files, tests_executed, risks_identified, blockers_encountered
+                tool_result,
+                config,
+                role,
+                messages,
+                actions_taken,
+                evidence_collected,
+                affected_files,
+                tests_executed,
+                risks_identified,
+                blockers_encountered,
             ):
                 yield event
             return
@@ -399,13 +415,24 @@ class AutonomousAgentRuntime:
                 error="O modo 'PLAN' é estritamente de leitura. Descreva o plano proposto em vez de alterá-lo.",
             )
             async for event in self._finish_tool(
-                tool_result, config, role, messages, actions_taken, evidence_collected, affected_files, tests_executed, risks_identified, blockers_encountered
+                tool_result,
+                config,
+                role,
+                messages,
+                actions_taken,
+                evidence_collected,
+                affected_files,
+                tests_executed,
+                risks_identified,
+                blockers_encountered,
             ):
                 yield event
             return
 
         # 2. Kill Switch
-        if hasattr(self.security_core, "kill_switch") and self.security_core.kill_switch.is_tool_blocked(call.name):
+        if hasattr(
+            self.security_core, "kill_switch"
+        ) and self.security_core.kill_switch.is_tool_blocked(call.name):
             tool_result = ToolResult(
                 call_id=call.id,
                 name=call.name,
@@ -414,7 +441,16 @@ class AutonomousAgentRuntime:
                 error=f"A ferramenta '{call.name}' está bloqueada pelo Kill Switch.",
             )
             async for event in self._finish_tool(
-                tool_result, config, role, messages, actions_taken, evidence_collected, affected_files, tests_executed, risks_identified, blockers_encountered
+                tool_result,
+                config,
+                role,
+                messages,
+                actions_taken,
+                evidence_collected,
+                affected_files,
+                tests_executed,
+                risks_identified,
+                blockers_encountered,
             ):
                 yield event
             return
@@ -424,16 +460,41 @@ class AutonomousAgentRuntime:
             try:
                 preview = self.tools.preview(call, config.project_id or "")
             except PermissionDeniedError as exc:
-                tool_result = ToolResult(call_id=call.id, name=call.name, success=False, denied=True, error=str(exc))
+                tool_result = ToolResult(
+                    call_id=call.id, name=call.name, success=False, denied=True, error=str(exc)
+                )
                 async for event in self._finish_tool(
-                    tool_result, config, role, messages, actions_taken, evidence_collected, affected_files, tests_executed, risks_identified, blockers_encountered
+                    tool_result,
+                    config,
+                    role,
+                    messages,
+                    actions_taken,
+                    evidence_collected,
+                    affected_files,
+                    tests_executed,
+                    risks_identified,
+                    blockers_encountered,
                 ):
                     yield event
                 return
             except Exception as exc:
-                tool_result = ToolResult(call_id=call.id, name=call.name, success=False, error=f"Pré-validação falhou: {exc}")
+                tool_result = ToolResult(
+                    call_id=call.id,
+                    name=call.name,
+                    success=False,
+                    error=f"Pré-validação falhou: {exc}",
+                )
                 async for event in self._finish_tool(
-                    tool_result, config, role, messages, actions_taken, evidence_collected, affected_files, tests_executed, risks_identified, blockers_encountered
+                    tool_result,
+                    config,
+                    role,
+                    messages,
+                    actions_taken,
+                    evidence_collected,
+                    affected_files,
+                    tests_executed,
+                    risks_identified,
+                    blockers_encountered,
                 ):
                     yield event
                 return
@@ -462,7 +523,9 @@ class AutonomousAgentRuntime:
                 try:
                     ticket = await self.broker.wait(ticket, timeout_seconds=900.0)
                 except asyncio.CancelledError:
-                    self.broker.cancel_ticket(ticket.request_id, reason="Cliente desconectou durante a aprovação.")
+                    self.broker.cancel_ticket(
+                        ticket.request_id, reason="Cliente desconectou durante a aprovação."
+                    )
                     raise
 
                 if not ticket.approved:
@@ -475,14 +538,59 @@ class AutonomousAgentRuntime:
                     )
                     blockers_encountered.append(f"Aprovação recusada para ferramenta {call.name}")
                     async for event in self._finish_tool(
-                        tool_result, config, role, messages, actions_taken, evidence_collected, affected_files, tests_executed, risks_identified, blockers_encountered
+                        tool_result,
+                        config,
+                        role,
+                        messages,
+                        actions_taken,
+                        evidence_collected,
+                        affected_files,
+                        tests_executed,
+                        risks_identified,
+                        blockers_encountered,
+                    ):
+                        yield event
+                    return
+
+                resources = preview.get("affected_resources") or []
+                try:
+                    self.security_core.approval_engine.consume_approved_request(
+                        ticket.request_id,
+                        operation=preview["operation"],
+                        task_id=task_id,
+                        resource=resources[0] if resources else "",
+                        proposed_diff=preview.get("proposed_diff"),
+                        owner_user_id=config.owner_user_id,
+                    )
+                except (ValueError, KeyError) as exc:
+                    tool_result = ToolResult(
+                        call_id=call.id,
+                        name=call.name,
+                        success=False,
+                        denied=True,
+                        error=f"Aprovação não pôde ser validada para uso único: {exc}",
+                    )
+                    blockers_encountered.append("Aprovação expirada ou já utilizada")
+                    async for event in self._finish_tool(
+                        tool_result,
+                        config,
+                        role,
+                        messages,
+                        actions_taken,
+                        evidence_collected,
+                        affected_files,
+                        tests_executed,
+                        risks_identified,
+                        blockers_encountered,
                     ):
                         yield event
                     return
 
         # 4. Execução da Ferramenta
         try:
-            tool_result = await self.tools.execute(call, config.project_id or "")
+            tool_result = await self.tools.execute(
+                call, config.project_id or "", owner_user_id=config.owner_user_id
+            )
         except Exception as exc:
             tool_result = ToolResult(
                 call_id=call.id,
@@ -492,7 +600,16 @@ class AutonomousAgentRuntime:
             )
 
         async for event in self._finish_tool(
-            tool_result, config, role, messages, actions_taken, evidence_collected, affected_files, tests_executed, risks_identified, blockers_encountered
+            tool_result,
+            config,
+            role,
+            messages,
+            actions_taken,
+            evidence_collected,
+            affected_files,
+            tests_executed,
+            risks_identified,
+            blockers_encountered,
         ):
             yield event
 
@@ -521,11 +638,15 @@ class AutonomousAgentRuntime:
             model_text = tool_result.to_model_text()
             actions_taken.append(f"Executou {tool_result.name}")
             if tool_result.output:
-                evidence_collected.append(f"Evidência de {tool_result.name}: {tool_result.output[:180].strip()}...")
+                evidence_collected.append(
+                    f"Evidência de {tool_result.name}: {tool_result.output[:180].strip()}..."
+                )
             if tool_result.changed_files:
                 affected_files.extend(tool_result.changed_files)
             if tool_result.name in {"run_tests", "run_linter"}:
-                tests_executed.append(f"{tool_result.name} ({'sucesso' if tool_result.success else 'falha'})")
+                tests_executed.append(
+                    f"{tool_result.name} ({'sucesso' if tool_result.success else 'falha'})"
+                )
 
         messages.append(
             ChatTurn(
@@ -570,9 +691,7 @@ class AutonomousAgentRuntime:
             return None
         root = self.workspace_service.get_project_dir(project_id)
         if not root.exists() or not root.is_dir():
-            raise FileNotFoundError(
-                f"Projeto '{project_id}' não encontrado no Project Workspace."
-            )
+            raise FileNotFoundError(f"Projeto '{project_id}' não encontrado no Project Workspace.")
         try:
             self.security_core.permission_engine.validate_path_access(project_id, ".")
         except PermissionDeniedError:
@@ -586,8 +705,10 @@ class AutonomousAgentRuntime:
             return []
         try:
             rows = self.db_manager.list_chat_messages(
-                session_id, limit=MAX_HISTORY_MESSAGES, ascending=False,
-                owner_user_id=config.owner_user_id
+                session_id,
+                limit=MAX_HISTORY_MESSAGES,
+                ascending=False,
+                owner_user_id=config.owner_user_id,
             )
         except Exception as exc:
             logger.warning("Falha ao carregar histórico da sessão %s: %s", session_id, exc)
@@ -619,16 +740,16 @@ class AutonomousAgentRuntime:
             )
         return turns
 
-    def _load_memories(
-        self, role: AgentRole, owner_user_id: str | None = None
-    ) -> list[str]:
+    def _load_memories(self, role: AgentRole, owner_user_id: str | None = None) -> list[str]:
         if not self.db_manager:
             return []
         try:
             mems = self.db_manager.list_agent_memories(
                 agent_role=role.value, limit=10, owner_user_id=owner_user_id
             )
-            return [f"{m.get('key', 'Fato')}: {m.get('content', '')}" for m in mems if m.get("content")]
+            return [
+                f"{m.get('key', 'Fato')}: {m.get('content', '')}" for m in mems if m.get("content")
+            ]
         except Exception as exc:
             logger.warning("Falha ao ler memórias do agente %s: %s", role.value, exc)
             return []
@@ -644,7 +765,9 @@ class AutonomousAgentRuntime:
             logger.warning("Falha ao obter skills do agente %s: %s", role.value, exc)
         return ""
 
-    def _tools_for_specialist(self, allowed_tools: list[str], mode: AutonomousAgentMode) -> list[ToolSpec]:
+    def _tools_for_specialist(
+        self, allowed_tools: list[str], mode: AutonomousAgentMode
+    ) -> list[ToolSpec]:
         allowed_set = set(allowed_tools)
         # Mapeamento de sinônimos/aliases comuns
         if "glob_find" in allowed_set:

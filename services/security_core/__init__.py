@@ -89,8 +89,8 @@ __all__ = [
     "UnauthorizedApprovalError",
     "UserRole",
     "UserSession",
-    "cyber_shield",
     "contains_sensitive_data",
+    "cyber_shield",
     "redact_data",
     "redact_string",
 ]

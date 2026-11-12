@@ -1,9 +1,9 @@
 # PLANO COMPLETO — JARVIS AI HUB
 
-> **Versão:** 1.0  
-> **Data:** 12/11/2026  
-> **Estado:** proposta de execução (nada neste documento foi implementado por si só)  
-> **Âmbito:** verificar, corrigir, otimizar e evoluir o que já existe, incluindo o programa de voz  
+> **Versão:** 1.0
+> **Data:** 12/11/2026
+> **Estado:** em execução; baseline, P0, CAP-01/04/05–08/10–13, partes de PERF-01/02, PERF-07/08, V0 e GOV-01 implementados; várias fases ainda em aberto
+> **Âmbito:** verificar, corrigir, otimizar e evoluir o que já existe, incluindo o programa de voz
 > **Documento relacionado:** [VOICE_ASSISTANT.md](./VOICE_ASSISTANT.md)
 
 ---
@@ -197,7 +197,7 @@ O que já existe não pode falhar nem ser contornado de forma silenciosa.
 ### 6.1 Segurança
 
 | ID | Tarefa | Detalhe | Esforço |
-|---|---|---|---|
+|---|---|---|
 | SEC-01 | `web_search` respeitar isolamento | Consultar `cyber_shield.network_isolated` no motor ou nos call sites; devolver motivo explícito; teste com mock que falha se houver HTTP | 0,5–1d |
 | SEC-02 | `duckdb_query` read-only | Allowlist `SELECT`/`WITH`/`EXPLAIN`/`DESCRIBE`/`SHOW`; bloquear `COPY`, `ATTACH`, `INSTALL`, `LOAD`, `CREATE`, `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`; teste com `COPY ... TO` | 0,5–1d |
 | SEC-03 | Endurecer padrões destrutivos | Windows e Unix; manter como primeiro filtro | 0,5d |
@@ -208,7 +208,7 @@ O que já existe não pode falhar nem ser contornado de forma silenciosa.
 ### 6.2 Confiabilidade
 
 | ID | Tarefa | Detalhe | Esforço |
-|---|---|---|---|
+|---|---|---|
 | REL-01 | Contratos de resposta | `InferenceResponse` ↔ `AgentOutput`; `prompt_tokens` vs `tokens_prompt` | 1d |
 | REL-02 | Paridade playground/stream/task | Mesmo agente, modelo, tokens e erros coerentes | 1d |
 | REL-03 | Testes SSE | Primeiro token, cancelamento, timeout, erro do provedor, libertação de lock | 1d |
@@ -252,29 +252,29 @@ O que já existe não pode falhar nem ser contornado de forma silenciosa.
 
 | ID | Tarefa | Esforço |
 |---|---|---|
-| CAP-01 | Template Python com SQLite stdlib + schema + seed + teste | 2d |
+| CAP-01 | ✅ Template Python com SQLite stdlib + schema + seed + teste | Concluído: opção explícita, preview de aprovação vinculado e testes gerados |
 | CAP-02 | Template Node com Prisma/SQLite (🟡 opcional) | 1,5d |
 | CAP-03 | Rota `/api/v1/data/pipeline` (🟡 P2) | 2d |
-| CAP-04 | Teste de inspeção do BD gerado no Backend Studio | 0,5d |
+| CAP-04 | ✅ Teste de inspeção do BD gerado no Backend Studio | Concluído: descoberta, inspeção e query read-only cobertas |
 
 ### 7.2 Busca online — de “funciona” para “confiável”
 
 | ID | Tarefa | Esforço |
 |---|---|---|
-| CAP-05 | Cache curto (10–15 min) por query normalizada | 1d |
-| CAP-06 | Resultado com fonte e timestamp; indicador no chat | 0,5d |
-| CAP-07 | Falha explícita “busca indisponível” | 0,5d |
-| CAP-08 | Testes de parsing com fixtures locais | 0,5d |
+| CAP-05 | ✅ Cache curto (10–15 min) por query normalizada | Concluído: cache de 12 min |
+| CAP-06 | ✅ Resultado com fonte e timestamp; indicador no chat | Concluído: fontes e data expostas no stream/chat |
+| CAP-07 | ✅ Falha explícita “busca indisponível” | Concluído: erro próprio e sem instruir o modelo a inventar resultados |
+| CAP-08 | ✅ Testes de parsing com fixtures locais | Concluído: parsing, cache e indisponibilidade cobertos |
 | CAP-09 | 🟡 Leitura de páginas completas com allowlist e limite (P2) | 2–3d |
 
 ### 7.3 Execução de scripts — UX e controlo
 
 | ID | Tarefa | Esforço |
 |---|---|---|
-| CAP-10 | Aprovação mostra comando, cwd, timeout e risco | 1d |
-| CAP-11 | Botão cancelar ligado ao kill switch/task cancel | 1d |
-| CAP-12 | Dry-run: mostrar comando sem executar | 0,5d |
-| CAP-13 | Log descarregável + limite de saída + redação visível | 0,5d |
+| CAP-10 | ✅ Aprovação mostra comando, cwd, timeout e risco | Concluído: preview vinculativo do comando com metadados de execução |
+| CAP-11 | ✅ Botão cancelar ligado ao kill switch/task cancel | Concluído: cancelamento do stream termina o subprocesso; Kill Switch por tarefa continua disponível |
+| CAP-12 | ✅ Dry-run: mostrar comando sem executar | Concluído: aprovação apresenta o comando como preview e nada corre antes da decisão |
+| CAP-13 | ✅ Log descarregável + limite de saída + redação visível | Concluído: exportação Markdown, saída limitada e redação na sandbox |
 
 ### Aceite
 
@@ -294,15 +294,15 @@ O que já existe não pode falhar nem ser contornado de forma silenciosa.
 Reduzir latência e uso de CPU sem perder qualidade.
 
 | ID | Tarefa | Detalhe | Esforço |
-|---|---|---|---|
-| PERF-01 | Reduzir prompts | De 1.000–1.700 para 400–800 tokens; contexto dinâmico; histórico truncado | 1,5d |
-| PERF-02 | Limitar geração | `max_tokens` por modo: playground 128–256; tarefa 512–1.024; stop sequences | 1d |
-| PERF-03 | Afinar Ollama | `keep_alive`, `num_ctx` 4k–8k, threads, `OLLAMA_NUM_PARALLEL=1`, warm-up | 1d |
+|---|---|---|
+| PERF-01 | 🟡 Reduzir prompts | Contexto de projeto só em intents de projeto; memórias, skills e histórico limitados. Meta 400–800 tokens ainda depende de medição no benchmark. | Parcial |
+| PERF-02 | 🟡 Limitar geração | Playground fixo em 256; tarefas com default e máximo 1.024. Stop sequences ainda pendentes. | Parcial |
+| PERF-03 | 🟡 Afinar Ollama | `keep_alive` e `num_ctx` 2k–8k configuráveis por ambiente; `OLLAMA_NUM_PARALLEL=1` e warm-up ainda pendentes | Parcial |
 | PERF-04 | Agrupar por modelo | Evitar troca constante e recarregamento | 1d |
 | PERF-05 | Roteamento por capacidade | Código → `qwen2.5-coder:7b`; raciocínio → `deepseek-r1:1.5b`; escrita → `qwen2.5:7b`; evitar `phi3.5` em tarefas estruturadas | 1d |
 | PERF-06 | Cache de inferência | Validar e usar `inference_cache` para prompts idempotentes | 1d |
-| PERF-07 | SQLite | WAL + índices em `chat_messages(session_id)`, `knowledge_vault`, `tasks` | 0,5d |
-| PERF-08 | Benchmark | `scripts/bench_agents.py` com 3 prompts fixos por agente; TTFT, tokens/s, total | 1d |
+| PERF-07 | ✅ SQLite | WAL + índices em `chat_messages(session_id)`, `knowledge_vault`, `tasks` já inicializados | Implementado |
+| PERF-08 | ✅ Benchmark | `scripts/bench_agents.py` com 3 prompts fixos por agente; TTFT, tokens/s, total e p95 | Implementado; execução exige API e token |
 
 ### Metas
 
@@ -326,7 +326,7 @@ Ollama em CPU continua a ser o teto. Se as metas não forem atingidas, documenta
 Resolver respostas fora do tema e definir o modelo certo por agente.
 
 | ID | Tarefa | Detalhe | Esforço |
-|---|---|---|---|
+|---|---|---|
 | QUAL-01 | Harness de avaliação | `scripts/eval_agents.py`; rubrica 1–5: relevância, aderência ao papel, formato, ferramentas, alucinação | 1,5d |
 | QUAL-02 | Casos de teste | 3–5 prompts por agente, incluindo “não sei / fora do âmbito” | 2d |
 | QUAL-03 | Corrigir prompts | Piores desempenhos; exemplos curtos; limites explícitos | 1,5d |
@@ -349,7 +349,7 @@ Resolver respostas fora do tema e definir o modelo certo por agente.
 **Ordem recomendada por valor:**
 
 | ID | Item | O que fazer | Esforço |
-|---|---|---|---|
+|---|---|---|
 | SIM-01 | Busca semântica no Knowledge Vault | Embeddings locais + `sqlite-vec`/FAISS; keyword como fallback | 3–4d |
 | SIM-02 | Voz real | `faster-whisper` para STT; Piper/SAPI para TTS | 3–4d |
 | SIM-03 | Segurança menos heurística | `pip-audit`/`npm audit` + snapshot OSV offline; Semgrep; regex como pré-filtro | 4–5d |
@@ -411,7 +411,7 @@ Nenhuma simulação é substituída “de uma vez”. Cada item entra por trás 
 
 | ID | Tarefa | Cadência |
 |---|---|---|
-| GOV-01 | CI: pytest + Ruff + `tsc` + build | Cada PR |
+| GOV-01 | ✅ CI: pytest + Ruff + `tsc` + build | Cada PR; full Ruff lint/format gates added |
 | GOV-02 | Smoke dos 26 agentes | Noturno |
 | GOV-03 | Benchmark de performance | Semanal |
 | GOV-04 | Avaliação de qualidade dos agentes | Mensal |
@@ -446,15 +446,15 @@ Adicionar ao JARVIS a capacidade de:
 
 ### Subfases
 
-| Subfase | Foco | Esforço |
-|---|---|---|
-| V0 | STT/TTS reais + VAD + endpoint de comando | 3–4d |
-| V1 | Wake word + daemon + bandeja + autostart | 3–4d |
-| V2 | Conversa por voz, follow-up, barge-in, TTS por frase | 3–4d |
-| V3 | Intent router + 10 comandos de assistente pessoal | 1–2 semanas |
-| V4 | Android com foreground service | 1–2 semanas |
-| V5 | iOS (push-to-talk/Siri) — opcional | 1 semana |
-| V6 | Hardening de privacidade e auditoria | contínuo |
+| Subfase | Foco | Esforço | Estado |
+|---|---|---|---|
+| V0 | STT/TTS reais + VAD + endpoint de comando | 3–4d | ✅ Implementado, adapters opcionais e cobertos por fixtures |
+| V1 | Wake word + daemon + bandeja + autostart | 3–4d | 🟡 Implementação inicial; falta teste em hardware, atalho global e autostart configurado |
+| V2 | Conversa por voz, follow-up, barge-in, TTS por frase | 3–4d | ⬜ Em aberto |
+| V3 | Intent router + 10 comandos de assistente pessoal | 1–2 semanas | ⬜ Em aberto |
+| V4 | Android com foreground service | 1–2 semanas | ⬜ Em aberto |
+| V5 | iOS (push-to-talk/Siri) — opcional | 1 semana | ⬜ Em aberto |
+| V6 | Hardening de privacidade e auditoria | contínuo | 🟡 Parcial; teste do daemon e hardware ainda necessários |
 
 ### Gate
 

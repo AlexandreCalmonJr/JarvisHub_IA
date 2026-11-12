@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 
 class ProjectScaffolder:
@@ -9,7 +9,10 @@ class ProjectScaffolder:
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         title = "English Practice Hub • Domine o Inglês na Prática"
-        desc = description or "Plataforma interativa desenvolvida pelo JARVIS para prática ativa de inglês com exercícios, áudio nativo e vocabulário."
+        desc = (
+            description
+            or "Plataforma interativa desenvolvida pelo JARVIS para prática ativa de inglês com exercícios, áudio nativo e vocabulário."
+        )
 
         index_html = """<!DOCTYPE html>
 <html lang="pt-BR">
@@ -861,7 +864,7 @@ renderFill();
 renderFlashcard();
 """
 
-        readme_md = f"""# 🎯 English Practice Hub
+        readme_md = """# 🎯 English Practice Hub
 
 Plataforma interativa de alta fidelidade desenvolvida pelo **JARVIS AI HUB** para treino diário de inglês.
 
@@ -886,7 +889,10 @@ Abra o arquivo `index.html` em qualquer navegador moderno (Chrome, Edge, Firefox
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         title = name or "CyberShield Security Hub"
-        desc = description or "Portal oficial de cibersegurança e auditoria de vulnerabilidades com scanner interativo e conformidade OWASP."
+        desc = (
+            description
+            or "Portal oficial de cibersegurança e auditoria de vulnerabilidades com scanner interativo e conformidade OWASP."
+        )
 
         index_html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1731,13 +1737,44 @@ Dê um duplo clique no arquivo `index.html` ou abra-o em qualquer navegador web.
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         combined = f"{project_id} {name} {description}".lower()
-        if any(k in combined for k in ("ingles", "inglês", "english", "exercicios", "exercício", "exercicio", "quiz", "praticas", "prática")):
+        if any(
+            k in combined
+            for k in (
+                "ingles",
+                "inglês",
+                "english",
+                "exercicios",
+                "exercício",
+                "exercicio",
+                "quiz",
+                "praticas",
+                "prática",
+            )
+        ):
             return self._generate_english_practice_web_scaffold(project_id, name, description)
-        if any(k in combined for k in ("segurança", "seguranca", "cyber", "ciber", "owasp", "threat", "soc", "shield", "pentest", "vulnerabilidade", "firewall", "antivirus")):
+        if any(
+            k in combined
+            for k in (
+                "segurança",
+                "seguranca",
+                "cyber",
+                "ciber",
+                "owasp",
+                "threat",
+                "soc",
+                "shield",
+                "pentest",
+                "vulnerabilidade",
+                "firewall",
+                "antivirus",
+            )
+        ):
             return self._generate_security_web_scaffold(project_id, name, description)
 
         title = name or project_id.replace("-", " ").title()
-        desc = description or f"Website moderno e responsivo gerado pelo JARVIS AI HUB para {title}."
+        desc = (
+            description or f"Website moderno e responsivo gerado pelo JARVIS AI HUB para {title}."
+        )
 
         index_html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -2168,7 +2205,10 @@ Você pode solicitar alterações diretamente pelo chat do JARVIS (ex: *"Mude o 
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         title = name or "CyberShield Security Hub"
-        desc = description or "Portal oficial de cibersegurança e auditoria de vulnerabilidades com scanner interativo e conformidade OWASP."
+        desc = (
+            description
+            or "Portal oficial de cibersegurança e auditoria de vulnerabilidades com scanner interativo e conformidade OWASP."
+        )
 
         index_html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -3013,8 +3053,10 @@ Dê um duplo clique no arquivo `index.html` ou abra-o em qualquer navegador web.
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         title = name or project_id.replace("-", " ").title()
-        raw_desc = description or f"Aplicativo mobile Flutter gerado pelo JARVIS AI HUB para {title}."
-        desc = raw_desc.replace('"', ' ').replace("'", " ").replace("\n", " ").strip()
+        raw_desc = (
+            description or f"Aplicativo mobile Flutter gerado pelo JARVIS AI HUB para {title}."
+        )
+        desc = raw_desc.replace('"', " ").replace("'", " ").replace("\n", " ").strip()
         safe_package_name = project_id.lower().replace("-", "_")
 
         pubspec_yaml = f"""name: {safe_package_name}
@@ -3244,10 +3286,16 @@ O arquivo APK gerado ficará em `build/app/outputs/flutter-apk/app-release.apk`.
         }
 
     def _generate_default_python_scaffold(
-        self, project_id: str, name: str, description: str
+        self, project_id: str, name: str, description: str, database: str = "none"
     ) -> dict[str, str]:
+        database = (database or "none").strip().lower()
+        if database not in {"none", "sqlite"}:
+            raise ValueError("O scaffold Python oferece database='none' ou database='sqlite'.")
         title = name or project_id.replace("-", " ").title()
-        desc = description or f"Microsserviço e API moderna desenvolvida em Python 3.12 com FastAPI e Pydantic para {title}."
+        desc = (
+            description
+            or f"Microsserviço e API moderna desenvolvida em Python 3.12 com FastAPI e Pydantic para {title}."
+        )
         safe_mod = project_id.lower().replace("-", "_")
 
         main_py = f'''"""
@@ -3327,6 +3375,37 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8080, reload=True)
 '''
 
+        if database == "sqlite":
+            replacements = {
+                "from pydantic import BaseModel, Field": (
+                    "from pydantic import BaseModel, Field\n"
+                    "from database import create_item as create_item_db, get_item as get_item_db, "
+                    "initialize_database, list_items as list_items_db\n\n"
+                    "initialize_database()"
+                ),
+                "# Banco de dados em memória para operações de teste\n_STORAGE: dict[int, dict[str, Any]] = {\n"
+                '    1: {"id": 1, "title": "Configurar ambiente inicial", "priority": 1},\n'
+                '    2: {"id": 2, "title": "Validar rotas e integrações", "priority": 2},\n'
+                "}\n": "",
+                "    return list(_STORAGE.values())": "    return list_items_db()",
+                "len(_STORAGE)": "len(list_items_db())",
+                "    new_id = max(_STORAGE.keys(), default=0) + 1\n"
+                '    item = {"id": new_id, **payload.model_dump()}\n'
+                "    _STORAGE[new_id] = item\n"
+                '    logger.info("Item criado com sucesso com ID %d", new_id)\n'
+                "    return item": "    return create_item_db(payload.model_dump())",
+                "    if item_id not in _STORAGE:\n"
+                '        raise HTTPException(status_code=404, detail="Item não encontrado")\n'
+                "    return _STORAGE[item_id]": "    item = get_item_db(item_id)\n"
+                '    if item is None:\n        raise HTTPException(status_code=404, detail="Item não encontrado")\n'
+                "    return item",
+            }
+            for old, new in replacements.items():
+                if old not in main_py:
+                    raise RuntimeError(
+                        "Não foi possível aplicar o template SQLite ao scaffold Python."
+                    )
+                main_py = main_py.replace(old, new)
         requirements_txt = """fastapi>=0.110.0
 uvicorn>=0.28.0
 pydantic>=2.6.0
@@ -3436,19 +3515,125 @@ pytest -v
 ```
 """
 
-        return {
+        if database == "sqlite":
+            gitignore += "app.db\napp.db-shm\napp.db-wal\n"
+            readme_md += """
+
+## Banco SQLite
+
+O projeto inclui `schema.sql`, inicializa??o idempotente, seed e teste de persist?ncia.
+O banco `app.db` ? criado automaticamente ao importar a aplica??o e pode ser recriado com:
+
+```bash
+python init_db.py
+pytest -q
+```
+
+Defina a variável de ambiente `JARVIS_DATABASE_PATH` para alterar o caminho do arquivo.
+"""
+
+        files = {
             "main.py": main_py,
             "requirements.txt": requirements_txt,
             "tests/test_main.py": test_main_py,
             ".gitignore": gitignore,
             "README.md": readme_md,
         }
+        if database == "sqlite":
+            files.update(
+                {
+                    "database.py": '''"""Persistência SQLite via biblioteca padrão."""
+import os
+import sqlite3
+from pathlib import Path
+
+DB_PATH = Path(os.getenv("JARVIS_DATABASE_PATH", Path(__file__).with_name("app.db"))).expanduser()
+
+
+def connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def initialize_database():
+    from seed import seed
+
+    with connect() as connection:
+        schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
+        connection.executescript(schema)
+        seed(connection)
+
+
+def list_items():
+    with connect() as connection:
+        return [dict(row) for row in connection.execute("SELECT id, title, description, priority FROM items ORDER BY id")]
+
+
+def create_item(values: dict):
+    with connect() as connection:
+        cursor = connection.execute(
+            "INSERT INTO items (title, description, priority) VALUES (?, ?, ?)",
+            (values["title"], values.get("description"), values.get("priority", 1)),
+        )
+        row = connection.execute("SELECT id, title, description, priority FROM items WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        return dict(row)
+
+
+def get_item(item_id: int):
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT id, title, description, priority FROM items WHERE id = ?", (item_id,)
+        ).fetchone()
+        return dict(row) if row else None
+''',
+                    "schema.sql": """CREATE TABLE IF NOT EXISTS items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL CHECK (length(title) BETWEEN 2 AND 100),
+    description TEXT,
+    priority INTEGER NOT NULL DEFAULT 1 CHECK (priority BETWEEN 1 AND 5)
+);
+""",
+                    "seed.py": '''"""Seed idempotente do banco de desenvolvimento."""
+def seed(connection):
+    connection.executemany(
+        "INSERT OR IGNORE INTO items (id, title, description, priority) VALUES (?, ?, ?, ?)",
+        [
+            (1, "Configurar ambiente inicial", "Tarefa de exemplo", 1),
+            (2, "Validar rotas e integrações", "Tarefa de exemplo", 2),
+        ],
+    )
+''',
+                    "init_db.py": '''"""Cria schema e seed sem apagar dados existentes."""
+from database import initialize_database
+
+if __name__ == "__main__":
+    initialize_database()
+    print("Banco SQLite inicializado.")
+''',
+                    ".env.example": "JARVIS_DATABASE_PATH=./app.db\n",
+                    "tests/test_database.py": """from database import create_item, get_item, initialize_database, list_items
+
+
+def test_database_initializes_seeds_and_persists_items():
+    initialize_database()
+    assert len(list_items()) >= 2
+    created = create_item({"title": "Persistência SQLite", "description": "teste", "priority": 3})
+    assert get_item(created["id"])["title"] == "Persistência SQLite"
+""",
+                }
+            )
+        return files
 
     def _generate_default_java_scaffold(
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         title = name or project_id.replace("-", " ").title()
-        desc = description or f"Aplicação moderna em Java 21 desenvolvida para {title} com Maven e JUnit 5."
+        desc = (
+            description
+            or f"Aplicação moderna em Java 21 desenvolvida para {title} com Maven e JUnit 5."
+        )
         pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", project_id.lower())
         group_id = "com.jarvis.hub"
         artifact_id = project_id.lower()
@@ -3644,7 +3829,10 @@ mvn test
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         title = name or project_id.replace("-", " ").title()
-        desc = description or f"Solução moderna em .NET 8 / C# 12 para {title} gerada pelo JARVIS AI HUB."
+        desc = (
+            description
+            or f"Solução moderna em .NET 8 / C# 12 para {title} gerada pelo JARVIS AI HUB."
+        )
         safe_name = re.sub(r"[^a-zA-Z0-9]", "", project_id.replace("-", " ").title()) or "App"
 
         csproj = f"""<Project Sdk="Microsoft.NET.Sdk">
@@ -3760,7 +3948,10 @@ dotnet publish -c Release -r win-x64 --self-contained
         self, project_id: str, name: str, description: str
     ) -> dict[str, str]:
         title = name or project_id.replace("-", " ").title()
-        desc = description or f"Microsserviço de alta performance em Go 1.22 para {title} com HTTP Server e graceful shutdown."
+        desc = (
+            description
+            or f"Microsserviço de alta performance em Go 1.22 para {title} com HTTP Server e graceful shutdown."
+        )
         safe_mod = project_id.lower().replace("_", "-")
 
         go_mod = f"""module {safe_mod}
@@ -3867,7 +4058,7 @@ func main() {{
 }}
 """
 
-        main_test_go = f"""package main
+        main_test_go = """package main
 
 import (
 	"net/http"
@@ -3875,16 +4066,16 @@ import (
 	"testing"
 )
 
-func TestStatusHandler(t *testing.T) {{
+func TestStatusHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
 	statusHandler(w, req)
 
-	if w.Code != http.StatusOK {{
+	if w.Code != http.StatusOK {
 		t.Fatalf("esperado status 200, recebido: %d", w.Code)
-	}}
-}}
+	}
+}
 """
 
         gitignore = """*.exe
@@ -4073,6 +4264,3 @@ gradlew.bat run
             ".gitignore": gitignore,
             "README.md": readme_md,
         }
-
-
-

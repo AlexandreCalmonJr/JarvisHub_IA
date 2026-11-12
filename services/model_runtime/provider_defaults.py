@@ -33,9 +33,7 @@ def default_model_for_provider(provider: str | None) -> str:
     return DEFAULT_MODELS.get((provider or "").lower().strip(), "gpt-4o-mini")
 
 
-def normalize_model_for_provider(
-    provider: str | None, model: str | None
-) -> str | None:
+def normalize_model_for_provider(provider: str | None, model: str | None) -> str | None:
     """Substitui IDs descontinuados; preserva modelos personalizados válidos."""
     if model is None:
         return None

@@ -18,6 +18,11 @@ INTENT_DOMAIN_MAP: dict[str, str] = {
 }
 
 
+def _bounded_text(value: Any, limit: int) -> str:
+    text = str(value or "").strip()
+    return text if len(text) <= limit else text[:limit].rstrip() + "…"
+
+
 def build_specialist_prompt(
     agent_role: str,
     agent_registry: Any | None,
@@ -79,35 +84,57 @@ def build_specialist_prompt(
             memories = db_manager.list_project_memory(project_id, owner_user_id=owner_user_id)
             if memories:
                 items = []
-                for m in memories[:8]:
+                for m in memories[:5]:
                     cat = m.get("category", "geral").upper()
                     k = m.get("key", "")
                     c = m.get("content", "")
-                    items.append(f"- [{cat}] {k}: {c}")
+                    items.append(f"- [{cat}] {k}: {_bounded_text(c, 260)}")
                 memory_section = (
-                    f"\n\n### 🧠 REGRAS E MEMÓRIAS DO PROJETO ({project_id}):\n"
-                    + "\n".join(items)
+                    f"\n\n### 🧠 REGRAS E MEMÓRIAS DO PROJETO ({project_id}):\n" + "\n".join(items)
                 )
         except Exception:
             logger.debug("Memórias do projeto indisponíveis.", exc_info=True)
 
     # 2.0 Injeção de Código Fonte Real do Projeto Físico em Disco
     source_code_section = ""
-    if project_id:
+    if project_id and intent in {
+        "architecture_analysis",
+        "code_modification",
+        "project_creation",
+        "qa_testing",
+        "security_audit",
+    }:
         try:
             from pathlib import Path
+
             workspace_dir = Path("workspace") / project_id
             if workspace_dir.exists() and workspace_dir.is_dir():
                 file_snippets = []
                 for p in sorted(workspace_dir.iterdir()):
-                    if p.is_file() and p.suffix.lower() in (".html", ".js", ".css", ".py", ".json", ".md", ".ts"):
+                    if p.is_file() and p.suffix.lower() in (
+                        ".html",
+                        ".js",
+                        ".css",
+                        ".py",
+                        ".json",
+                        ".md",
+                        ".ts",
+                    ):
                         try:
                             content = p.read_text(encoding="utf-8", errors="replace")
-                            preview = content[:1800] + ("\n... [restante do arquivo truncado para brevidade]" if len(content) > 1800 else "")
-                            file_snippets.append(f"📄 Arquivo `{p.name}`:\n```{p.suffix.lstrip('.')}\n{preview}\n```")
+                            preview = content[:1200] + (
+                                "\n... [restante do arquivo truncado para brevidade]"
+                                if len(content) > 1200
+                                else ""
+                            )
+                            file_snippets.append(
+                                f"📄 Arquivo `{p.name}`:\n```{p.suffix.lstrip('.')}\n{preview}\n```"
+                            )
                         except Exception:
-                            logger.debug("Ficheiro de código ilegível ignorado: %s", p.name, exc_info=True)
-                    if len(file_snippets) >= 4:
+                            logger.debug(
+                                "Ficheiro de código ilegível ignorado: %s", p.name, exc_info=True
+                            )
+                    if len(file_snippets) >= 2:
                         break
                 if file_snippets:
                     source_code_section = (
@@ -123,7 +150,7 @@ def build_specialist_prompt(
     if db_manager and hasattr(db_manager, "list_agent_memories"):
         try:
             agent_mems = db_manager.list_agent_memories(
-                agent_role=role_val, limit=5, owner_user_id=owner_user_id
+                agent_role=role_val, limit=3, owner_user_id=owner_user_id
             )
             if agent_mems:
                 items = []
@@ -131,7 +158,7 @@ def build_specialist_prompt(
                     cat = am.get("category", "geral").upper()
                     k = am.get("key", "")
                     c = am.get("content", "")
-                    items.append(f"- [{cat}] {k}: {c}")
+                    items.append(f"- [{cat}] {k}: {_bounded_text(c, 220)}")
                 agent_memory_section = (
                     f"\n\n### 🧠 MEMÓRIAS EPISÓDICAS E PREFERÊNCIAS APRENDIDAS ({role_val}):\n"
                     + "\n".join(items)
@@ -144,16 +171,22 @@ def build_specialist_prompt(
     if db_manager and hasattr(db_manager, "get_user_profile"):
         try:
             user_prof = db_manager.get_user_profile(owner_user_id=owner_user_id)
-            custom_inst = user_prof.get("custom_instructions") or user_prof.get("customInstructions")
+            custom_inst = user_prof.get("custom_instructions") or user_prof.get(
+                "customInstructions"
+            )
             seniority = user_prof.get("seniority_level") or user_prof.get("seniorityLevel")
             role_title = user_prof.get("role_title") or user_prof.get("roleTitle")
             pref_parts = []
             if role_title:
                 pref_parts.append(f"- Cargo do Desenvolvedor: {role_title}")
             if seniority:
-                pref_parts.append(f"- Nível de Senioridade: {str(seniority).upper()} (adapte profundidade e vocabulário técnico)")
+                pref_parts.append(
+                    f"- Nível de Senioridade: {str(seniority).upper()} (adapte profundidade e vocabulário técnico)"
+                )
             if custom_inst and str(custom_inst).strip():
-                pref_parts.append(f"- Diretrizes de Estilo Personalizadas do Desenvolvedor:\n  \"{str(custom_inst).strip()}\"")
+                pref_parts.append(
+                    f'- Diretrizes de Estilo Personalizadas do Desenvolvedor:\n  "{_bounded_text(custom_inst, 500)}"'
+                )
             if pref_parts:
                 user_instructions_section = (
                     "\n\n### 👤 PERFIL & INSTRUÇÕES PERSONALIZADAS DO USUÁRIO:\n"
@@ -171,10 +204,10 @@ def build_specialist_prompt(
             )
             if k_results:
                 k_items = []
-                for kr in k_results:
+                for kr in k_results[:2]:
                     doc = kr.get("doc_name", "documento")
-                    snippet = kr.get("content", "")[:350].replace("\n", " ")
-                    k_items.append(f"- 📄 **{doc}**: \"{snippet}...\"")
+                    snippet = _bounded_text(kr.get("content", ""), 280).replace("\n", " ")
+                    k_items.append(f'- 📄 **{doc}**: "{snippet}..."')
                 knowledge_section = (
                     "\n\n### 📚 BASE DE CONHECIMENTO LOCAL (JARVIS Vault / RAG):\n"
                     + "\n".join(k_items)
@@ -187,7 +220,12 @@ def build_specialist_prompt(
     ponytail_section = ""
     try:
         from services.skills.ponytail_rules import get_ponytail_instruction
-        p_level = db_manager.get_ponytail_level() if (db_manager and hasattr(db_manager, "get_ponytail_level")) else "senior"
+
+        p_level = (
+            db_manager.get_ponytail_level()
+            if (db_manager and hasattr(db_manager, "get_ponytail_level"))
+            else "senior"
+        )
         ponytail_section = get_ponytail_instruction(p_level)
     except Exception:
         logger.debug("Instrução do modo Ponytail indisponível.", exc_info=True)
@@ -197,12 +235,14 @@ def build_specialist_prompt(
     if skills_catalog:
         try:
             skills = [
-                skill for skill in skills_catalog.get_skills_for_agent(role_val)
+                skill
+                for skill in skills_catalog.get_skills_for_agent(role_val)
                 if getattr(skill, "origin", "") not in {"user_created", "imported_ecc"}
             ]
             if not skills and dom:
                 skills = [
-                    skill for skill in skills_catalog.get_relevant_skills(dom, limit=2)
+                    skill
+                    for skill in skills_catalog.get_relevant_skills(dom, limit=2)
                     if getattr(skill, "origin", "") not in {"user_created", "imported_ecc"}
                 ]
             if owner_user_id is not None and db_manager and hasattr(db_manager, "list_user_skills"):
@@ -210,22 +250,27 @@ def build_specialist_prompt(
                 for skill in private_skills:
                     assigned = skill.get("assigned_agents") or []
                     if role_val in assigned and skill.get("is_approved", True):
-                        skills.append(type("PrivateSkill", (), {
-                            "name": skill.get("name", skill.get("id", "Skill")),
-                            "version": skill.get("version", "1.0.0"),
-                            "description": skill.get("description", ""),
-                            "instructions": skill.get("instructions", ""),
-                        })())
+                        skills.append(
+                            type(
+                                "PrivateSkill",
+                                (),
+                                {
+                                    "name": skill.get("name", skill.get("id", "Skill")),
+                                    "version": skill.get("version", "1.0.0"),
+                                    "description": skill.get("description", ""),
+                                    "instructions": skill.get("instructions", ""),
+                                },
+                            )()
+                        )
             if skills:
                 items = []
-                for s in skills[:3]:
+                for s in skills[:2]:
                     items.append(
-                        f"- **{s.name}** (v{s.version}): {s.description}\n"
-                        f"  Diretriz técnica: {s.instructions}"
+                        f"- **{s.name}** (v{s.version}): {_bounded_text(s.description, 240)}\n"
+                        f"  Diretriz técnica: {_bounded_text(s.instructions, 520)}"
                     )
                 skills_section = (
-                    f"\n\n### 🛠️ HABILIDADES TÉCNICAS E DIRETRIZES ECC ATIVAS:\n"
-                    + "\n".join(items)
+                    "\n\n### 🛠️ HABILIDADES TÉCNICAS E DIRETRIZES ECC ATIVAS:\n" + "\n".join(items)
                 )
         except Exception:
             logger.debug("Catálogo de skills indisponível.", exc_info=True)
@@ -234,32 +279,28 @@ def build_specialist_prompt(
     collab_section = ""
     if previous_outputs:
         items = []
-        for prev in previous_outputs:
+        for prev in previous_outputs[-3:]:
             prev_role = prev.get("agent_role", "Especialista")
-            prev_summary = prev.get("summary", "")[:350]
+            prev_summary = _bounded_text(prev.get("summary", ""), 280)
             items.append(f"- **{prev_role}**: {prev_summary}")
         collab_section = (
-            f"\n\n### 🔄 FLUXO DE COLABORAÇÃO MULTI-AGENTE (Pareceres Prévios):\n"
+            "\n\n### 🔄 FLUXO DE COLABORAÇÃO MULTI-AGENTE (Pareceres Prévios):\n"
             + "\n".join(items)
             + "\nAnalise o trabalho do especialista anterior sob sua perspectiva de domínio e produza seu parecer ou plano de ação complementar."
         )
 
     react_scaffold = (
-        "\n\n### 🧭 PROTOCOLO COGNITIVO OBRIGATÓRIO (ReAct / Chain-of-Thought):\n"
-        "- Pensamento Crítico: Avalie requisitos, restrições e riscos do domínio antes de concluir.\n"
-        "- Evidências Concretas: Apoie decisões em arquivos inspecionados, padrões arquiteturais e dados verificáveis.\n"
-        "- Reflexão e Garantia: Aponte potenciais falhas, edge cases, testes recomendados e mitigações de segurança."
+        "\n\n### ANÁLISE:\n"
+        "- Considere requisitos, restrições e riscos; apoie conclusões em evidências verificáveis.\n"
+        "- Resuma a justificativa sem expor raciocínio interno passo a passo."
     )
 
     footer = (
-        "\n\n### DIRETRIZES DE RESPOSTA OBRIGATÓRIAS:\n"
-        "1. Responda estritamente em português brasileiro de forma técnica, amigável, concisa e completa.\n"
-        "2. Estruture a resposta em 3 ou 4 tópicos principais com exemplos de código claros e uma breve conclusão final.\n"
-        "3. IMPORTANTE: Conclua todas as suas frases, parágrafos, tópicos e blocos de código até o final. NUNCA termine uma resposta no meio de uma frase ou incompleta.\n"
-        "4. Ao fornecer exemplos de código, encerre todos os blocos com cercas (```) e garanta que o código esteja completo e funcional.\n"
-        "5. Não mencione nomes ou funções internas da sandbox (como read_file, list_directory, sess_...) na sua conversa com o usuário."
+        "\n\n### DIRETRIZES DE RESPOSTA:\n"
+        "1. Responda em português brasileiro, com clareza e concisão.\n"
+        "2. Use estrutura e exemplos só quando ajudarem a responder ao pedido.\n"
+        "3. Termine a resposta e os blocos de código completos.\n"
+        "4. Não revele nomes de ferramentas internas da sandbox ao usuário."
     )
 
     return f"{header}{memory_section}{source_code_section}{agent_memory_section}{user_instructions_section}{knowledge_section}{ponytail_section}{skills_section}{collab_section}{react_scaffold}{footer}"
-
-

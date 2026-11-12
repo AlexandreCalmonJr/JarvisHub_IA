@@ -143,13 +143,14 @@ class AutonomousAgentRunConfig(BaseModel):
 
     agent_role: AgentRole
     prompt: str
-    session_id: str = Field(default_factory=lambda: f"session-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}")
+    session_id: str = Field(
+        default_factory=lambda: f"session-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    )
     project_id: str | None = None
     owner_user_id: str | None = None
     mode: AutonomousAgentMode = AutonomousAgentMode.ASK
     max_iterations: int = 15
     temperature: float = 0.3
-    max_tokens: int = 2048
+    max_tokens: int = Field(default=1024, ge=256, le=1024)
     timeout_seconds: float = 180.0
     include_history: bool = True
-

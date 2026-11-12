@@ -21,7 +21,9 @@ from services.tool_gateway import (
 def test_duckdb_query_execution(tmp_path: Path):
     # 1. Cria um arquivo CSV simples no projeto
     csv_file = tmp_path / "vendas.csv"
-    csv_file.write_text("id,produto,valor\n1,Notebook,4500.0\n2,Mouse,150.0\n3,Teclado,300.0\n", encoding="utf-8")
+    csv_file.write_text(
+        "id,produto,valor\n1,Notebook,4500.0\n2,Mouse,150.0\n3,Teclado,300.0\n", encoding="utf-8"
+    )
 
     # 2. Executa agregação SQL analítica no DuckDB
     sql = "SELECT produto, valor FROM read_csv_auto('vendas.csv') WHERE valor > 200 ORDER BY valor DESC;"
@@ -33,6 +35,18 @@ def test_duckdb_query_execution(tmp_path: Path):
     assert "Teclado" in out
     assert "Mouse" not in out
     assert "linhas retornadas" in out
+
+
+def test_duckdb_query_blocks_writes_and_multiple_statements(tmp_path: Path):
+    for sql in (
+        "COPY (SELECT 1) TO 'out.csv'",
+        "SELECT 1; COPY (SELECT 2) TO 'out.csv'",
+        "ATTACH ':memory:' AS other",
+    ):
+        ok, _, err = execute_duckdb_query(sql=sql, project_root=tmp_path)
+        assert not ok
+        assert "bloquead" in err.lower() or "somente leitura" in err.lower()
+    assert not (tmp_path / "out.csv").exists()
 
 
 def test_scan_secrets_detects_credentials(tmp_path: Path):
@@ -116,13 +130,17 @@ def test_sql_query_explain(tmp_path: Path):
 
 def test_vector_memory_manager_store_and_search(tmp_path: Path):
     vec_mgr = VectorMemoryManager(db_dir=tmp_path / "vectors")
-    
+
     # Vetores simulados de 4 dimensões
     v1 = [1.0, 0.0, 0.0, 0.0]
     v2 = [0.0, 1.0, 0.0, 0.0]
 
-    stored1 = vec_mgr.store_memory("memories", "Autenticação via JWT implementada", v1, {"topic": "auth"})
-    stored2 = vec_mgr.store_memory("memories", "Pipeline de dados com DuckDB", v2, {"topic": "data"})
+    stored1 = vec_mgr.store_memory(
+        "memories", "Autenticação via JWT implementada", v1, {"topic": "auth"}
+    )
+    stored2 = vec_mgr.store_memory(
+        "memories", "Pipeline de dados com DuckDB", v2, {"topic": "data"}
+    )
     assert stored1 is True
     assert stored2 is True
 
@@ -137,10 +155,14 @@ def test_vector_memory_manager_store_and_search(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_tool_gateway_dispatches_specialized_tools(tmp_path: Path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj_spec", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj_spec", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
 
     # Cria CSV de teste
-    (tmp_path / "relatorio.csv").write_text("mes,faturamento\nJan,50000\nFev,75000\n", encoding="utf-8")
+    (tmp_path / "relatorio.csv").write_text(
+        "mes,faturamento\nJan,50000\nFev,75000\n", encoding="utf-8"
+    )
 
     gateway = ToolGateway(security_core=sec)
 
@@ -148,7 +170,9 @@ async def test_tool_gateway_dispatches_specialized_tools(tmp_path: Path):
     req = ToolExecutionRequest(
         agent_role="data_scientist",
         tool_name="duckdb_query",
-        arguments={"sql": "SELECT mes, faturamento FROM read_csv_auto('relatorio.csv') WHERE faturamento > 60000;"},
+        arguments={
+            "sql": "SELECT mes, faturamento FROM read_csv_auto('relatorio.csv') WHERE faturamento > 60000;"
+        },
         project_id="proj_spec",
     )
     res = await gateway.execute_tool(req, owner_user_id="test-owner", actor_role="admin")
@@ -164,7 +188,9 @@ async def test_coding_tool_executor_specialized_tools(tmp_path: Path):
     from services.coding_agent.types import ToolCall
 
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj_exec", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj_exec", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
 
     (tmp_path / "requirements.txt").write_text("fastapi>=0.115.0\n", encoding="utf-8")
     (tmp_path / "leak.py").write_text("API_KEY = 'AKIA0000111122223333'\n", encoding="utf-8")
@@ -172,17 +198,22 @@ async def test_coding_tool_executor_specialized_tools(tmp_path: Path):
     executor = CodingToolExecutor(security_core=sec, workspace_service=None)
 
     # 1. Executa scan_secrets
-    res_sec = await executor.execute(ToolCall(id="c1", name="scan_secrets", arguments={}), project_id="proj_exec")
+    res_sec = await executor.execute(
+        ToolCall(id="c1", name="scan_secrets", arguments={}), project_id="proj_exec"
+    )
     assert res_sec.success is True
     assert "AWS Access Key" in res_sec.output
 
     # 2. Executa inspect_dependencies
-    res_dep = await executor.execute(ToolCall(id="c2", name="inspect_dependencies", arguments={}), project_id="proj_exec")
+    res_dep = await executor.execute(
+        ToolCall(id="c2", name="inspect_dependencies", arguments={}), project_id="proj_exec"
+    )
     assert res_dep.success is True
     assert "fastapi" in res_dep.output
 
     # 3. Executa generate_sbom
-    res_sbom = await executor.execute(ToolCall(id="c3", name="generate_sbom", arguments={}), project_id="proj_exec")
+    res_sbom = await executor.execute(
+        ToolCall(id="c3", name="generate_sbom", arguments={}), project_id="proj_exec"
+    )
     assert res_sbom.success is True
     assert "CycloneDX" in res_sbom.output
-

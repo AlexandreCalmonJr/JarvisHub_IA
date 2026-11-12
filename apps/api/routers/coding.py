@@ -39,7 +39,6 @@ MODE_LABELS = {
 }
 
 
-
 def _private_owner(principal: Principal) -> str:
     if principal.kind == "device" and principal.subject_id.startswith("device:"):
         raise HTTPException(
@@ -47,6 +46,7 @@ def _private_owner(principal: Principal) -> str:
             detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
         )
     return principal.subject_id
+
 
 def _provider_info() -> dict[str, Any]:
     try:
@@ -84,7 +84,8 @@ async def list_coding_tools():
 
 @router.get("/api/v1/coding/sessions/{session_id}/messages")
 async def list_coding_messages(
-    session_id: str, limit: int = 200,
+    session_id: str,
+    limit: int = 200,
     principal: Principal = Depends(get_principal),
 ):
     """Histórico fiel da sessão (mensagens, chamadas e resultados de ferramentas)."""
@@ -99,14 +100,10 @@ async def list_coding_messages(
 
 
 @router.delete("/api/v1/coding/sessions/{session_id}/messages")
-async def clear_coding_messages(
-    session_id: str, principal: Principal = Depends(get_principal)
-):
+async def clear_coding_messages(session_id: str, principal: Principal = Depends(get_principal)):
     from apps.api.deps import db_manager
 
-    deleted = db_manager.clear_session_messages(
-        session_id, owner_user_id=_private_owner(principal)
-    )
+    deleted = db_manager.clear_session_messages(session_id, owner_user_id=_private_owner(principal))
     return {"session_id": session_id, "deleted": deleted}
 
 
@@ -124,9 +121,7 @@ async def run_coding_agent_stream(
         )
 
     owner_user_id = _private_owner(principal)
-    if not db_manager.get_project(
-        payload.project_id, owner_user_id=owner_user_id
-    ):
+    if not db_manager.get_project(payload.project_id, owner_user_id=owner_user_id):
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
     session_id = payload.session_id or f"coding-{uuid.uuid4().hex[:10]}"
     lock_key = f"{owner_user_id}:{session_id}"
@@ -163,7 +158,7 @@ async def run_coding_agent_stream(
             logger.info("Cliente desconectou da execução do Coding Agent (%s).", session_id)
             raise
         except Exception as exc:  # pragma: no cover - defensivo
-            logger.exception("Falha no Coding Agent: %s", exc)
+            logger.exception("Falha no Coding Agent")
             error = json.dumps(
                 {"type": "error", "error": f"Falha interna do agente: {exc}"},
                 ensure_ascii=False,
@@ -206,9 +201,10 @@ async def decide_coding_approval(
 
     # Rejeita imediatamente tentativa de aprovação por agentes de IA
     from packages.contracts.agent import AgentRole
+
     known_agents = {r.value for r in AgentRole}
     candidate = (payload.decided_by or "").lower().strip()
-    if candidate and (candidate in known_agents or candidate.startswith("agent_") or candidate.startswith("agent")):
+    if candidate and (candidate in known_agents or candidate.startswith("agent")):
         raise HTTPException(
             status_code=403,
             detail="Agentes de IA não possuem permissão para aprovar operações.",

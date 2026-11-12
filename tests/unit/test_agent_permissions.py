@@ -1,4 +1,5 @@
 import pytest
+
 from packages.contracts.agent import AgentRole
 from packages.contracts.security import ProjectWorkMode
 from services.memory.database import DatabaseManager
@@ -39,7 +40,9 @@ async def test_tool_gateway_blocks_modifications_for_read_only_agent(tmp_path):
     from agents.registry.registry import AgentRegistry
 
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj1", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj1", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     registry = AgentRegistry()
 
     # Get software architect profile and ensure is_read_only is True

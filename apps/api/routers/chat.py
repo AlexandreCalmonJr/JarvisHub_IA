@@ -13,9 +13,21 @@ from apps.api.deps import chat_runtime, db_manager, jarvis_master
 from apps.api.schemas import ChatRequest
 from services.coding_agent import ChatRunConfig, ProviderError
 from services.orchestration.state import TaskState
+from services.security_core.permission_engine import PermissionDeniedError
 
 logger = logging.getLogger("jarvis.api.chat")
 router = APIRouter(tags=["chat"])
+
+
+def _error_code(exc: Exception) -> str:
+    if isinstance(exc, PermissionDeniedError):
+        return "policy_denied"
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or "timeout" in str(exc).casefold():
+        return "timeout"
+    if isinstance(exc, ProviderError):
+        return "provider_unavailable"
+    return "internal"
+
 
 # Ações que exigem a governança do orquestrador/Coding Agent: escrita em disco,
 # execução de comandos, aprovações, rollback, auditoria e mesa redonda.
@@ -86,7 +98,6 @@ DIALOGUE_PREFIXES = (
 _reachability = {"checked_at": 0.0, "ok": False, "provider": ""}
 
 
-
 def _private_owner(principal: Principal) -> str:
     # Dispositivos ainda não possuem vínculo explícito com uma conta humana.
     if principal.kind == "device" and principal.subject_id.startswith("device:"):
@@ -96,6 +107,7 @@ def _private_owner(principal: Principal) -> str:
         )
     return principal.subject_id
 
+
 def _looks_actionable(prompt: str) -> bool:
     """Classifica ações protegidas e problemas complexos que exigem delegação."""
     lowered = prompt.lower().strip()
@@ -103,17 +115,28 @@ def _looks_actionable(prompt: str) -> bool:
     # Problemas abertos devem chegar ao JarvisMaster para convocar especialistas,
     # mesmo quando a frase começa como pergunta conversacional.
     complex_markers = (
-        "analise", "análise", "analisar", "investigue", "investigar",
-        "resolver", "solucionar", "diagnosticar", "estratégia",
-        "planejamento", "decisão", "compare", "avaliar",
-        "problema", "problemas", "causa", "causas",
+        "analise",
+        "análise",
+        "analisar",
+        "investigue",
+        "investigar",
+        "resolver",
+        "solucionar",
+        "diagnosticar",
+        "estratégia",
+        "planejamento",
+        "decisão",
+        "compare",
+        "avaliar",
+        "problema",
+        "problemas",
+        "causa",
+        "causas",
     )
     if len(lowered.split()) >= 6 and any(marker in lowered for marker in complex_markers):
         return True
 
-    if lowered.endswith("?") or any(
-        lowered.startswith(q) for q in DIALOGUE_PREFIXES
-    ):
+    if lowered.endswith("?") or any(lowered.startswith(q) for q in DIALOGUE_PREFIXES):
         return False
 
     if any(re.search(pattern, lowered, re.IGNORECASE) for pattern in PLANNING_PATTERNS):
@@ -152,15 +175,10 @@ async def _provider_reachable() -> bool:
             if not base_url:
                 continue
             is_local = any(
-                host in base_url
-                for host in ("127.0.0.1", "localhost", "0.0.0.0", "[::1]")
+                host in base_url for host in ("127.0.0.1", "localhost", "0.0.0.0", "[::1]")
             )
             # Evita sondar endpoints online em um caminho que não existe.
-            if (
-                "ollama" not in candidate_name
-                and "11434" not in base_url
-                and not is_local
-            ):
+            if "ollama" not in candidate_name and "11434" not in base_url and not is_local:
                 continue
             try:
                 async with httpx.AsyncClient(timeout=1.5) as client:
@@ -174,9 +192,7 @@ async def _provider_reachable() -> bool:
 
         if not ok:
             primary = getattr(provider, "primary", provider)
-            ok = bool(
-                getattr(primary, "api_key", "") or getattr(provider, "api_key", "")
-            )
+            ok = bool(getattr(primary, "api_key", "") or getattr(provider, "api_key", ""))
     except Exception as exc:
         logger.info("Provedor de chat indisponível; usando orquestrador: %s", exc)
         ok = False
@@ -221,7 +237,10 @@ def _persist_turn(
     try:
         if persist_user:
             db_manager.add_chat_message(
-                session_id=session_id, role="user", content=prompt, project_id=project_id,
+                session_id=session_id,
+                role="user",
+                content=prompt,
+                project_id=project_id,
                 owner_user_id=owner_user_id,
             )
         if summary:
@@ -237,9 +256,7 @@ def _persist_turn(
 
 
 @router.post("/api/v1/chat")
-async def chat_endpoint(
-    request: ChatRequest, principal: Principal = Depends(get_principal)
-):
+async def chat_endpoint(request: ChatRequest, principal: Principal = Depends(get_principal)):
     owner_user_id = _private_owner(principal)
     if request.project_id and not db_manager.get_project(
         request.project_id, owner_user_id=owner_user_id
@@ -274,8 +291,14 @@ async def chat_endpoint(
             project_id=request.project_id,
             owner_user_id=owner_user_id,
         )
-        summary = result.get("final_summary", "") if isinstance(result, dict) else result.final_summary
-        sid = result.get("session_id") if isinstance(result, dict) else getattr(result, "session_id", None)
+        summary = (
+            result.get("final_summary", "") if isinstance(result, dict) else result.final_summary
+        )
+        sid = (
+            result.get("session_id")
+            if isinstance(result, dict)
+            else getattr(result, "session_id", None)
+        )
         _persist_turn(
             sid,
             request.project_id,
@@ -298,14 +321,18 @@ async def chat_endpoint(
         except Exception as exc:
             logger.warning("Falha ao salvar tarefa no banco de dados: %s", exc)
         return result
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Tempo limite de inferência excedido.") from exc
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/api/v1/chat/stream")
-async def chat_stream_endpoint(
-    request: ChatRequest, principal: Principal = Depends(get_principal)
-):
+async def chat_stream_endpoint(request: ChatRequest, principal: Principal = Depends(get_principal)):
     """
     Endpoint SSE para streaming de tokens em tempo real.
 
@@ -363,11 +390,13 @@ async def chat_stream_endpoint(
         session_override: str | None = None,
     ):
         try:
-            init_json = json.dumps({
-                "type": "status",
-                "stage": "starting",
-                "message": "JARVIS Maestro analisando a solicitação e preparando a execução...",
-            })
+            init_json = json.dumps(
+                {
+                    "type": "status",
+                    "stage": "starting",
+                    "message": "JARVIS Maestro analisando a solicitação e preparando a execução...",
+                }
+            )
             yield f"data: {init_json}\n\n"
 
             result: TaskState = await jarvis_master.execute_task(
@@ -406,43 +435,51 @@ async def chat_stream_endpoint(
             except Exception as exc:
                 logger.warning("Falha ao salvar tarefa em streaming: %s", exc)
 
-            meta_json = json.dumps({
-                "type": "meta",
-                "engine": "orchestrator",
-                "task_id": result.get("task_id"),
-                "session_id": sid,
-                "intent": intent,
-                "selected_agents": agents,
-                "plan_steps": steps,
-                "agent_outputs": result.get("agent_outputs", []),
-                "is_completed": result.get("is_completed", False),
-                "approval_required": result.get("approval_required", False),
-                "approval_id": result.get("approval_id"),
-                "error": result.get("error"),
-            }, ensure_ascii=False, default=str)
+            meta_json = json.dumps(
+                {
+                    "type": "meta",
+                    "engine": "orchestrator",
+                    "task_id": result.get("task_id"),
+                    "session_id": sid,
+                    "intent": intent,
+                    "selected_agents": agents,
+                    "plan_steps": steps,
+                    "agent_outputs": result.get("agent_outputs", []),
+                    "is_completed": result.get("is_completed", False),
+                    "approval_required": result.get("approval_required", False),
+                    "approval_id": result.get("approval_id"),
+                    "error": result.get("error"),
+                },
+                ensure_ascii=False,
+                default=str,
+            )
             yield f"data: {meta_json}\n\n"
 
             words = summary.split(" ")
             for i, w in enumerate(words):
-                token_json = json.dumps({
-                    "type": "token",
-                    "chunk": w + (" " if i < len(words) - 1 else ""),
-                })
+                token_json = json.dumps(
+                    {
+                        "type": "token",
+                        "chunk": w + (" " if i < len(words) - 1 else ""),
+                    }
+                )
                 yield f"data: {token_json}\n\n"
                 await asyncio.sleep(0.015)
 
-            done_json = json.dumps({
-                "type": "done",
-                "engine": "orchestrator",
-                "is_completed": result.get("is_completed", True),
-                "approval_required": result.get("approval_required", False),
-                "approval_id": result.get("approval_id"),
-                "final_summary": summary,
-            })
+            done_json = json.dumps(
+                {
+                    "type": "done",
+                    "engine": "orchestrator",
+                    "is_completed": result.get("is_completed", True),
+                    "approval_required": result.get("approval_required", False),
+                    "approval_id": result.get("approval_id"),
+                    "final_summary": summary,
+                }
+            )
             yield f"data: {done_json}\n\n"
 
         except Exception as exc:
-            err_json = json.dumps({"type": "error", "error": str(exc)})
+            err_json = json.dumps({"type": "error", "code": _error_code(exc), "error": str(exc)})
             yield f"data: {err_json}\n\n"
 
     generator = agent_generator if engine == "agent" else orchestrator_generator
@@ -450,16 +487,12 @@ async def chat_stream_endpoint(
 
 
 @router.get("/api/v1/tasks")
-async def list_tasks_endpoint(
-    limit: int = 50, principal: Principal = Depends(get_principal)
-):
+async def list_tasks_endpoint(limit: int = 50, principal: Principal = Depends(get_principal)):
     return db_manager.list_tasks(limit=limit, owner_user_id=_private_owner(principal))
 
 
 @router.delete("/api/v1/tasks/{task_id}")
-async def delete_task_endpoint(
-    task_id: str, principal: Principal = Depends(get_principal)
-):
+async def delete_task_endpoint(task_id: str, principal: Principal = Depends(get_principal)):
     success = db_manager.delete_task(task_id, owner_user_id=_private_owner(principal))
     return {"task_id": task_id, "deleted": success}
 
@@ -478,20 +511,14 @@ async def purge_tasks_endpoint(
 async def list_chat_sessions_endpoint(
     limit: int = 50, principal: Principal = Depends(get_principal)
 ):
-    return db_manager.list_chat_sessions(
-        limit=limit, owner_user_id=_private_owner(principal)
-    )
+    return db_manager.list_chat_sessions(limit=limit, owner_user_id=_private_owner(principal))
 
 
 @router.get("/api/v1/chat/sessions/{session_id}")
-async def get_chat_session_endpoint(
-    session_id: str, principal: Principal = Depends(get_principal)
-):
+async def get_chat_session_endpoint(session_id: str, principal: Principal = Depends(get_principal)):
     owner = _private_owner(principal)
     tasks = db_manager.get_session_tasks(session_id, owner_user_id=owner)
-    messages = db_manager.list_chat_messages(
-        session_id, limit=400, owner_user_id=owner
-    )
+    messages = db_manager.list_chat_messages(session_id, limit=400, owner_user_id=owner)
     if not tasks and not messages:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     return {"session_id": session_id, "tasks": tasks, "messages": messages}
@@ -502,9 +529,7 @@ async def list_session_messages_endpoint(
     session_id: str, limit: int = 200, principal: Principal = Depends(get_principal)
 ):
     owner = _private_owner(principal)
-    messages = db_manager.list_chat_messages(
-        session_id, limit=limit, owner_user_id=owner
-    )
+    messages = db_manager.list_chat_messages(session_id, limit=limit, owner_user_id=owner)
     if not messages:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     return {"session_id": session_id, "messages": messages}
@@ -536,11 +561,11 @@ async def export_chat_session_endpoint(
     tasks = db_manager.get_session_tasks(session_id, owner_user_id=owner)
     if not tasks:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
-    md_content = db_manager.export_session_markdown(
-        session_id, owner_user_id=owner
-    )
+    md_content = db_manager.export_session_markdown(session_id, owner_user_id=owner)
     return Response(
         content=md_content,
         media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=conversa-jarvis-{session_id[:8]}.md"},
+        headers={
+            "Content-Disposition": f"attachment; filename=conversa-jarvis-{session_id[:8]}.md"
+        },
     )

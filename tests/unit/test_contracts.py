@@ -1,8 +1,12 @@
+import pytest
+from pydantic import ValidationError
+
 from packages.contracts import (
     AgentOutputContract,
     AgentRole,
     ApprovalRequest,
     ApprovalStatus,
+    AutonomousAgentRunConfig,
     ResourceUsage,
 )
 
@@ -45,3 +49,17 @@ def test_approval_request_lifecycle():
     )
     assert approval.status == ApprovalStatus.PENDING
     assert approval.reversible is True
+
+
+def test_autonomous_agent_generation_limit_is_bounded():
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.JARVIS_MASTER,
+        prompt="Resuma o status do projeto.",
+    )
+    assert config.max_tokens == 1024
+    with pytest.raises(ValidationError):
+        AutonomousAgentRunConfig(
+            agent_role=AgentRole.JARVIS_MASTER,
+            prompt="Resuma o status do projeto.",
+            max_tokens=2048,
+        )

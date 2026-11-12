@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Download,
   FileDiff,
   FolderGit2,
   Play,
@@ -355,6 +356,18 @@ export const CodingAgentView: React.FC = () => {
     abortRef.current?.abort();
   };
 
+  const handleDownloadLog = () => {
+    const content = entries
+      .map((entry) => `## ${entry.timestamp} · ${entry.kind}\n\n${entry.text}`)
+      .join("\n\n---\n\n");
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/markdown;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `jarvis-coding-${sessionId.slice(0, 12)}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDecision = async (action: 'approve' | 'reject') => {
     if (!canDecideApproval || !pendingApproval || approvalBusy) return;
     setApprovalBusy(true);
@@ -500,6 +513,9 @@ export const CodingAgentView: React.FC = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button onClick={handleDownloadLog} style={styles.secondaryButton} disabled={entries.length === 0}>
+            <Download size={14} /> Exportar log
+          </button>
           <button onClick={handleNewSession} style={styles.secondaryButton} disabled={running}>
             Nova sessão
           </button>
@@ -699,7 +715,8 @@ export const CodingAgentView: React.FC = () => {
           {pendingApproval.proposed_diff && (
             <div style={{ marginTop: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                <FileDiff size={14} color="var(--accent-color)" /> Diff proposto
+                <FileDiff size={14} color="var(--accent-color)" />
+                {pendingApproval.operation === 'RUN_COMMAND' ? 'Pré-visualização dry-run' : 'Diff proposto'}
               </div>
               <pre style={{ ...styles.pre, maxHeight: '240px', color: 'var(--text-primary)' }}>{pendingApproval.proposed_diff}</pre>
             </div>

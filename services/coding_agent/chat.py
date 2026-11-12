@@ -16,8 +16,8 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from collections.abc import AsyncIterator
-from typing import Any, Callable
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -81,7 +81,7 @@ class ChatRunConfig(BaseModel):
     model: str | None = None
     system_prompt: str | None = None
     temperature: float = 0.3
-    max_tokens: int = 2048
+    max_tokens: int = 1024
     timeout_seconds: float = 180.0
     include_history: bool = True
 
@@ -109,13 +109,18 @@ class ChatAgentRuntime:
         session_id = config.session_id or f"chat-{uuid.uuid4().hex[:10]}"
         prompt = config.prompt.strip()
         if not prompt:
-            yield {"type": "error", "error": "Mensagem vazia.", "session_id": session_id}
+            yield {
+                "type": "error",
+                "code": "internal",
+                "error": "Mensagem vazia.",
+                "session_id": session_id,
+            }
             return
 
         provider = self.provider_factory()
         model = provider.resolve_model(config.model)
 
-        turns = await self._build_turns(config, session_id, prompt)
+        turns, sources = await self._build_turns(config, session_id, prompt)
         self._persist(session_id, config.project_id, "user", prompt, config.owner_user_id)
 
         yield {
@@ -124,6 +129,7 @@ class ChatAgentRuntime:
             "model": model,
             "provider": provider.name,
             "engine": "agent",
+            "sources": sources,
         }
 
         collected: list[str] = []
@@ -145,19 +151,27 @@ class ChatAgentRuntime:
             logger.warning("Falha do provedor no chat (%s): %s", provider.name, message)
             if collected:
                 self._persist(
-                    session_id, config.project_id, "assistant", "".join(collected), config.owner_user_id
+                    session_id,
+                    config.project_id,
+                    "assistant",
+                    "".join(collected),
+                    config.owner_user_id,
                 )
             yield {
                 "type": "error",
+                "code": "timeout"
+                if "timeout" in message.casefold() or "tempo limite" in message.casefold()
+                else "provider_unavailable",
                 "error": message,
                 "session_id": session_id,
                 "provider": provider.name,
             }
             return
         except Exception as exc:  # pragma: no cover - defensivo
-            logger.exception("Erro inesperado no chat: %s", exc)
+            logger.exception("Erro inesperado no chat")
             yield {
                 "type": "error",
+                "code": "internal",
                 "error": f"Falha interna do chat: {exc}",
                 "session_id": session_id,
             }
@@ -175,13 +189,14 @@ class ChatAgentRuntime:
             "engine": "agent",
             "model": model,
             "provider": provider.name,
+            "sources": sources,
         }
 
     async def complete(self, config: ChatRunConfig) -> dict[str, Any]:
         """Versão não-streaming usada pelo endpoint JSON ``/api/v1/chat``."""
         session_id = config.session_id or f"chat-{uuid.uuid4().hex[:10]}"
         provider = self.provider_factory()
-        turns = await self._build_turns(config, session_id, config.prompt)
+        turns, sources = await self._build_turns(config, session_id, config.prompt)
         self._persist(session_id, config.project_id, "user", config.prompt, config.owner_user_id)
         reply = await provider.complete(
             turns=turns,
@@ -205,6 +220,7 @@ class ChatAgentRuntime:
             "classified_intent": "conversation",
             "selected_agents": ["jarvis_master"],
             "plan_steps": [],
+            "sources": sources,
         }
 
     # ------------------------------------------------------------------
@@ -212,23 +228,30 @@ class ChatAgentRuntime:
     # ------------------------------------------------------------------
     async def _build_turns(
         self, config: ChatRunConfig, session_id: str, prompt: str
-    ) -> list[ChatTurn]:
+    ) -> tuple[list[ChatTurn], list[dict[str, str]]]:
         system = (config.system_prompt or SYSTEM_PROMPT).strip()
+        sources: list[dict[str, str]] = []
 
         # Enriquecimento com busca web segura caso relevante
         if _should_perform_web_search(prompt):
             try:
                 from services.tool_gateway.web_search import safe_web_search
 
-                search_results = await safe_web_search.search(prompt, max_results=3, timeout_seconds=3.5)
+                search_results = await safe_web_search.search(
+                    prompt, max_results=3, timeout_seconds=3.5
+                )
                 if search_results:
-                    web_context = "\n\n### 🌐 Resultados Recentes da Web (Fontes Públicas Verificadas):\n"
+                    web_context = "\n\n### Resultados Recentes da Web (fontes públicas):\n"
                     for r in search_results:
-                        web_context += f"- **{r.title}**: {r.snippet} (Link: {r.url})\n"
+                        web_context += f"- **{r.title}**: {r.snippet} (Fonte: {r.url}; coletado: {r.retrieved_at})\n"
+                        sources.append(
+                            {"title": r.title, "url": r.url, "retrieved_at": r.retrieved_at}
+                        )
                     web_context += "\nUtilize as informações acima para enriquecer sua explicação com dados atualizados e cite as referências."
                     system += web_context
             except Exception as exc:
                 logger.debug("Busca web segura ignorada ou indisponível: %s", exc)
+                system += "\n\nA busca web falhou. Informe que a busca está indisponível e não invente resultados atuais nem fontes."
 
         if config.project_id and self.workspace_service is not None:
             try:
@@ -242,7 +265,8 @@ class ChatAgentRuntime:
         if config.include_history and self.db_manager is not None:
             try:
                 history = self.db_manager.list_chat_messages(
-                    session_id, limit=self.max_history_messages,
+                    session_id,
+                    limit=self.max_history_messages,
                     owner_user_id=config.owner_user_id,
                 )
                 for row in history:
@@ -250,13 +274,11 @@ class ChatAgentRuntime:
                         continue
                     content = (row.get("content") or "").strip()
                     if content:
-                        turns.append(
-                            ChatTurn(role=row["role"], content=content)
-                        )
+                        turns.append(ChatTurn(role=row["role"], content=content))
             except Exception as exc:
                 logger.warning("Falha ao carregar histórico do chat %s: %s", session_id, exc)
         turns.append(ChatTurn(role="user", content=prompt))
-        return turns
+        return turns, sources
 
     def _persist(
         self,

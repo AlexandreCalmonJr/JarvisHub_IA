@@ -167,10 +167,19 @@ class CVEScannerService:
             data = json.loads(content)
             deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
             for k, v in deps.items():
-                clean_v = str(v).replace("^", "").replace("~", "").replace(">", "").replace("=", "").strip()
+                clean_v = (
+                    str(v)
+                    .replace("^", "")
+                    .replace("~", "")
+                    .replace(">", "")
+                    .replace("=", "")
+                    .strip()
+                )
                 packages[k.lower()] = clean_v
         except Exception:
-            logger.debug("package.json inválido ignorado na análise de dependências.", exc_info=True)
+            logger.debug(
+                "package.json inválido ignorado na análise de dependências.", exc_info=True
+            )
         return packages
 
     def scan_project_dependencies(self, project_dir: Path) -> dict[str, Any]:
@@ -206,31 +215,43 @@ class CVEScannerService:
                     vuln_below = cve_info["vulnerable_below"]
                     if version != "unknown":
                         if _is_version_vulnerable(version, vuln_below):
-                            findings.append({
-                                "package": pkg,
-                                "detected_version": version,
-                                "cve": cve_info["cve"],
-                                "severity": cve_info["severity"],
-                                "title": cve_info["title"],
-                                "remediation": cve_info["remediation"],
-                            })
+                            findings.append(
+                                {
+                                    "package": pkg,
+                                    "detected_version": version,
+                                    "cve": cve_info["cve"],
+                                    "severity": cve_info["severity"],
+                                    "title": cve_info["title"],
+                                    "remediation": cve_info["remediation"],
+                                }
+                            )
                     else:
                         # Versão não fixada - recomendação de boas práticas
-                        findings.append({
-                            "package": pkg,
-                            "detected_version": "não fixada (unpinned)",
-                            "cve": cve_info["cve"],
-                            "severity": "LOW",
-                            "title": f"Pacote '{pkg}' possui histórico de vulnerabilidades. Fixe a versão segura.",
-                            "remediation": cve_info["remediation"],
-                        })
+                        findings.append(
+                            {
+                                "package": pkg,
+                                "detected_version": "não fixada (unpinned)",
+                                "cve": cve_info["cve"],
+                                "severity": "LOW",
+                                "title": f"Pacote '{pkg}' possui histórico de vulnerabilidades. Fixe a versão segura.",
+                                "remediation": cve_info["remediation"],
+                            }
+                        )
 
         severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
         for f in findings:
             sev = f.get("severity", "LOW")
             severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
-        score = max(0, 100 - (severity_counts["CRITICAL"] * 40 + severity_counts["HIGH"] * 25 + severity_counts["MEDIUM"] * 10))
+        score = max(
+            0,
+            100
+            - (
+                severity_counts["CRITICAL"] * 40
+                + severity_counts["HIGH"] * 25
+                + severity_counts["MEDIUM"] * 10
+            ),
+        )
 
         return {
             "status": "completed",

@@ -5,7 +5,6 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from apps.api.auth import Principal, get_principal, require_admin
-
 from apps.api.deps import coding_tools, mcp_service
 
 router = APIRouter(tags=["mcp"])

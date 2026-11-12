@@ -89,9 +89,7 @@ class ApprovalEngine:
             return
         try:
             status_val = (
-                request.status.value
-                if hasattr(request.status, "value")
-                else str(request.status)
+                request.status.value if hasattr(request.status, "value") else str(request.status)
             )
             self._db_manager.save_approval(
                 id=request.id,
@@ -230,7 +228,9 @@ class ApprovalEngine:
                     "Aprovação ausente, já utilizada ou não correspondente à operação e ao recurso."
                 )
 
-            if self._db_manager and not self._db_manager.consume_approved_approval(request_id, owner_user_id=owner_user_id):
+            if self._db_manager and not self._db_manager.consume_approved_approval(
+                request_id, owner_user_id=owner_user_id
+            ):
                 raise ValueError("A aprovação já foi utilizada ou deixou de estar válida.")
 
             request.status = ApprovalStatus.CONSUMED
@@ -251,11 +251,10 @@ class ApprovalEngine:
                 )
             return request
 
-    def list_pending_requests(
-        self, owner_user_id: str | None = None
-    ) -> list[ApprovalRequest]:
+    def list_pending_requests(self, owner_user_id: str | None = None) -> list[ApprovalRequest]:
         return [
-            request for request in self._requests.values()
+            request
+            for request in self._requests.values()
             if request.status == ApprovalStatus.PENDING
             and (owner_user_id is None or request.owner_user_id == owner_user_id)
         ]

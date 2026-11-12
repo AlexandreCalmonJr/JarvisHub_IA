@@ -39,10 +39,12 @@ class BIReportGenerator:
         else:
             lines.append("- *Nenhum KPI customizado informado.*")
 
-        lines.extend([
-            "",
-            "## 3. Resumo Estatístico de Variáveis Numéricas",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 3. Resumo Estatístico de Variáveis Numéricas",
+            ]
+        )
 
         if quality_report.summary_stats:
             lines.append("| Variável | Registos | Mínimo | Máximo | Média |")
@@ -54,16 +56,18 @@ class BIReportGenerator:
         else:
             lines.append("- *Nenhuma variável numérica identificada.*")
 
-        lines.extend([
-            "",
-            "## 4. Amostra Higienizada de Dados",
-            "```json",
-            f"{safe_records}",
-            "```",
-            "",
-            "---",
-            "*Gerado automaticamente pelo Agente BI Analyst do JARVIS AI HUB.*",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 4. Amostra Higienizada de Dados",
+                "```json",
+                f"{safe_records}",
+                "```",
+                "",
+                "---",
+                "*Gerado automaticamente pelo Agente BI Analyst do JARVIS AI HUB.*",
+            ]
+        )
 
         return "\n".join(lines)
 

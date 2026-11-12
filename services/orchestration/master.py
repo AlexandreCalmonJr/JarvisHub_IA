@@ -4,8 +4,8 @@ from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from services.model_runtime import ModelManager
 from packages.contracts.approval import ApprovalStatus
+from services.model_runtime import ModelManager
 from services.security_core import PermissionDeniedError, SecurityCore
 
 from .graph import create_master_graph, execute_workspace_modification
@@ -88,7 +88,9 @@ class JarvisMaster:
         }
 
         # Executa no grafo com checkpoint associado ao task_id
-        config = {"configurable": {"thread_id": self._checkpoint_thread_id(actual_task_id, owner_user_id)}}
+        config = {
+            "configurable": {"thread_id": self._checkpoint_thread_id(actual_task_id, owner_user_id)}
+        }
         result_state = await self.graph.ainvoke(initial_state, config=config)
         return result_state
 
@@ -110,10 +112,9 @@ class JarvisMaster:
         approval_id = current_values.get("approval_id")
         intent = current_values.get("classified_intent")
         approval = (
-            self.security_core.approval_engine.get_request(
-                approval_id, owner_user_id=owner_user_id
-            )
-            if approval_id else None
+            self.security_core.approval_engine.get_request(approval_id, owner_user_id=owner_user_id)
+            if approval_id
+            else None
         )
 
         if intent == "code_modification":
@@ -150,6 +151,7 @@ class JarvisMaster:
                     "project_id": project_id,
                     "name": pending_project.get("name"),
                     "project_type": pending_project.get("project_type"),
+                    "database": pending_project.get("database", "none"),
                     "files": pending_project.get("files") or "Scaffold padrão do tipo selecionado",
                 },
                 ensure_ascii=False,
@@ -197,10 +199,7 @@ class JarvisMaster:
         current_values["approval_required"] = False
 
         mod_extra = ""
-        if (
-            self.workspace_service
-            and intent == "code_modification"
-        ):
+        if self.workspace_service and intent == "code_modification":
             msg, _ = execute_workspace_modification(
                 workspace_service=self.workspace_service,
                 user_prompt=current_values.get("user_prompt", ""),

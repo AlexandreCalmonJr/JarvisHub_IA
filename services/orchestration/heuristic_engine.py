@@ -1,5 +1,3 @@
-
-
 def generate_heuristic_technical_response(
     user_prompt: str,
     intent: str,
@@ -13,7 +11,19 @@ def generate_heuristic_technical_response(
     """
     p_lower = user_prompt.lower()
 
-    if any(w in p_lower for w in ("inglês", "ingles", "idioma", "idiomas", "língua", "lingua", "english", "aprender falar")):
+    if any(
+        w in p_lower
+        for w in (
+            "inglês",
+            "ingles",
+            "idioma",
+            "idiomas",
+            "língua",
+            "lingua",
+            "english",
+            "aprender falar",
+        )
+    ):
         topic_title = "Roteiro Prático & Metodologia de Estudo de Inglês"
         overview = (
             "Aprender inglês com fluência e rapidez fundamenta-se em **imersão ativa diária, assimilação natural "
@@ -26,12 +36,31 @@ def generate_heuristic_technical_response(
             "**3. Prática de Pronúncia com Shadowing**: Escute falantes nativos e repita as frases em voz alta quase instantaneamente, absorvendo ritmo, entonação e a ligação natural entre palavras (connected speech).",
             "**4. Conversação & Raciocínio Direto**: Comece pensando em inglês sobre tarefas cotidianas e pratique pequenos diálogos no chat comigo. Posso corrigir sua gramática de forma amigável e sugerir alternativas naturais.",
         ]
-        tools = ["Comprehensible Input", "Método Shadowing", "Repetição Espaçada (SRS)", "BBC Learning English", "Diálogos Conversacionais"]
+        tools = [
+            "Comprehensible Input",
+            "Método Shadowing",
+            "Repetição Espaçada (SRS)",
+            "BBC Learning English",
+            "Diálogos Conversacionais",
+        ]
         next_steps = (
             "Vamos começar agora mesmo? Me diga: qual é o seu nível atual (Iniciante, Intermediário ou Avançado)? "
-            "Ou simplesmente digite: 'Let\'s practice English!' para iniciarmos nosso primeiro diálogo guiado."
+            "Ou simplesmente digite: 'Let's practice English!' para iniciarmos nosso primeiro diálogo guiado."
         )
-    elif any(w in p_lower for w in ("oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "ajuda", "quem é você", "o que você faz")):
+    elif any(
+        w in p_lower
+        for w in (
+            "oi",
+            "olá",
+            "ola",
+            "bom dia",
+            "boa tarde",
+            "boa noite",
+            "ajuda",
+            "quem é você",
+            "o que você faz",
+        )
+    ):
         topic_title = "JARVIS AI Hub — Como Posso Ajudar Você Hoje?"
         overview = (
             "Olá! Sou o **JARVIS**, seu assistente soberano de Inteligência Artificial. "
@@ -43,9 +72,25 @@ def generate_heuristic_technical_response(
             "**2. Pesquisa Web Segura**: Busca de informações atualizadas na internet com proteção SSRF e fontes verificadas.",
             "**3. Desenvolvimento de Software**: Criação de interfaces modernas, código limpo, testes e arquitetura sob demanda.",
         ]
-        tools = ["Conversação Natural", "Pesquisa Web Segura", "Tutoria Didática", "Modelos Locais Soberanos"]
+        tools = [
+            "Conversação Natural",
+            "Pesquisa Web Segura",
+            "Tutoria Didática",
+            "Modelos Locais Soberanos",
+        ]
         next_steps = "Digite sua dúvida, tópico de estudo ou pedido de projeto para começarmos!"
-    elif any(w in p_lower for w in ("ti", "tecnologia", "informação", "computação", "infraestrutura", "infra", "sistemas")):
+    elif any(
+        w in p_lower
+        for w in (
+            "ti",
+            "tecnologia",
+            "informação",
+            "computação",
+            "infraestrutura",
+            "infra",
+            "sistemas",
+        )
+    ):
         topic_title = "Tecnologia da Informação & Engenharia de Sistemas"
         overview = (
             "A **Tecnologia da Informação (TI)** moderna transcende o suporte operacional, "
@@ -60,12 +105,22 @@ def generate_heuristic_technical_response(
             "**4. Observabilidade & Operações (DevOps/SRE)**: Monitoramento proativo, tracing distribuído, agregação de logs em tempo real e orquestração de resiliência com circuit breakers.",
             "**5. Inteligência Artificial & Engenharia de Dados**: Adoção de modelos locais soberanos (LLMs Locais), RAG vetorial de baixa latência e pipelines ETL assíncronos.",
         ]
-        tools = ["FastAPI / Python", "Docker", "PostgreSQL / SQLite WAL", "Ollama", "React / Vite", "OpenTelemetry"]
+        tools = [
+            "FastAPI / Python",
+            "Docker",
+            "PostgreSQL / SQLite WAL",
+            "Ollama",
+            "React / Vite",
+            "OpenTelemetry",
+        ]
         next_steps = (
             "Você pode solicitar ao JARVIS criar um novo projeto (ex: `/create-project web cafeteria` ou `/create-project python api`), "
             "disparar uma mesa redonda técnica com `/debate` ou executar uma auditoria de cibersegurança com `/audit`."
         )
-    elif any(w in p_lower for w in ("arquitetura", "clean", "design", "padrões", "solid", "padroes", "backend")):
+    elif any(
+        w in p_lower
+        for w in ("arquitetura", "clean", "design", "padrões", "solid", "padroes", "backend")
+    ):
         topic_title = "Arquitetura de Software & Clean Design"
         overview = (
             "Uma arquitetura sólida prioriza **baixo acoplamento, alta coesão e separação estrita de responsabilidades**. "
@@ -78,9 +133,17 @@ def generate_heuristic_technical_response(
             "**3. Single Responsibility (SRP)**: Cada classe, módulo ou rota possui um único motivo para mudar.",
             "**4. Pragmatismo & YAGNI (Ponytail)**: Desenvolver apenas o que agrega valor mensurável, evitando sobre-engenharia prematura.",
         ]
-        tools = ["Domain-Driven Design (DDD)", "Repository Pattern", "Pydantic Schemas", "Dependency Injection"]
+        tools = [
+            "Domain-Driven Design (DDD)",
+            "Repository Pattern",
+            "Pydantic Schemas",
+            "Dependency Injection",
+        ]
         next_steps = "Para analisar a estrutura do seu projeto atual, utilize o comando `/doc` ou visualize a árvore de pastas no Project Workspace."
-    elif any(w in p_lower for w in ("segurança", "seguranca", "owasp", "vulnerabilidade", "threat", "auth")):
+    elif any(
+        w in p_lower
+        for w in ("segurança", "seguranca", "owasp", "vulnerabilidade", "threat", "auth")
+    ):
         topic_title = "Engenharia de Cibersegurança & Blindagem de Aplicações"
         overview = (
             "A segurança em profundidade requer validação sanitizada em todas as fronteiras de I/O, princípio do "
@@ -97,7 +160,21 @@ def generate_heuristic_technical_response(
     else:
         is_coding_context = any(
             k in p_lower
-            for k in ("código", "codigo", "função", "funcao", "api", "software", "endpoint", "bug", "erro", "banco", "tabela", "react", "python")
+            for k in (
+                "código",
+                "codigo",
+                "função",
+                "funcao",
+                "api",
+                "software",
+                "endpoint",
+                "bug",
+                "erro",
+                "banco",
+                "tabela",
+                "react",
+                "python",
+            )
         )
         if is_coding_context:
             topic_title = f"Parecer Técnico Estruturado: {user_prompt[:50]}"
@@ -141,5 +218,3 @@ def generate_heuristic_technical_response(
         f"#### 🚀 Recomendações e Próximos Passos:\n"
         f"{next_steps}"
     )
-
-

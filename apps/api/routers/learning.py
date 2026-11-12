@@ -43,7 +43,9 @@ def _connect() -> sqlite3.Connection:
 @router.get("/progress")
 async def get_learning_progress(principal: Principal = Depends(require_permission("profile:read"))):
     if principal.kind != "human":
-        raise HTTPException(status_code=403, detail="Aprendizagem disponível apenas para contas humanas.")
+        raise HTTPException(
+            status_code=403, detail="Aprendizagem disponível apenas para contas humanas."
+        )
     with _connect() as conn:
         row = conn.execute(
             "SELECT completed_ids_json, updated_at FROM learning_progress WHERE owner_user_id = ?",
@@ -64,9 +66,15 @@ async def save_learning_progress(
     principal: Principal = Depends(require_permission("profile:write")),
 ):
     if principal.kind != "human":
-        raise HTTPException(status_code=403, detail="Aprendizagem disponível apenas para contas humanas.")
-    if any(not isinstance(item, str) or not _VALID_ID.fullmatch(item) for item in payload.completed_ids):
-        raise HTTPException(status_code=422, detail="A lista contém identificadores de guia inválidos.")
+        raise HTTPException(
+            status_code=403, detail="Aprendizagem disponível apenas para contas humanas."
+        )
+    if any(
+        not isinstance(item, str) or not _VALID_ID.fullmatch(item) for item in payload.completed_ids
+    ):
+        raise HTTPException(
+            status_code=422, detail="A lista contém identificadores de guia inválidos."
+        )
     completed = sorted(set(payload.completed_ids))
     now = datetime.now(UTC).isoformat()
     with _connect() as conn:

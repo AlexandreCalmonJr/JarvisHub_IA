@@ -124,7 +124,14 @@ class UserCredentialStore:
 
         salt = secrets.token_bytes(16)
         digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, cls.ITERATIONS)
-        return "pbkdf2_sha256$" + str(cls.ITERATIONS) + "$" + base64.urlsafe_b64encode(salt).decode("ascii") + "$" + base64.urlsafe_b64encode(digest).decode("ascii")
+        return (
+            "pbkdf2_sha256$"
+            + str(cls.ITERATIONS)
+            + "$"
+            + base64.urlsafe_b64encode(salt).decode("ascii")
+            + "$"
+            + base64.urlsafe_b64encode(digest).decode("ascii")
+        )
 
     @classmethod
     def _verify_password(cls, password: str, encoded: str) -> bool:
@@ -178,7 +185,9 @@ class UserCredentialStore:
             return None
         if not self._verify_password(password, row["password_hash"]):
             return None
-        return {key: row[key] for key in ("username", "display_name", "role", "is_active", "created_at")}
+        return {
+            key: row[key] for key in ("username", "display_name", "role", "is_active", "created_at")
+        }
 
     def get_user(self, username: str) -> dict | None:
         import sqlite3

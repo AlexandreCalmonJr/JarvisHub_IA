@@ -50,7 +50,9 @@ def execute_workspace_modification(
     )
     if explicit_file:
         target_file = explicit_file.group(1)
-    elif any(k in p_lower for k in ("style", "css", "cor", "fundo", "background", "tema", "estilo")):
+    elif any(
+        k in p_lower for k in ("style", "css", "cor", "fundo", "background", "tema", "estilo")
+    ):
         target_file = "style.css"
     elif any(k in p_lower for k in ("app.js", "script", "js", "alerta", "interação")):
         target_file = "app.js"
@@ -128,14 +130,17 @@ def execute_workspace_modification(
     except ValueError as exc:
         raise PermissionDeniedError("Caminho fora da raiz autorizada do projeto.") from exc
 
-    diff_display = "".join(
-        difflib.unified_diff(
-            content.splitlines(keepends=True),
-            new_content.splitlines(keepends=True),
-            fromfile=f"a/{target_file}",
-            tofile=f"b/{target_file}",
+    diff_display = (
+        "".join(
+            difflib.unified_diff(
+                content.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile=f"a/{target_file}",
+                tofile=f"b/{target_file}",
+            )
         )
-    ) or f"+ {target_file} atualizado"
+        or f"+ {target_file} atualizado"
+    )
 
     preview = (
         f"Pré-visualização da alteração proposta para {target_project}/{target_file}:\n"
@@ -188,5 +193,3 @@ INTENT_DOMAIN_MAP = {
     "general_planning": "management",
     "multi_agent_consensus": "architecture",
 }
-
-

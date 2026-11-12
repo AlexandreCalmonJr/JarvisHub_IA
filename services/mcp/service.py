@@ -110,7 +110,7 @@ class McpService:
                 continue
             except Exception as exc:
                 errors[config.id] = str(exc)
-                logger.exception("Erro inesperado no MCP %s: %s", config.id, exc)
+                logger.exception("Erro inesperado no MCP %s", config.id)
                 continue
 
             for tool in tools:
@@ -120,8 +120,7 @@ class McpService:
                     spec = ToolSpec(
                         name=spec_name,
                         description=f"[MCP:{config.id}] {tool.description or tool.name}",
-                        parameters=tool.input_schema
-                        or {"type": "object", "properties": {}},
+                        parameters=tool.input_schema or {"type": "object", "properties": {}},
                         risk=config.risk,
                         requires_approval=config.requires_approval,
                     )
@@ -169,7 +168,9 @@ class McpService:
         return {
             "config_path": str(self.config_path) if self.config_path else None,
             "configured": len(configs),
-            "connected": sum(1 for c in configs if self.clients.get(c.id) and self.clients[c.id].running),
+            "connected": sum(
+                1 for c in configs if self.clients.get(c.id) and self.clients[c.id].running
+            ),
             "tools": sorted(self.tools.keys()),
             "servers": [
                 {

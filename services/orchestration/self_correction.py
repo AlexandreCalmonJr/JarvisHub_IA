@@ -26,7 +26,9 @@ class SelfCorrectionEngine:
             ast.parse(code)
             return code, False, None
         except SyntaxError as orig_err:
-            logger.info("Detectado erro sintático em Python na linha %s: %s", orig_err.lineno, orig_err.msg)
+            logger.info(
+                "Detectado erro sintático em Python na linha %s: %s", orig_err.lineno, orig_err.msg
+            )
 
         healed_code = code
         modified = False
@@ -38,15 +40,43 @@ class SelfCorrectionEngine:
 
         # Correção 2: Adiciona dois-pontos ':' ausentes no final de blocos
         block_keywords = (
-            "def ", "class ", "if ", "elif ", "else:", "while ", "for ", "try:",
-            "except", "finally:", "with ", "async def ", "async with ", "async for "
+            "def ",
+            "class ",
+            "if ",
+            "elif ",
+            "else:",
+            "while ",
+            "for ",
+            "try:",
+            "except",
+            "finally:",
+            "with ",
+            "async def ",
+            "async with ",
+            "async for ",
         )
         lines = healed_code.split("\n")
         new_lines = []
         for line in lines:
             stripped = line.strip()
             # Se inicia com palavra-chave de bloco e não termina em ':' ou '\' ou comentário
-            if any(stripped.startswith(kw) for kw in ("def ", "class ", "if ", "elif ", "while ", "for ", "with ", "async def ")) and not stripped.endswith(":") and not stripped.endswith("\\"):
+            if (
+                any(
+                    stripped.startswith(kw)
+                    for kw in (
+                        "def ",
+                        "class ",
+                        "if ",
+                        "elif ",
+                        "while ",
+                        "for ",
+                        "with ",
+                        "async def ",
+                    )
+                )
+                and not stripped.endswith(":")
+                and not stripped.endswith("\\")
+            ):
                 # Ignora se for expressão lambda ou inline
                 if not ("lambda" in stripped and not stripped.endswith(":")):
                     line = line.rstrip() + ":"
@@ -75,7 +105,11 @@ class SelfCorrectionEngine:
         # Testa se a autocorreção resolveu
         try:
             ast.parse(healed_code)
-            return healed_code, True, "Erro de sintaxe corrigido com sucesso (dois-pontos ou delimitadores balanceados)"
+            return (
+                healed_code,
+                True,
+                "Erro de sintaxe corrigido com sucesso (dois-pontos ou delimitadores balanceados)",
+            )
         except SyntaxError:
             # Se não conseguiu corrigir tudo com heurísticas simples, retorna o código original
             return code, False, "Erro de sintaxe residual detectado"
@@ -98,7 +132,11 @@ class SelfCorrectionEngine:
 
         try:
             json.loads(cleaned)
-            return cleaned, True, "JSON reparado (remoção de vírgulas trailing / normalização de aspas)"
+            return (
+                cleaned,
+                True,
+                "JSON reparado (remoção de vírgulas trailing / normalização de aspas)",
+            )
         except Exception:
             return code, False, "JSON inválido"
 

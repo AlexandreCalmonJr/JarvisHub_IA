@@ -8,7 +8,7 @@ Recursos:
 
 import logging
 import re
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +51,11 @@ class EngineeringIntelligenceService:
             try:
                 lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
             except Exception:
-                logger.debug("Ficheiro ilegível ignorado na análise de dívida técnica: %s", rel_path, exc_info=True)
+                logger.debug(
+                    "Ficheiro ilegível ignorado na análise de dívida técnica: %s",
+                    rel_path,
+                    exc_info=True,
+                )
                 continue
 
             file_loc = len(lines)
@@ -72,25 +76,32 @@ class EngineeringIntelligenceService:
                     continue
 
                 # Detecção de início de função em Python ou JS/TS
-                func_match = re.match(r"^\s*(?:def|async def|function|const\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)\s*([a-zA-Z0-9_]+)", line)
+                func_match = re.match(
+                    r"^\s*(?:def|async def|function|const\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)\s*([a-zA-Z0-9_]+)",
+                    line,
+                )
                 if func_match:
                     if current_func and func_line_count > 60:
-                        complex_functions.append({
-                            "file": rel_path,
-                            "function": current_func,
-                            "lines": func_line_count,
-                        })
+                        complex_functions.append(
+                            {
+                                "file": rel_path,
+                                "function": current_func,
+                                "lines": func_line_count,
+                            }
+                        )
                     current_func = func_match.group(1)
                     func_line_count = 0
                 elif current_func:
                     func_line_count += 1
 
             if current_func and func_line_count > 60:
-                complex_functions.append({
-                    "file": rel_path,
-                    "function": current_func,
-                    "lines": func_line_count,
-                })
+                complex_functions.append(
+                    {
+                        "file": rel_path,
+                        "function": current_func,
+                        "lines": func_line_count,
+                    }
+                )
 
         comment_ratio = round((total_comments / max(1, total_loc)) * 100, 1)
 
@@ -124,9 +135,13 @@ class EngineeringIntelligenceService:
             "complex_functions_count": len(complex_functions),
             "complex_functions": complex_functions[:10],
             "recommendations": [
-                f"Dividir {len(large_files)} arquivos com mais de 400 linhas em módulos menores." if large_files else "Tamanho de arquivos equilibrado.",
-                f"Refatorar {len(complex_functions)} funções que excedem 60 linhas para favorecer princípio da responsabilidade única." if complex_functions else "Funções concisas e de alta legibilidade.",
-                f"Taxa de comentários em {comment_ratio}%. Ideal entre 10% e 25%."
+                f"Dividir {len(large_files)} arquivos com mais de 400 linhas em módulos menores."
+                if large_files
+                else "Tamanho de arquivos equilibrado.",
+                f"Refatorar {len(complex_functions)} funções que excedem 60 linhas para favorecer princípio da responsabilidade única."
+                if complex_functions
+                else "Funções concisas e de alta legibilidade.",
+                f"Taxa de comentários em {comment_ratio}%. Ideal entre 10% e 25%.",
             ],
         }
 
@@ -170,7 +185,7 @@ class EngineeringIntelligenceService:
             debt = self.analyze_technical_debt(p_dir)
 
         md_lines = [
-            f"# 📊 JARVIS AI HUB — Relatório Executivo de Engenharia",
+            "# 📊 JARVIS AI HUB — Relatório Executivo de Engenharia",
             f"**Data de Emissão:** {now} | **Projeto:** {proj_name}",
             "",
             "## 1. Sumário Executivo de Produtividade & ROI",
@@ -183,27 +198,33 @@ class EngineeringIntelligenceService:
         ]
 
         if debt:
-            md_lines.extend([
-                f"- **Nota de Saúde Arquitetural:** {debt['grade']} ({debt['score']}/100)",
-                f"- **Linhas Totais de Código (LOC):** {debt['metrics']['total_lines_of_code']}",
-                f"- **Total de Arquivos Analisados:** {debt['metrics']['total_files']}",
-                f"- **Densidade de Comentários:** {debt['metrics']['comment_ratio_percent']}%",
-                "",
-                "### Recomendações Estratégicas:",
-            ])
+            md_lines.extend(
+                [
+                    f"- **Nota de Saúde Arquitetural:** {debt['grade']} ({debt['score']}/100)",
+                    f"- **Linhas Totais de Código (LOC):** {debt['metrics']['total_lines_of_code']}",
+                    f"- **Total de Arquivos Analisados:** {debt['metrics']['total_files']}",
+                    f"- **Densidade de Comentários:** {debt['metrics']['comment_ratio_percent']}%",
+                    "",
+                    "### Recomendações Estratégicas:",
+                ]
+            )
             for r in debt["recommendations"]:
                 md_lines.append(f"- {r}")
         else:
-            md_lines.append("- *Análise detalhada de código disponível ao selecionar um projeto específico.*")
+            md_lines.append(
+                "- *Análise detalhada de código disponível ao selecionar um projeto específico.*"
+            )
 
-        md_lines.extend([
-            "",
-            "## 3. Conformidade & Segurança Cibernética",
-            "- **Controles de segurança:** consultar o Security Center para o estado operacional atual",
-            "",
-            "---",
-            "*Gerado automaticamente pelo JARVIS AI Hub Intelligence Core.*",
-        ])
+        md_lines.extend(
+            [
+                "",
+                "## 3. Conformidade & Segurança Cibernética",
+                "- **Controles de segurança:** consultar o Security Center para o estado operacional atual",
+                "",
+                "---",
+                "*Gerado automaticamente pelo JARVIS AI Hub Intelligence Core.*",
+            ]
+        )
 
         markdown_content = "\n".join(md_lines)
         return {

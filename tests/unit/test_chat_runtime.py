@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from services.coding_agent import ChatAgentRuntime, ChatRunConfig, ChatTurn, ProviderReply
 from services.coding_agent.providers import ChatProvider
 from services.memory import DatabaseManager
+from services.tool_gateway.web_search import SearchResult, SearchUnavailableError
 
 
 class StreamingProvider:
@@ -48,9 +51,7 @@ async def test_chat_streams_and_persists_history(tmp_path):
     runtime = ChatAgentRuntime(provider_factory=lambda: provider, db_manager=db)
 
     events = await _collect(
-        runtime.run(
-            ChatRunConfig(prompt="Qual é a arquitetura?", session_id="s1", project_id=None)
-        )
+        runtime.run(ChatRunConfig(prompt="Qual é a arquitetura?", session_id="s1", project_id=None))
     )
 
     assert events[0]["type"] == "start"
@@ -67,18 +68,12 @@ async def test_chat_streams_and_persists_history(tmp_path):
     ]
 
     # Segunda execução envia o histórico ao modelo
-    await _collect(
-        runtime.run(ChatRunConfig(prompt="E os módulos?", session_id="s1"))
-    )
+    await _collect(runtime.run(ChatRunConfig(prompt="E os módulos?", session_id="s1")))
     second_turns = provider.received[-1]
     roles = [turn.role for turn in second_turns]
     assert roles[0] == "system"
-    assert ("user", "Qual é a arquitetura?") in [
-        (turn.role, turn.content) for turn in second_turns
-    ]
-    assert ("assistant", "Olá, mundo!") in [
-        (turn.role, turn.content) for turn in second_turns
-    ]
+    assert ("user", "Qual é a arquitetura?") in [(turn.role, turn.content) for turn in second_turns]
+    assert ("assistant", "Olá, mundo!") in [(turn.role, turn.content) for turn in second_turns]
     assert second_turns[-1].content == "E os módulos?"
 
 
@@ -103,3 +98,68 @@ async def test_chat_complete_returns_task_state_shape(tmp_path):
     assert result["engine"] == "agent"
     assert result["final_summary"] == "Olá, mundo!"
     assert result["is_completed"] is True
+
+
+@pytest.mark.asyncio
+async def test_chat_includes_search_sources_for_ui_citations(monkeypatch, tmp_path):
+    async def search(*_args, **_kwargs):
+        return [
+            SearchResult(
+                title="Fonte de teste",
+                url="https://example.org",
+                snippet="Dado recente",
+                retrieved_at="2026-11-12T00:00:00+00:00",
+            )
+        ]
+
+    monkeypatch.setattr("services.tool_gateway.web_search.safe_web_search.search", search)
+    runtime = ChatAgentRuntime(provider_factory=StreamingProvider)
+    events = await _collect(
+        runtime.run(
+            ChatRunConfig(
+                prompt="Pesquise na web sobre um tópico atual", session_id="search-source"
+            )
+        )
+    )
+    assert events[0]["sources"][0]["url"] == "https://example.org"
+    assert events[-1]["sources"][0]["retrieved_at"].startswith("2026-11-12")
+
+
+@pytest.mark.asyncio
+async def test_chat_explicitly_marks_search_failure_in_context(monkeypatch, tmp_path):
+    async def unavailable(*_args, **_kwargs):
+        raise SearchUnavailableError("Busca indisponível: sem rede")
+
+    monkeypatch.setattr("services.tool_gateway.web_search.safe_web_search.search", unavailable)
+    provider = StreamingProvider()
+    runtime = ChatAgentRuntime(provider_factory=lambda: provider)
+    await _collect(
+        runtime.run(
+            ChatRunConfig(prompt="Pesquise na web sobre algo atual", session_id="search-error")
+        )
+    )
+    assert "A busca web falhou" in provider.received[0][0].content
+
+
+@pytest.mark.asyncio
+async def test_chat_cancellation_propagates_to_provider():
+    started = asyncio.Event()
+
+    class HangingProvider(StreamingProvider):
+        async def stream(self, **_kwargs):
+            yield "primeiro"
+            started.set()
+            await asyncio.Event().wait()
+
+    runtime = ChatAgentRuntime(provider_factory=HangingProvider)
+
+    async def consume():
+        return [
+            event async for event in runtime.run(ChatRunConfig(prompt="oi", session_id="cancel"))
+        ]
+
+    task = asyncio.create_task(consume())
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task

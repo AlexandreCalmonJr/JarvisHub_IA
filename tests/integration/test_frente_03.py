@@ -1,10 +1,12 @@
 import io
 import zipfile
+
 import pytest
-from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, knowledge_vault_service, db_manager, skills_catalog
-from services.orchestration.graph import build_specialist_prompt
+from httpx import ASGITransport, AsyncClient
+
 from agents.registry import AgentRegistry
+from apps.api.main import app, db_manager, knowledge_vault_service, skills_catalog
+from services.orchestration.graph import build_specialist_prompt
 
 
 def _create_mock_docx_bytes(text: str) -> bytes:
@@ -113,7 +115,10 @@ async def test_frente_03_chat_history_search_and_export_markdown():
                 "agent_outputs": [
                     {
                         "agent_role": "cybersecurity_engineer",
-                        "evidence": ["Bind em 127.0.0.1 verificado", "Porta isolada de interfaces públicas"],
+                        "evidence": [
+                            "Bind em 127.0.0.1 verificado",
+                            "Porta isolada de interfaces públicas",
+                        ],
                         "affected_files": [],
                     }
                 ],

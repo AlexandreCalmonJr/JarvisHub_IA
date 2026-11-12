@@ -1,4 +1,3 @@
-
 import pytest
 
 from services.project_workspace import ProjectScanner

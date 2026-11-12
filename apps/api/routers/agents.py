@@ -90,7 +90,8 @@ async def list_agents_endpoint(
 
 @router.get("/api/v1/agents/{role}")
 async def get_agent_endpoint(
-    role: str, principal: Principal = Depends(get_principal),
+    role: str,
+    principal: Principal = Depends(get_principal),
 ):
     clean_role = role.lower().strip()
     profile = None
@@ -121,7 +122,8 @@ async def get_agent_endpoint(
 
 @router.put("/api/v1/agents/{role}/config")
 async def update_agent_config_endpoint(
-    role: str, payload: AgentConfigUpdateRequest,
+    role: str,
+    payload: AgentConfigUpdateRequest,
     principal: Principal = Depends(require_admin),
 ):
     clean_role = role.lower().strip()
@@ -143,7 +145,9 @@ async def update_agent_config_endpoint(
     if payload.is_read_only is not None:
         target_profile.is_read_only = payload.is_read_only
     if payload.assigned_key_id is not None:
-        target_profile.assigned_key_id = payload.assigned_key_id.strip() if payload.assigned_key_id.strip() else None
+        target_profile.assigned_key_id = (
+            payload.assigned_key_id.strip() if payload.assigned_key_id.strip() else None
+        )
 
     # Persiste customização no SQLite para sobreviver a reinicializações
     try:
@@ -161,7 +165,9 @@ async def update_agent_config_endpoint(
     return {
         "status": "updated",
         "agent": {
-            "role": target_profile.role.value if hasattr(target_profile.role, "value") else str(target_profile.role),
+            "role": target_profile.role.value
+            if hasattr(target_profile.role, "value")
+            else str(target_profile.role),
             "name": target_profile.name,
             "mission": target_profile.mission,
             "preferred_model": target_profile.preferred_model,
@@ -174,18 +180,23 @@ async def update_agent_config_endpoint(
 
 @router.get("/api/v1/agents/{role}/memories")
 async def list_agent_memories_endpoint(
-    role: str, category: str | None = None, limit: int = 50,
+    role: str,
+    category: str | None = None,
+    limit: int = 50,
     principal: Principal = Depends(get_principal),
 ):
     return db_manager.list_agent_memories(
-        agent_role=role, category=category, limit=limit,
+        agent_role=role,
+        category=category,
+        limit=limit,
         owner_user_id=_private_owner(principal),
     )
 
 
 @router.post("/api/v1/agents/{role}/memories")
 async def create_agent_memory_endpoint(
-    role: str, payload: AgentMemoryCreateRequest,
+    role: str,
+    payload: AgentMemoryCreateRequest,
     principal: Principal = Depends(get_principal),
 ):
     mem_id = db_manager.set_agent_memory(
@@ -204,9 +215,7 @@ async def create_agent_memory_endpoint(
 async def delete_agent_memory_endpoint(
     role: str, memory_id: str, principal: Principal = Depends(get_principal)
 ):
-    success = db_manager.delete_agent_memory(
-        memory_id, owner_user_id=_private_owner(principal)
-    )
+    success = db_manager.delete_agent_memory(memory_id, owner_user_id=_private_owner(principal))
     if not success:
         raise HTTPException(status_code=404, detail="Memória não encontrada.")
     return {"status": "deleted", "id": memory_id}
@@ -214,7 +223,8 @@ async def delete_agent_memory_endpoint(
 
 @router.post("/api/v1/agents/{role}/playground")
 async def agent_playground_endpoint(
-    role: str, payload: AgentPlaygroundRequest,
+    role: str,
+    payload: AgentPlaygroundRequest,
     principal: Principal = Depends(get_principal),
 ):
     """Execução isolada de um especialista no playground interativo."""
@@ -258,7 +268,7 @@ async def agent_playground_endpoint(
         prompt=payload.prompt,
         system_prompt=prompt,
         model_name=route.model or profile.preferred_model,
-        max_tokens=2048,
+        max_tokens=256,
         temperature=0.3,
         timeout_seconds=300.0,
         owner_user_id=owner_user_id,
@@ -338,16 +348,20 @@ async def execute_tool_endpoint(
         logger.exception("Falha na execução de ferramenta para o projeto %s", request.project_id)
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
+
 # ---------------------------------------------------------------------------
 # Especialistas Autônomos (Etapa 5: Streaming SSE, Tarefas Estruturadas & Histórico)
 # ---------------------------------------------------------------------------
+
 
 def _resolve_agent_role(role_str: str) -> AgentRole:
     clean = role_str.lower().strip()
     try:
         return AgentRole(clean)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"Papel de especialista '{role_str}' não existe.")
+        raise HTTPException(
+            status_code=404, detail=f"Papel de especialista '{role_str}' não existe."
+        )
 
 
 @router.get("/api/v1/agent-routes")
@@ -361,9 +375,7 @@ async def list_agent_routes_endpoint(
         profile = key_vault.get_key(route["key_id"], owner_user_id)
         route["key_label"] = profile.label if profile else None
         route["provider"] = profile.provider if profile else None
-        route["key_available"] = bool(
-            profile and profile.is_active and profile.api_key
-        )
+        route["key_available"] = bool(profile and profile.is_active and profile.api_key)
     return {"routes": routes}
 
 
@@ -431,7 +443,8 @@ async def delete_agent_route_endpoint(
 
 @router.post("/api/v1/agents/{role}/stream")
 async def stream_agent_execution_endpoint(
-    role: str, payload: AutonomousAgentRunRequest,
+    role: str,
+    payload: AutonomousAgentRunRequest,
     principal: Principal = Depends(get_principal),
 ):
     """Executa o especialista selecionado em modo ReAct com streaming de eventos SSE em tempo real."""
@@ -450,7 +463,9 @@ async def stream_agent_execution_endpoint(
     lock_key = f"{owner_user_id}:{session_id}"
     lock = _agent_session_locks.setdefault(lock_key, asyncio.Lock())
     if lock.locked():
-        raise HTTPException(status_code=409, detail="Já existe uma execução ativa nesta sessão do especialista.")
+        raise HTTPException(
+            status_code=409, detail="Já existe uma execução ativa nesta sessão do especialista."
+        )
 
     config = AutonomousAgentRunConfig(
         agent_role=agent_role,
@@ -472,7 +487,11 @@ async def stream_agent_execution_endpoint(
             async for event in autonomous_agent_runtime.run_stream(config):
                 yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
         except asyncio.CancelledError:
-            logger.info("Cliente desconectou da execução do especialista %s (%s).", agent_role.value, session_id)
+            logger.info(
+                "Cliente desconectou da execução do especialista %s (%s).",
+                agent_role.value,
+                session_id,
+            )
             raise
         except Exception as exc:
             logger.exception("Falha na execução do especialista %s", agent_role.value)
@@ -494,7 +513,9 @@ async def stream_agent_execution_endpoint(
 
 @router.get("/api/v1/agents/{role}/history")
 async def get_agent_history_endpoint(
-    role: str, session_id: str | None = None, limit: int = 100,
+    role: str,
+    session_id: str | None = None,
+    limit: int = 100,
     principal: Principal = Depends(get_principal),
 ):
     """Lista histórico conversacional e eventos de ferramentas persistidos para a sessão do especialista."""
@@ -512,7 +533,8 @@ async def get_agent_history_endpoint(
 
 @router.post("/api/v1/agents/{role}/task")
 async def execute_agent_task_endpoint(
-    role: str, payload: AutonomousAgentRunRequest,
+    role: str,
+    payload: AutonomousAgentRunRequest,
     principal: Principal = Depends(get_principal),
 ):
     """Executa uma tarefa estruturada com o especialista, retornando o AgentOutputContract formal."""
@@ -544,4 +566,3 @@ async def execute_agent_task_endpoint(
 
     contract = await autonomous_agent_runtime.run_task(config)
     return contract.model_dump()
-

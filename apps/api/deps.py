@@ -35,7 +35,7 @@ from services.model_runtime import (
     OnlineProviderConfig,
     UniversalOnlineAdapter,
     load_hybrid_config_from_disk,
-    save_hybrid_config_to_disk,  # noqa: F401
+    save_hybrid_config_to_disk,
 )
 from services.model_runtime.huggingface_service import (
     AGENT_MODEL_RECOMMENDATIONS,  # noqa: F401
@@ -240,11 +240,13 @@ def resolve_skills_dirs() -> list[Path]:
 
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).parent
-        possible_roots.extend([
-            exe_dir,
-            exe_dir / "_internal",
-            exe_dir / "_internal" / "skills",
-        ])
+        possible_roots.extend(
+            [
+                exe_dir,
+                exe_dir / "_internal",
+                exe_dir / "_internal" / "skills",
+            ]
+        )
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
             possible_roots.extend([Path(meipass), Path(meipass) / "skills"])
@@ -295,10 +297,14 @@ if len(skills_catalog.list_all_skills()) == 0:
 # Skills criadas/importadas por utilizadores permanecem no SQLite por owner.
 # O prompt builder injeta-as apenas quando owner_user_id corresponde à conta autenticada.
 
-logger.info("Catálogo ECC inicializado com %d skills registradas.", len(skills_catalog.list_all_skills()))
+logger.info(
+    "Catálogo ECC inicializado com %d skills registradas.", len(skills_catalog.list_all_skills())
+)
 
 knowledge_vault_service = KnowledgeVaultService(db_manager=db_manager)
-hardware_performance_manager = HardwarePerformanceManager(db_manager=db_manager, model_manager=model_manager)
+hardware_performance_manager = HardwarePerformanceManager(
+    db_manager=db_manager, model_manager=model_manager
+)
 hardware_performance_manager.apply_to_runtime()
 webhook_service = WebhookNotificationService(db_manager=db_manager)
 mock_server_service = MockServerService(db_manager=db_manager)
@@ -307,7 +313,9 @@ security_core.red_team.workspace_service = workspace_service
 security_core.policy_generator.workspace_service = workspace_service
 quality_studio_service = QualityStudioService(workspace_service=workspace_service)
 design_studio_service = DesignStudioService()
-engineering_intelligence_service = EngineeringIntelligenceService(workspace_service=workspace_service, db_manager=db_manager)
+engineering_intelligence_service = EngineeringIntelligenceService(
+    workspace_service=workspace_service, db_manager=db_manager
+)
 
 jarvis_master = JarvisMaster(
     security_core=security_core,

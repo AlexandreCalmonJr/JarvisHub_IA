@@ -162,7 +162,9 @@ class DeviceAuthManager:
                     if self.db_manager:
                         self._save_device_to_db(reg)
             except Exception:
-                logger.warning("Registo local de dispositivos inválido em %s.", self.store_path, exc_info=True)
+                logger.warning(
+                    "Registo local de dispositivos inválido em %s.", self.store_path, exc_info=True
+                )
 
     def _save_device_to_db(self, reg: DeviceRegistration) -> None:
         if not self.db_manager:

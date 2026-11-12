@@ -68,14 +68,22 @@ class CyberShield:
                     sanitized = pattern.sub(CYBER_MASK, sanitized)
 
         if redacted:
-            logger.info("Filtro DLP ativado: segredos confidenciais foram ofuscados antes do envio.")
+            logger.info(
+                "Filtro DLP ativado: segredos confidenciais foram ofuscados antes do envio."
+            )
 
         return sanitized, redacted
 
-    def toggle_network_isolation(self, isolated: bool, reason: str = "Configurado pelo usuário") -> dict[str, Any]:
+    def toggle_network_isolation(
+        self, isolated: bool, reason: str = "Configurado pelo usuário"
+    ) -> dict[str, Any]:
         """Ativa ou desativa o corte total de conexões de internet do JARVIS."""
         self.network_isolated = isolated
-        status_label = "Isolamento Estrito 100% Offline" if isolated else "Acesso Seguro Autorizado (DLP Ativo)"
+        status_label = (
+            "Isolamento Estrito 100% Offline"
+            if isolated
+            else "Acesso Seguro Autorizado (DLP Ativo)"
+        )
         logger.info("Estado de rede atualizado: %s. Motivo: %s", status_label, reason)
         return {
             "network_isolated": self.network_isolated,
@@ -101,7 +109,9 @@ class CyberShield:
             },
             "network_isolation": {
                 "isolated": self.network_isolated,
-                "status": "Isolamento 100% Offline Ativo" if self.network_isolated else "Conexão Segura Ativa (Com DLP)",
+                "status": "Isolamento 100% Offline Ativo"
+                if self.network_isolated
+                else "Conexão Segura Ativa (Com DLP)",
                 "blocked_attempts": self.blocked_outbound_attempts,
             },
             "cyber_badge": "🛡️ Blindagem Cibernética Ativa (Zero Inbound • DLP Estrito)",

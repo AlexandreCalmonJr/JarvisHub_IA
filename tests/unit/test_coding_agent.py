@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -45,7 +46,9 @@ class FakeProvider:
         return ProviderReply(content="Fim.", model=self.default_model)
 
 
-def _workspace_with_project(tmp_path: Path, project_id: str = "demo") -> tuple[SecurityCore, ProjectWorkspaceService, Path]:
+def _workspace_with_project(
+    tmp_path: Path, project_id: str = "demo"
+) -> tuple[SecurityCore, ProjectWorkspaceService, Path]:
     root = tmp_path / project_id
     root.mkdir(parents=True)
     (root / "README.md").write_text("# Demo\n", encoding="utf-8")
@@ -69,7 +72,9 @@ class TestTools:
         executor = CodingToolExecutor(security, workspace)
 
         read = asyncio.run(
-            executor.execute(ToolCall(id="1", name="read_file", arguments={"path": "app.py"}), "demo")
+            executor.execute(
+                ToolCall(id="1", name="read_file", arguments={"path": "app.py"}), "demo"
+            )
         )
         assert read.success and "def soma" in read.output
 
@@ -87,7 +92,9 @@ class TestTools:
         assert found.success and "app.py" in found.output
 
         globbed = asyncio.run(
-            executor.execute(ToolCall(id="4", name="glob", arguments={"pattern": "**/*.py"}), "demo")
+            executor.execute(
+                ToolCall(id="4", name="glob", arguments={"pattern": "**/*.py"}), "demo"
+            )
         )
         assert globbed.success and "app.py" in globbed.output
 
@@ -119,6 +126,60 @@ class TestTools:
             executor.preview(call, "demo")
         with pytest.raises(PermissionDeniedError):
             asyncio.run(executor.execute(call, "demo"))
+
+        for command in (
+            "rm -rf ./important",
+            "rm -fr /home/user/data",
+            "Remove-Item -Recurse -Force C:\\important",
+            "rd /s /q C:\\important",
+            "find . -type f -delete",
+        ):
+            with pytest.raises(PermissionDeniedError):
+                executor.preview(
+                    ToolCall(id="danger", name="run_command", arguments={"command": command}),
+                    "demo",
+                )
+
+    def test_command_preview_discloses_dry_run_details(self, tmp_path: Path):
+        security, workspace, _ = _workspace_with_project(tmp_path)
+        executor = CodingToolExecutor(security, workspace)
+        preview = executor.preview(
+            ToolCall(
+                id="preview-command",
+                name="run_command",
+                arguments={"command": "pytest -q", "timeout_seconds": 45},
+            ),
+            "demo",
+        )
+        details = json.loads(preview["proposed_diff"])
+        assert details["mode"] == "dry_run"
+        assert details["command"] == "pytest -q"
+        assert details["cwd"] == str(workspace.get_project_dir("demo").resolve())
+        assert details["timeout_seconds"] == 45
+        assert details["risk"] == "exec"
+
+    def test_command_execution_is_audited_with_actor_and_redacted_output(self, tmp_path: Path):
+        security, workspace, _ = _workspace_with_project(tmp_path)
+        executor = CodingToolExecutor(security, workspace)
+        result = asyncio.run(
+            executor.execute(
+                ToolCall(
+                    id="audit-command",
+                    name="run_command",
+                    arguments={"command": "echo audit-check", "timeout_seconds": 5},
+                ),
+                "demo",
+                owner_user_id="account-audit",
+            )
+        )
+        assert result.success is True
+        assert result.exit_code == 0
+        event = security.audit.list_events(limit=1)[0]
+        assert event.user_id == "account-audit"
+        assert event.project_id == "demo"
+        assert event.parameters_redacted["command"] == "echo audit-check"
+        assert event.parameters_redacted["exit_code"] == 0
+        assert "audit-check" in event.parameters_redacted["output_redacted"]
 
     def test_write_and_edit_generate_diff_and_backup(self, tmp_path: Path):
         security, workspace, root = _workspace_with_project(tmp_path)
@@ -275,7 +336,7 @@ class TestRuntime:
         assert events[0]["type"] == "start"
         assert any(e["type"] == "approval_required" for e in events)
         assert any(e["type"] == "tool_result" and not e["success"] for e in events)
-        final = [e for e in events if e["type"] == "final"][0]
+        final = next(e for e in events if e["type"] == "final")
         assert "hello.py" not in final["changed_files"]
 
         rows = db.list_chat_messages("sess-1")

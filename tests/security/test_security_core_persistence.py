@@ -219,10 +219,14 @@ def test_session_lifecycle_and_invalidation_after_restart(tmp_path):
     valid_sess = sm1.create_session(user_id="developer_1", role=UserRole.DEVELOPER, expiry_hours=12)
 
     # 2. Sessão já criada com expiração no passado
-    expired_sess = sm1.create_session(user_id="developer_2", role=UserRole.DEVELOPER, expiry_hours=-1)
+    expired_sess = sm1.create_session(
+        user_id="developer_2", role=UserRole.DEVELOPER, expiry_hours=-1
+    )
 
     # 3. Sessão válida que é revogada explicitamente
-    revoked_sess = sm1.create_session(user_id="developer_3", role=UserRole.DEVELOPER, expiry_hours=10)
+    revoked_sess = sm1.create_session(
+        user_id="developer_3", role=UserRole.DEVELOPER, expiry_hours=10
+    )
     sm1.revoke_session(revoked_sess.session_id)
 
     # Verificação inicial
@@ -272,4 +276,3 @@ def test_security_core_unified_wiring_across_restarts(tmp_path):
 
     assert sec2.device_auth.validate_token(dev.device_token).device_id == dev.device_id
     assert sec2.sessions.validate_session(sess.session_id).user_id == "admin_user"
-

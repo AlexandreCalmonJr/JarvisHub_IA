@@ -8,21 +8,21 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from apps.api.auth import Principal, get_principal
 from apps.api.deps import (
     db_manager,
-    mock_server_service,
-    sql_playground_service,
-    quality_studio_service,
     design_studio_service,
     engineering_intelligence_service,
+    mock_server_service,
+    quality_studio_service,
+    sql_playground_service,
     workspace_service,
 )
 from apps.api.schemas import (
-    MockEndpointPayload,
-    SQLQueryPayload,
-    SQLInspectPayload,
-    SQLAuditPayload,
-    RunTestsPayload,
-    GeneratePlaywrightPayload,
     ColorPalettePayload,
+    GeneratePlaywrightPayload,
+    MockEndpointPayload,
+    RunTestsPayload,
+    SQLAuditPayload,
+    SQLInspectPayload,
+    SQLQueryPayload,
     WcagAuditPayload,
 )
 
@@ -47,6 +47,7 @@ def _require_owned_project(project_id: str, principal: Principal) -> dict:
 
 # --- MOCK SERVER NATIVO: endpoints e execuções privados por conta ---
 
+
 @router.get("/api/v1/mock-server/endpoints")
 async def list_mock_endpoints(principal: Principal = Depends(get_principal)):
     owner_id = _require_human(principal)
@@ -68,9 +69,7 @@ async def create_or_update_mock_endpoint(
 
 
 @router.delete("/api/v1/mock-server/endpoints/{endpoint_id}")
-async def delete_mock_endpoint(
-    endpoint_id: str, principal: Principal = Depends(get_principal)
-):
+async def delete_mock_endpoint(endpoint_id: str, principal: Principal = Depends(get_principal)):
     owner_id = _require_human(principal)
     deleted = mock_server_service.delete_endpoint(endpoint_id, owner_id)
     if not deleted:
@@ -88,9 +87,7 @@ async def serve_mock_route(mock_path: str, request: Request):
     if principal is None or principal.kind != "human":
         raise HTTPException(status_code=403, detail="Conta humana necessária para executar mocks.")
     clean_path = f"/{mock_path}" if not mock_path.startswith("/") else mock_path
-    mock_res = mock_server_service.match_and_serve(
-        request.method, clean_path, principal.subject_id
-    )
+    mock_res = mock_server_service.match_and_serve(request.method, clean_path, principal.subject_id)
     if not mock_res and not clean_path.startswith("/api/"):
         mock_res = mock_server_service.match_and_serve(
             request.method, f"/api/{mock_path.lstrip('/')}", principal.subject_id
@@ -108,7 +105,8 @@ async def serve_mock_route(mock_path: str, request: Request):
     headers = mock_res.get("headers", {})
     # Impede que uma configuração de mock injete cabeçalhos hop-by-hop ou de controle.
     safe_headers = {
-        key: value for key, value in headers.items()
+        key: value
+        for key, value in headers.items()
         if key.lower() not in {"connection", "transfer-encoding", "content-length", "set-cookie"}
     }
     return Response(
@@ -121,10 +119,9 @@ async def serve_mock_route(mock_path: str, request: Request):
 
 # --- SQL PLAYGROUND: acesso apenas a projetos da conta autenticada ---
 
+
 @router.get("/api/v1/backend-studio/databases/{project_id}")
-async def list_project_databases(
-    project_id: str, principal: Principal = Depends(get_principal)
-):
+async def list_project_databases(project_id: str, principal: Principal = Depends(get_principal)):
     _require_owned_project(project_id, principal)
     return sql_playground_service.find_project_databases(project_id)
 
@@ -165,9 +162,7 @@ async def execute_sql_query(
 
 
 @router.post("/api/v1/backend-studio/sql/audit")
-async def audit_sql_query(
-    payload: SQLAuditPayload, principal: Principal = Depends(get_principal)
-):
+async def audit_sql_query(payload: SQLAuditPayload, principal: Principal = Depends(get_principal)):
     if not payload.project_id:
         raise HTTPException(status_code=422, detail="project_id é obrigatório.")
     _require_owned_project(payload.project_id, principal)
@@ -184,6 +179,7 @@ async def audit_sql_query(
 
 
 # --- QUALITY STUDIO ---
+
 
 @router.get("/api/v1/quality-studio/tests/{project_id}")
 async def discover_project_tests_endpoint(
@@ -249,6 +245,7 @@ async def get_chaos_edge_cases_endpoint(principal: Principal = Depends(get_princ
 
 # --- DESIGN STUDIO: operações determinísticas sem dados de projeto ---
 
+
 @router.post("/api/v1/design-studio/palette")
 async def extract_color_palette_endpoint(
     payload: ColorPalettePayload, principal: Principal = Depends(get_principal)
@@ -283,6 +280,7 @@ async def get_component_boilerplate_endpoint(
 
 # --- ENGINEERING INTELLIGENCE ---
 
+
 @router.get("/api/v1/intelligence/tech-debt/{project_id}")
 async def analyze_project_tech_debt_endpoint(
     project_id: str, principal: Principal = Depends(get_principal)
@@ -305,7 +303,9 @@ async def get_productivity_roi_endpoint(principal: Principal = Depends(get_princ
     return engineering_intelligence_service.calculate_productivity_and_roi()
 
 
-@router.get("/api/v1/intelligence/executive-report", operation_id="get_intelligence_executive_report")
+@router.get(
+    "/api/v1/intelligence/executive-report", operation_id="get_intelligence_executive_report"
+)
 @router.get("/api/v1/reports/executive", operation_id="get_legacy_executive_report")
 async def get_executive_report_endpoint(
     project_id: str | None = None, principal: Principal = Depends(get_principal)

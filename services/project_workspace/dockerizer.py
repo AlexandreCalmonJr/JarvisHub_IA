@@ -157,7 +157,7 @@ services:
 .git/
 *.bak
 """
-        elif any(f.endswith(".csproj") or f.endswith(".cs") for f in files):
+        elif any(f.endswith((".csproj", ".cs")) for f in files):
             stack = ".NET 8 / C#"
             dockerfile = """# Multi-stage Dockerfile para .NET 8 gerado pelo JARVIS
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
@@ -219,21 +219,31 @@ services:
         if self.workspace:
             try:
                 self.workspace.ensure_git_repo(project_id)
-                self.workspace.commit_project_changes(project_id, f"feat(devops): Dockerizacao em 1 clique para {stack}")
+                self.workspace.commit_project_changes(
+                    project_id, f"feat(devops): Dockerizacao em 1 clique para {stack}"
+                )
             except Exception:
                 logger.debug("Falha ao registar commit Git da dockerização.", exc_info=True)
             try:
-                inventory = self.workspace.scanner.scan(project_id=project_id, root_path=project_dir)
+                inventory = self.workspace.scanner.scan(
+                    project_id=project_id, root_path=project_dir
+                )
                 self.workspace._inventories[project_id] = inventory
                 self.workspace._reports[project_id] = self.workspace.analyzer.analyze(inventory)
             except Exception:
                 logger.debug("Falha ao atualizar inventário após dockerização.", exc_info=True)
-            if hasattr(self.workspace.security_core, "audit") and self.workspace.security_core.audit:
+            if (
+                hasattr(self.workspace.security_core, "audit")
+                and self.workspace.security_core.audit
+            ):
                 self.workspace.security_core.audit.record_event(
                     operation="PROJECT_DOCKERIZED",
                     status="SUCCESS",
                     project_id=project_id,
-                    parameters={"stack": stack, "files": ["Dockerfile", "docker-compose.yml", ".dockerignore"]},
+                    parameters={
+                        "stack": stack,
+                        "files": ["Dockerfile", "docker-compose.yml", ".dockerignore"],
+                    },
                 )
 
         return {
@@ -244,5 +254,3 @@ services:
             "run_command": "docker compose up --build",
             "message": f"Projeto '{project_id}' dockerizado com sucesso! Stack identificada: {stack}.",
         }
-
-

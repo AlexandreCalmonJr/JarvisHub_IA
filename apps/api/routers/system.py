@@ -95,8 +95,6 @@ async def health_details(
     }
 
 
-
-
 @router.get("/api/v1/system/inference-telemetry")
 async def get_inference_telemetry(
     limit: int = 50,
@@ -109,18 +107,10 @@ async def get_inference_telemetry(
         "records": telemetry_store.list_for_owner(
             principal.subject_id, limit=limit, task_id=task_id
         ),
-        "model_performance": telemetry_store.performance_by_model_for_owner(
-            principal.subject_id
-        ),
-        "model_quality": telemetry_store.quality_by_model_for_owner(
-            principal.subject_id
-        ),
-        "model_selections": telemetry_store.list_model_selections_for_owner(
-            principal.subject_id
-        ),
+        "model_performance": telemetry_store.performance_by_model_for_owner(principal.subject_id),
+        "model_quality": telemetry_store.quality_by_model_for_owner(principal.subject_id),
+        "model_selections": telemetry_store.list_model_selections_for_owner(principal.subject_id),
     }
-
-
 
 
 @router.post("/api/v1/system/inference-feedback")
@@ -140,6 +130,7 @@ async def submit_inference_feedback(
             detail="Inferência não encontrada nesta conta ou ainda não concluída com sucesso.",
         )
     return {"status": "recorded", "inference_id": payload.inference_id, "rating": payload.rating}
+
 
 _ONBOARDING_STATE_PATH = data_dir / "onboarding_state.json"
 
@@ -162,9 +153,7 @@ async def get_onboarding_status(principal: Principal = Depends(require_admin)):
     try:
         configured_keys = sum(
             1
-            for item in key_vault.list_keys(
-                owner_user_id=principal.subject_id, include_global=True
-            )
+            for item in key_vault.list_keys(owner_user_id=principal.subject_id, include_global=True)
             if item.get("is_active") and item.get("has_api_key")
         )
         vault_encryption_ready = os.name == "nt" or key_vault._fernet_key_path.exists()
@@ -173,12 +162,18 @@ async def get_onboarding_status(principal: Principal = Depends(require_admin)):
         vault_encryption_ready = False
     return {
         "completed": bool(_read_onboarding_state().get("completed")),
-        "database_available": Path(db_manager.db_path).exists() if getattr(db_manager, "db_path", None) else True,
+        "database_available": Path(db_manager.db_path).exists()
+        if getattr(db_manager, "db_path", None)
+        else True,
         "local_model_available": ollama_available,
         "active_provider_keys": configured_keys,
         "vault_encryption_ready": vault_encryption_ready,
-        "hybrid_provider_enabled": bool(hybrid_config.enabled and hybrid_config.key_id and configured_keys),
-        "environment": os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")),
+        "hybrid_provider_enabled": bool(
+            hybrid_config.enabled and hybrid_config.key_id and configured_keys
+        ),
+        "environment": os.environ.get(
+            "JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")
+        ),
     }
 
 
@@ -199,7 +194,9 @@ async def complete_onboarding(principal: Principal = Depends(require_admin)):
     except OSError as exc:
         temporary.unlink(missing_ok=True)
         logger.exception("Não foi possível persistir o estado do onboarding.")
-        raise HTTPException(status_code=500, detail="Não foi possível guardar a conclusão da configuração.") from exc
+        raise HTTPException(
+            status_code=500, detail="Não foi possível guardar a conclusão da configuração."
+        ) from exc
     return {"status": "completed", "completed": True}
 
 

@@ -113,22 +113,12 @@ def test_approval_engine_rejects_cross_account_lookup_and_decision(tmp_path):
         affected_resources=["/workspace/a/file.txt"],
     )
 
-    assert engine.get_request(
-        request.id, owner_user_id="account-b"
-    ) is None
-    assert engine.list_pending_requests(
-        owner_user_id="account-b"
-    ) == []
+    assert engine.get_request(request.id, owner_user_id="account-b") is None
+    assert engine.list_pending_requests(owner_user_id="account-b") == []
 
     with pytest.raises(ValueError, match="não encontrado"):
-        engine.approve_request(
-            request.id, decided_by="account-b", owner_user_id="account-b"
-        )
+        engine.approve_request(request.id, decided_by="account-b", owner_user_id="account-b")
 
-    approved = engine.approve_request(
-        request.id, decided_by="account-a", owner_user_id="account-a"
-    )
+    approved = engine.approve_request(request.id, decided_by="account-a", owner_user_id="account-a")
     assert approved.owner_user_id == "account-a"
-    assert database.get_approval(
-        request.id, owner_user_id="account-b"
-    ) is None
+    assert database.get_approval(request.id, owner_user_id="account-b") is None

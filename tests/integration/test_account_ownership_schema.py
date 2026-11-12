@@ -1,6 +1,5 @@
 from services.memory import DatabaseManager
 
-
 PRIVATE_TABLES = (
     "projects",
     "tasks",
@@ -19,14 +18,12 @@ def test_account_ownership_migration_adds_nullable_owner_columns(tmp_path):
     with db._get_connection() as conn:
         for table in PRIVATE_TABLES:
             columns = {
-                row["name"]
-                for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+                row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
             }
             assert "owner_user_id" in columns
 
             indexes = {
-                row["name"]
-                for row in conn.execute(f"PRAGMA index_list({table})").fetchall()
+                row["name"] for row in conn.execute(f"PRAGMA index_list({table})").fetchall()
             }
             assert f"idx_{table}_owner_user" in indexes
 
@@ -68,9 +65,7 @@ def test_account_ownership_migration_is_idempotent_after_restart(tmp_path):
     restarted = DatabaseManager(db_path=db_path)
 
     with restarted._get_connection() as conn:
-        versions = conn.execute(
-            "SELECT version FROM schema_migrations ORDER BY version"
-        ).fetchall()
+        versions = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
 
     assert [row["version"] for row in versions] == [1, 2, 3]
 
@@ -78,20 +73,22 @@ def test_account_ownership_migration_is_idempotent_after_restart(tmp_path):
 def test_agent_memory_keys_are_independent_between_accounts(tmp_path):
     db = DatabaseManager(db_path=str(tmp_path / "agent-memory.db"))
     db.set_agent_memory(
-        "jarvis_master", "preference", "tone", "Account A tone",
+        "jarvis_master",
+        "preference",
+        "tone",
+        "Account A tone",
         owner_user_id="account-a",
     )
     db.set_agent_memory(
-        "jarvis_master", "preference", "tone", "Account B tone",
+        "jarvis_master",
+        "preference",
+        "tone",
+        "Account B tone",
         owner_user_id="account-b",
     )
 
-    a_memories = db.list_agent_memories(
-        agent_role="jarvis_master", owner_user_id="account-a"
-    )
-    b_memories = db.list_agent_memories(
-        agent_role="jarvis_master", owner_user_id="account-b"
-    )
+    a_memories = db.list_agent_memories(agent_role="jarvis_master", owner_user_id="account-a")
+    b_memories = db.list_agent_memories(agent_role="jarvis_master", owner_user_id="account-b")
     assert [item["content"] for item in a_memories] == ["Account A tone"]
     assert [item["content"] for item in b_memories] == ["Account B tone"]
 

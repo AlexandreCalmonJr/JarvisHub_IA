@@ -42,9 +42,12 @@ flowchart LR
 ### 3.1. Ferramenta: `read_file`
 ```python
 class ReadFileInput(BaseModel):
-    file_path: str = Field(..., description="Caminho relativo do arquivo em relação à raiz do projeto.")
+    file_path: str = Field(
+        ..., description="Caminho relativo do arquivo em relação à raiz do projeto."
+    )
     max_lines: int = Field(500, description="Limite máximo de linhas para leitura segura.")
     byte_offset: int = Field(0, description="Offset para paginação em arquivos extensos.")
+
 
 class ReadFileOutput(BaseModel):
     content: str
@@ -60,11 +63,12 @@ class RunTestsInput(BaseModel):
     test_suite: Literal["pytest", "flutter", "npm"] = Field("pytest")
     target_path: Optional[str] = Field(None, description="Arquivo ou pasta de testes específica.")
 
+
 class RunTestsOutput(BaseModel):
     is_success: bool
     exit_code: int
     duration_seconds: float
-    summary: dict[str, int] # {"total": 35, "passed": 35, "failed": 0, "skipped": 0}
+    summary: dict[str, int]  # {"total": 35, "passed": 35, "failed": 0, "skipped": 0}
     stdout: str
     stderr: str
 ```
@@ -77,11 +81,12 @@ class ProposePatchInput(BaseModel):
     unified_diff: str
     justification: str
 
+
 class ProposePatchOutput(BaseModel):
-    branch_name: str # "jarvis/task-ab37e221"
+    branch_name: str  # "jarvis/task-ab37e221"
     approval_required: bool = True
     approval_id: str
-    status: str # "awaiting_human_approval"
+    status: str  # "awaiting_human_approval"
 ```
 
 ---

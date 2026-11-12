@@ -7,11 +7,12 @@ Valida:
 """
 
 from pathlib import Path
+
 import pytest
 
 from services.security_core.cve_scanner import CVEScannerService
-from services.security_core.red_team_sandbox import RedTeamSandboxService
 from services.security_core.policy_generator import SecurityPolicyGenerator
+from services.security_core.red_team_sandbox import RedTeamSandboxService
 
 
 @pytest.fixture
@@ -25,32 +26,34 @@ def vulnerable_project(tmp_path: Path):
     req_txt.write_text("requests==2.18.0\nurllib3==1.24.1\nfastapi>=0.110.0\n", encoding="utf-8")
 
     pkg_json = proj_dir / "package.json"
-    pkg_json.write_text('{"dependencies": {"lodash": "^4.17.10", "react": "^18.2.0"}}', encoding="utf-8")
+    pkg_json.write_text(
+        '{"dependencies": {"lodash": "^4.17.10", "react": "^18.2.0"}}', encoding="utf-8"
+    )
 
     # 2. Código com vulnerabilidades
     py_code = proj_dir / "database_api.py"
     py_code.write_text(
-        'import subprocess\n'
-        'import sqlite3\n\n'
-        'def get_user(user_id):\n'
+        "import subprocess\n"
+        "import sqlite3\n\n"
+        "def get_user(user_id):\n"
         '    conn = sqlite3.connect("app.db")\n'
-        '    cursor = conn.cursor()\n'
-        '    # Injeção de SQL via f-string\n'
+        "    cursor = conn.cursor()\n"
+        "    # Injeção de SQL via f-string\n"
         '    cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")\n'
-        '    return cursor.fetchone()\n\n'
-        'def run_system_cmd(command):\n'
-        '    # Injeção de comandos\n'
-        '    subprocess.run(command, shell=True)\n\n'
-        '# Segredo hardcoded exposto\n'
+        "    return cursor.fetchone()\n\n"
+        "def run_system_cmd(command):\n"
+        "    # Injeção de comandos\n"
+        "    subprocess.run(command, shell=True)\n\n"
+        "# Segredo hardcoded exposto\n"
         'API_KEY = "AIzaSyD-TEST-FAKE-KEY-FOR-SECURITY-TESTS-00"\n',
         encoding="utf-8",
     )
 
     js_code = proj_dir / "component.jsx"
     js_code.write_text(
-        'export function DangerComponent({ html }) {\n'
-        '    return <div dangerouslySetInnerHTML={{ __html: html }} />;\n'
-        '}\n',
+        "export function DangerComponent({ html }) {\n"
+        "    return <div dangerouslySetInnerHTML={{ __html: html }} />;\n"
+        "}\n",
         encoding="utf-8",
     )
 
@@ -68,11 +71,11 @@ def safe_project(tmp_path: Path):
 
     py_code = proj_dir / "app.py"
     py_code.write_text(
-        'import os\n\n'
+        "import os\n\n"
         'api_key = os.getenv("API_KEY")\n'
-        'def get_user(cursor, user_id):\n'
+        "def get_user(cursor, user_id):\n"
         '    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))\n'
-        '    return cursor.fetchone()\n',
+        "    return cursor.fetchone()\n",
         encoding="utf-8",
     )
     return proj_dir

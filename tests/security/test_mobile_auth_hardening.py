@@ -38,7 +38,13 @@ async def test_01_authorized_mobile_pairing(admin_token):
             "/api/v1/mobile/pair",
             json={
                 "device_name": "Google Pixel 8 Pro",
-                "scopes": ["chat:read", "chat:use", "approvals:read", "approvals:decide", "system:read"],
+                "scopes": [
+                    "chat:read",
+                    "chat:use",
+                    "approvals:read",
+                    "approvals:decide",
+                    "system:read",
+                ],
             },
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -132,7 +138,9 @@ async def test_05_revoked_device_immediately_blocked():
     device_id = reg.device_id
 
     # Revoga o dispositivo
-    security_core.device_auth.revoke_device(device_id, reason="Perda do aparelho", revoked_by="admin_test")
+    security_core.device_auth.revoke_device(
+        device_id, reason="Perda do aparelho", revoked_by="admin_test"
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -145,9 +153,14 @@ async def test_05_revoked_device_immediately_blocked():
     # Verifica se evento de bloqueio foi auditado
     events = security_core.audit.list_events()
     blocked_events = [
-        e for e in events
-        if e.operation == "REVOKED_DEVICE_ACCESS_BLOCKED" and (
-            (getattr(e, "parameters_redacted", None) or getattr(e, "parameters", {}) or {}).get("device_id") == device_id
+        e
+        for e in events
+        if e.operation == "REVOKED_DEVICE_ACCESS_BLOCKED"
+        and (
+            (getattr(e, "parameters_redacted", None) or getattr(e, "parameters", {}) or {}).get(
+                "device_id"
+            )
+            == device_id
         )
     ]
     assert len(blocked_events) > 0, "Tentativa de acesso de dispositivo revogado não foi auditada!"
@@ -289,9 +302,7 @@ async def test_user_can_pair_device_to_own_private_account():
             affected_resources=["project/main.py"],
             owner_user_id=owner,
         )
-        visible = await client.get(
-            "/api/v1/approvals", headers={"X-Device-Token": token}
-        )
+        visible = await client.get("/api/v1/approvals", headers={"X-Device-Token": token})
         assert visible.status_code == 200
         assert approval.id in {item["id"] for item in visible.json()}
 
@@ -300,6 +311,8 @@ async def test_user_can_pair_device_to_own_private_account():
             device_id, reason="limpeza de teste", revoked_by=owner
         )
         security_core.approval_engine.reject_request(
-            approval.id, decided_by=owner, reason="limpeza de teste",
+            approval.id,
+            decided_by=owner,
+            reason="limpeza de teste",
             owner_user_id=owner,
         )

@@ -27,10 +27,12 @@ class CodingRunRequest(BaseModel):
     task_id: str | None = Field(None, description="ID de tarefa para cancelamento via Kill Switch")
     mode: str = Field("ask", description="'plan' (só leitura), 'ask' (aprovação) ou 'auto'")
     model: str | None = Field(None, description="Modelo específico (padrão do provedor se ausente)")
-    agent_role: str = Field("backend_developer", description="Papel usado na auditoria de aprovações")
+    agent_role: str = Field(
+        "backend_developer", description="Papel usado na auditoria de aprovações"
+    )
     max_iterations: int = Field(12, ge=1, le=40)
     temperature: float = Field(0.15, ge=0.0, le=1.0)
-    max_tokens: int = Field(4096, ge=256, le=32768)
+    max_tokens: int = Field(1024, ge=256, le=1024)
     timeout_seconds: float = Field(180.0, ge=10.0, le=1800.0)
     approval_timeout_seconds: float = Field(900.0, ge=30.0, le=3600.0)
     include_history: bool = True
@@ -100,7 +102,9 @@ class AssignAgentsRequest(BaseModel):
 
 
 class HybridConfigRequest(BaseModel):
-    provider_name: str = Field(..., description="Nome do provedor (openai, gemini, groq, deepseek, anthropic, custom)")
+    provider_name: str = Field(
+        ..., description="Nome do provedor (openai, gemini, groq, deepseek, anthropic, custom)"
+    )
     enabled: bool = Field(False, description="Ativar ou desativar o Gateway Online")
     api_key: str | None = Field(None, description="Chave de API do provedor (opcional se já salva)")
     base_url: str | None = Field(None, description="URL base customizada da API")
@@ -116,7 +120,9 @@ class HybridTestRequest(BaseModel):
 
 
 class ProjectMemoryRequest(BaseModel):
-    category: str = Field(..., description="Categoria da memória (ex: architecture, style_guide, decisions)")
+    category: str = Field(
+        ..., description="Categoria da memória (ex: architecture, style_guide, decisions)"
+    )
     key: str = Field(..., description="Chave identificadora")
     content: str = Field(..., description="Conteúdo ou diretriz")
     sources: list[str] | None = None
@@ -157,15 +163,25 @@ class KnowledgeSearchRequest(BaseModel):
 
 
 class AgentConfigUpdateRequest(BaseModel):
-    system_prompt: str | None = Field(None, description="Prompt de sistema customizado do especialista")
+    system_prompt: str | None = Field(
+        None, description="Prompt de sistema customizado do especialista"
+    )
     preferred_model: str | None = Field(None, description="Modelo de IA preferencial")
     allowed_tools: list[str] | None = Field(None, description="Lista de ferramentas autorizadas")
-    is_read_only: bool | None = Field(None, description="Permissão do agente: True para Somente Leitura, False para Edição/Proposição")
-    assigned_key_id: str | None = Field(None, description="ID da chave de API específica do KeyVault vinculada a este agente")
+    is_read_only: bool | None = Field(
+        None,
+        description="Permissão do agente: True para Somente Leitura, False para Edição/Proposição",
+    )
+    assigned_key_id: str | None = Field(
+        None, description="ID da chave de API específica do KeyVault vinculada a este agente"
+    )
 
 
 class AgentMemoryCreateRequest(BaseModel):
-    category: str = Field(..., description="Categoria do aprendizado (ex: coding_style, test_preference, security_rule)")
+    category: str = Field(
+        ...,
+        description="Categoria do aprendizado (ex: coding_style, test_preference, security_rule)",
+    )
     key: str = Field(..., description="Chave identificadora única")
     content: str = Field(..., description="Conteúdo do aprendizado ou diretriz")
     context: str | None = Field(None, description="Contexto ou tarefa de origem")
@@ -200,7 +216,9 @@ class WebhookConfigPayload(BaseModel):
     telegram_chat_id: str = Field(default="", description="Chat ID de destino no Telegram")
     notify_on_export: bool = Field(default=True, description="Notificar ao exportar projeto")
     notify_on_dockerize: bool = Field(default=True, description="Notificar ao dockerizar projeto")
-    notify_on_long_task: bool = Field(default=True, description="Notificar ao concluir tarefas longas")
+    notify_on_long_task: bool = Field(
+        default=True, description="Notificar ao concluir tarefas longas"
+    )
 
 
 class MockEndpointPayload(BaseModel):
@@ -216,9 +234,13 @@ class MockEndpointPayload(BaseModel):
 
 
 class SQLQueryPayload(BaseModel):
-    db_path: str = Field(..., description="Caminho do arquivo SQLite relativo ao projeto ou absoluto")
+    db_path: str = Field(
+        ..., description="Caminho do arquivo SQLite relativo ao projeto ou absoluto"
+    )
     query: str = Field(..., description="Instrução SQL a ser executada")
-    project_id: str | None = Field(default=None, description="ID do projeto para resolução de caminho")
+    project_id: str | None = Field(
+        default=None, description="ID do projeto para resolução de caminho"
+    )
     limit: int = Field(default=200, description="Limite máximo de linhas para retorno")
 
 
@@ -240,9 +262,15 @@ class ApplySecurityPolicyPayload(BaseModel):
 
 
 class RunTestsPayload(BaseModel):
-    project_id: str = Field(..., min_length=1, max_length=128, description="ID do projeto para execução dos testes")
-    test_file: str | None = Field(default=None, max_length=512, description="Arquivo de teste relativo ao projeto")
-    timeout_seconds: int = Field(default=45, ge=5, le=300, description="Timeout em segundos (5 a 300)")
+    project_id: str = Field(
+        ..., min_length=1, max_length=128, description="ID do projeto para execução dos testes"
+    )
+    test_file: str | None = Field(
+        default=None, max_length=512, description="Arquivo de teste relativo ao projeto"
+    )
+    timeout_seconds: int = Field(
+        default=45, ge=5, le=300, description="Timeout em segundos (5 a 300)"
+    )
 
 
 class GeneratePlaywrightPayload(BaseModel):
@@ -253,42 +281,62 @@ class GeneratePlaywrightPayload(BaseModel):
 
 class ColorPalettePayload(BaseModel):
     hex_primary: str = Field(
-        ..., pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+        ...,
+        pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
         description="Cor primária em formato hexadecimal (#RGB ou #RRGGBB)",
     )
     name: str = Field(
-        default="custom", min_length=1, max_length=40,
-        pattern=r"^[A-Za-z0-9_-]+$", description="Identificador seguro da paleta",
+        default="custom",
+        min_length=1,
+        max_length=40,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="Identificador seguro da paleta",
     )
 
 
 class WcagAuditPayload(BaseModel):
-    markup: str = Field(..., min_length=1, max_length=100000, description="Código HTML ou JSX para auditoria de acessibilidade")
+    markup: str = Field(
+        ...,
+        min_length=1,
+        max_length=100000,
+        description="Código HTML ou JSX para auditoria de acessibilidade",
+    )
 
 
 class WriteProjectFilePayload(BaseModel):
     path: str = Field(..., description="Caminho relativo do arquivo no projeto")
     content: str = Field(..., description="Conteúdo textual a ser gravado")
     reason: str = Field(default="Modificação aplicada via Artifact Canvas", description="Motivo")
-    approval_id: str | None = Field(default=None, description="ID de aprovação humana previamente aprovada")
+    approval_id: str | None = Field(
+        default=None, description="ID de aprovação humana previamente aprovada"
+    )
 
 
 class ImportFolderPayload(BaseModel):
     folder_path: str = Field(..., description="Caminho absoluto da pasta no computador")
     name: str | None = Field(default=None, description="Nome de identificação do projeto")
-    approval_id: str | None = Field(default=None, description="ID de aprovação humana previamente aprovada")
+    approval_id: str | None = Field(
+        default=None, description="ID de aprovação humana previamente aprovada"
+    )
 
 
 class AutonomousAgentRunRequest(BaseModel):
     """Pedido de execução de especialista autônomo (qualquer um dos 26 agentes)."""
 
     prompt: str = Field(..., min_length=1, description="Instrução ou tarefa para o especialista")
-    project_id: str | None = Field(default=None, description="ID do projeto no workspace (opcional)")
-    session_id: str | None = Field(default=None, description="ID da sessão de conversa com o especialista")
-    mode: str = Field(default="ask", description="'plan' (só leitura), 'ask' (assistido/aprovação) ou 'auto' (autônomo)")
+    project_id: str | None = Field(
+        default=None, description="ID do projeto no workspace (opcional)"
+    )
+    session_id: str | None = Field(
+        default=None, description="ID da sessão de conversa com o especialista"
+    )
+    mode: str = Field(
+        default="ask",
+        description="'plan' (só leitura), 'ask' (assistido/aprovação) ou 'auto' (autônomo)",
+    )
     max_iterations: int = Field(default=15, ge=1, le=50)
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=2048, ge=256, le=32768)
+    max_tokens: int = Field(default=1024, ge=256, le=1024)
     timeout_seconds: float = Field(default=180.0, ge=10.0, le=1800.0)
     include_history: bool = True
 

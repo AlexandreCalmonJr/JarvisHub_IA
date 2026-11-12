@@ -7,9 +7,9 @@ são persistidos neste repositório de telemetria.
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -207,7 +207,6 @@ class SqliteTelemetryStore:
             rows = conn.execute(query, tuple(params)).fetchall()
         return [dict(row) for row in rows]
 
-
     def performance_by_model_for_owner(
         self,
         owner_user_id: str,
@@ -260,13 +259,11 @@ class SqliteTelemetryStore:
                     "average_cost_usd": round(float(row["average_cost_usd"] or 0), 6),
                     "sample_sufficient": total >= safe_minimum_samples,
                     "routing_eligible": (
-                        total >= safe_minimum_samples
-                        and success_rate >= safe_success_rate
+                        total >= safe_minimum_samples and success_rate >= safe_success_rate
                     ),
                 }
             )
         return result
-
 
     def record_model_selection(
         self,
@@ -294,9 +291,17 @@ class SqliteTelemetryStore:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    record_id, owner_user_id, task_id, agent_role, task_capability,
-                    selected_model, selected_provider, selection_reason,
-                    max(0, int(candidate_count)), max(0.0, float(estimated_cost_usd)), datetime.now(UTC).isoformat(),
+                    record_id,
+                    owner_user_id,
+                    task_id,
+                    agent_role,
+                    task_capability,
+                    selected_model,
+                    selected_provider,
+                    selection_reason,
+                    max(0, int(candidate_count)),
+                    max(0.0, float(estimated_cost_usd)),
+                    datetime.now(UTC).isoformat(),
                 ),
             )
         return record_id
@@ -320,7 +325,6 @@ class SqliteTelemetryStore:
                 (owner_user_id, safe_limit),
             ).fetchall()
         return [dict(row) for row in rows]
-
 
     def record_quality_feedback(
         self, *, owner_user_id: str, inference_id: str, rating: int
@@ -354,10 +358,15 @@ class SqliteTelemetryStore:
                     created_at = excluded.created_at
                 """,
                 (
-                    str(uuid.uuid4()), owner_user_id, inference["id"],
-                    inference["model_name"], inference["provider"],
-                    inference["agent_role"], inference["task_id"],
-                    int(rating), datetime.now(UTC).isoformat(),
+                    str(uuid.uuid4()),
+                    owner_user_id,
+                    inference["id"],
+                    inference["model_name"],
+                    inference["provider"],
+                    inference["agent_role"],
+                    inference["task_id"],
+                    int(rating),
+                    datetime.now(UTC).isoformat(),
                 ),
             )
         return True

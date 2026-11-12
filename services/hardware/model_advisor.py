@@ -41,57 +41,65 @@ def generate_recommendations(specs: dict[str, Any]) -> dict[str, Any]:
         size_gb = m.get("size_gb", 0)
 
         if "3b" in m_name or "1.5b" in m_name or "1b" in m_name:
-            models_evaluation.append({
-                "model_name": m["name"],
-                "size_gb": size_gb,
-                "badge": "⚡ Altamente Recomendado",
-                "badge_color": "badge-success",
-                "score_percent": 98,
-                "expected_speed_tps": "12 a 16 tokens/s",
-                "expected_latency": "15 a 25 segundos",
-                "cpu_load": "Moderada",
-                "verdict": "Perfeito para uso diário na sua CPU. Respostas completas em menos de 25 segundos com baixíssimo consumo de bateria e aquecimento.",
-                "best_for": "Triagem, Maestro, Chat Geral, Explicações de Código",
-            })
+            models_evaluation.append(
+                {
+                    "model_name": m["name"],
+                    "size_gb": size_gb,
+                    "badge": "⚡ Altamente Recomendado",
+                    "badge_color": "badge-success",
+                    "score_percent": 98,
+                    "expected_speed_tps": "12 a 16 tokens/s",
+                    "expected_latency": "15 a 25 segundos",
+                    "cpu_load": "Moderada",
+                    "verdict": "Perfeito para uso diário na sua CPU. Respostas completas em menos de 25 segundos com baixíssimo consumo de bateria e aquecimento.",
+                    "best_for": "Triagem, Maestro, Chat Geral, Explicações de Código",
+                }
+            )
         elif "coder:7b" in m_name:
-            models_evaluation.append({
-                "model_name": m["name"],
-                "size_gb": size_gb,
-                "badge": "⚙️ Especialista em Código (CPU)",
-                "badge_color": "badge-purple",
-                "score_percent": 85,
-                "expected_speed_tps": "3.5 a 5 tokens/s",
-                "expected_latency": "45 a 80 segundos",
-                "cpu_load": "Alta (100% dos núcleos)",
-                "verdict": "Excelente capacidade técnica para arquitetura e código complexo. Por rodar na CPU, aguarde de 45 a 80s por resposta.",
-                "best_for": "Geração Completa de Projetos Python, Java, Go, C#",
-            })
+            models_evaluation.append(
+                {
+                    "model_name": m["name"],
+                    "size_gb": size_gb,
+                    "badge": "⚙️ Especialista em Código (CPU)",
+                    "badge_color": "badge-purple",
+                    "score_percent": 85,
+                    "expected_speed_tps": "3.5 a 5 tokens/s",
+                    "expected_latency": "45 a 80 segundos",
+                    "cpu_load": "Alta (100% dos núcleos)",
+                    "verdict": "Excelente capacidade técnica para arquitetura e código complexo. Por rodar na CPU, aguarde de 45 a 80s por resposta.",
+                    "best_for": "Geração Completa de Projetos Python, Java, Go, C#",
+                }
+            )
         elif "7b" in m_name or "8b" in m_name:
-            models_evaluation.append({
-                "model_name": m["name"],
-                "size_gb": size_gb,
-                "badge": "⚖️ Moderado para CPU",
-                "badge_color": "badge-warning",
-                "score_percent": 72,
-                "expected_speed_tps": "3 a 4 tokens/s",
-                "expected_latency": "60 a 110 segundos",
-                "cpu_load": "Muito Alta",
-                "verdict": "Funciona normalmente graças aos seus 32GB de RAM, mas é mais lento que o 3B para conversas cotidianas.",
-                "best_for": "Análises aprofundadas quando a velocidade não for prioridade",
-            })
+            models_evaluation.append(
+                {
+                    "model_name": m["name"],
+                    "size_gb": size_gb,
+                    "badge": "⚖️ Moderado para CPU",
+                    "badge_color": "badge-warning",
+                    "score_percent": 72,
+                    "expected_speed_tps": "3 a 4 tokens/s",
+                    "expected_latency": "60 a 110 segundos",
+                    "cpu_load": "Muito Alta",
+                    "verdict": "Funciona normalmente graças aos seus 32GB de RAM, mas é mais lento que o 3B para conversas cotidianas.",
+                    "best_for": "Análises aprofundadas quando a velocidade não for prioridade",
+                }
+            )
         else:
-            models_evaluation.append({
-                "model_name": m["name"],
-                "size_gb": size_gb,
-                "badge": "Instalado",
-                "badge_color": "badge-info",
-                "score_percent": 75,
-                "expected_speed_tps": "4 a 8 tokens/s",
-                "expected_latency": "30 a 60 segundos",
-                "cpu_load": "Variável",
-                "verdict": "Modelo disponível localmente no Ollama.",
-                "best_for": "Tarefas gerais",
-            })
+            models_evaluation.append(
+                {
+                    "model_name": m["name"],
+                    "size_gb": size_gb,
+                    "badge": "Instalado",
+                    "badge_color": "badge-info",
+                    "score_percent": 75,
+                    "expected_speed_tps": "4 a 8 tokens/s",
+                    "expected_latency": "30 a 60 segundos",
+                    "cpu_load": "Variável",
+                    "verdict": "Modelo disponível localmente no Ollama.",
+                    "best_for": "Tarefas gerais",
+                }
+            )
 
     # 3. Recomendações de Aceleração Híbrida / Nuvem Gratuita
     cloud_recommendations = [

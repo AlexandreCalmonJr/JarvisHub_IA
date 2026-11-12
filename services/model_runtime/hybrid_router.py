@@ -124,10 +124,9 @@ def load_hybrid_config_from_disk(file_path: Path) -> OnlineProviderConfig:
         try:
             data = json.loads(file_path.read_text(encoding="utf-8"))
             cfg = OnlineProviderConfig(**data)
-            cfg.default_model = (
-                normalize_model_for_provider(cfg.provider_name, cfg.default_model)
-                or default_model_for_provider(cfg.provider_name)
-            )
+            cfg.default_model = normalize_model_for_provider(
+                cfg.provider_name, cfg.default_model
+            ) or default_model_for_provider(cfg.provider_name)
             return cfg
         except Exception:
             logger.warning("Configuração híbrida inválida em %s; a usar predefinições.", file_path)
@@ -179,16 +178,13 @@ class HybridModelRouter:
         if not self.key_vault:
             return None
         resolver = getattr(self.key_vault, "get_key_for_request", None)
-        profile = (
-            resolver(key_id, owner_user_id)
-            if resolver
-            else self.key_vault.get_key(key_id)
-        )
+        profile = resolver(key_id, owner_user_id) if resolver else self.key_vault.get_key(key_id)
         if not profile or not profile.api_key:
             return None
         cache_key = key_id if not owner_user_id else f"{owner_user_id}::{key_id}"
         if cache_key not in self._vault_adapters:
             from services.model_runtime.adapter import UniversalOnlineAdapter
+
             self._vault_adapters[cache_key] = UniversalOnlineAdapter(
                 api_key=profile.api_key,
                 provider_name=profile.provider,
@@ -197,9 +193,7 @@ class HybridModelRouter:
             )
         return self._vault_adapters[cache_key]
 
-    def _resolve_external_candidate(
-        self, request: InferenceRequest
-    ) -> _ExternalCandidate | None:
+    def _resolve_external_candidate(self, request: InferenceRequest) -> _ExternalCandidate | None:
         """
         Resolve o destino externo (KeyVault ou gateway) sem executá-lo.
 
@@ -219,11 +213,11 @@ class HybridModelRouter:
                     if (resolver and self.key_vault)
                     else (self.key_vault.get_key(req_key_id) if self.key_vault else None)
                 )
-                vault_adapter = self.get_adapter_for_key(req_key_id, owner_user_id) if profile else None
-            except Exception as exc:
-                logger.warning(
-                    "Falha ao resolver a chave '%s' do KeyVault: %s", req_key_id, exc
+                vault_adapter = (
+                    self.get_adapter_for_key(req_key_id, owner_user_id) if profile else None
                 )
+            except Exception as exc:
+                logger.warning("Falha ao resolver a chave '%s' do KeyVault: %s", req_key_id, exc)
                 profile, vault_adapter = None, None
 
             if profile and vault_adapter:
@@ -268,10 +262,9 @@ class HybridModelRouter:
         cost_per_1k_input: float,
         cost_per_1k_output: float,
     ) -> float:
-        return (
-            (prompt_tokens / 1000.0) * cost_per_1k_input
-            + (completion_tokens / 1000.0) * cost_per_1k_output
-        )
+        return (prompt_tokens / 1000.0) * cost_per_1k_input + (
+            completion_tokens / 1000.0
+        ) * cost_per_1k_output
 
     def record_cost(
         self,
@@ -302,9 +295,7 @@ class HybridModelRouter:
         Não é contabilizada como custo final: o valor real é liquidado com a utilização
         devolvida pelo provedor (ou com estimativa explícita no streaming sem usage).
         """
-        prompt_tokens = max(
-            1, (len(request.prompt) + len(request.system_prompt or "")) // 4
-        )
+        prompt_tokens = max(1, (len(request.prompt) + len(request.system_prompt or "")) // 4)
         completion_tokens = request.max_tokens or 2048
         return self._calculate_cost(
             prompt_tokens,
@@ -483,9 +474,7 @@ class HybridModelRouter:
                 else contains_sensitive_data(text)
             ),
         )
-        return await self._authorize_external_call(
-            request, candidate, has_external_data_approval
-        )
+        return await self._authorize_external_call(request, candidate, has_external_data_approval)
 
     def settle_chat_egress(
         self,

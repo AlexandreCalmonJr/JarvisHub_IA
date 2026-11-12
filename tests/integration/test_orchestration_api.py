@@ -1,7 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.api.main import app, workspace_service, db_manager
+from apps.api.main import app, db_manager, workspace_service
 from packages.contracts.agent import AgentRole
 
 
@@ -64,13 +64,20 @@ async def test_api_chat_code_modification_creates_approval():
             project_id=project_id,
             name="Site Auth Approval",
             project_type="web",
-            files={"index.html": "<html><head><title>Antigo</title></head><body>Login</body></html>"},
+            files={
+                "index.html": "<html><head><title>Antigo</title></head><body>Login</body></html>"
+            },
         )
         db_manager.register_project(
-            project_id, "Site Auth Approval", str(workspace_service.get_project_dir(project_id)),
+            project_id,
+            "Site Auth Approval",
+            str(workspace_service.get_project_dir(project_id)),
             owner_user_id="admin",
         )
-        payload = {"prompt": "Alterar o endpoint de autenticação no projeto site-auth-approval e mudar o título para Login Seguro", "project_id": project_id}
+        payload = {
+            "prompt": "Alterar o endpoint de autenticação no projeto site-auth-approval e mudar o título para Login Seguro",
+            "project_id": project_id,
+        }
         res = await client.post("/api/v1/chat", json=payload)
         assert res.status_code == 200
         data = res.json()
@@ -116,7 +123,9 @@ async def test_api_chat_create_website_and_modify_file():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Remove resíduos de execuções anteriores antes de validar a criação E2E.
         workspace_service.delete_project("site-cafeteria")
-        create_payload = {"prompt": "cria um site simples de cafeteria para mim com index.html e style.css"}
+        create_payload = {
+            "prompt": "cria um site simples de cafeteria para mim com index.html e style.css"
+        }
         create_res = await client.post("/api/v1/chat", json=create_payload)
         assert create_res.status_code == 200
         data = create_res.json()

@@ -26,7 +26,9 @@ class AgentMode(str, Enum):
 
     PLAN = "plan"  # Somente leitura; nunca escreve nem executa comandos.
     ASK = "ask"  # Pede aprovação humana antes de escrever/executar.
-    AUTO = "auto"  # Autonomia no sandbox; ferramentas protegidas continuam exigindo aprovação humana.
+    AUTO = (
+        "auto"  # Autonomia no sandbox; ferramentas protegidas continuam exigindo aprovação humana.
+    )
 
 
 class ToolSpec(BaseModel):
@@ -83,6 +85,7 @@ class ToolResult(BaseModel):
     output: str = ""
     error: str | None = None
     duration_ms: float = 0.0
+    exit_code: int | None = None
     changed_files: list[str] = Field(default_factory=list)
     diff: str | None = None
     denied: bool = False
@@ -133,7 +136,7 @@ class AgentRunConfig(BaseModel):
     agent_role: str = "backend_developer"
     max_iterations: int = 12
     temperature: float = 0.15
-    max_tokens: int = 4096
+    max_tokens: int = Field(default=1024, ge=256, le=1024)
     timeout_seconds: float = 180.0
     include_history: bool = True
     approval_timeout_seconds: float = 900.0

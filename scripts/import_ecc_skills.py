@@ -269,7 +269,9 @@ def generate_and_save_skills():
         file_path = out_dir / f"{s['id']}.json"
         file_path.write_text(json.dumps(s, indent=2, ensure_ascii=False), encoding="utf-8")
         count += 1
-        print(f"  [OK] Skill ECC importada: {s['id']} ({s['name']}) -> Hash: {computed_hash[:12]}...")
+        print(
+            f"  [OK] Skill ECC importada: {s['id']} ({s['name']}) -> Hash: {computed_hash[:12]}..."
+        )
 
     print(f"\nTotal de {count} skills ECC importadas e salvas em {out_dir}")
 

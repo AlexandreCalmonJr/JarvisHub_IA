@@ -7,6 +7,7 @@ Envia notificações em tempo real para Discord e Telegram quando tarefas demora
 import json
 import logging
 from typing import Any
+
 import httpx
 
 logger = logging.getLogger("jarvis.webhooks")
@@ -28,7 +29,10 @@ class WebhookNotificationService:
                 try:
                     return json.loads(row["value_json"])
                 except Exception:
-                    logger.debug("Configuração de webhooks inválida no banco; a usar predefinições.", exc_info=True)
+                    logger.debug(
+                        "Configuração de webhooks inválida no banco; a usar predefinições.",
+                        exc_info=True,
+                    )
         return {
             "enabled": False,
             "discord_webhook_url": "",
@@ -63,7 +67,8 @@ class WebhookNotificationService:
 
         merged = {**current, **new_cfg}
         val_str = json.dumps(merged)
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
+
         now = datetime.now(UTC).isoformat()
 
         if self.db:
@@ -78,7 +83,9 @@ class WebhookNotificationService:
                 )
         return self.get_safe_config()
 
-    async def send_notification(self, title: str, message: str, event_type: str = "general") -> dict[str, Any]:
+    async def send_notification(
+        self, title: str, message: str, event_type: str = "general"
+    ) -> dict[str, Any]:
         """Dispara notificações assíncronas para Discord e/ou Telegram se configurados."""
         cfg = self.get_raw_config()
         if not cfg.get("enabled", False):

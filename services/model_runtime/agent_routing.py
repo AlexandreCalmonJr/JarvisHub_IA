@@ -75,9 +75,7 @@ def resolve_account_agent_route(
             return AgentRoute(
                 agent_role=clean_role,
                 key_id=account_key_id,
-                model=assignment.get("model")
-                or profile.default_model
-                or fallback_model,
+                model=assignment.get("model") or profile.default_model or fallback_model,
                 source="account",
                 key_label=profile.label,
                 provider=profile.provider,

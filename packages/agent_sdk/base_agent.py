@@ -86,7 +86,11 @@ class AutonomousAgent(BaseAgent):
         if skills_instructions:
             skills_section = f"\n\n## Competências e Skills Ativas\n{skills_instructions}"
 
-        tools_list = ", ".join(self.profile.allowed_tools) if self.profile.allowed_tools else "read_file, list_directory"
+        tools_list = (
+            ", ".join(self.profile.allowed_tools)
+            if self.profile.allowed_tools
+            else "read_file, list_directory"
+        )
 
         prompt = (
             f"Você é {self.profile.name}, um agente especialista autônomo soberano do JARVIS AI HUB.\n"
@@ -175,7 +179,7 @@ class AutonomousAgent(BaseAgent):
             prompt=task_request.user_prompt,
             system_prompt=system_prompt,
             model_name=self.profile.preferred_model,
-            max_tokens=2048,
+            max_tokens=1024,
             temperature=0.3,
             timeout_seconds=300.0,
             task_id=task_request.task_id,
@@ -201,4 +205,3 @@ class AutonomousAgent(BaseAgent):
             model_name=model_used,
             duration_ms=dur,
         )
-

@@ -1,4 +1,3 @@
-
 import pytest
 
 from services.engineering_intelligence.tech_debt_analyzer import EngineeringIntelligenceService
@@ -34,9 +33,7 @@ def test_project_report_requires_owner_scope():
 def test_project_report_uses_account_scoped_metrics():
     db = DatabaseStub()
     service = EngineeringIntelligenceService(db_manager=db)
-    result = service.generate_executive_report(
-        project_id="project-a", owner_user_id="account-a"
-    )
+    result = service.generate_executive_report(project_id="project-a", owner_user_id="account-a")
 
     assert db.last_owner == "account-a"
     assert result["roi"]["total_tasks_completed"] == 1

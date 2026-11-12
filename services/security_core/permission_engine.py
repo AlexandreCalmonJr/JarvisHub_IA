@@ -175,9 +175,7 @@ class PermissionEngine:
         """Indica se a operação é crítica e requer aprovação humana explícita."""
         return operation in CRITICAL_OPERATIONS
 
-    def can_propose_operation(
-        self, agent_role: AgentRole, project_id: str, operation: str
-    ) -> bool:
+    def can_propose_operation(self, agent_role: AgentRole, project_id: str, operation: str) -> bool:
         """
         Verifica se o especialista pode propor a execução da operação para aprovação.
         Agentes estritamente analíticos (READ_ONLY_ROLES) não podem propor modificações

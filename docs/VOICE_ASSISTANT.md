@@ -1,9 +1,9 @@
 # VOICE ASSISTANT — Assistente por voz em segundo plano
 
-> **Versão:** 1.0  
-> **Data:** 12/11/2026  
-> **Estado:** proposta (não implementado)  
-> **Âmbito:** wake word, STT, TTS, execução em segundo plano, desktop e celular  
+> **Versão:** 1.0
+> **Data:** 12/11/2026
+> **Estado:** V0 implementado; V1 em implementação inicial; V2–V6 em aberto
+> **Âmbito:** wake word, STT, TTS, execução em segundo plano, desktop e celular
 > **Documento principal:** [PLANO_COMPLETO.md](./PLANO_COMPLETO.md) — Fase 8
 
 ---
@@ -71,10 +71,10 @@ Telefone no bolso
 | Arranque silencioso no Windows | ✅ Parcial | `iniciar_jarvis_silencioso.vbs` |
 | Microfone no dashboard | ✅ Push-to-talk | `apps/dashboard/src/hooks/useChatStream.ts` |
 | STT cloud | ⚠️ Se houver chave | `apps/api/routers/voice.py` (Groq/OpenAI Whisper) |
-| STT local | ❌ Simulado | `services/voice_runtime/stt_adapter.py` devolve frase fixa |
-| TTS backend | ❌ Simulado | `services/voice_runtime/tts_adapter.py` devolve WAV vazio |
+| STT local | ✅ Real opcional | `services/voice_runtime/stt_adapter.py` usa faster-whisper quando instalado e configurado |
+| TTS backend | ✅ Real opcional | `services/voice_runtime/tts_adapter.py` usa Piper configurado e devolve WAV válido |
 | TTS no browser | ✅ Real, robótico | `speechSynthesis` em `MessageBubble.tsx` |
-| Wake word | ❌ Não existe | — |
+| Wake word | 🟡 Implementação inicial | `apps/voice_daemon/`; modelo `hey_jarvis`, exige `.[voice]`, token autorizado e Piper configurado |
 | Voz no celular | ❌ Não existe | `apps/mobile/lib/main.dart` |
 | Serviço em segundo plano no celular | ❌ Não existe | — |
 | Aprovações | ✅ Funciona | Dashboard + mobile |
@@ -253,7 +253,7 @@ O Android permite escuta em segundo plano, mas **com uma notificação permanent
 6. Toca no alto-falante.
 7. Se houver aprovação pendente, mostra notificação com botões.
 
-**Vantagem:** o celular fica leve; o PC faz o trabalho pesado.  
+**Vantagem:** o celular fica leve; o PC faz o trabalho pesado.
 **Limite:** o PC precisa estar ligado e acessível. Para uso fora de casa, Tailscale resolve.
 
 ### 6.3 iOS — a verdade
@@ -399,6 +399,10 @@ O MVP pode começar com gravação completa + POST; o streaming entra na fase V2
 - Arranque no logon via Task Scheduler.
 - Instância única.
 - Botão de mute e atalho global.
+
+**Estado:** implementação inicial em `apps/voice_daemon/`: bandeja, mute,
+instância única, wake word local, VAD, STT/TTS local e encaminhamento autenticado
+ao chat. O atalho global e o ensaio em hardware continuam pendentes.
 
 **Aceite:** dizer “Jarvis” com o dashboard fechado → chime → pergunta → resposta falada.
 
@@ -579,11 +583,8 @@ Com o dashboard fechado, dizer “Jarvis, que horas são?” e ouvir a resposta 
 
 | Ficheiro | Função |
 |---|---|
-| `apps/voice_daemon/main.py` | Entrada do daemon, single instance |
-| `apps/voice_daemon/tray.py` | Ícone e menu da bandeja |
-| `apps/voice_daemon/listener.py` | Wake word + VAD + captura |
-| `apps/voice_daemon/client.py` | HTTP/WebSocket para o backend |
-| `apps/voice_daemon/playback.py` | Reprodução de TTS |
+| `apps/voice_daemon/main.py` | Daemon inicial, bandeja, captura, cliente e playback |
+| `apps/voice_daemon/README.md` | Configuração, execução e limites do daemon |
 | `services/voice_runtime/wake_word.py` | Deteção da palavra de ativação |
 | `services/voice_runtime/vad.py` | Deteção de atividade de voz |
 | `services/voice_runtime/audio_io.py` | Abstração de microfone/alto-falante |

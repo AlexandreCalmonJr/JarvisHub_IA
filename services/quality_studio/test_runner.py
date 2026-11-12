@@ -11,7 +11,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger("jarvis.quality_studio")
 
@@ -20,9 +20,18 @@ class QualityStudioService:
     def __init__(self, workspace_service: Any = None):
         self.workspace_service = workspace_service
 
-    _EXCLUDED_DIRS = {
-        ".git", ".venv", "venv", "env", "node_modules", ".tox",
-        ".pytest_cache", ".mypy_cache", "__pycache__", "dist", "build",
+    _EXCLUDED_DIRS: ClassVar[set[str]] = {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        ".tox",
+        ".pytest_cache",
+        ".mypy_cache",
+        "__pycache__",
+        "dist",
+        "build",
     }
 
     @classmethod
@@ -30,7 +39,9 @@ class QualityStudioService:
         try:
             resolved = candidate.resolve()
             resolved.relative_to(project_dir.resolve())
-            return resolved.is_file() and not any(part in cls._EXCLUDED_DIRS for part in candidate.parts)
+            return resolved.is_file() and not any(
+                part in cls._EXCLUDED_DIRS for part in candidate.parts
+            )
         except (OSError, ValueError):
             return False
 
@@ -76,7 +87,9 @@ class QualityStudioService:
         if test_file:
             requested = Path(test_file)
             if requested.is_absolute() or requested.as_posix() not in discovery["test_files"]:
-                raise PermissionError("O arquivo de teste não pertence à lista de testes deste projeto.")
+                raise PermissionError(
+                    "O arquivo de teste não pertence à lista de testes deste projeto."
+                )
             resolved_test = (proj_dir / requested).resolve()
             if not self._is_safe_project_file(proj_dir, resolved_test):
                 raise PermissionError("O arquivo de teste está fora do projeto autorizado.")
@@ -171,11 +184,13 @@ class QualityStudioService:
                 code_lines.append(f"    expect(page.locator({target})).to_be_visible()")
             elif action == "assert_title":
                 code_lines.append(f"    assert {target}.lower() in page.title().lower()")
-        code_lines.extend([
-            "",
-            "    # Captura de evidência visual",
-            f"    page.screenshot(path={json.dumps('screenshot_' + clean_name + '.png')})",
-        ])
+        code_lines.extend(
+            [
+                "",
+                "    # Captura de evidência visual",
+                f"    page.screenshot(path={json.dumps('screenshot_' + clean_name + '.png')})",
+            ]
+        )
         return "\n".join(code_lines)
 
     def generate_chaos_edge_cases(
@@ -199,7 +214,10 @@ class QualityStudioService:
             {
                 "category": "CARACTERES_ESPECIAIS_E_UNICODE",
                 "name": "Emojis, RTL e Caracteres Especiais",
-                "payload": {"name": "🚀🔥 JARVIS 💻 \u202Ereversed\u202C", "bio": "Special chars: &<>'\"/\\;:"},
+                "payload": {
+                    "name": "🚀🔥 JARVIS 💻 \u202ereversed\u202c",
+                    "bio": "Special chars: &<>'\"/\\;:",
+                },
                 "expected_behavior": "Processamento e persistência corretos com codificação UTF-8 completa.",
             },
             {
@@ -211,7 +229,10 @@ class QualityStudioService:
             {
                 "category": "SIMULACAO_INJECAO",
                 "name": "Payload com Caracteres de Delimitação SQL e Script",
-                "payload": {"input": "test'; DROP TABLE users; --", "xss": "<script>alert(1)</script>"},
+                "payload": {
+                    "input": "test'; DROP TABLE users; --",
+                    "xss": "<script>alert(1)</script>",
+                },
                 "expected_behavior": "Escapamento seguro e parametrização, impedindo execução no banco de dados.",
             },
         ]

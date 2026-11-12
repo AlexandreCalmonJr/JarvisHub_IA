@@ -1,5 +1,6 @@
 from PIL import Image, ImageDraw
 
+
 def create_jarvis_icon(output_path="packaging/jarvis.ico"):
     # Base em 256x256
     base_size = 256
@@ -46,6 +47,7 @@ def create_jarvis_icon(output_path="packaging/jarvis.ico"):
 
     # 5. Feixes radiais do reator (8 linhas de energia)
     import math
+
     for i in range(8):
         angle = i * (math.pi / 4)
         x1 = center + int(r_mid * math.cos(angle))
@@ -62,6 +64,7 @@ def create_jarvis_icon(output_path="packaging/jarvis.ico"):
         sizes=sizes,
     )
     print(f"Ícone gerado com sucesso em alta definição: {output_path}")
+
 
 if __name__ == "__main__":
     create_jarvis_icon()

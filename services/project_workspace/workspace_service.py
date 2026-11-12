@@ -11,9 +11,9 @@ from packages.contracts.security import ProjectWorkMode
 from services.security_core import PermissionDeniedError, SecurityCore
 
 from .analyzer import ArchitectureReport, ProjectAnalyzer
-from .scanner import ProjectInventory, ProjectScanner
-from .scaffolder import ProjectScaffolder
 from .dockerizer import ProjectDockerizer
+from .scaffolder import ProjectScaffolder
+from .scanner import ProjectInventory, ProjectScanner
 
 logger = logging.getLogger("jarvis.workspace")
 
@@ -47,7 +47,9 @@ class ProjectWorkspaceService:
             if inv.root_path and Path(inv.root_path).exists():
                 return Path(inv.root_path).resolve()
 
-        if hasattr(self.security_core, "permission_engine") and hasattr(self.security_core.permission_engine, "_project_allowlists"):
+        if hasattr(self.security_core, "permission_engine") and hasattr(
+            self.security_core.permission_engine, "_project_allowlists"
+        ):
             if project_id in self.security_core.permission_engine._project_allowlists:
                 return self.security_core.permission_engine._project_allowlists[project_id]
 
@@ -56,7 +58,9 @@ class ProjectWorkspaceService:
         try:
             p_dir.relative_to(base_resolved)
         except ValueError:
-            raise PermissionDeniedError(f"Caminho do projeto fora do workspace autorizado: '{project_id}'")
+            raise PermissionDeniedError(
+                f"Caminho do projeto fora do workspace autorizado: '{project_id}'"
+            )
         if p_dir == base_resolved:
             raise PermissionDeniedError(f"Identificador de projeto inválido: '{project_id}'")
         return p_dir
@@ -196,7 +200,10 @@ class ProjectWorkspaceService:
 
     def delete_project(self, project_id: str) -> bool:
         """Exclui fisicamente a pasta do projeto no disco e remove registros de inventário."""
-        if hasattr(self.security_core, "kill_switch") and self.security_core.kill_switch.is_global_killed():
+        if (
+            hasattr(self.security_core, "kill_switch")
+            and self.security_core.kill_switch.is_global_killed()
+        ):
             raise PermissionDeniedError("Operação de exclusão suspensa pelo Kill Switch Global.")
 
         project_dir = self.get_project_dir(project_id)
@@ -208,7 +215,9 @@ class ProjectWorkspaceService:
             raise PermissionDeniedError("Tentativa de exclusão da raiz de workspaces bloqueada.")
 
         def _remove_readonly(func, path, _):
-            import os, stat
+            import os
+            import stat
+
             try:
                 os.chmod(path, stat.S_IWRITE)
                 func(path)
@@ -274,9 +283,7 @@ class ProjectWorkspaceService:
         if self._sandbox is None:
             self._sandbox = SubprocessSandbox()
         target = cwd or self.base_dir
-        return await self._sandbox.run_shell_command(
-            command, Path(target), timeout_seconds
-        )
+        return await self._sandbox.run_shell_command(command, Path(target), timeout_seconds)
 
     def ensure_git_repo(self, project_id: str) -> bool:
         """Inicializa um repositório Git local isolado no projeto se ainda não existir."""
@@ -307,7 +314,14 @@ class ProjectWorkspaceService:
                 self._run_git(project_dir, ["add", "-A"])
                 st = self._run_git(project_dir, ["status", "--porcelain"])
                 if st.stdout.strip():
-                    self._run_git(project_dir, ["commit", "-m", "feat(scaffold): Inicializacao do repositorio pelo JARVIS"])
+                    self._run_git(
+                        project_dir,
+                        [
+                            "commit",
+                            "-m",
+                            "feat(scaffold): Inicializacao do repositorio pelo JARVIS",
+                        ],
+                    )
                 logger.info("Repositorio Git isolado inicializado em '%s'", project_dir)
                 return True
             except Exception as e:
@@ -330,7 +344,9 @@ class ProjectWorkspaceService:
                 self._run_git(project_dir, ["commit", "-m", clean_msg])
                 head = self._run_git(project_dir, ["rev-parse", "--short", "HEAD"])
                 commit_hash = head.stdout.strip()
-                logger.info("Commit Git '%s' gerado no projeto '%s': %s", commit_hash, project_id, clean_msg)
+                logger.info(
+                    "Commit Git '%s' gerado no projeto '%s': %s", commit_hash, project_id, clean_msg
+                )
                 return commit_hash
             head = self._run_git(project_dir, ["rev-parse", "--short", "HEAD"])
             return head.stdout.strip() if head.returncode == 0 else None
@@ -405,12 +421,14 @@ class ProjectWorkspaceService:
         for line in log_res.stdout.strip().split("\n"):
             parts = line.split("||")
             if len(parts) == 4:
-                commits.append({
-                    "hash": parts[0],
-                    "author": parts[1],
-                    "date": parts[2],
-                    "message": parts[3],
-                })
+                commits.append(
+                    {
+                        "hash": parts[0],
+                        "author": parts[1],
+                        "date": parts[2],
+                        "message": parts[3],
+                    }
+                )
         return commits
 
     def export_clean_project_zip(self, project_id: str) -> tuple[bytes, str]:
@@ -423,9 +441,22 @@ class ProjectWorkspaceService:
             raise FileNotFoundError(f"Projeto '{project_id}' não existe no disco.")
 
         EXCLUDED_DIRS = {
-            "node_modules", ".venv", "venv", "env", "__pycache__", ".git",
-            ".pytest_cache", ".mypy_cache", ".idea", ".vscode", "dist", "build",
-            "target", ".gradle", "bin", "obj",
+            "node_modules",
+            ".venv",
+            "venv",
+            "env",
+            "__pycache__",
+            ".git",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".idea",
+            ".vscode",
+            "dist",
+            "build",
+            "target",
+            ".gradle",
+            "bin",
+            "obj",
         }
         EXCLUDED_EXTS = {".pyc", ".pyo", ".pyd", ".bak", ".tmp", ".log"}
 
@@ -456,9 +487,7 @@ class ProjectWorkspaceService:
         """
         target = Path(folder_path).expanduser().resolve()
         if not target.exists() or not target.is_dir():
-            raise FileNotFoundError(
-                f"O diretório informado não foi encontrado: '{folder_path}'"
-            )
+            raise FileNotFoundError(f"O diretório informado não foi encontrado: '{folder_path}'")
 
         raw_roots = os.environ.get("JARVIS_WORKSPACE_IMPORT_ROOTS", "").strip()
         separator = ";" if os.name == "nt" else ","
@@ -515,6 +544,7 @@ class ProjectWorkspaceService:
         description: str = "",
         project_type: str = "web",
         files: dict[str, str] | None = None,
+        database: str = "none",
     ) -> dict:
         """
         Cria a pasta física no computador em workspace/<project_id>
@@ -523,21 +553,49 @@ class ProjectWorkspaceService:
         project_dir = self.get_project_dir(project_id)
         project_dir.mkdir(parents=True, exist_ok=True)
 
+        if files and database != "none":
+            raise ValueError("A opção database só pode ser usada com o scaffold Python padrão.")
         if not files:
             p_type = (project_type or "web").lower()
             if p_type in ("python", "py", "fastapi"):
-                files = self._generate_default_python_scaffold(project_id, name, description)
+                files = self._generate_default_python_scaffold(
+                    project_id, name, description, database=database
+                )
             elif p_type in ("java", "spring", "maven"):
+                if database != "none":
+                    raise ValueError(
+                        "O scaffold com banco está disponível apenas para Python nesta versão."
+                    )
                 files = self._generate_default_java_scaffold(project_id, name, description)
             elif p_type in ("csharp", "c#", "dotnet", "cs"):
+                if database != "none":
+                    raise ValueError(
+                        "O scaffold com banco está disponível apenas para Python nesta versão."
+                    )
                 files = self._generate_default_csharp_scaffold(project_id, name, description)
             elif p_type in ("go", "golang"):
+                if database != "none":
+                    raise ValueError(
+                        "O scaffold com banco está disponível apenas para Python nesta versão."
+                    )
                 files = self._generate_default_go_scaffold(project_id, name, description)
             elif p_type in ("kotlin", "kt"):
+                if database != "none":
+                    raise ValueError(
+                        "O scaffold com banco está disponível apenas para Python nesta versão."
+                    )
                 files = self._generate_default_kotlin_scaffold(project_id, name, description)
             elif p_type in ("flutter", "mobile"):
+                if database != "none":
+                    raise ValueError(
+                        "O scaffold com banco está disponível apenas para Python nesta versão."
+                    )
                 files = self._generate_default_flutter_scaffold(project_id, name, description)
             else:
+                if database != "none":
+                    raise ValueError(
+                        "O scaffold com banco está disponível apenas para Python nesta versão."
+                    )
                 files = self._generate_default_web_scaffold(project_id, name, description)
 
         created_files: list[str] = []
@@ -577,7 +635,12 @@ class ProjectWorkspaceService:
                 operation="PROJECT_SCAFFOLDED",
                 status="SUCCESS",
                 project_id=project_id,
-                parameters={"files_created": created_files, "path": str(project_dir), "project_type": project_type},
+                parameters={
+                    "files_created": created_files,
+                    "path": str(project_dir),
+                    "project_type": project_type,
+                    "database": database,
+                },
             )
 
         return {
@@ -585,6 +648,7 @@ class ProjectWorkspaceService:
             "name": name,
             "root_path": str(project_dir),
             "project_type": project_type,
+            "database": database,
             "files_created": created_files,
             "report": report,
         }
@@ -626,7 +690,10 @@ class ProjectWorkspaceService:
         reason: str = "Modificação solicitada via chat",
     ) -> dict:
         """Modifica um arquivo no disco, gerando backup .bak e diff unificado com validações de segurança."""
-        if hasattr(self.security_core, "kill_switch") and self.security_core.kill_switch.is_global_killed():
+        if (
+            hasattr(self.security_core, "kill_switch")
+            and self.security_core.kill_switch.is_global_killed()
+        ):
             raise PermissionDeniedError("Operação de escrita suspensa pelo Kill Switch Global.")
 
         project_dir = self.get_project_dir(project_id)
@@ -652,14 +719,20 @@ class ProjectWorkspaceService:
 
         # Bloqueio de modificação em arquivos sensíveis e internos (.env, .pem, .key e .git)
         if target.name.startswith(".env") or target.suffix in (".key", ".pem"):
-            raise PermissionDeniedError(f"Modificação proibida no arquivo protegido '{target.name}'.")
+            raise PermissionDeniedError(
+                f"Modificação proibida no arquivo protegido '{target.name}'."
+            )
         try:
             target.relative_to(project_dir / ".git")
-            raise PermissionDeniedError("Modificação direta de arquivos internos do repositório Git bloqueada.")
+            raise PermissionDeniedError(
+                "Modificação direta de arquivos internos do repositório Git bloqueada."
+            )
         except ValueError:
             pass
 
-        old_content = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+        old_content = (
+            target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+        )
 
         # Gera backup se o arquivo já existia
         if target.is_file():
@@ -721,7 +794,7 @@ class ProjectWorkspaceService:
                     if total_bytes >= 1024 * 1024
                     else f"{round(total_bytes / 1024, 1)} KB"
                 )
-                
+
                 # Detecta tipo de projeto
                 p_type = "web"
                 f_names = [f.lower() for f in files]
@@ -729,11 +802,11 @@ class ProjectWorkspaceService:
                     p_type = "python"
                 elif any(f == "pom.xml" or f.endswith(".java") for f in f_names):
                     p_type = "java"
-                elif any(f.endswith(".csproj") or f.endswith(".cs") for f in f_names):
+                elif any(f.endswith((".csproj", ".cs")) for f in f_names):
                     p_type = "csharp"
                 elif any(f == "go.mod" or f.endswith(".go") for f in f_names):
                     p_type = "go"
-                elif any(f.endswith(".kt") or f.endswith(".kts") for f in f_names):
+                elif any(f.endswith((".kt", ".kts")) for f in f_names):
                     p_type = "kotlin"
                 elif any(f == "pubspec.yaml" or f.endswith(".dart") for f in f_names):
                     p_type = "flutter"
@@ -787,26 +860,56 @@ class ProjectWorkspaceService:
         return projects
 
     # Delegação compatível para o módulo Scaffolder desacoplado
-    def _generate_english_practice_web_scaffold(self, project_dir: Path, project_name: str) -> list[str]:
+    def _generate_english_practice_web_scaffold(
+        self, project_dir: Path, project_name: str
+    ) -> list[str]:
         return self.scaffolder._generate_english_practice_web_scaffold(project_dir, project_name)
 
-    def _generate_default_web_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
-        return self.scaffolder._generate_default_web_scaffold(project_dir, project_name, initial_prompt)
+    def _generate_default_web_scaffold(
+        self, project_dir: Path, project_name: str, initial_prompt: str
+    ) -> list[str]:
+        return self.scaffolder._generate_default_web_scaffold(
+            project_dir, project_name, initial_prompt
+        )
 
-    def _generate_default_flutter_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
-        return self.scaffolder._generate_default_flutter_scaffold(project_dir, project_name, initial_prompt)
+    def _generate_default_flutter_scaffold(
+        self, project_dir: Path, project_name: str, initial_prompt: str
+    ) -> list[str]:
+        return self.scaffolder._generate_default_flutter_scaffold(
+            project_dir, project_name, initial_prompt
+        )
 
-    def _generate_default_python_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
-        return self.scaffolder._generate_default_python_scaffold(project_dir, project_name, initial_prompt)
+    def _generate_default_python_scaffold(
+        self, project_dir: Path, project_name: str, initial_prompt: str, database: str = "none"
+    ) -> list[str]:
+        return self.scaffolder._generate_default_python_scaffold(
+            project_dir, project_name, initial_prompt, database=database
+        )
 
-    def _generate_default_java_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
-        return self.scaffolder._generate_default_java_scaffold(project_dir, project_name, initial_prompt)
+    def _generate_default_java_scaffold(
+        self, project_dir: Path, project_name: str, initial_prompt: str
+    ) -> list[str]:
+        return self.scaffolder._generate_default_java_scaffold(
+            project_dir, project_name, initial_prompt
+        )
 
-    def _generate_default_csharp_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
-        return self.scaffolder._generate_default_csharp_scaffold(project_dir, project_name, initial_prompt)
+    def _generate_default_csharp_scaffold(
+        self, project_dir: Path, project_name: str, initial_prompt: str
+    ) -> list[str]:
+        return self.scaffolder._generate_default_csharp_scaffold(
+            project_dir, project_name, initial_prompt
+        )
 
-    def _generate_default_go_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
-        return self.scaffolder._generate_default_go_scaffold(project_dir, project_name, initial_prompt)
+    def _generate_default_go_scaffold(
+        self, project_dir: Path, project_name: str, initial_prompt: str
+    ) -> list[str]:
+        return self.scaffolder._generate_default_go_scaffold(
+            project_dir, project_name, initial_prompt
+        )
 
-    def _generate_default_kotlin_scaffold(self, project_dir: Path, project_name: str, initial_prompt: str) -> list[str]:
-        return self.scaffolder._generate_default_kotlin_scaffold(project_dir, project_name, initial_prompt)
+    def _generate_default_kotlin_scaffold(
+        self, project_dir: Path, project_name: str, initial_prompt: str
+    ) -> list[str]:
+        return self.scaffolder._generate_default_kotlin_scaffold(
+            project_dir, project_name, initial_prompt
+        )

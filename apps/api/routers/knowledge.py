@@ -1,18 +1,19 @@
 import hashlib
 import logging
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from apps.api.auth import Principal, get_principal
-from apps.api.schemas import (
-    KnowledgeIndexFolderRequest,
-    KnowledgeIndexTextRequest,
-    KnowledgeSearchRequest,
-)
 from apps.api.deps import (
     db_manager,
     knowledge_vault_service,
     resolve_data_dir,
+)
+from apps.api.schemas import (
+    KnowledgeIndexFolderRequest,
+    KnowledgeIndexTextRequest,
+    KnowledgeSearchRequest,
 )
 
 logger = logging.getLogger("jarvis.api.knowledge")
@@ -26,6 +27,7 @@ def _private_owner(principal: Principal) -> str:
             detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
         )
     return principal.subject_id
+
 
 MAX_KNOWLEDGE_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_KNOWLEDGE_TEXT_BYTES = 1024 * 1024
@@ -76,9 +78,7 @@ def _validate_index_folder(folder_path: str, owner_user_id: str) -> Path:
 async def list_knowledge_documents_endpoint(
     principal: Principal = Depends(get_principal),
 ):
-    return knowledge_vault_service.list_documents(
-        owner_user_id=_private_owner(principal)
-    )
+    return knowledge_vault_service.list_documents(owner_user_id=_private_owner(principal))
 
 
 @router.post("/api/v1/knowledge/upload")
@@ -98,9 +98,7 @@ async def upload_knowledge_document_endpoint(
     if len(content_bytes) > MAX_KNOWLEDGE_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="O ficheiro excede o limite de 25 MB.")
     target_path.write_bytes(content_bytes)
-    result = knowledge_vault_service.index_file(
-        target_path, category=category, owner_user_id=owner
-    )
+    result = knowledge_vault_service.index_file(target_path, category=category, owner_user_id=owner)
     return result
 
 
@@ -111,7 +109,9 @@ async def index_knowledge_folder_endpoint(
     owner = _private_owner(principal)
     folder = _validate_index_folder(payload.folder_path, owner)
     return knowledge_vault_service.index_directory(
-        folder, category=payload.category, owner_user_id=owner,
+        folder,
+        category=payload.category,
+        owner_user_id=owner,
     )
 
 
@@ -123,7 +123,9 @@ async def index_knowledge_text_endpoint(
     if len(payload.content.encode("utf-8")) > MAX_KNOWLEDGE_TEXT_BYTES:
         raise HTTPException(status_code=413, detail="O texto excede o limite de 1 MB.")
     return knowledge_vault_service.index_text_snippet(
-        payload.doc_name, payload.content, category=payload.category,
+        payload.doc_name,
+        payload.content,
+        category=payload.category,
         owner_user_id=owner,
     )
 
@@ -133,7 +135,8 @@ async def search_knowledge_endpoint(
     payload: KnowledgeSearchRequest, principal: Principal = Depends(get_principal)
 ):
     return knowledge_vault_service.search(
-        payload.query, limit=payload.limit,
+        payload.query,
+        limit=payload.limit,
         owner_user_id=_private_owner(principal),
     )
 

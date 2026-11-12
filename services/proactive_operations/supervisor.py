@@ -97,7 +97,9 @@ class ProactiveSupervisor:
                     operation="PROACTIVE_FINDING_REPORTED",
                     status="AWAITING_APPROVAL" if approval_id else "RECORDED",
                     parameters={"project_id": project_id, "finding_id": finding_id},
-                    severity=AuditEventSeverity.WARNING if item.get("severity") == "HIGH" else AuditEventSeverity.INFO,
+                    severity=AuditEventSeverity.WARNING
+                    if item.get("severity") == "HIGH"
+                    else AuditEventSeverity.INFO,
                     reason=f"Achado de manutenção gerado proativamente: {item['title']}",
                 )
 

@@ -58,6 +58,7 @@ Se houver corrupção no arquivo `data/jarvis.db`:
 3. Execute o script de restauração:
    ```python
    from services.memory import DatabaseBackupManager
+
    mgr = DatabaseBackupManager(db_path="data/jarvis.db", backup_dir="data/backups")
    mgr.restore_latest_backup()
    ```

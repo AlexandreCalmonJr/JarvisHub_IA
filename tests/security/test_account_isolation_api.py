@@ -40,8 +40,11 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp
         owner_user_id=owner_a,
     )
     db_manager.add_chat_message(
-        session_id, "user", "mensagem privada da conta A",
-        project_id=project_id, owner_user_id=owner_a,
+        session_id,
+        "user",
+        "mensagem privada da conta A",
+        project_id=project_id,
+        owner_user_id=owner_a,
     )
     db_manager.insert_knowledge_chunks(
         doc_name=doc_name,
@@ -68,9 +71,7 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp
         },
         owner_user_id=owner_a,
     )
-    db_manager.set_user_profile(
-        {"displayName": "Perfil privado A"}, owner_user_id=owner_a
-    )
+    db_manager.set_user_profile({"displayName": "Perfil privado A"}, owner_user_id=owner_a)
     approval = security_core.approval_engine.create_request(
         task_id=f"approval-task-{suffix}",
         agent_role="jarvis_master",
@@ -142,10 +143,7 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp
             "/api/v1/agents/software_architect/memories", headers=headers_b
         )
         assert memories_b.status_code == 200
-        assert all(
-            row["content"] != "memória exclusiva da conta A"
-            for row in memories_b.json()
-        )
+        assert all(row["content"] != "memória exclusiva da conta A" for row in memories_b.json())
 
         skills_b = await client.get("/api/v1/skills", headers=headers_b)
         assert skills_b.status_code == 200
@@ -203,7 +201,9 @@ async def test_account_a_private_data_is_not_visible_or_mutable_by_account_b(tmp
     db_manager.delete_agent_memory(memory_id, owner_user_id=owner_a)
     db_manager.delete_user_skill(skill_id, owner_user_id=owner_a)
     security_core.approval_engine.reject_request(
-        approval.id, decided_by=owner_a, reason="limpeza de teste",
+        approval.id,
+        decided_by=owner_a,
+        reason="limpeza de teste",
         owner_user_id=owner_a,
     )
     workspace_service.delete_project(project_id)

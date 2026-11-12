@@ -53,7 +53,9 @@ class ScriptedChatProvider:
 @pytest.mark.asyncio
 async def test_data_scientist_autonomous_execution_with_duckdb(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-ds", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-ds", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
     broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
     db = DatabaseManager(str(tmp_path / "jarvis_test.db"))
@@ -68,9 +70,19 @@ async def test_data_scientist_autonomous_execution_with_duckdb(tmp_path):
     )
 
     # Cria script mock: primeiro chama duckdb_query, depois devolve a síntese final
-    call = ToolCall(id="call_duck_1", name="duckdb_query", arguments={"sql": "SELECT 100 as total, 'metrics' as metric"})
-    reply1 = ProviderReply(content="Calculando métricas analíticas no DuckDB...", tool_calls=[call], model="mock_ds")
-    reply2 = ProviderReply(content="Conclusão: O DuckDB confirmou total = 100 com sucesso.", tool_calls=[], model="mock_ds")
+    call = ToolCall(
+        id="call_duck_1",
+        name="duckdb_query",
+        arguments={"sql": "SELECT 100 as total, 'metrics' as metric"},
+    )
+    reply1 = ProviderReply(
+        content="Calculando métricas analíticas no DuckDB...", tool_calls=[call], model="mock_ds"
+    )
+    reply2 = ProviderReply(
+        content="Conclusão: O DuckDB confirmou total = 100 com sucesso.",
+        tool_calls=[],
+        model="mock_ds",
+    )
 
     provider = ScriptedChatProvider([reply1, reply2])
     runtime = AutonomousAgentRuntime(
@@ -124,7 +136,9 @@ async def test_data_scientist_autonomous_execution_with_duckdb(tmp_path):
 @pytest.mark.asyncio
 async def test_tool_filtering_per_specialist(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-filter", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-filter", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
     broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
 
@@ -161,7 +175,9 @@ async def test_tool_filtering_per_specialist(tmp_path):
 @pytest.mark.asyncio
 async def test_self_correction_on_tool_failure(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-sc", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-sc", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
     broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
 
@@ -170,7 +186,9 @@ async def test_self_correction_on_tool_failure(tmp_path):
     reply1 = ProviderReply(content="Vou ler o arquivo inexistente.", tool_calls=[call_fail])
 
     # 2º turno: agente recebe o erro com instrução de auto-correção e conclui
-    reply2 = ProviderReply(content="Percebi que o arquivo não existe. Auto-correção aplicada: vou documentar o cenário.")
+    reply2 = ProviderReply(
+        content="Percebi que o arquivo não existe. Auto-correção aplicada: vou documentar o cenário."
+    )
 
     provider = ScriptedChatProvider([reply1, reply2])
     runtime = AutonomousAgentRuntime(
@@ -201,11 +219,15 @@ async def test_self_correction_on_tool_failure(tmp_path):
 @pytest.mark.asyncio
 async def test_ask_mode_requires_approval_for_write(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-ask", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-ask", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
     broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
 
-    call_write = ToolCall(id="call_w_1", name="write_file", arguments={"path": "novo.py", "content": "print('novo')"})
+    call_write = ToolCall(
+        id="call_w_1", name="write_file", arguments={"path": "novo.py", "content": "print('novo')"}
+    )
     reply1 = ProviderReply(content="Gravando novo arquivo...", tool_calls=[call_write])
     reply2 = ProviderReply(content="Arquivo criado.")
 
@@ -240,12 +262,16 @@ async def test_ask_mode_requires_approval_for_write(tmp_path):
     assert any(e["type"] == "approval_required" for e in events)
     assert any(e["type"] == "tool_result" and e["success"] is True for e in events)
     assert (tmp_path / "novo.py").exists()
+    approval_id = next(e["approval_id"] for e in events if e["type"] == "approval_required")
+    assert sec.approval_engine.get_request(approval_id).status.value == "consumed"
 
 
 @pytest.mark.asyncio
 async def test_cybersecurity_engineer_scans_secrets_and_reports(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-sec", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-sec", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
     broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
 
@@ -255,7 +281,9 @@ async def test_cybersecurity_engineer_scans_secrets_and_reports(tmp_path):
 
     call = ToolCall(id="call_sec_1", name="scan_secrets", arguments={})
     reply1 = ProviderReply(content="Varrendo repositório por credenciais...", tool_calls=[call])
-    reply2 = ProviderReply(content="Identificada chave AWS exposta. Recomendada revogação imediata.")
+    reply2 = ProviderReply(
+        content="Identificada chave AWS exposta. Recomendada revogação imediata."
+    )
 
     provider = ScriptedChatProvider([reply1, reply2])
     runtime = AutonomousAgentRuntime(
@@ -282,11 +310,15 @@ async def test_cybersecurity_engineer_scans_secrets_and_reports(tmp_path):
 @pytest.mark.asyncio
 async def test_plan_mode_blocks_mutations_and_warns(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-plan", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-plan", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
     broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
 
-    call = ToolCall(id="call_mut_1", name="write_file", arguments={"path": "bad.txt", "content": "hello"})
+    call = ToolCall(
+        id="call_mut_1", name="write_file", arguments={"path": "bad.txt", "content": "hello"}
+    )
     reply1 = ProviderReply(content="Tentando gravar no modo PLAN...", tool_calls=[call])
     reply2 = ProviderReply(content="Compreendido. No modo PLAN apenas gero o plano.")
 
@@ -314,4 +346,3 @@ async def test_plan_mode_blocks_mutations_and_warns(tmp_path):
     assert tool_res["denied"] is True
     assert "estritamente de leitura" in tool_res["error"]
     assert not (tmp_path / "bad.txt").exists()
-

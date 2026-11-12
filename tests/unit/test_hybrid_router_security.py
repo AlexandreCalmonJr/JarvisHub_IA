@@ -154,7 +154,9 @@ async def test_vault_key_sensitive_data_without_approval_stays_local():
     assert vault.calls == []
     assert router.online_config.current_spend_usd == 0.0
 
-    containment = [e for e in audit.list_events() if e.operation == "SENSITIVE_DATA_LOCAL_CONTAINMENT"]
+    containment = [
+        e for e in audit.list_events() if e.operation == "SENSITIVE_DATA_LOCAL_CONTAINMENT"
+    ]
     assert len(containment) == 1
     assert containment[0].severity == AuditEventSeverity.WARNING
     assert containment[0].parameters_redacted["provider"] == "openai"
@@ -330,9 +332,7 @@ async def test_stream_with_approval_uses_vault_and_records_provider_usage():
         contains_sensitive_data=True,
         key_id="agent_key",
     )
-    chunks = await _collect(
-        router.route_inference_stream(request, has_external_data_approval=True)
-    )
+    chunks = await _collect(router.route_inference_stream(request, has_external_data_approval=True))
 
     assert "".join(chunks) == "Olá mundo"
     assert len(vault.calls) == 1
@@ -472,7 +472,9 @@ async def test_model_manager_routes_key_vault_when_online_config_disabled():
     res = await manager.generate(req_sensitive, has_external_data_approval=False)
     assert res.content == "resposta local segura"
     assert vault.calls == []
-    containment = [e for e in audit.list_events() if e.operation == "SENSITIVE_DATA_LOCAL_CONTAINMENT"]
+    containment = [
+        e for e in audit.list_events() if e.operation == "SENSITIVE_DATA_LOCAL_CONTAINMENT"
+    ]
     assert len(containment) == 1
 
     # 2. Com aprovação para dados sensíveis -> encaminha para o vault

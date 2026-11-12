@@ -186,7 +186,9 @@ class MaintenanceAuditModule {
     print("              REGISTO DE AUDITORIA IMUTAVEL (SECURITY CORE)              ")
     print("=" * 80)
     for evt in events:
-        print(f"  [{evt.timestamp.strftime('%H:%M:%S')}] [{evt.severity.value}] {evt.operation:<35} | Status: {evt.status}")
+        print(
+            f"  [{evt.timestamp.strftime('%H:%M:%S')}] [{evt.severity.value}] {evt.operation:<35} | Status: {evt.status}"
+        )
     print("=" * 80)
     print("OPERAÇÃO SUPERVISIONADA CONCLUÍDA COM TOTAL CONFORMIDADE E SEGURANÇA!")
     print("=" * 80)

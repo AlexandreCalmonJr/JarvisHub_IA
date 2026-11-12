@@ -100,25 +100,37 @@ def scan_hardware() -> dict[str, Any]:
                     g_name = g.get("Name", "Dispositivo de Vídeo").strip()
                     raw_ram = g.get("AdapterRAM", 0) or 0
                     vram_gb = round(raw_ram / (1024**3), 2)
-                    is_nvidia = "nvidia" in g_name.lower() or "geforce" in g_name.lower() or "quadro" in g_name.lower() or "rtx" in g_name.lower()
+                    is_nvidia = (
+                        "nvidia" in g_name.lower()
+                        or "geforce" in g_name.lower()
+                        or "quadro" in g_name.lower()
+                        or "rtx" in g_name.lower()
+                    )
                     if is_nvidia:
                         has_nvidia_cuda = True
-                    gpus.append({
-                        "name": g_name,
-                        "vram_gb": vram_gb,
-                        "is_dedicated": is_nvidia,
-                        "is_integrated": "intel" in g_name.lower() or "uhd" in g_name.lower() or "iris" in g_name.lower() or "radeon graphics" in g_name.lower(),
-                    })
+                    gpus.append(
+                        {
+                            "name": g_name,
+                            "vram_gb": vram_gb,
+                            "is_dedicated": is_nvidia,
+                            "is_integrated": "intel" in g_name.lower()
+                            or "uhd" in g_name.lower()
+                            or "iris" in g_name.lower()
+                            or "radeon graphics" in g_name.lower(),
+                        }
+                    )
         except Exception as e:
             logger.debug("Não foi possível ler GPU via WMI: %s", e)
 
     if not gpus:
-        gpus.append({
-            "name": "Adaptador Gráfico Genérico / Integrado",
-            "vram_gb": 1.0,
-            "is_dedicated": False,
-            "is_integrated": True,
-        })
+        gpus.append(
+            {
+                "name": "Adaptador Gráfico Genérico / Integrado",
+                "vram_gb": 1.0,
+                "is_dedicated": False,
+                "is_integrated": True,
+            }
+        )
 
     # 4. Modelos Locais Instalados no Ollama
     ollama_models = []
@@ -133,13 +145,15 @@ def scan_hardware() -> dict[str, Any]:
                     name = m.get("name", "")
                     size_gb = round(m.get("size", 0) / (1024**3), 2)
                     details = m.get("details", {})
-                    ollama_models.append({
-                        "name": name,
-                        "size_gb": size_gb,
-                        "parameter_size": details.get("parameter_size", "unknown"),
-                        "quantization": details.get("quantization_level", "unknown"),
-                        "family": details.get("family", "unknown"),
-                    })
+                    ollama_models.append(
+                        {
+                            "name": name,
+                            "size_gb": size_gb,
+                            "parameter_size": details.get("parameter_size", "unknown"),
+                            "quantization": details.get("quantization_level", "unknown"),
+                            "family": details.get("family", "unknown"),
+                        }
+                    )
     except Exception:
         ollama_online = False
 

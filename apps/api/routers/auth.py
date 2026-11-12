@@ -23,7 +23,6 @@ class AuthLoginRequest(BaseModel):
     token: str = Field(..., min_length=1, description="Token de administrador ou sessão")
 
 
-
 class PasswordLoginRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=48, pattern=r"^[a-zA-Z0-9._-]+$")
     password: str = Field(..., min_length=1, max_length=256)
@@ -122,7 +121,6 @@ async def login(payload: AuthLoginRequest, request: Request, response: Response)
         severity=AuditEventSeverity.INFO,
     )
     return {"status": "authenticated", **_session_payload(session)}
-
 
 
 def _revoke_user_sessions(username: str) -> None:
@@ -262,9 +260,14 @@ async def exchange_bootstrap(
 async def me(principal: Principal = Depends(get_principal)):
     payload = principal.to_dict()
     payload["user_id"] = principal.subject_id
-    environment = __import__("os").environ.get(
-        "JARVIS_ENVIRONMENT", __import__("os").environ.get("JARVIS_ENV", "development")
-    ).strip().lower()
+    environment = (
+        __import__("os")
+        .environ.get(
+            "JARVIS_ENVIRONMENT", __import__("os").environ.get("JARVIS_ENV", "development")
+        )
+        .strip()
+        .lower()
+    )
     payload["must_change_password"] = bool(
         principal.kind == "human"
         and principal.subject_id.casefold() == "admin"
@@ -287,18 +290,29 @@ async def change_own_password(
 ):
     """Permite ao utilizador autenticado trocar a própria palavra-passe."""
     if principal.kind != "human" or not principal.session_id or principal.via_admin_token:
-        raise HTTPException(status_code=403, detail="Inicie sessão com a sua conta para alterar a palavra-passe.")
-    if not auth_service.check_rate_limit(f"password-change:{principal.subject_id}", limit=5, window_seconds=300):
-        raise HTTPException(status_code=429, detail="Muitas tentativas de alteração. Tente novamente mais tarde.")
+        raise HTTPException(
+            status_code=403, detail="Inicie sessão com a sua conta para alterar a palavra-passe."
+        )
+    if not auth_service.check_rate_limit(
+        f"password-change:{principal.subject_id}", limit=5, window_seconds=300
+    ):
+        raise HTTPException(
+            status_code=429, detail="Muitas tentativas de alteração. Tente novamente mais tarde."
+        )
     user = auth_service.user_store.authenticate(principal.subject_id, payload.current_password)
     if user is None:
         raise HTTPException(status_code=400, detail="A palavra-passe atual não confere.")
     if payload.current_password == payload.new_password:
-        raise HTTPException(status_code=400, detail="A nova palavra-passe deve ser diferente da atual.")
+        raise HTTPException(
+            status_code=400, detail="A nova palavra-passe deve ser diferente da atual."
+        )
     if not auth_service.user_store.set_password(principal.subject_id, payload.new_password):
         raise HTTPException(status_code=404, detail="Conta não encontrada.")
     for session in auth_service.security.sessions.list_sessions(include_revoked=False):
-        if session.user_id.casefold() == principal.subject_id.casefold() and session.session_id != principal.session_id:
+        if (
+            session.user_id.casefold() == principal.subject_id.casefold()
+            and session.session_id != principal.session_id
+        ):
             auth_service.security.sessions.revoke_session(session.session_id)
     auth_service.security.audit.record_event(
         operation="AUTH_OWN_PASSWORD_CHANGED",
@@ -374,9 +388,7 @@ async def list_human_sessions(principal: Principal = Depends(require_admin)):
 
 
 @router.delete("/sessions/{session_id}")
-async def revoke_human_session(
-    session_id: str, principal: Principal = Depends(require_admin)
-):
+async def revoke_human_session(session_id: str, principal: Principal = Depends(require_admin)):
     revoked = auth_service.security.sessions.revoke_session(session_id)
     if not revoked:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")

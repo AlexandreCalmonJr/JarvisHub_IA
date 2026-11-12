@@ -31,7 +31,7 @@ class SecurityPolicyGenerator:
             else ""
         )
 
-        return f'''# JARVIS Hardened Security Middleware para FastAPI
+        return f"""# JARVIS Hardened Security Middleware para FastAPI
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -64,7 +64,7 @@ def apply_security_hardening(app: FastAPI) -> None:
             return response
 
     app.add_middleware(SecurityHeadersMiddleware)
-'''
+"""
 
     def generate_express_policy(
         self,
@@ -74,7 +74,7 @@ def apply_security_hardening(app: FastAPI) -> None:
         origins = allowed_origins or ["http://127.0.0.1:3000", "http://localhost:3000"]
         origins_repr = ", ".join(f"'{o}'" for o in origins)
 
-        return f'''// JARVIS Hardened Security Middleware para Express.js
+        return f"""// JARVIS Hardened Security Middleware para Express.js
 // Requer: npm install helmet cors
 const helmet = require('helmet');
 const cors = require('cors');
@@ -111,14 +111,14 @@ function applySecurityHardening(app) {{
 }}
 
 module.exports = {{ applySecurityHardening }};
-'''
+"""
 
     def generate_nginx_policy(
         self,
         allowed_origins: list[str] | None = None,
     ) -> str:
         """Gera bloco de configuração Nginx com headers seguros."""
-        return '''# JARVIS Hardened Security Configuration para Nginx
+        return """# JARVIS Hardened Security Configuration para Nginx
 # Adicione este bloco dentro do seu server { ... } ou location / { ... }
 
 # Previne Clickjacking
@@ -138,7 +138,7 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" alway
 
 # Content Security Policy (CSP)
 add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:*;" always;
-'''
+"""
 
     def get_available_templates(self) -> list[dict[str, Any]]:
         """Retorna lista de templates prontos com instruções e código."""

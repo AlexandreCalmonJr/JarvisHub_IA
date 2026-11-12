@@ -333,21 +333,21 @@ class OllamaChatProvider(ChatProvider):
             payload["tools"] = [spec.to_openai_schema() for spec in tools]
 
         try:
-            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-                async with client.stream(
-                    "POST", f"{self.base_url}/api/chat", json=payload
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line.strip():
-                            continue
-                        try:
-                            data = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        text = (data.get("message") or {}).get("content") or ""
-                        if text:
-                            yield text
+            async with (
+                httpx.AsyncClient(timeout=timeout_seconds) as client,
+                client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response,
+            ):
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    text = (data.get("message") or {}).get("content") or ""
+                    if text:
+                        yield text
         except httpx.HTTPStatusError as exc:
             detail = ""
             try:
@@ -395,9 +395,7 @@ class OpenAICompatibleChatProvider(ChatProvider):
         timeout_seconds: float,
     ) -> ProviderReply:
         if not self.api_key:
-            raise ProviderError(
-                f"Chave de API não configurada para o provedor '{self.name}'."
-            )
+            raise ProviderError(f"Chave de API não configurada para o provedor '{self.name}'.")
 
         target_model = self.resolve_model(model)
         messages = to_openai_messages(turns)
@@ -435,9 +433,7 @@ class OpenAICompatibleChatProvider(ChatProvider):
                 f"Provedor '{self.name}' respondeu HTTP {status}: {detail}"
             ) from exc
         except httpx.HTTPError as exc:
-            raise ProviderError(
-                f"Falha de conexão com o provedor '{self.name}': {exc}"
-            ) from exc
+            raise ProviderError(f"Falha de conexão com o provedor '{self.name}': {exc}") from exc
 
         choices = data.get("choices") or []
         choice = choices[0] if choices else {}
@@ -459,7 +455,9 @@ class OpenAICompatibleChatProvider(ChatProvider):
             model=data.get("model") or target_model,
             prompt_tokens=int(usage.get("prompt_tokens") or 0),
             completion_tokens=int(usage.get("completion_tokens") or 0),
-            finish_reason=str(choice.get("finish_reason") or ("tool_calls" if tool_calls else "stop")),
+            finish_reason=str(
+                choice.get("finish_reason") or ("tool_calls" if tool_calls else "stop")
+            ),
         )
 
     async def stream(
@@ -473,9 +471,7 @@ class OpenAICompatibleChatProvider(ChatProvider):
         timeout_seconds: float,
     ) -> AsyncIterator[str]:
         if not self.api_key:
-            raise ProviderError(
-                f"Chave de API não configurada para o provedor '{self.name}'."
-            )
+            raise ProviderError(f"Chave de API não configurada para o provedor '{self.name}'.")
 
         target_model = self.resolve_model(model)
         payload: dict[str, Any] = {
@@ -494,30 +490,32 @@ class OpenAICompatibleChatProvider(ChatProvider):
             "Content-Type": "application/json",
         }
         try:
-            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(timeout=timeout_seconds) as client,
+                client.stream(
                     "POST",
                     f"{self.base_url}/chat/completions",
                     headers=headers,
                     json=payload,
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line or not line.startswith("data:"):
-                            continue
-                        data_str = line[5:].strip()
-                        if not data_str or data_str == "[DONE]":
-                            continue
-                        try:
-                            chunk = json.loads(data_str)
-                        except json.JSONDecodeError:
-                            continue
-                        choices = chunk.get("choices") or []
-                        if not choices:
-                            continue
-                        text = (choices[0].get("delta") or {}).get("content") or ""
-                        if text:
-                            yield text
+                ) as response,
+            ):
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    text = (choices[0].get("delta") or {}).get("content") or ""
+                    if text:
+                        yield text
         except httpx.HTTPStatusError as exc:
             detail = ""
             try:
@@ -528,9 +526,7 @@ class OpenAICompatibleChatProvider(ChatProvider):
                 f"Provedor '{self.name}' respondeu HTTP {exc.response.status_code}: {detail}"
             ) from exc
         except httpx.HTTPError as exc:
-            raise ProviderError(
-                f"Falha de conexão com o provedor '{self.name}': {exc}"
-            ) from exc
+            raise ProviderError(f"Falha de conexão com o provedor '{self.name}': {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -599,9 +595,7 @@ class AnthropicChatProvider(ChatProvider):
                 detail = exc.response.text[:300]
             except Exception:
                 detail = str(exc)
-            raise ProviderError(
-                f"Anthropic respondeu HTTP {status}: {detail}"
-            ) from exc
+            raise ProviderError(f"Anthropic respondeu HTTP {status}: {detail}") from exc
         except httpx.HTTPError as exc:
             raise ProviderError(f"Falha de conexão com a Anthropic: {exc}") from exc
 
@@ -665,31 +659,33 @@ class AnthropicChatProvider(ChatProvider):
             "content-type": "application/json",
         }
         try:
-            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(timeout=timeout_seconds) as client,
+                client.stream(
                     "POST", f"{self.base_url}/messages", headers=headers, json=payload
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line or not line.startswith("data:"):
-                            continue
-                        data_str = line[5:].strip()
-                        if not data_str:
-                            continue
-                        try:
-                            event = json.loads(data_str)
-                        except json.JSONDecodeError:
-                            continue
-                        event_type = event.get("type")
-                        if event_type == "content_block_delta":
-                            delta = event.get("delta") or {}
-                            if delta.get("type") == "text_delta":
-                                text = delta.get("text") or ""
-                                if text:
-                                    yield text
-                        elif event_type == "error":
-                            detail = (event.get("error") or {}).get("message", "erro desconhecido")
-                            raise ProviderError(f"Anthropic interrompeu o streaming: {detail}")
+                ) as response,
+            ):
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if not data_str:
+                        continue
+                    try:
+                        event = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    event_type = event.get("type")
+                    if event_type == "content_block_delta":
+                        delta = event.get("delta") or {}
+                        if delta.get("type") == "text_delta":
+                            text = delta.get("text") or ""
+                            if text:
+                                yield text
+                    elif event_type == "error":
+                        detail = (event.get("error") or {}).get("message", "erro desconhecido")
+                        raise ProviderError(f"Anthropic interrompeu o streaming: {detail}")
         except httpx.HTTPStatusError as exc:
             detail = ""
             try:
@@ -1047,11 +1043,7 @@ def resolve_governed_chat_provider(
         except Exception as exc:
             logger.warning("Falha ao resolver a chave da conta: %s", exc)
 
-    if (
-        account_profile is not None
-        and account_profile.is_active
-        and account_profile.api_key
-    ):
+    if account_profile is not None and account_profile.is_active and account_profile.api_key:
         # Segredo recuperado em memória apenas para criar o provider;
         # nunca é persistido na configuração de agentes.
         effective_config = SimpleNamespace(

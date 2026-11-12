@@ -8,6 +8,7 @@ Valida:
 """
 
 from pathlib import Path
+
 import pytest
 
 from services.quality_studio.test_runner import QualityStudioService
@@ -74,11 +75,11 @@ def test_quality_studio_generate_playwright():
 
     assert "def test_login_e_chat_e2e" in script
     assert "from playwright.sync_api import Page, expect" in script
-    assert "page.goto(\"http://127.0.0.1:8000/studio\", timeout=10000)" in script
-    assert "page.locator(\"#chat-input\").fill(\"Olá JARVIS\")" in script
-    assert "page.locator(\"#send-btn\").click()" in script
-    assert "expect(page.locator(\".chat-bubble\")).to_be_visible()" in script
-    assert "page.screenshot(path=\"screenshot_login_e_chat.png\")" in script
+    assert 'page.goto("http://127.0.0.1:8000/studio", timeout=10000)' in script
+    assert 'page.locator("#chat-input").fill("Olá JARVIS")' in script
+    assert 'page.locator("#send-btn").click()' in script
+    assert 'expect(page.locator(".chat-bubble")).to_be_visible()' in script
+    assert 'page.screenshot(path="screenshot_login_e_chat.png")' in script
 
 
 def test_quality_studio_chaos_edge_cases():

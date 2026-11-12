@@ -7,6 +7,7 @@ Valida:
 """
 
 from pathlib import Path
+
 import pytest
 
 from services.engineering_intelligence.tech_debt_analyzer import EngineeringIntelligenceService
@@ -76,7 +77,9 @@ def test_engineering_intelligence_executive_report(tmp_path: Path, sample_code_p
     ws = MockWorkspace(tmp_path)
     service = EngineeringIntelligenceService(workspace_service=ws)
 
-    report = service.generate_executive_report(project_id="sample_system", owner_user_id="integration-account")
+    report = service.generate_executive_report(
+        project_id="sample_system", owner_user_id="integration-account"
+    )
     assert report["status"] == "generated"
     assert "sample_system" in report["project"]
     assert "Relatório Executivo de Engenharia" in report["markdown"]

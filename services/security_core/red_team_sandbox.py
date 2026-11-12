@@ -53,7 +53,7 @@ class RedTeamSandboxService:
                 "COMMAND_INJECTION",
                 "CRITICAL",
                 "Uso arriscado de shell=True no subprocess, permitindo injeção de comandos do sistema operacional.",
-                "Passe os argumentos como uma lista de tokens ('[\"cmd\", \"arg1\"]') e remova shell=True.",
+                'Passe os argumentos como uma lista de tokens (\'["cmd", "arg1"]\') e remova shell=True.',
             ),
             (
                 r"""(?:os\.system|os\.popen)\s*\(""",
@@ -118,7 +118,9 @@ class RedTeamSandboxService:
             ),
         ]
 
-        all_rules = sqli_patterns + cmd_patterns + traversal_patterns + xss_patterns + secrets_patterns
+        all_rules = (
+            sqli_patterns + cmd_patterns + traversal_patterns + xss_patterns + secrets_patterns
+        )
 
         for idx, line in enumerate(lines, start=1):
             stripped = line.strip()
@@ -128,15 +130,17 @@ class RedTeamSandboxService:
 
             for pattern, vtype, severity, description, remediation in all_rules:
                 if re.search(pattern, line, re.IGNORECASE):
-                    findings.append({
-                        "file": relative_path,
-                        "line": idx,
-                        "snippet": stripped[:120],
-                        "type": vtype,
-                        "severity": severity,
-                        "description": description,
-                        "remediation": remediation,
-                    })
+                    findings.append(
+                        {
+                            "file": relative_path,
+                            "line": idx,
+                            "snippet": stripped[:120],
+                            "type": vtype,
+                            "severity": severity,
+                            "description": description,
+                            "remediation": remediation,
+                        }
+                    )
 
         return findings
 

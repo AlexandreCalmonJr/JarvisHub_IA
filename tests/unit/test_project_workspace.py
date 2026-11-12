@@ -3,6 +3,7 @@ from pathlib import Path
 from agents.registry import AgentRegistry
 from packages.contracts.agent import AgentRole
 from packages.contracts.security import ProjectWorkMode
+from services.backend_studio.sql_playground import SQLPlaygroundService
 from services.project_workspace import (
     ProjectAnalyzer,
     ProjectScanner,
@@ -37,7 +38,10 @@ def test_project_workspace_scan_and_analysis_on_flutter_project():
     demo_path.mkdir(parents=True, exist_ok=True)
     pubspec_path = demo_path / "pubspec.yaml"
     if not pubspec_path.exists():
-        pubspec_path.write_text("name: demo_flutter_app\ndependencies:\n  flutter:\n    sdk: flutter\n  cupertino_icons: ^1.0.2\n", encoding="utf-8")
+        pubspec_path.write_text(
+            "name: demo_flutter_app\ndependencies:\n  flutter:\n    sdk: flutter\n  cupertino_icons: ^1.0.2\n",
+            encoding="utf-8",
+        )
     lib_path = demo_path / "lib"
     lib_path.mkdir(parents=True, exist_ok=True)
     main_path = lib_path / "main.dart"
@@ -140,6 +144,58 @@ def test_project_workspace_scaffold_and_file_modification(tmp_path):
     assert "Cafeteria Teste" in backup_path.read_text(encoding="utf-8")
 
 
+def test_python_sqlite_scaffold_is_persistent_and_inspectable_readonly(tmp_path):
+    security_core = SecurityCore()
+    workspace_service = ProjectWorkspaceService(security_core=security_core, base_dir=tmp_path)
+    result = workspace_service.scaffold_project(
+        project_id="sqlite-api",
+        name="SQLite API",
+        project_type="python",
+        database="sqlite",
+    )
+    project_dir = tmp_path / "sqlite-api"
+    assert result["database"] == "sqlite"
+    assert {"schema.sql", "seed.py", "database.py", "init_db.py", ".env.example"} <= set(
+        result["files_created"]
+    )
+    assert "list_items_db()" in (project_dir / "main.py").read_text(encoding="utf-8")
+
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [sys.executable, "init_db.py"], cwd=project_dir, check=True, capture_output=True, text=True
+    )
+    sql_service = SQLPlaygroundService(workspace_service)
+    databases = sql_service.find_project_databases("sqlite-api")
+    assert any(item["relative_path"] == "app.db" for item in databases)
+    inspected = sql_service.inspect_database("app.db", "sqlite-api")
+    items = next(table for table in inspected["tables"] if table["name"] == "items")
+    assert items["row_count"] == 2
+    query_result = sql_service.execute_query(
+        "app.db", "SELECT COUNT(*) AS total FROM items", "sqlite-api"
+    )
+    assert query_result["rows"][0]["total"] == 2
+    rejected = sql_service.execute_query("app.db", "DELETE FROM items", "sqlite-api")
+    assert rejected["success"] is False
+    after_rejected_write = sql_service.inspect_database("app.db", "sqlite-api")
+    assert (
+        next(table for table in after_rejected_write["tables"] if table["name"] == "items")[
+            "row_count"
+        ]
+        == 2
+    )
+
+    generated_tests = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q"],
+        cwd=project_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert generated_tests.returncode == 0, generated_tests.stdout + generated_tests.stderr
+
+
 def test_multilang_scaffolding_and_workspace_management(tmp_path):
     security_core = SecurityCore()
     workspace_service = ProjectWorkspaceService(security_core=security_core, base_dir=tmp_path)
@@ -215,4 +271,3 @@ def test_multilang_scaffolding_and_workspace_management(tmp_path):
     import_res = workspace_service.import_external_project(str(external_folder), "projeto-externo")
     assert import_res["id"] == "projeto-externo"
     assert import_res["file_count"] >= 1
-

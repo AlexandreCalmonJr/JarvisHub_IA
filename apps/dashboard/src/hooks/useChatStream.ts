@@ -535,7 +535,12 @@ export function useChatStream(
           metaInfo = meta;
         },
         (done: any) => {
-          const finalText = done.final_summary || accumulatedText || 'Tarefa concluída.';
+          const baseText = done.final_summary || accumulatedText || 'Tarefa concluída.';
+          const sourceList = Array.isArray(done.sources) ? done.sources : [];
+          const citations = sourceList.length
+            ? `\n\nFontes consultadas:\n${sourceList.map((source: any) => `- [${source.title || source.url}](${source.url})${source.retrieved_at ? ` · ${source.retrieved_at}` : ''}`).join('\n')}`
+            : '';
+          const finalText = `${baseText}${citations}`;
           setMessages((prev) => {
             const next = [...prev];
             const lastIdx = next.length - 1;
@@ -602,14 +607,21 @@ export function useChatStream(
             }
           }
         },
-        (errStr: string) => {
+        (errStr: string, code?: string) => {
+          const errorLabel = code === 'provider_unavailable'
+            ? 'Provedor de IA indisponível'
+            : code === 'timeout'
+              ? 'Tempo limite excedido'
+              : code === 'policy_denied'
+                ? 'Ação bloqueada por política'
+                : 'Erro interno';
           setMessages((prev) => {
             const next = [...prev];
             const lastIdx = next.length - 1;
             if (lastIdx >= 0 && next[lastIdx].sender === 'jarvis') {
               next[lastIdx] = {
                 ...next[lastIdx],
-                text: `[Erro no processamento]: ${errStr}`,
+                text: `[${errorLabel}]: ${errStr}`,
               };
             }
             return next;

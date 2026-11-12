@@ -1,6 +1,8 @@
 from unittest.mock import AsyncMock, patch
+
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from apps.api.main import app, db_manager, model_manager
 from services.hardware.performance_manager import HardwarePerformanceManager
 from services.model_runtime.adapter import OllamaAdapter
@@ -52,7 +54,12 @@ def test_frente_04_battery_aware_auto_mode():
     with patch.object(
         perf_mgr,
         "get_power_status",
-        return_value={"has_battery": True, "percent": 45, "power_plugged": False, "secs_left": 3600},
+        return_value={
+            "has_battery": True,
+            "percent": 45,
+            "power_plugged": False,
+            "secs_left": 3600,
+        },
     ):
         profile_battery = perf_mgr.get_performance_profile()
         assert profile_battery["mode"] == "auto"
@@ -63,8 +70,10 @@ def test_frente_04_battery_aware_auto_mode():
 
 
 @pytest.mark.asyncio
-async def test_frente_04_ollama_adapter_threads_injection():
+async def test_frente_04_ollama_adapter_performance_options(monkeypatch):
     """Valida se o OllamaAdapter injeta options.num_thread nas requisições HTTP."""
+    monkeypatch.setenv("JARVIS_OLLAMA_KEEP_ALIVE", "20m")
+    monkeypatch.setenv("JARVIS_OLLAMA_NUM_CTX", "8192")
     adapter = OllamaAdapter(base_url="http://127.0.0.1:11434")
     adapter.set_cpu_threads(4)
 
@@ -89,6 +98,8 @@ async def test_frente_04_ollama_adapter_threads_injection():
         resp = await adapter.generate(req)
         assert resp.content == "Resposta teste"
         assert captured_payload.get("options", {}).get("num_thread") == 4
+        assert captured_payload["keep_alive"] == "20m"
+        assert captured_payload["options"]["num_ctx"] == 8192
 
 
 @pytest.mark.asyncio

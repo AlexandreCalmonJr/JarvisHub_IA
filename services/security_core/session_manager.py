@@ -123,7 +123,7 @@ class SessionManager:
         user_id: str,
         role: str = UserRole.DEVELOPER,
         scopes: list[str] | None = None,
-        expiry_hours: int | float | None = None,
+        expiry_hours: float | None = None,
     ) -> UserSession:
         session_id = f"sess_{uuid.uuid4().hex}"
         now = datetime.now(UTC)

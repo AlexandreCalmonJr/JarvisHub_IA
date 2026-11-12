@@ -47,8 +47,13 @@ class ToolGateway:
         self, request: ToolExecutionRequest, owner_user_id: str, actor_role: str = "developer"
     ) -> ToolExecutionResult:
         if not owner_user_id:
-            raise PermissionDeniedError("A conta proprietária é obrigatória para executar ferramentas.")
-        if request.tool_name in {"run_tests", "run_linter", "duckdb_query", "execute_command"} and actor_role != "admin":
+            raise PermissionDeniedError(
+                "A conta proprietária é obrigatória para executar ferramentas."
+            )
+        if (
+            request.tool_name in {"run_tests", "run_linter", "duckdb_query", "execute_command"}
+            and actor_role != "admin"
+        ):
             raise PermissionDeniedError(
                 "Esta ferramenta executa código ou acessa arquivos por SQL e está restrita ao administrador até existir isolamento de processo por conta."
             )
@@ -67,7 +72,12 @@ class ToolGateway:
         # 2. Verificação no Catálogo de Ferramentas Permitidas
         tool_def = self.tool_registry.get_tool(request.tool_name)
         if not tool_def:
-            self._audit(request, "DENIED", owner_user_id=owner_user_id, reason="Ferramenta não permitida ou desconhecida")
+            self._audit(
+                request,
+                "DENIED",
+                owner_user_id=owner_user_id,
+                reason="Ferramenta não permitida ou desconhecida",
+            )
             raise PermissionDeniedError(
                 f"A ferramenta '{request.tool_name}' não está no catálogo autorizado."
             )
@@ -83,7 +93,11 @@ class ToolGateway:
         try:
             role_enum = AgentRole(request.agent_role)
             profile = self.agent_registry.get_profile(role_enum)
-            if profile and getattr(profile, "is_read_only", False) and tool_def.category not in NON_MUTATING_CATEGORIES:
+            if (
+                profile
+                and getattr(profile, "is_read_only", False)
+                and tool_def.category not in NON_MUTATING_CATEGORIES
+            ):
                 raise PermissionDeniedError(
                     f"O agente '{request.agent_role}' está configurado em modo Somente Leitura (Read-Only) e não pode executar '{request.tool_name}'."
                 )
@@ -109,7 +123,9 @@ class ToolGateway:
                 raise PermissionDeniedError(
                     f"A ferramenta '{request.tool_name}' exige autorização humana explícita."
                 )
-            appr = self.security_core.approval_engine.get_request(request.approval_id, owner_user_id=owner_user_id)
+            appr = self.security_core.approval_engine.get_request(
+                request.approval_id, owner_user_id=owner_user_id
+            )
             if not appr or appr.status != ApprovalStatus.APPROVED:
                 raise PermissionDeniedError(
                     f"Aprovação '{request.approval_id}' não autorizada ou pendente."
@@ -219,7 +235,9 @@ class ToolGateway:
                 matches: list[str] = []
                 if resolved_dir.is_dir():
                     for file_p in resolved_dir.rglob("*"):
-                        if file_p.is_file() and not any(part.startswith(".") for part in file_p.parts):
+                        if file_p.is_file() and not any(
+                            part.startswith(".") for part in file_p.parts
+                        ):
                             try:
                                 text = file_p.read_text(encoding="utf-8", errors="ignore")
                                 if query.lower() in text.lower():
@@ -236,7 +254,9 @@ class ToolGateway:
             elif request.tool_name == "duckdb_query":
                 sql = request.arguments.get("sql", request.arguments.get("query", ""))
                 max_rows = request.arguments.get("max_rows", 50)
-                ok, out, err = execute_duckdb_query(sql=sql, project_root=project_root, max_rows=max_rows)
+                ok, out, err = execute_duckdb_query(
+                    sql=sql, project_root=project_root, max_rows=max_rows
+                )
                 result = ToolExecutionResult(
                     tool_name=request.tool_name,
                     success=ok,
@@ -258,7 +278,9 @@ class ToolGateway:
 
             elif request.tool_name == "scan_sast_patterns":
                 target_p = request.arguments.get("path", ".")
-                ok, out, err = execute_scan_sast_patterns(project_root=project_root, target_path=target_p)
+                ok, out, err = execute_scan_sast_patterns(
+                    project_root=project_root, target_path=target_p
+                )
                 result = ToolExecutionResult(
                     tool_name=request.tool_name,
                     success=ok,
@@ -290,7 +312,9 @@ class ToolGateway:
             elif request.tool_name == "sql_query_explain":
                 sql = request.arguments.get("sql", request.arguments.get("query", ""))
                 db_name = request.arguments.get("db_filename", "jarvis.db")
-                ok, out, err = execute_sql_query_explain(sql=sql, project_root=project_root, db_filename=db_name)
+                ok, out, err = execute_sql_query_explain(
+                    sql=sql, project_root=project_root, db_filename=db_name
+                )
                 result = ToolExecutionResult(
                     tool_name=request.tool_name,
                     success=ok,
@@ -309,6 +333,7 @@ class ToolGateway:
             elif request.tool_name == "web_search":
                 query = request.arguments.get("query", "")
                 from .web_search import safe_web_search
+
                 search_results = await safe_web_search.search(query=query)
                 formatted = [f"**{r.title}** ({r.url})\n{r.snippet}" for r in search_results]
                 result = ToolExecutionResult(
@@ -336,7 +361,9 @@ class ToolGateway:
             elif request.tool_name == "edit_file":
                 rel_path = request.arguments.get("path", request.arguments.get("file_path", ""))
                 target = request.arguments.get("target", request.arguments.get("old_str", ""))
-                replacement = request.arguments.get("replacement", request.arguments.get("new_str", ""))
+                replacement = request.arguments.get(
+                    "replacement", request.arguments.get("new_str", "")
+                )
                 resolved_path = self.security_core.permission_engine.validate_path_access(
                     request.project_id, rel_path
                 )
@@ -382,7 +409,9 @@ class ToolGateway:
                 result = ToolExecutionResult(
                     tool_name=request.tool_name,
                     success=True,
-                    stdout="\n".join(matches_glob[:100]) if matches_glob else "Nenhum arquivo encontrado pelo padrão.",
+                    stdout="\n".join(matches_glob[:100])
+                    if matches_glob
+                    else "Nenhum arquivo encontrado pelo padrão.",
                     duration_ms=(time.perf_counter() - start_time) * 1000.0,
                 )
 
@@ -396,7 +425,9 @@ class ToolGateway:
                 regex = re.compile(pattern, re.IGNORECASE)
                 if resolved_dir.is_dir():
                     for file_p in resolved_dir.rglob("*"):
-                        if file_p.is_file() and not any(part.startswith(".") for part in file_p.parts):
+                        if file_p.is_file() and not any(
+                            part.startswith(".") for part in file_p.parts
+                        ):
                             try:
                                 text = file_p.read_text(encoding="utf-8", errors="ignore")
                                 for lineno, line in enumerate(text.splitlines(), start=1):
@@ -412,7 +443,9 @@ class ToolGateway:
                 result = ToolExecutionResult(
                     tool_name=request.tool_name,
                     success=True,
-                    stdout="\n".join(matches_grep) if matches_grep else "Nenhum resultado correspondente ao padrão.",
+                    stdout="\n".join(matches_grep)
+                    if matches_grep
+                    else "Nenhum resultado correspondente ao padrão.",
                     duration_ms=(time.perf_counter() - start_time) * 1000.0,
                 )
 
@@ -435,7 +468,22 @@ class ToolGateway:
             else:
                 raise PermissionDeniedError(f"Handler para '{request.tool_name}' não implementado.")
 
-            self._audit(request, "SUCCESS", owner_user_id=owner_user_id, parameters={"duration_ms": result.duration_ms})
+            audit_parameters: dict[str, Any] = {"duration_ms": result.duration_ms}
+            if request.tool_name == "execute_command":
+                audit_parameters.update(
+                    command=str(request.arguments.get("command", ""))[:2000],
+                    approval_id=request.approval_id,
+                    exit_code=result.exit_code,
+                    output_redacted=result.stdout[:2000],
+                    stderr_redacted=result.stderr[:2000],
+                )
+            self._audit(
+                request,
+                "SUCCESS" if result.success else "FAILED",
+                owner_user_id=owner_user_id,
+                parameters=audit_parameters,
+                reason=result.error_message,
+            )
             return result
 
         except Exception as exc:

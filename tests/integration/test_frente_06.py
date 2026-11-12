@@ -9,6 +9,7 @@ Valida:
 
 import sqlite3
 from pathlib import Path
+
 import pytest
 
 from services.backend_studio.mock_server import MockServerService
@@ -70,17 +71,20 @@ def test_mock_server_crud_and_serving(temp_db):
     mock_service = MockServerService(db_manager=temp_db)
 
     # 1. Cria endpoint simulado
-    created = mock_service.create_or_update_endpoint({
-        "id": "mock_users",
-        "name": "Lista de Usuários",
-        "method": "GET",
-        "path": "/api/users",
-        "status_code": 200,
-        "response_body": [{"id": 1, "name": "Dev Local"}],
-        "headers": {"X-Custom-Mock": "JARVIS"},
-        "latency_ms": 10,
-        "enabled": True,
-    }, owner_user_id="integration-account")
+    created = mock_service.create_or_update_endpoint(
+        {
+            "id": "mock_users",
+            "name": "Lista de Usuários",
+            "method": "GET",
+            "path": "/api/users",
+            "status_code": 200,
+            "response_body": [{"id": 1, "name": "Dev Local"}],
+            "headers": {"X-Custom-Mock": "JARVIS"},
+            "latency_ms": 10,
+            "enabled": True,
+        },
+        owner_user_id="integration-account",
+    )
 
     assert created["id"] == "mock_users"
     assert created["method"] == "GET"
@@ -92,7 +96,9 @@ def test_mock_server_crud_and_serving(temp_db):
     assert endpoints[0]["name"] == "Lista de Usuários"
 
     # 3. Match e Serving
-    match_res = mock_service.match_and_serve("GET", "/api/users", owner_user_id="integration-account")
+    match_res = mock_service.match_and_serve(
+        "GET", "/api/users", owner_user_id="integration-account"
+    )
     assert match_res is not None
     assert match_res["status_code"] == 200
     assert match_res["body"] == [{"id": 1, "name": "Dev Local"}]
@@ -101,7 +107,10 @@ def test_mock_server_crud_and_serving(temp_db):
     # 4. Exclui endpoint
     deleted = mock_service.delete_endpoint("mock_users", owner_user_id="integration-account")
     assert deleted is True
-    assert mock_service.match_and_serve("GET", "/api/users", owner_user_id="integration-account") is None
+    assert (
+        mock_service.match_and_serve("GET", "/api/users", owner_user_id="integration-account")
+        is None
+    )
 
 
 def test_sql_playground_inspect_database(sample_project_sqlite):
@@ -129,7 +138,9 @@ def test_sql_playground_execute_query(sample_project_sqlite):
     sql_service = SQLPlaygroundService(workspace_service=MockWorkspace(db_file.parent.parent))
 
     # Executa SELECT
-    res = sql_service.execute_query("app.db", "SELECT name, email FROM users ORDER BY name ASC", project_id="sample_project")
+    res = sql_service.execute_query(
+        "app.db", "SELECT name, email FROM users ORDER BY name ASC", project_id="sample_project"
+    )
     assert res["success"] is True
     assert res["is_select"] is True
     assert res["row_count"] == 3

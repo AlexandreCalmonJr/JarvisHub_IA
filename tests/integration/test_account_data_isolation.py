@@ -18,12 +18,12 @@ def test_task_queries_search_and_delete_are_scoped_to_owner(tmp_path):
 
     assert [row["id"] for row in db.list_tasks(owner_user_id="account-a")] == ["task-a"]
     assert db.get_task("task-b", owner_user_id="account-a") is None
-    assert [row["id"] for row in db.search_chat_history(
-        "private", owner_user_id="account-a"
-    )] == ["task-a"]
-    assert [row["session_id"] for row in db.list_chat_sessions(
-        owner_user_id="account-b"
-    )] == ["shared-session"]
+    assert [row["id"] for row in db.search_chat_history("private", owner_user_id="account-a")] == [
+        "task-a"
+    ]
+    assert [row["session_id"] for row in db.list_chat_sessions(owner_user_id="account-b")] == [
+        "shared-session"
+    ]
 
     assert db.delete_task("task-b", owner_user_id="account-a") is False
     assert db.get_task("task-b", owner_user_id="account-b") is not None
@@ -34,30 +34,26 @@ def test_chat_messages_and_session_deletion_are_scoped_to_owner(tmp_path):
     db.add_chat_message("same-session", "user", "A secret", owner_user_id="account-a")
     db.add_chat_message("same-session", "user", "B secret", owner_user_id="account-b")
 
-    assert [row["content"] for row in db.list_chat_messages(
-        "same-session", owner_user_id="account-a"
-    )] == ["A secret"]
-    assert [row["content"] for row in db.list_chat_messages(
-        "same-session", owner_user_id="account-b"
-    )] == ["B secret"]
+    assert [
+        row["content"] for row in db.list_chat_messages("same-session", owner_user_id="account-a")
+    ] == ["A secret"]
+    assert [
+        row["content"] for row in db.list_chat_messages("same-session", owner_user_id="account-b")
+    ] == ["B secret"]
 
     db.delete_session("same-session", owner_user_id="account-a")
     assert db.list_chat_messages("same-session", owner_user_id="account-a") == []
-    assert [row["content"] for row in db.list_chat_messages(
-        "same-session", owner_user_id="account-b"
-    )] == ["B secret"]
+    assert [
+        row["content"] for row in db.list_chat_messages("same-session", owner_user_id="account-b")
+    ] == ["B secret"]
 
 
 def test_project_and_task_writes_reject_cross_account_ownership(tmp_path):
     db = DatabaseManager(db_path=str(tmp_path / "projects.db"))
-    db.register_project(
-        "project-a", "Project A", str(tmp_path), owner_user_id="account-a"
-    )
+    db.register_project("project-a", "Project A", str(tmp_path), owner_user_id="account-a")
 
     try:
-        db.register_project(
-            "project-a", "Hijack", str(tmp_path), owner_user_id="account-b"
-        )
+        db.register_project("project-a", "Hijack", str(tmp_path), owner_user_id="account-b")
     except PermissionError:
         pass
     else:
@@ -98,9 +94,7 @@ def test_approval_queries_and_consumption_are_scoped_to_owner(tmp_path):
     )
 
     assert db.get_approval("approval-b", owner_user_id="account-a") is None
-    assert [row["id"] for row in db.list_approvals(
-        owner_user_id="account-a"
-    )] == ["approval-a"]
+    assert [row["id"] for row in db.list_approvals(owner_user_id="account-a")] == ["approval-a"]
 
     with db._get_connection() as conn:
         conn.execute(
@@ -108,87 +102,101 @@ def test_approval_queries_and_consumption_are_scoped_to_owner(tmp_path):
             ("approval-a", "approval-b"),
         )
 
-    assert db.consume_approved_approval(
-        "approval-b", owner_user_id="account-a"
-    ) is False
-    assert db.consume_approved_approval(
-        "approval-a", owner_user_id="account-a"
-    ) is True
+    assert db.consume_approved_approval("approval-b", owner_user_id="account-a") is False
+    assert db.consume_approved_approval("approval-a", owner_user_id="account-a") is True
 
 
 def test_knowledge_vault_is_private_per_account_even_for_same_filename(tmp_path):
     db = DatabaseManager(db_path=str(tmp_path / "knowledge.db"))
     db.insert_knowledge_chunks(
-        doc_name="manual.pdf", file_type="PDF", category="private",
-        chunks=["alpha private document"], owner_user_id="account-a",
+        doc_name="manual.pdf",
+        file_type="PDF",
+        category="private",
+        chunks=["alpha private document"],
+        owner_user_id="account-a",
     )
     db.insert_knowledge_chunks(
-        doc_name="manual.pdf", file_type="PDF", category="private",
-        chunks=["beta private document"], owner_user_id="account-b",
+        doc_name="manual.pdf",
+        file_type="PDF",
+        category="private",
+        chunks=["beta private document"],
+        owner_user_id="account-b",
     )
 
-    assert [row["content"] for row in db.search_knowledge_vault(
-        "private", owner_user_id="account-a"
-    )] == ["alpha private document"]
-    assert [row["content"] for row in db.search_knowledge_vault(
-        "private", owner_user_id="account-b"
-    )] == ["beta private document"]
-    assert [row["doc_name"] for row in db.list_knowledge_documents(
-        owner_user_id="account-a"
-    )] == ["manual.pdf"]
+    assert [
+        row["content"] for row in db.search_knowledge_vault("private", owner_user_id="account-a")
+    ] == ["alpha private document"]
+    assert [
+        row["content"] for row in db.search_knowledge_vault("private", owner_user_id="account-b")
+    ] == ["beta private document"]
+    assert [row["doc_name"] for row in db.list_knowledge_documents(owner_user_id="account-a")] == [
+        "manual.pdf"
+    ]
 
-    assert db.delete_knowledge_document(
-        "manual.pdf", owner_user_id="account-a"
-    ) is True
-    assert db.delete_knowledge_document(
-        "manual.pdf", owner_user_id="account-a"
-    ) is False
-    assert db.search_knowledge_vault(
-        "private", owner_user_id="account-b"
-    )[0]["content"] == "beta private document"
+    assert db.delete_knowledge_document("manual.pdf", owner_user_id="account-a") is True
+    assert db.delete_knowledge_document("manual.pdf", owner_user_id="account-a") is False
+    assert (
+        db.search_knowledge_vault("private", owner_user_id="account-b")[0]["content"]
+        == "beta private document"
+    )
 
 
 def test_project_memory_and_project_listing_are_owner_scoped(tmp_path):
     db = DatabaseManager(db_path=str(tmp_path / "project-memory.db"))
     db.register_project(
-        "project-a", "Project A", str(tmp_path / "a"),
+        "project-a",
+        "Project A",
+        str(tmp_path / "a"),
         owner_user_id="account-a",
     )
     db.register_project(
-        "project-b", "Project B", str(tmp_path / "b"),
+        "project-b",
+        "Project B",
+        str(tmp_path / "b"),
         owner_user_id="account-b",
     )
     db.set_project_memory(
-        "project-a", "decision", "database", "SQLite",
+        "project-a",
+        "decision",
+        "database",
+        "SQLite",
         owner_user_id="account-a",
     )
 
     assert db.get_project("project-a", owner_user_id="account-b") is None
     assert [p["id"] for p in db.list_projects(owner_user_id="account-a")] == ["project-a"]
-    assert db.list_project_memory(
-        "project-a", owner_user_id="account-b"
-    ) == []
-    assert db.list_project_memory(
-        "project-a", owner_user_id="account-a"
-    )[0]["content"] == "SQLite"
+    assert db.list_project_memory("project-a", owner_user_id="account-b") == []
+    assert db.list_project_memory("project-a", owner_user_id="account-a")[0]["content"] == "SQLite"
 
 
 def test_agent_memories_custom_skills_and_profiles_are_account_scoped(tmp_path):
     db = DatabaseManager(db_path=str(tmp_path / "private-settings.db"))
     db.set_agent_memory(
-        agent_role="software_architect", category="preference", key="style",
-        content="A likes concise answers", owner_user_id="account-a",
+        agent_role="software_architect",
+        category="preference",
+        key="style",
+        content="A likes concise answers",
+        owner_user_id="account-a",
     )
     db.set_agent_memory(
-        agent_role="software_architect", category="preference", key="style",
-        content="B likes detailed answers", owner_user_id="account-b",
+        agent_role="software_architect",
+        category="preference",
+        key="style",
+        content="B likes detailed answers",
+        owner_user_id="account-b",
     )
-    assert db.list_agent_memories(
-        agent_role="software_architect", owner_user_id="account-a"
-    )[0]["content"] == "A likes concise answers"
-    assert db.list_agent_memories(
-        agent_role="software_architect", owner_user_id="account-b"
-    )[0]["content"] == "B likes detailed answers"
+    assert (
+        db.list_agent_memories(agent_role="software_architect", owner_user_id="account-a")[0][
+            "content"
+        ]
+        == "A likes concise answers"
+    )
+    assert (
+        db.list_agent_memories(agent_role="software_architect", owner_user_id="account-b")[0][
+            "content"
+        ]
+        == "B likes detailed answers"
+    )
 
     skill = {
         "id": "private_skill",
@@ -199,16 +207,10 @@ def test_agent_memories_custom_skills_and_profiles_are_account_scoped(tmp_path):
         "assigned_agents": ["jarvis_master"],
     }
     db.save_user_skill(skill, owner_user_id="account-a")
-    assert [s["id"] for s in db.list_user_skills(
-        owner_user_id="account-a"
-    )] == ["private_skill"]
+    assert [s["id"] for s in db.list_user_skills(owner_user_id="account-a")] == ["private_skill"]
     assert db.list_user_skills(owner_user_id="account-b") == []
-    assert db.get_user_skill(
-        "private_skill", owner_user_id="account-b"
-    ) is None
-    assert db.delete_user_skill(
-        "private_skill", owner_user_id="account-b"
-    ) is False
+    assert db.get_user_skill("private_skill", owner_user_id="account-b") is None
+    assert db.delete_user_skill("private_skill", owner_user_id="account-b") is False
 
     db.set_user_profile({"displayName": "Account A"}, owner_user_id="account-a")
     db.set_user_profile({"displayName": "Account B"}, owner_user_id="account-b")

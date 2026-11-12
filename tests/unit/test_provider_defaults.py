@@ -12,18 +12,9 @@ from services.model_runtime.provider_defaults import (
 
 def test_groq_uses_current_production_model():
     assert default_model_for_provider("groq") == "openai/gpt-oss-120b"
-    assert (
-        normalize_model_for_provider("groq", "llama-3.3-70b-versatile")
-        == "openai/gpt-oss-120b"
-    )
-    assert (
-        normalize_model_for_provider("groq", "llama-3.1-8b-instant")
-        == "openai/gpt-oss-20b"
-    )
-    assert (
-        normalize_model_for_provider("groq", "openai/gpt-oss-120b")
-        == "openai/gpt-oss-120b"
-    )
+    assert normalize_model_for_provider("groq", "llama-3.3-70b-versatile") == "openai/gpt-oss-120b"
+    assert normalize_model_for_provider("groq", "llama-3.1-8b-instant") == "openai/gpt-oss-20b"
+    assert normalize_model_for_provider("groq", "openai/gpt-oss-120b") == "openai/gpt-oss-120b"
     # A substituição é específica da Groq e não altera outros provedores.
     assert (
         normalize_model_for_provider("openai", "llama-3.3-70b-versatile")

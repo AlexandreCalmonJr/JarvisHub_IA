@@ -34,6 +34,12 @@ logger = logging.getLogger("jarvis.api.models")
 router = APIRouter(tags=["models"])
 
 
+def _mask_api_key(profile) -> str | None:
+    if not profile:
+        return None
+    return f"{profile.api_key[:4]}...{profile.api_key[-4:]}" if len(profile.api_key) > 8 else "***"
+
+
 @router.get("/api/v1/models")
 @router.get("/api/v1/models/status")
 async def list_models_endpoint(principal=Depends(get_principal)):
@@ -54,14 +60,16 @@ async def list_models_endpoint(principal=Depends(get_principal)):
             elif "deepseek" in low_name:
                 role_desc = "Raciocínio R1 e Matemática"
 
-            installed_local.append({
-                "name": rm.name,
-                "role": role_desc,
-                "speed": "Ativo",
-                "context": rm.context_length,
-                "status": "ready",
-                "parameter_size": rm.parameter_size,
-            })
+            installed_local.append(
+                {
+                    "name": rm.name,
+                    "role": role_desc,
+                    "speed": "Ativo",
+                    "context": rm.context_length,
+                    "status": "ready",
+                    "parameter_size": rm.parameter_size,
+                }
+            )
     except Exception as exc:
         logger.debug("Não foi possível atualizar o inventário local de modelos: %s", exc)
 
@@ -91,12 +99,14 @@ async def list_models_endpoint(principal=Depends(get_principal)):
             online_name = cfg.default_model
             online_provider = cfg.provider_name
             online_label = f"{online_name} ({online_provider.upper()} — configurado e ativo)"
-        online_models.append({
-            "name": online_name,
-            "provider": online_provider,
-            "is_default": True,
-            "label": online_label,
-        })
+        online_models.append(
+            {
+                "name": online_name,
+                "provider": online_provider,
+                "is_default": True,
+                "label": online_label,
+            }
+        )
 
     response = {
         "models": installed_local,
@@ -116,11 +126,13 @@ async def list_models_endpoint(principal=Depends(get_principal)):
             "active": model_manager.queue.active_count,
             "waiting": model_manager.queue.waiting_count,
         }
-        response["hybrid_gateway"].update({
-            "has_api_key": bool(active_key and active_key.is_active),
-            "max_budget_usd": cfg.max_budget_usd,
-            "current_spend_usd": cfg.current_spend_usd,
-        })
+        response["hybrid_gateway"].update(
+            {
+                "has_api_key": bool(active_key and active_key.is_active),
+                "max_budget_usd": cfg.max_budget_usd,
+                "current_spend_usd": cfg.current_spend_usd,
+            }
+        )
     return response
 
 
@@ -137,7 +149,7 @@ async def get_hybrid_config_endpoint(principal=Depends(require_admin)):
         "provider_name": cfg.provider_name,
         "enabled": cfg.enabled,
         "has_api_key": bool(cfg.key_id and key_vault.get_key(cfg.key_id)),
-        "masked_api_key": (lambda p: (f"{p.api_key[:4]}...{p.api_key[-4:]}" if p and len(p.api_key) > 8 else ("***" if p else None)))(key_vault.get_key(cfg.key_id) if cfg.key_id else None),
+        "masked_api_key": _mask_api_key(key_vault.get_key(cfg.key_id) if cfg.key_id else None),
         "base_url": cfg.base_url,
         "default_model": cfg.default_model,
         "max_budget_usd": cfg.max_budget_usd,
@@ -147,7 +159,9 @@ async def get_hybrid_config_endpoint(principal=Depends(require_admin)):
 
 
 @router.post("/api/v1/models/hybrid-config")
-async def update_hybrid_config_endpoint(payload: HybridConfigRequest, principal=Depends(require_admin)):
+async def update_hybrid_config_endpoint(
+    payload: HybridConfigRequest, principal=Depends(require_admin)
+):
     cfg = hybrid_router.online_config
     cfg.provider_name = payload.provider_name.lower()
     cfg.enabled = payload.enabled
@@ -204,7 +218,7 @@ async def update_hybrid_config_endpoint(payload: HybridConfigRequest, principal=
             "provider_name": cfg.provider_name,
             "enabled": cfg.enabled,
             "has_api_key": bool(cfg.key_id and key_vault.get_key(cfg.key_id)),
-            "masked_api_key": (lambda p: (f"{p.api_key[:4]}...{p.api_key[-4:]}" if p and len(p.api_key) > 8 else ("***" if p else None)))(key_vault.get_key(cfg.key_id) if cfg.key_id else None),
+            "masked_api_key": _mask_api_key(key_vault.get_key(cfg.key_id) if cfg.key_id else None),
             "base_url": cfg.base_url,
             "default_model": cfg.default_model,
             "max_budget_usd": cfg.max_budget_usd,
@@ -214,7 +228,9 @@ async def update_hybrid_config_endpoint(payload: HybridConfigRequest, principal=
 
 
 @router.post("/api/v1/models/hybrid-config/test")
-async def test_hybrid_connection_endpoint(payload: HybridTestRequest, principal=Depends(require_admin)):
+async def test_hybrid_connection_endpoint(
+    payload: HybridTestRequest, principal=Depends(require_admin)
+):
     # Usa a chave fornecida ou recupera a chave descriptografada do KeyVault.
     api_key = (payload.api_key or "").strip()
     if not api_key and hybrid_router.online_config.key_id:
@@ -222,7 +238,10 @@ async def test_hybrid_connection_endpoint(payload: HybridTestRequest, principal=
         api_key = profile.api_key if profile and profile.is_active else ""
 
     if not api_key:
-        raise HTTPException(status_code=400, detail="Nenhuma chave de API informada ou previamente configurada no KeyVault.")
+        raise HTTPException(
+            status_code=400,
+            detail="Nenhuma chave de API informada ou previamente configurada no KeyVault.",
+        )
 
     adapter = UniversalOnlineAdapter(
         api_key=api_key,
@@ -242,7 +261,9 @@ async def get_huggingface_curated(principal=Depends(get_principal)):
 
 
 @router.get("/api/v1/models/huggingface/search")
-async def search_huggingface_endpoint(q: str = "", limit: int = 10, principal=Depends(get_principal)):
+async def search_huggingface_endpoint(
+    q: str = "", limit: int = 10, principal=Depends(get_principal)
+):
     """Pesquisa modelos GGUF no Hugging Face Hub."""
     return await search_huggingface_hub(query=q, limit=limit)
 
@@ -254,8 +275,11 @@ async def get_agent_recommendations_endpoint(principal=Depends(get_principal)):
 
 
 @router.post("/api/v1/models/huggingface/install")
-async def install_huggingface_model_endpoint(payload: HFInstallPayload, principal=Depends(require_admin)):
+async def install_huggingface_model_endpoint(
+    payload: HFInstallPayload, principal=Depends(require_admin)
+):
     """Inicia o download e registro de um modelo via Ollama em background com streaming SSE."""
+
     async def event_generator():
         async for chunk in stream_ollama_pull(payload.model_tag):
             yield f"data: {json.dumps(chunk)}\n\n"
@@ -264,6 +288,7 @@ async def install_huggingface_model_endpoint(payload: HFInstallPayload, principa
 
 
 # --- Endpoints do Cofre de Múltiplas Chaves (KeyVault) ---
+
 
 class KeyProfilePayload(BaseModel):
     key_id: str
@@ -361,4 +386,3 @@ async def test_vault_key_endpoint(
     owner = _vault_scope_owner(principal, scope)
     res = await key_vault.test_key_connectivity(key_id, owner_user_id=owner)
     return res
-

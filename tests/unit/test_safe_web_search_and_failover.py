@@ -1,12 +1,20 @@
+import httpx
 import pytest
-from services.tool_gateway.web_search import is_safe_public_url, sanitize_search_query
+
+from services.coding_agent import ChatTurn
 from services.coding_agent.providers import (
     ChatProvider,
-    ProviderReply,
     ProviderError,
+    ProviderReply,
     ResilientChatProvider,
 )
-from services.coding_agent import ChatTurn
+from services.security_core.cyber_shield import cyber_shield
+from services.tool_gateway.web_search import (
+    SafeWebSearchEngine,
+    SearchUnavailableError,
+    is_safe_public_url,
+    sanitize_search_query,
+)
 
 
 def test_ssrf_protection_blocks_internal_and_reserved_ips():
@@ -33,6 +41,78 @@ def test_dlp_query_sanitization():
     # Query normal permanece limpa
     normal_query = "como aprender ingles sozinho"
     assert sanitize_search_query(normal_query) == "como aprender ingles sozinho"
+
+
+@pytest.mark.asyncio
+async def test_search_fails_closed_when_network_is_isolated(monkeypatch):
+    monkeypatch.setattr(cyber_shield, "network_isolated", True)
+
+    async def unexpected_http(*args, **kwargs):
+        raise AssertionError("HTTP não deveria ser chamado")
+
+    monkeypatch.setattr("httpx.AsyncClient", unexpected_http)
+    with pytest.raises(PermissionError, match="isolamento de rede"):
+        await SafeWebSearchEngine().search("consulta segura")
+
+
+@pytest.mark.asyncio
+async def test_search_fixture_parsing_and_normalized_query_cache(monkeypatch):
+    monkeypatch.setattr(cyber_shield, "network_isolated", False)
+    monkeypatch.setattr("services.tool_gateway.web_search.is_safe_public_url", lambda _url: True)
+    calls = []
+    body = """<a class="result-link" href="https://example.org/page">Fonte de teste</a>
+      <td class="result-snippet">Trecho de fixture local</td>"""
+
+    class FakeResponse:
+        status_code = 200
+        text = body
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def post(self, *_args, **_kwargs):
+            calls.append(1)
+            return FakeResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", FakeClient)
+    engine = SafeWebSearchEngine()
+    first = await engine.search("  Jarvis   local  ")
+    second = await engine.search("jarvis local")
+    assert len(calls) == 1
+    assert first[0].title == "Fonte de teste"
+    assert first[0].url == "https://example.org/page"
+    assert first[0].retrieved_at
+    assert second[0].retrieved_at == first[0].retrieved_at
+
+
+@pytest.mark.asyncio
+async def test_search_network_failure_is_explicit(monkeypatch):
+    monkeypatch.setattr(cyber_shield, "network_isolated", False)
+    monkeypatch.setattr("services.tool_gateway.web_search.is_safe_public_url", lambda _url: True)
+
+    class FailingClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def post(self, *_args, **_kwargs):
+            raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr("httpx.AsyncClient", FailingClient)
+    with pytest.raises(SearchUnavailableError, match="Busca indisponível"):
+        await SafeWebSearchEngine().search("Jarvis local")
 
 
 class MockFailingProvider(ChatProvider):

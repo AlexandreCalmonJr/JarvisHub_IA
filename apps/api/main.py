@@ -1,47 +1,48 @@
 import os
 from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from services.observability import attach_server_logging
 from apps.api.auth import AuthMiddleware, auth_service
 
 # Importa singletons e serviços centrais de apps.api.deps
 from apps.api.deps import (
     db_manager,
+    knowledge_vault_service,
+    logger,
     model_manager,
+    resolve_frontend_dist,
     security_core,
     skills_catalog,
-    workspace_service,
-    knowledge_vault_service,
     webhook_service,
-    resolve_frontend_dist,
-    logger,
+    workspace_service,
+)
+
+# Importa roteadores modulares (Clean Architecture)
+from apps.api.routers import (
+    agents,
+    auth,
+    chat,
+    coding,
+    hardware,
+    knowledge,
+    learning,
+    mcp,
+    models,
+    security,
+    skills,
+    studios,
+    system,
+    voice,
+    workspace,
 )
 
 # Importa schemas comuns para re-exportação
 from apps.api.schemas import ChatRequest
-
-# Importa roteadores modulares (Clean Architecture)
-from apps.api.routers import (
-    auth,
-    chat,
-    workspace,
-    models,
-    hardware,
-    agents,
-    skills,
-    knowledge,
-    security,
-    studios,
-    system,
-    coding,
-    mcp,
-    voice,
-    learning,
-)
+from services.observability import attach_server_logging
 
 # Documentação interativa é opt-in explícito. Em produção (padrão) os endpoints
 # /docs, /redoc e /openapi.json não são sequer registados.
@@ -51,7 +52,11 @@ _api_docs_enabled = os.environ.get("JARVIS_ENABLE_API_DOCS", "").strip().lower()
     "yes",
 }
 
-_runtime_environment = os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")).strip().lower()
+_runtime_environment = (
+    os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development"))
+    .strip()
+    .lower()
+)
 if _api_docs_enabled and _runtime_environment in {"prod", "production"}:
     logger.warning("Documentação OpenAPI foi solicitada, mas permanece desativada em produção.")
     _api_docs_enabled = False
@@ -116,6 +121,7 @@ app.include_router(learning.router)
 # Monta aplicativo mobile Flutter (PWA) se compilado
 mobile_dist = Path("apps/mobile/build/web")
 if mobile_dist.exists():
+
     @app.get("/mobile")
     async def redirect_mobile():
         return RedirectResponse(url="/mobile/")
@@ -160,6 +166,7 @@ if react_dist and (react_dist / "index.html").exists():
     }
 
     for route_path in spa_routes:
+
         @app.get(route_path, include_in_schema=False)
         async def serve_spa_route():
             return FileResponse(index_file, headers=no_cache_headers)
@@ -167,7 +174,11 @@ if react_dist and (react_dist / "index.html").exists():
     class SPAStaticFiles(StaticFiles):
         async def get_response(self, path: str, scope):
             response = await super().get_response(path, scope)
-            if response.status_code == 404 and not path.startswith("api/") and not path.startswith("mobile/"):
+            if (
+                response.status_code == 404
+                and not path.startswith("api/")
+                and not path.startswith("mobile/")
+            ):
                 fallback_resp = await super().get_response("index.html", scope)
                 for k, v in no_cache_headers.items():
                     fallback_resp.headers[k] = v
@@ -177,13 +188,17 @@ if react_dist and (react_dist / "index.html").exists():
                     response.headers[k] = v
             return response
 
-    logger.info("Painel React/Vite montado com SPA fallback na rota raiz / a partir de %s", react_dist)
+    logger.info(
+        "Painel React/Vite montado com SPA fallback na rota raiz / a partir de %s", react_dist
+    )
     app.mount("/", SPAStaticFiles(directory=str(react_dist), html=True), name="dashboard")
 elif react_dist:
     logger.info("Painel React/Vite montado na rota raiz / a partir de %s", react_dist)
     app.mount("/", StaticFiles(directory=str(react_dist), html=True), name="dashboard")
 else:
-    logger.warning("Bundle do React não localizado. Verifique se o comando 'npm run build' foi executado.")
+    logger.warning(
+        "Bundle do React não localizado. Verifique se o comando 'npm run build' foi executado."
+    )
 
     @app.get("/", response_class=HTMLResponse)
     async def fallback_home():
@@ -208,15 +223,16 @@ else:
             </div></body></html>"""
         )
 
+
 # Re-exportações para retrocompatibilidade com scripts de automação e testes
 __all__ = [
+    "ChatRequest",
     "app",
     "db_manager",
+    "knowledge_vault_service",
     "model_manager",
     "security_core",
     "skills_catalog",
-    "workspace_service",
-    "knowledge_vault_service",
     "webhook_service",
-    "ChatRequest",
+    "workspace_service",
 ]

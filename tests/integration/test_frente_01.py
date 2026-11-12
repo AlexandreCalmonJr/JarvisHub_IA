@@ -1,6 +1,7 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service, db_manager
+from httpx import ASGITransport, AsyncClient
+
+from apps.api.main import app, db_manager, workspace_service
 
 
 @pytest.mark.asyncio
@@ -16,7 +17,9 @@ async def test_frente_01_workspace_buttons_and_files():
         )
 
         # 2. Testa endpoint de abrir pasta no Explorer
-        open_folder_resp = await ac.post("/api/v1/workspace/projects/test_frente1_project/open-folder")
+        open_folder_resp = await ac.post(
+            "/api/v1/workspace/projects/test_frente1_project/open-folder"
+        )
         assert open_folder_resp.status_code == 200
         data = open_folder_resp.json()
         assert data["status"] == "opened"
@@ -59,7 +62,9 @@ async def test_frente_01_workspace_buttons_and_files():
         assert applied.status_code == 200
         assert applied.json()["status"] == "saved"
         assert (test_proj_dir / "main.py.bak").exists()
-        assert (test_proj_dir / "main.py").read_text(encoding="utf-8") == "print('hello updated front 1')\n"
+        assert (test_proj_dir / "main.py").read_text(
+            encoding="utf-8"
+        ) == "print('hello updated front 1')\n"
         # Limpeza
         workspace_service.delete_project("test_frente1_project")
 

@@ -1,4 +1,5 @@
 import pytest
+
 from agents.registry import AgentRegistry
 from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
 
@@ -117,6 +118,30 @@ def test_build_specialist_prompt_injects_ecc_skills_and_memory(tmp_path):
     assert "backend_developer" in prompt
 
 
+def test_specialist_prompt_uses_project_source_only_for_project_intents(tmp_path, monkeypatch):
+    from services.orchestration.prompt_builder import build_specialist_prompt
+
+    monkeypatch.chdir(tmp_path)
+    project = tmp_path / "workspace" / "prompt-project"
+    project.mkdir(parents=True)
+    source = project / "app.py"
+    source.write_text("SECRET_PROJECT_MARKER\n" + "x" * 4000, encoding="utf-8")
+    args = {
+        "agent_role": "software_architect",
+        "agent_registry": AgentRegistry(),
+        "skills_catalog": None,
+        "db_manager": None,
+        "user_prompt": "Descreva a arquitetura.",
+        "project_id": "prompt-project",
+    }
+
+    concise = build_specialist_prompt(intent="general_planning", **args)
+    detailed = build_specialist_prompt(intent="architecture_analysis", **args)
+    assert "SECRET_PROJECT_MARKER" not in concise
+    assert "SECRET_PROJECT_MARKER" in detailed
+    assert "restante do arquivo truncado" in detailed
+
+
 @pytest.mark.asyncio
 async def test_multi_agent_sequential_execution_in_jarvis_master():
     from services.model_runtime import MockAdapter, ModelManager
@@ -177,7 +202,10 @@ async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
     from services.security_core import SecurityCore
 
     security = SecurityCore()
-    model_mgr = ModelManager(adapter=MockAdapter(default_response="Parecer simulado com análise e riscos."), audit_trail=security.audit)
+    model_mgr = ModelManager(
+        adapter=MockAdapter(default_response="Parecer simulado com análise e riscos."),
+        audit_trail=security.audit,
+    )
     master = JarvisMaster(security_core=security, model_manager=model_mgr)
     captured_system_prompts = []
     original_generate = model_mgr.generate
@@ -193,7 +221,9 @@ async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
     )
 
     assert result["classified_intent"] == "multi_agent_consensus"
-    assert any("Parecer simulado com análise e riscos." in prompt for prompt in captured_system_prompts)
+    assert any(
+        "Parecer simulado com análise e riscos." in prompt for prompt in captured_system_prompts
+    )
     roles = [output["agent_role"] for output in result["agent_outputs"]]
     assert AgentRole.SOFTWARE_ARCHITECT.value in roles
     assert AgentRole.CYBERSECURITY_ENGINEER.value in roles
@@ -205,7 +235,5 @@ async def test_roundtable_agents_receive_prior_reviews_and_master_synthesizes():
 def test_chat_routes_complex_problem_solving_to_orchestrator():
     from apps.api.routers.chat import _looks_actionable
 
-    assert _looks_actionable(
-        "Como resolver o problema de autenticação e segurança do Jarvis?"
-    )
+    assert _looks_actionable("Como resolver o problema de autenticação e segurança do Jarvis?")
     assert not _looks_actionable("Como funciona o Jarvis?")

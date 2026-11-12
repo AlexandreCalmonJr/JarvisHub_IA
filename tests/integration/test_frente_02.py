@@ -1,6 +1,7 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service, db_manager
+from httpx import ASGITransport, AsyncClient
+
+from apps.api.main import app, db_manager, workspace_service
 from services.orchestration.self_correction import SelfCorrectionEngine
 
 
@@ -30,7 +31,7 @@ def test_self_correction_json():
     broken_json = '{\n  "status": "ok",\n  "itens": [1, 2, 3,],\n}'
     healed, was_modified, msg = SelfCorrectionEngine.heal_json_code(broken_json)
     assert was_modified is True
-    assert '"itens": [1, 2, 3]' in healed or '[1, 2, 3]' in healed
+    assert '"itens": [1, 2, 3]' in healed or "[1, 2, 3]" in healed
 
 
 def test_self_correction_markdown():
@@ -131,13 +132,14 @@ async def test_frente_02_git_version_control_and_rollback():
 @pytest.mark.asyncio
 async def test_frente_02_mesa_redonda_intent_and_consensus():
     """Valida intenção de Mesa Redonda e deliberação consensual no grafo."""
-    from services.orchestration.graph import create_master_graph
-    from services.security_core import SecurityCore
-    from services.model_runtime import ModelManager
+    from unittest.mock import AsyncMock
+
     from langgraph.checkpoint.memory import MemorySaver
 
-    from unittest.mock import AsyncMock
+    from services.model_runtime import ModelManager
     from services.model_runtime.types import InferenceResponse
+    from services.orchestration.graph import create_master_graph
+    from services.security_core import SecurityCore
 
     sec_core = SecurityCore()
     mod_mgr = ModelManager()

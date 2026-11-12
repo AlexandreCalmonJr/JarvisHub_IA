@@ -91,6 +91,7 @@ def test_safe_project_file_helper_rejects_paths_outside_project(tmp_path):
     service = QualityStudioService(WorkspaceStub(project_dir))
     assert not service._is_safe_project_file(project_dir, project_dir.parent / "outside.py")
 
+
 def test_generated_playwright_script_escapes_user_supplied_strings():
     service = QualityStudioService()
     payload = '"); __import__("os").system("echo injected") #'

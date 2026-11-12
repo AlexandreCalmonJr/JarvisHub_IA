@@ -15,12 +15,8 @@ def _vault(tmp_path) -> KeyVaultService:
 
 def test_account_keys_are_isolated_and_masked(tmp_path):
     vault = _vault(tmp_path)
-    vault.save_key(
-        "primary", "Alice", "openai", "sk-alice-secret-key", owner_user_id="alice"
-    )
-    vault.save_key(
-        "primary", "Bob", "groq", "gsk-bob-secret-key", owner_user_id="bob"
-    )
+    vault.save_key("primary", "Alice", "openai", "sk-alice-secret-key", owner_user_id="alice")
+    vault.save_key("primary", "Bob", "groq", "gsk-bob-secret-key", owner_user_id="bob")
     vault.save_key("global", "Global", "openai", "sk-global-secret-key")
 
     alice = vault.list_keys(owner_user_id="alice")
@@ -39,14 +35,10 @@ def test_account_keys_are_isolated_and_masked(tmp_path):
 
 def test_default_key_resolution_and_deletion_scope(tmp_path):
     vault = _vault(tmp_path)
-    vault.save_key(
-        "one", "One", "openai", "sk-one-secret-key", owner_user_id="alice"
-    )
+    vault.save_key("one", "One", "openai", "sk-one-secret-key", owner_user_id="alice")
     assert vault.resolve_active_key("alice").key_id == "one"
 
-    vault.save_key(
-        "two", "Two", "groq", "gsk-two-secret-key", owner_user_id="alice"
-    )
+    vault.save_key("two", "Two", "groq", "gsk-two-secret-key", owner_user_id="alice")
     # A primeira chave continua a ser a predefinida até ser substituída.
     assert vault.resolve_active_key("alice").key_id == "one"
     assert vault.set_default_key("two", "alice")

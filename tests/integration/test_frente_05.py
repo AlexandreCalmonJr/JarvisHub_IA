@@ -1,8 +1,10 @@
 import io
 import zipfile
+
 import pytest
-from httpx import AsyncClient, ASGITransport
-from apps.api.main import app, workspace_service, db_manager
+from httpx import ASGITransport, AsyncClient
+
+from apps.api.main import app, db_manager, workspace_service
 
 
 @pytest.mark.asyncio
@@ -28,9 +30,7 @@ async def test_frente_05_export_clean_project_zip():
     (proj_dir / "__pycache__").mkdir()
     (proj_dir / "__pycache__" / "cached.pyc").write_bytes(b"\x00\x01\x02")
 
-    db_manager.register_project(
-        proj_id, "Front 5 ZIP Test", str(proj_dir), owner_user_id="admin"
-    )
+    db_manager.register_project(proj_id, "Front 5 ZIP Test", str(proj_dir), owner_user_id="admin")
 
     # 3. Chama o endpoint de exportação ZIP
     transport = ASGITransport(app=app)
@@ -66,7 +66,9 @@ async def test_frente_05_dockerize_project():
 
     proj_dir = workspace_service.get_project_dir(proj_id)
     proj_dir.mkdir(parents=True, exist_ok=True)
-    (proj_dir / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8")
+    (proj_dir / "main.py").write_text(
+        "from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8"
+    )
     (proj_dir / "requirements.txt").write_text("fastapi\nuvicorn\n", encoding="utf-8")
     db_manager.register_project(
         proj_id, "Front 5 Docker Test", str(proj_dir), owner_user_id="admin"

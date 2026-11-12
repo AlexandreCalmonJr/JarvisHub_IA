@@ -70,9 +70,13 @@ async def test_autonomous_agent_invalid_role_or_mode():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # Papel inexistente -> 404
-        resp404 = await ac.post("/api/v1/agents/papel_inexistente_xyz/task", json={"prompt": "teste"})
+        resp404 = await ac.post(
+            "/api/v1/agents/papel_inexistente_xyz/task", json={"prompt": "teste"}
+        )
         assert resp404.status_code == 404
 
         # Modo inválido -> 400
-        resp400 = await ac.post("/api/v1/agents/data_scientist/task", json={"prompt": "teste", "mode": "invalido"})
+        resp400 = await ac.post(
+            "/api/v1/agents/data_scientist/task", json={"prompt": "teste", "mode": "invalido"}
+        )
         assert resp400.status_code == 400

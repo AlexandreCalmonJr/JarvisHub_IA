@@ -1,3 +1,7 @@
+import io
+import struct
+import wave
+
 import pytest
 
 from services.proactive_operations import (
@@ -7,6 +11,18 @@ from services.proactive_operations import (
 )
 from services.security_core import ApprovalEngine, AuditTrail
 from services.voice_runtime import VoiceConfig, VoiceEngine
+from services.voice_runtime.types import SpeechSynthesisResult, TranscriptionResult
+from services.voice_runtime.vad import has_voice_activity
+
+
+class FakeSTT:
+    def transcribe_audio_bytes(self, _audio):
+        return TranscriptionResult(text="jarvis teste", confidence=1.0)
+
+
+class FakeTTS:
+    def synthesize(self, _text):
+        return SpeechSynthesisResult(audio_bytes=b"RIFF" + b"\0" * 40, is_spoken=True)
 
 
 def test_voice_engine_disabled_by_default():
@@ -20,9 +36,23 @@ def test_voice_engine_disabled_by_default():
     assert synth.is_spoken is False
 
 
+def test_vad_detects_pcm_and_rejects_silence():
+    recordings = []
+    for amplitude in (0, 12000):
+        stream = io.BytesIO()
+        with wave.open(stream, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(struct.pack("<h", amplitude) * 1600)
+        recordings.append(stream.getvalue())
+    assert not has_voice_activity(recordings[0])
+    assert has_voice_activity(recordings[1])
+
+
 def test_voice_engine_enabled_local_pipeline():
     cfg = VoiceConfig(enabled=True)
-    voice = VoiceEngine(config=cfg)
+    voice = VoiceEngine(config=cfg, stt_adapter=FakeSTT(), tts_adapter=FakeTTS())
 
     # 1. STT local
     trans = voice.process_incoming_speech(b"RIFF dummy speech data")

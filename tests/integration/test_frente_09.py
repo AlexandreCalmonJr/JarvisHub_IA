@@ -26,12 +26,12 @@ def test_design_studio_color_palette_extraction():
 def test_design_studio_wcag_accessibility_audit_inaccessible():
     service = DesignStudioService()
     bad_markup = (
-        '<div>\n'
+        "<div>\n"
         '  <img src="banner.png" />\n'
-        '  <button></button>\n'
+        "  <button></button>\n"
         '  <input type="text" />\n'
         '  <a href="#">clique aqui</a>\n'
-        '</div>'
+        "</div>"
     )
 
     audit = service.audit_wcag_accessibility(bad_markup)
@@ -55,7 +55,7 @@ def test_design_studio_wcag_accessibility_audit_accessible():
         '  <label for="username">Nome de usuário</label>\n'
         '  <input id="username" type="text" aria-label="Nome de usuário" />\n'
         '  <a href="/docs">Consulte a documentação técnica oficial</a>\n'
-        '</main>'
+        "</main>"
     )
 
     audit = service.audit_wcag_accessibility(good_markup)

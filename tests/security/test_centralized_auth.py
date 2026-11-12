@@ -15,6 +15,7 @@ Cobre os 10 cenários especificados:
 """
 
 from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -90,7 +91,9 @@ async def test_05_non_admin_forbidden_from_admin_endpoints():
             headers={"Authorization": f"Bearer {session.session_id}"},
         )
         assert res.status_code == 403
-        assert "Apenas administradores" in res.json().get("detail", "") or "Permissão insuficiente" in res.json().get("detail", "")
+        assert "Apenas administradores" in res.json().get(
+            "detail", ""
+        ) or "Permissão insuficiente" in res.json().get("detail", "")
 
 
 @pytest.mark.asyncio
@@ -123,7 +126,9 @@ async def test_07_revoked_device_rejected():
         created_by="admin_test",
     )
     token = device_reg.device_token
-    auth_service.security.device_auth.revoke_device(device_reg.device_id, reason="Teste de revogação")
+    auth_service.security.device_auth.revoke_device(
+        device_reg.device_id, reason="Teste de revogação"
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -240,6 +245,7 @@ def test_11_rate_limit_persists_across_auth_service_instances(monkeypatch, tmp_p
 
     restarted = AuthService(auth_service.security, tmp_path / "auth")
     assert restarted.check_rate_limit("login:127.0.0.77", limit=1, window_seconds=60) is False
+
 
 @pytest.mark.asyncio
 async def test_12_mock_server_requires_dedicated_authenticated_permission():

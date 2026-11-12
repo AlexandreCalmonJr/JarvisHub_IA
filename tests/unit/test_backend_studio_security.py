@@ -1,5 +1,5 @@
-from contextlib import contextmanager
 import sqlite3
+from contextlib import contextmanager
 
 import pytest
 
@@ -94,9 +94,7 @@ def test_sql_playground_reads_only_inside_the_selected_project(tmp_path):
     assert result["rows"] == [{"value": "preserve-me"}]
     assert result["read_only"] is True
 
-    denied = service.execute_query(
-        "app.db", "UPDATE records SET value = 'changed'", "project-a"
-    )
+    denied = service.execute_query("app.db", "UPDATE records SET value = 'changed'", "project-a")
     assert denied["success"] is False
 
     with sqlite3.connect(database) as connection:

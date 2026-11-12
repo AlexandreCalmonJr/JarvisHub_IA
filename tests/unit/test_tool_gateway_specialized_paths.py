@@ -55,9 +55,7 @@ def test_sql_explain_uses_read_only_project_database(tmp_path):
     with sqlite3.connect(database) as conn:
         conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
 
-    ok, output, error = execute_sql_query_explain(
-        "SELECT * FROM users", project, "app.db"
-    )
+    ok, output, error = execute_sql_query_explain("SELECT * FROM users", project, "app.db")
     assert ok is True
     assert "EXPLAIN QUERY PLAN" in output
     assert error == ""

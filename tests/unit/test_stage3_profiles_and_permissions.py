@@ -19,10 +19,14 @@ def test_all_26_agents_have_real_tools_and_react_prompts():
     valid_tool_names.update({"delegate_agent", "list_projects", "request_approval", "query_audit"})
 
     for agent in agents:
-        assert len(agent.allowed_tools) > 0, f"O agente {agent.role.value} deve ter ferramentas associadas"
+        assert len(agent.allowed_tools) > 0, (
+            f"O agente {agent.role.value} deve ter ferramentas associadas"
+        )
         # Garante que nenhuma ferramenta seja placeholder desconhecido
         for tool in agent.allowed_tools:
-            assert tool in valid_tool_names, f"Ferramenta desconhecida '{tool}' no perfil '{agent.role.value}'"
+            assert tool in valid_tool_names, (
+                f"Ferramenta desconhecida '{tool}' no perfil '{agent.role.value}'"
+            )
 
         # Valida que o prompt possui estrutura cognitiva ReAct
         prompt = agent.system_prompt
@@ -39,44 +43,68 @@ def test_permission_engine_can_propose_operation(tmp_path):
     )
 
     # Agentes ativos podem propor escrita sob aprovação
-    assert sec.permission_engine.can_propose_operation(
-        AgentRole.BACKEND_DEVELOPER, "proj-edit", "file_write"
-    ) is True
-    assert sec.permission_engine.can_propose_operation(
-        AgentRole.SOFTWARE_ARCHITECT, "proj-edit", "file_write"
-    ) is True
-    assert sec.permission_engine.can_propose_operation(
-        AgentRole.DEVOPS_ENGINEER, "proj-edit", "shell_exec"
-    ) is True
+    assert (
+        sec.permission_engine.can_propose_operation(
+            AgentRole.BACKEND_DEVELOPER, "proj-edit", "file_write"
+        )
+        is True
+    )
+    assert (
+        sec.permission_engine.can_propose_operation(
+            AgentRole.SOFTWARE_ARCHITECT, "proj-edit", "file_write"
+        )
+        is True
+    )
+    assert (
+        sec.permission_engine.can_propose_operation(
+            AgentRole.DEVOPS_ENGINEER, "proj-edit", "shell_exec"
+        )
+        is True
+    )
 
     # Agentes analíticos (READ_ONLY_ROLES) são bloqueados de propor escrita
-    assert sec.permission_engine.can_propose_operation(
-        AgentRole.CODE_REVIEWER, "proj-edit", "file_write"
-    ) is False
-    assert sec.permission_engine.can_propose_operation(
-        AgentRole.RESEARCH_ANALYST, "proj-edit", "shell_exec"
-    ) is False
+    assert (
+        sec.permission_engine.can_propose_operation(
+            AgentRole.CODE_REVIEWER, "proj-edit", "file_write"
+        )
+        is False
+    )
+    assert (
+        sec.permission_engine.can_propose_operation(
+            AgentRole.RESEARCH_ANALYST, "proj-edit", "shell_exec"
+        )
+        is False
+    )
 
     # Em projeto READ_ONLY, nenhum agente pode propor escrita
-    sec.permission_engine.register_project(
-        "proj-ro", str(tmp_path), mode=ProjectWorkMode.READ_ONLY
+    sec.permission_engine.register_project("proj-ro", str(tmp_path), mode=ProjectWorkMode.READ_ONLY)
+    assert (
+        sec.permission_engine.can_propose_operation(
+            AgentRole.BACKEND_DEVELOPER, "proj-ro", "file_write"
+        )
+        is False
     )
-    assert sec.permission_engine.can_propose_operation(
-        AgentRole.BACKEND_DEVELOPER, "proj-ro", "file_write"
-    ) is False
 
 
 def test_permission_engine_requires_approval():
     sec = SecurityCore()
-    assert sec.permission_engine.requires_approval(AgentRole.BACKEND_DEVELOPER, "file_write") is True
-    assert sec.permission_engine.requires_approval(AgentRole.BACKEND_DEVELOPER, "shell_exec") is True
-    assert sec.permission_engine.requires_approval(AgentRole.BACKEND_DEVELOPER, "file_read") is False
+    assert (
+        sec.permission_engine.requires_approval(AgentRole.BACKEND_DEVELOPER, "file_write") is True
+    )
+    assert (
+        sec.permission_engine.requires_approval(AgentRole.BACKEND_DEVELOPER, "shell_exec") is True
+    )
+    assert (
+        sec.permission_engine.requires_approval(AgentRole.BACKEND_DEVELOPER, "file_read") is False
+    )
 
 
 @pytest.mark.asyncio
 async def test_data_scientist_can_execute_duckdb_tool(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-ds", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-ds", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     registry = AgentRegistry()
     gateway = ToolGateway(security_core=sec, agent_registry=registry)
 
@@ -96,7 +124,9 @@ async def test_data_scientist_can_execute_duckdb_tool(tmp_path):
 @pytest.mark.asyncio
 async def test_code_reviewer_blocked_on_mutating_tools(tmp_path):
     sec = SecurityCore()
-    sec.permission_engine.register_project("proj-cr", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED)
+    sec.permission_engine.register_project(
+        "proj-cr", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
     registry = AgentRegistry()
     gateway = ToolGateway(security_core=sec, agent_registry=registry)
 

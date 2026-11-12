@@ -6,8 +6,8 @@ from .types import McpServerConfig, McpToolInfo, McpToolOutcome
 
 __all__ = [
     "McpError",
-    "McpService",
     "McpServerConfig",
+    "McpService",
     "McpStdioClient",
     "McpToolInfo",
     "McpToolOutcome",

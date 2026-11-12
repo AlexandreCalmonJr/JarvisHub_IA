@@ -1,17 +1,15 @@
 import pytest
-
 from httpx import ASGITransport, AsyncClient
 
 from apps.api.main import app, db_manager
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_resources_endpoint():
 
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         resp = await ac.get("/api/v1/system/resources")
 
         assert resp.status_code == 200
@@ -28,14 +26,13 @@ async def test_api_resources_endpoint():
 
         assert data["offline_mode_active"] is True
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_models_endpoint():
 
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         resp = await ac.get("/api/v1/models")
 
         assert resp.status_code == 200
@@ -49,14 +46,13 @@ async def test_api_models_endpoint():
         assert "online_models" in data
         assert "hybrid_gateway" in data
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_skills_endpoint():
 
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         resp = await ac.get("/api/v1/skills")
 
         assert resp.status_code == 200
@@ -71,14 +67,13 @@ async def test_api_skills_endpoint():
 
         assert any(s["id"] == "ecc_prompt_injection_defense" for s in skills)
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_agents_and_skill_assignment():
 
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         # Testa listagem de agentes
 
         resp = await ac.get("/api/v1/agents")
@@ -95,9 +90,13 @@ async def test_api_agents_and_skill_assignment():
 
         # Testa atribuição personalizada de agentes a uma skill
 
-        payload = {"agent_roles": ["backend_developer", "software_architect", "secure_code_auditor"]}
+        payload = {
+            "agent_roles": ["backend_developer", "software_architect", "secure_code_auditor"]
+        }
 
-        assign_resp = await ac.post("/api/v1/skills/ecc_clean_architecture/assign-agents", json=payload)
+        assign_resp = await ac.post(
+            "/api/v1/skills/ecc_clean_architecture/assign-agents", json=payload
+        )
 
         assert assign_resp.status_code == 200
 
@@ -107,8 +106,8 @@ async def test_api_agents_and_skill_assignment():
 
         assert "secure_code_auditor" in data["skill"]["assigned_agents"]
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_tasks_and_database_retention_and_export():
 
     db_manager.register_project(
@@ -116,24 +115,17 @@ async def test_api_tasks_and_database_retention_and_export():
     )
 
     db_manager.save_task(
-
         task_id="task_audit_001",
-
         session_id="sess_001",
-
         prompt="Auditar projeto",
-
         state_dict={"classified_intent": "audit", "is_completed": True},
-
         project_id="proj_audit",
         owner_user_id="admin",
-
     )
 
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         resp = await ac.get("/api/v1/tasks")
 
         assert resp.status_code == 200
@@ -156,14 +148,13 @@ async def test_api_tasks_and_database_retention_and_export():
 
     assert purged == 0
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_audit_logs():
 
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         resp = await ac.get("/api/v1/audit/logs?limit=10")
 
         assert resp.status_code == 200
@@ -176,8 +167,8 @@ async def test_api_audit_logs():
 
         assert isinstance(data["events"], list)
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_tools_catalog_and_execution():
 
     from apps.api.auth import auth_service
@@ -187,7 +178,6 @@ async def test_api_tools_catalog_and_execution():
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as ac:
-
         # 1. Catálogo de ferramentas
 
         resp = await ac.get("/api/v1/tools")
@@ -213,21 +203,20 @@ async def test_api_tools_catalog_and_execution():
         demo_dir.mkdir(parents=True, exist_ok=True)
 
         db_manager.register_project(
-            "demo_flutter_app", "Demo Flutter App", str(demo_dir.resolve()),
+            "demo_flutter_app",
+            "Demo Flutter App",
+            str(demo_dir.resolve()),
             owner_user_id="admin",
         )
-        security_core.permission_engine.register_project("demo_flutter_app", str(demo_dir.resolve()))
+        security_core.permission_engine.register_project(
+            "demo_flutter_app", str(demo_dir.resolve())
+        )
 
         payload = {
-
             "tool_name": "list_directory",
-
             "agent_role": "software_architect",
-
             "project_id": "demo_flutter_app",
-
             "arguments": {"path": "."},
-
         }
 
         exec_resp = await ac.post("/api/v1/tools/execute", json=payload)
@@ -238,33 +227,31 @@ async def test_api_tools_catalog_and_execution():
 
         assert res["success"] is True
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_project_memory():
 
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         db_manager.register_project(
-            "proj_mem_test", "Project Memory Test", "workspace/proj_mem_test",
+            "proj_mem_test",
+            "Project Memory Test",
+            "workspace/proj_mem_test",
             owner_user_id="admin",
         )
         # 1. Salvar diretriz de memória
 
         save_payload = {
-
             "category": "style_guide",
-
             "key": "theme_colors",
-
             "content": "Primary: #38BDF8, Background: #0F172A",
-
             "sources": ["docs/conventions.md"],
-
         }
 
-        save_resp = await ac.post("/api/v1/workspace/projects/proj_mem_test/memory", json=save_payload)
+        save_resp = await ac.post(
+            "/api/v1/workspace/projects/proj_mem_test/memory", json=save_payload
+        )
 
         assert save_resp.status_code == 200
 
@@ -282,11 +269,12 @@ async def test_api_project_memory():
 
         assert any(m["key"] == "theme_colors" for m in memories)
 
-@pytest.mark.asyncio
 
+@pytest.mark.asyncio
 async def test_api_chat_stream(monkeypatch):
 
     from types import SimpleNamespace
+
     from apps.api.deps import model_manager
 
     async def fake_generate(request):
@@ -304,7 +292,6 @@ async def test_api_chat_stream(monkeypatch):
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-
         payload = {"prompt": "Explique brevemente a arquitetura"}
 
         resp = await ac.post("/api/v1/chat/stream", json=payload)
@@ -322,4 +309,3 @@ async def test_api_chat_stream(monkeypatch):
         assert "token" in text
 
         assert "done" in text
-

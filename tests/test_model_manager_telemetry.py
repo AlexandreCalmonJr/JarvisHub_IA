@@ -1,6 +1,6 @@
 import pytest
 
-from services.model_runtime import InferenceRequest, ModelManager, MockAdapter
+from services.model_runtime import InferenceRequest, MockAdapter, ModelManager
 from services.observability.telemetry_store import SqliteTelemetryStore
 
 

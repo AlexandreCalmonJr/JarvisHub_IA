@@ -1,5 +1,6 @@
 import asyncio
 import os
+import signal
 import time
 from pathlib import Path
 
@@ -32,6 +33,37 @@ class SubprocessSandbox:
         safe_env["CI"] = "true"
         return safe_env
 
+    @staticmethod
+    async def _terminate_tree(proc: asyncio.subprocess.Process) -> None:
+        """Termina o processo e descendentes antes de libertar a tarefa."""
+        try:
+            if os.name == "nt":
+                killer = await asyncio.create_subprocess_exec(
+                    "taskkill",
+                    "/PID",
+                    str(proc.pid),
+                    "/T",
+                    "/F",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(killer.wait(), timeout=3)
+            else:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (OSError, ProcessLookupError, TimeoutError):
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=3)
+        except TimeoutError:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            await proc.wait()
+
     async def run_command(
         self,
         command: list[str],
@@ -47,6 +79,7 @@ class SubprocessSandbox:
             env=self._sanitize_env(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=(os.name != "nt"),
         )
 
         try:
@@ -55,15 +88,14 @@ class SubprocessSandbox:
                 timeout=timeout,
             )
         except TimeoutError:
-            try:
-                proc.kill()
-                await proc.wait()
-            except ProcessLookupError:
-                pass
+            await self._terminate_tree(proc)
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             raise SandboxTimeoutError(
                 f"Comando '{' '.join(command)}' excedeu o tempo limite ({timeout}s)."
             )
+        except asyncio.CancelledError:
+            await self._terminate_tree(proc)
+            raise
 
         duration_ms = (time.perf_counter() - start_time) * 1000.0
         stdout = stdout_bytes.decode("utf-8", errors="replace")[: self.max_output_chars]
@@ -96,6 +128,7 @@ class SubprocessSandbox:
             env=self._sanitize_env(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=(os.name != "nt"),
         )
 
         try:
@@ -104,15 +137,12 @@ class SubprocessSandbox:
                 timeout=timeout,
             )
         except TimeoutError:
-            try:
-                proc.kill()
-                await proc.wait()
-            except ProcessLookupError:
-                pass
+            await self._terminate_tree(proc)
             duration_ms = (time.perf_counter() - start_time) * 1000.0
-            raise SandboxTimeoutError(
-                f"Comando excedeu o tempo limite ({timeout}s)."
-            )
+            raise SandboxTimeoutError(f"Comando excedeu o tempo limite ({timeout}s).")
+        except asyncio.CancelledError:
+            await self._terminate_tree(proc)
+            raise
 
         duration_ms = (time.perf_counter() - start_time) * 1000.0
         stdout = stdout_bytes.decode("utf-8", errors="replace")[: self.max_output_chars]
@@ -123,4 +153,3 @@ class SubprocessSandbox:
             redact_string(stderr),
             duration_ms,
         )
-

@@ -56,18 +56,23 @@ class ModelManager:
             return await self.adapter.evict_model(model_name)
         return False
 
-
     async def list_available_models(self) -> list[ModelMetadata]:
         models: list[ModelMetadata] = []
         try:
             models.extend(await self.adapter.list_models())
         except Exception as exc:
             logger.warning("Catálogo local indisponível durante descoberta: %s", type(exc).__name__)
-        if self.hybrid_router and self.hybrid_router.online_config.enabled and self.hybrid_router.online_adapter:
+        if (
+            self.hybrid_router
+            and self.hybrid_router.online_config.enabled
+            and self.hybrid_router.online_adapter
+        ):
             try:
                 models.extend(await self.hybrid_router.online_adapter.list_models())
             except Exception as exc:
-                logger.warning("Catálogo online indisponível durante descoberta: %s", type(exc).__name__)
+                logger.warning(
+                    "Catálogo online indisponível durante descoberta: %s", type(exc).__name__
+                )
         return models
 
     def _apply_owner_default_key(self, request: InferenceRequest) -> InferenceRequest:
@@ -123,7 +128,9 @@ class ModelManager:
                     self.hybrid_router.online_config.cost_per_1k_input,
                     self.hybrid_router.online_config.cost_per_1k_output,
                 )
-            } if allow_external else {},
+            }
+            if allow_external
+            else {},
             prompt_text=request.prompt,
             system_prompt=request.system_prompt,
             max_tokens=request.max_tokens,
@@ -194,7 +201,9 @@ class ModelManager:
 
         async def _run_inference():
             nonlocal used_provider
-            if self.hybrid_router and (self.hybrid_router.online_config.enabled or getattr(request, "key_id", None)):
+            if self.hybrid_router and (
+                self.hybrid_router.online_config.enabled or getattr(request, "key_id", None)
+            ):
                 res, used_provider = await self.hybrid_router.route_inference(
                     request, has_external_data_approval=has_external_data_approval
                 )
@@ -297,7 +306,9 @@ class ModelManager:
         request = await self._prepare_model_selection(request, has_external_data_approval)
 
         # 2. Streaming via Hybrid Router ou Adapter Local
-        if self.hybrid_router and (self.hybrid_router.online_config.enabled or getattr(request, "key_id", None)):
+        if self.hybrid_router and (
+            self.hybrid_router.online_config.enabled or getattr(request, "key_id", None)
+        ):
             async for chunk in self.hybrid_router.route_inference_stream(
                 request, has_external_data_approval=has_external_data_approval
             ):

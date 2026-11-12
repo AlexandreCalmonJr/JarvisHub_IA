@@ -5,7 +5,13 @@ from apps.api.main import app
 
 
 @pytest.mark.asyncio
-async def test_agent_config_and_memories_api():
+async def test_agent_config_and_memories_api(monkeypatch):
+    from apps.api.routers import agents as agents_router
+
+    async def provider_unavailable(_request):
+        raise RuntimeError("mock provider unavailable")
+
+    monkeypatch.setattr(agents_router.model_manager, "generate", provider_unavailable)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # 1. Obter agente individual

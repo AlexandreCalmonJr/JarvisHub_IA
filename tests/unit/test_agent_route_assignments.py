@@ -67,9 +67,7 @@ def test_resolver_prefers_account_route_and_falls_back_safely(tmp_path):
         is_default=True,
     )
 
-    db.set_agent_route(
-        "code_reviewer", "account_key", "openai/gpt-oss-20b", "alice"
-    )
+    db.set_agent_route("code_reviewer", "account_key", "openai/gpt-oss-20b", "alice")
     route = resolve_account_agent_route(
         db_manager=db,
         key_vault=vault,
@@ -108,9 +106,7 @@ def test_resolver_prefers_account_route_and_falls_back_safely(tmp_path):
 
     # Uma chave global com o mesmo ID não substitui a chave privada da conta.
     vault.save_key("only_global", "Global", "groq", "gsk-global-only")
-    db.set_agent_route(
-        "research_analyst", "only_global", "openai/gpt-oss-120b", "alice"
-    )
+    db.set_agent_route("research_analyst", "only_global", "openai/gpt-oss-120b", "alice")
     shadow_route = resolve_account_agent_route(
         db_manager=db,
         key_vault=vault,
@@ -206,9 +202,7 @@ async def test_route_endpoints_save_list_and_delete_for_account(tmp_path, monkey
     assert listed["routes"][0]["key_available"] is True
     assert listed["routes"][0]["provider"] == "groq"
 
-    removed = await agents_router.delete_agent_route_endpoint(
-        "code_reviewer", _principal()
-    )
+    removed = await agents_router.delete_agent_route_endpoint("code_reviewer", _principal())
     assert removed["status"] == "deleted"
     assert db.get_agent_route("code_reviewer", "alice") is None
 
@@ -243,9 +237,7 @@ async def test_autonomous_runtime_uses_account_route_key_and_model(tmp_path):
         owner_user_id="alice",
         is_default=True,
     )
-    db.set_agent_route(
-        "code_reviewer", "account_key", "openai/gpt-oss-20b", "alice"
-    )
+    db.set_agent_route("code_reviewer", "account_key", "openai/gpt-oss-20b", "alice")
 
     class RecordingProvider:
         name = "recording"
@@ -291,9 +283,7 @@ async def test_autonomous_runtime_uses_account_route_key_and_model(tmp_path):
         security_core=sec,
         workspace_service=Workspace(),
         tools=CodingToolExecutor(security_core=sec, workspace_service=Workspace()),
-        broker=ApprovalBroker(
-            approval_engine=sec.approval_engine, audit_trail=sec.audit
-        ),
+        broker=ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit),
         db_manager=db,
         key_vault=vault,
         provider_factory=unused_global_factory,

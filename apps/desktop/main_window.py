@@ -4,15 +4,17 @@ Executa o backend FastAPI silenciosamente e abre a janela nativa do Windows (Edg
 Permite uso por usuários finais sem abrir navegador ou terminal.
 """
 
+import msvcrt
 import os
-import sys
 import socket
+import sys
 import threading
 import time
-from pathlib import Path
 import urllib.request
-import webview
+from pathlib import Path
+
 import uvicorn
+import webview
 
 # Define e fixa o diretório base de trabalho da aplicação
 if getattr(sys, "frozen", False):
@@ -70,6 +72,23 @@ def is_port_listening(host: str, port: int) -> bool:
         return s.connect_ex((host, port)) == 0
 
 
+def is_voice_daemon_running() -> bool:
+    lock_path = ROOT_DIR / "data" / "run" / "voice-daemon.lock"
+    if not lock_path.exists():
+        return False
+    try:
+        with lock_path.open("a+b") as lock_file:
+            lock_file.seek(0)
+            try:
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                return True
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            return False
+    except OSError:
+        return False
+
+
 def launch_desktop():
     HOST = "127.0.0.1"
     PORT = 8000
@@ -107,7 +126,7 @@ def launch_desktop():
     webview.start()
 
     # Encerra o backend ao fechar a janela se tiver sido iniciado por este processo
-    if server_thread and not already_running:
+    if server_thread and not already_running and not is_voice_daemon_running():
         server_thread.stop()
 
 

@@ -15,12 +15,17 @@ import ipaddress
 import logging
 import re
 import socket
+import time
 import urllib.parse
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import httpx
 
+from services.security_core.cyber_shield import cyber_shield
+
 logger = logging.getLogger("jarvis.security.web_search")
+
 
 # ---------------------------------------------------------------------------
 # Estruturas de Dados
@@ -28,10 +33,12 @@ logger = logging.getLogger("jarvis.security.web_search")
 @dataclass
 class SearchResult:
     """Resultado individual sanitizado de busca web."""
+
     title: str
     url: str
     snippet: str
     source: str = "web"
+    retrieved_at: str = ""
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -39,7 +46,12 @@ class SearchResult:
             "url": self.url,
             "snippet": self.snippet,
             "source": self.source,
+            "retrieved_at": self.retrieved_at,
         }
+
+
+class SearchUnavailableError(RuntimeError):
+    """Pesquisa externa não pôde ser concluída; não representa zero resultados."""
 
 
 # ---------------------------------------------------------------------------
@@ -55,14 +67,14 @@ _BLOCKED_HOSTNAMES = {
 }
 
 _BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),      # Loopback IPv4
-    ipaddress.ip_network("10.0.0.0/8"),       # Privada Classe A
-    ipaddress.ip_network("172.16.0.0/12"),    # Privada Classe B
-    ipaddress.ip_network("192.168.0.0/16"),   # Privada Classe C
-    ipaddress.ip_network("169.254.0.0/16"),   # Link-Local / Cloud Metadata (169.254.169.254)
-    ipaddress.ip_network("::1/128"),          # Loopback IPv6
-    ipaddress.ip_network("fe80::/10"),        # Link-Local IPv6
-    ipaddress.ip_network("fc00::/7"),         # Unique Local Address (ULA) IPv6
+    ipaddress.ip_network("127.0.0.0/8"),  # Loopback IPv4
+    ipaddress.ip_network("10.0.0.0/8"),  # Privada Classe A
+    ipaddress.ip_network("172.16.0.0/12"),  # Privada Classe B
+    ipaddress.ip_network("192.168.0.0/16"),  # Privada Classe C
+    ipaddress.ip_network("169.254.0.0/16"),  # Link-Local / Cloud Metadata (169.254.169.254)
+    ipaddress.ip_network("::1/128"),  # Loopback IPv6
+    ipaddress.ip_network("fe80::/10"),  # Link-Local IPv6
+    ipaddress.ip_network("fc00::/7"),  # Unique Local Address (ULA) IPv6
 ]
 
 
@@ -81,12 +93,19 @@ def is_safe_public_url(target_url: str) -> bool:
             return False
 
         # Verifica resolução de DNS para todos os IPs associados
-        addr_infos = socket.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+        addr_infos = socket.getaddrinfo(
+            hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+        )
         for item in addr_infos:
             ip_str = item[4][0]
             try:
                 ip_obj = ipaddress.ip_address(ip_str)
-                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved:
+                if (
+                    ip_obj.is_private
+                    or ip_obj.is_loopback
+                    or ip_obj.is_link_local
+                    or ip_obj.is_reserved
+                ):
                     return False
                 for net in _BLOCKED_NETWORKS:
                     if ip_obj in net:
@@ -104,13 +123,13 @@ def is_safe_public_url(target_url: str) -> bool:
 # DLP & Sanitização de Dados
 # ---------------------------------------------------------------------------
 _SENSITIVE_PATTERNS = [
-    r"gsk_[a-zA-Z0-9_-]{20,}",                  # Groq API Key
-    r"sk-[a-zA-Z0-9_-]{20,}",                   # OpenAI API Key
-    r"sk-ant-[a-zA-Z0-9_-]{20,}",               # Anthropic API Key
-    r"bearer\s+[a-zA-Z0-9_\-\.]{20,}",          # Authorization Tokens
-    r"password\s*=\s*['\"][^'\"]+['\"]",        # Senhas explícitas
-    r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b",           # CPF brasileiro
-    r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b", # Cartão de crédito
+    r"gsk_[a-zA-Z0-9_-]{20,}",  # Groq API Key
+    r"sk-[a-zA-Z0-9_-]{20,}",  # OpenAI API Key
+    r"sk-ant-[a-zA-Z0-9_-]{20,}",  # Anthropic API Key
+    r"bearer\s+[a-zA-Z0-9_\-\.]{20,}",  # Authorization Tokens
+    r"password\s*=\s*['\"][^'\"]+['\"]",  # Senhas explícitas
+    r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b",  # CPF brasileiro
+    r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b",  # Cartão de crédito
 ]
 
 
@@ -144,6 +163,10 @@ class SafeWebSearchEngine:
     SEARCH_ENDPOINT = "https://lite.duckduckgo.com/lite/"
     DEFAULT_TIMEOUT_SECONDS = 4.5
     MAX_SNIPPET_LENGTH = 320
+    CACHE_TTL_SECONDS = 12 * 60
+
+    def __init__(self):
+        self._cache: dict[str, tuple[float, list[SearchResult]]] = {}
 
     async def search(
         self,
@@ -151,14 +174,27 @@ class SafeWebSearchEngine:
         max_results: int = 4,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> list[SearchResult]:
+        if cyber_shield.network_isolated:
+            cyber_shield.blocked_outbound_attempts += 1
+            raise PermissionError("Busca bloqueada: o isolamento de rede está ativo.")
         sanitized_query = sanitize_search_query(query)
         if not sanitized_query or len(sanitized_query) < 2:
             return []
+        cache_key = " ".join(sanitized_query.casefold().split())
+        cached = self._cache.get(cache_key)
+        if cached and cached[0] > time.monotonic():
+            return [SearchResult(**item.to_dict()) for item in cached[1]]
+        if cached:
+            self._cache.pop(cache_key, None)
 
         # Validação SSRF do endpoint de busca
         if not is_safe_public_url(self.SEARCH_ENDPOINT):
-            logger.warning("Endpoint de busca rejeitado pela política SSRF: %s", self.SEARCH_ENDPOINT)
-            return []
+            logger.warning(
+                "Endpoint de busca rejeitado pela política SSRF: %s", self.SEARCH_ENDPOINT
+            )
+            raise SearchUnavailableError(
+                "Busca indisponível: o endpoint foi bloqueado pela política de rede."
+            )
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -171,19 +207,34 @@ class SafeWebSearchEngine:
             async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
                 response = await client.post(self.SEARCH_ENDPOINT, data=data, headers=headers)
                 if response.status_code != 200:
-                    logger.debug("Busca retornou HTTP %s para a query '%s'", response.status_code, sanitized_query)
-                    return []
+                    logger.debug(
+                        "Busca retornou HTTP %s para a query '%s'",
+                        response.status_code,
+                        sanitized_query,
+                    )
+                    raise SearchUnavailableError(
+                        f"Busca indisponível (HTTP {response.status_code})."
+                    )
 
-                return self._parse_lite_results(response.text, max_results=max_results)
+                results = self._parse_lite_results(response.text, max_results=max_results)
+                self._cache[cache_key] = (
+                    time.monotonic() + self.CACHE_TTL_SECONDS,
+                    [SearchResult(**item.to_dict()) for item in results],
+                )
+                return results
         except (httpx.TimeoutException, TimeoutError):
-            logger.info("Timeout na busca web (%ss) para query: '%s'", timeout_seconds, sanitized_query)
-            return []
+            logger.info(
+                "Timeout na busca web (%ss) para query: '%s'", timeout_seconds, sanitized_query
+            )
+            raise SearchUnavailableError("Busca indisponível: tempo limite excedido.")
         except httpx.HTTPError as exc:
             logger.info("Falha de rede na busca web: %s", exc)
-            return []
+            raise SearchUnavailableError("Busca indisponível: falha de conexão.") from exc
+        except SearchUnavailableError:
+            raise
         except Exception as exc:
             logger.warning("Erro inesperado ao consultar busca web: %s", exc)
-            return []
+            raise SearchUnavailableError("Busca indisponível: erro inesperado.") from exc
 
     def _parse_lite_results(self, html_text: str, max_results: int = 4) -> list[SearchResult]:
         """Extrai resultados estruturados do layout Lite do DuckDuckGo."""
@@ -235,6 +286,7 @@ class SafeWebSearchEngine:
                         title=clean_title,
                         url=target_url,
                         snippet=clean_snippet or clean_title,
+                        retrieved_at=datetime.now(UTC).isoformat(),
                     )
                 )
 

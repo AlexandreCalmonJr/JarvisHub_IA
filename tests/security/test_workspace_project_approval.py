@@ -42,6 +42,7 @@ async def test_project_creation_is_executed_only_after_matching_human_approval(t
             "project_id": project_id,
             "name": pending_project["name"],
             "project_type": pending_project["project_type"],
+            "database": pending_project.get("database", "none"),
             "files": pending_project["files"],
         },
         ensure_ascii=False,

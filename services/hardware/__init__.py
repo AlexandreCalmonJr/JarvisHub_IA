@@ -4,4 +4,4 @@ from services.hardware.hardware_scanner import scan_hardware
 from services.hardware.model_advisor import generate_recommendations
 from services.hardware.performance_manager import HardwarePerformanceManager
 
-__all__ = ["scan_hardware", "generate_recommendations", "HardwarePerformanceManager"]
+__all__ = ["HardwarePerformanceManager", "generate_recommendations", "scan_hardware"]

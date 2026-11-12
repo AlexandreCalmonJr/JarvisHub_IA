@@ -12,7 +12,7 @@ from services.coding_agent import CodingToolExecutor, ToolCall
 from services.mcp import McpService
 from services.security_core import SecurityCore
 
-FAKE_SERVER = r'''
+FAKE_SERVER = r"""
 import json
 import sys
 
@@ -52,7 +52,7 @@ for line in sys.stdin:
         result = {}
     if "id" in message:
         print(json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": result}), flush=True)
-'''
+"""
 
 
 def _write_config(tmp_path: Path, script: Path, server_id: str = "fake") -> Path:
@@ -78,9 +78,7 @@ async def test_mcp_discovery_registers_tool_and_executes_it(tmp_path):
     script.write_text(FAKE_SERVER, encoding="utf-8")
     config_path = _write_config(tmp_path, script)
 
-    executor = CodingToolExecutor(
-        security_core=SecurityCore(), workspace_service=None
-    )
+    executor = CodingToolExecutor(security_core=SecurityCore(), workspace_service=None)
     service = McpService(config_path=config_path)
     try:
         summary = await service.discover(executor=executor)
@@ -128,9 +126,7 @@ async def test_mcp_missing_command_reports_error_without_crashing(tmp_path):
     config_path.write_text(json.dumps(config), encoding="utf-8")
 
     service = McpService(config_path=config_path)
-    executor = CodingToolExecutor(
-        security_core=SecurityCore(), workspace_service=None
-    )
+    executor = CodingToolExecutor(security_core=SecurityCore(), workspace_service=None)
     try:
         summary = await service.discover(executor=executor)
         assert summary["tools"] == 0

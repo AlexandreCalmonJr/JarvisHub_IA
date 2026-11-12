@@ -1,15 +1,15 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from apps.api.auth import Principal, get_principal
-
+from apps.api.deps import db_manager, skills_catalog
 from apps.api.schemas import (
     AssignAgentsRequest,
-    PonytailConfigRequest,
     CreateSkillRequest,
     ImportEccSkillRequest,
+    PonytailConfigRequest,
 )
-from apps.api.deps import skills_catalog, db_manager
 from services.skills_manager import SkillMetadata, SkillValidator
 
 logger = logging.getLogger("jarvis.api.skills")
@@ -20,6 +20,7 @@ def _skill_owner(principal: Principal) -> str:
     if principal.kind == "device" and principal.subject_id.startswith("device:"):
         raise HTTPException(status_code=403, detail="Dispositivo sem associação a uma conta.")
     return principal.subject_id
+
 
 def _ensure_skill_id_available(skill_id: str) -> None:
     if any(skill.id == skill_id for skill in skills_catalog.list_all_skills()):
@@ -76,9 +77,7 @@ async def list_skills_endpoint(principal: Principal = Depends(get_principal)):
 
 
 @router.post("/api/v1/skills/{skill_id}/toggle")
-async def toggle_skill_endpoint(
-    skill_id: str, principal: Principal = Depends(get_principal)
-):
+async def toggle_skill_endpoint(skill_id: str, principal: Principal = Depends(get_principal)):
     owner = _skill_owner(principal)
     private_skill = db_manager.get_user_skill(skill_id, owner_user_id=owner)
     skill = skills_catalog.get_skill(skill_id)
@@ -88,7 +87,9 @@ async def toggle_skill_endpoint(
         status = "approved" if private_skill["is_approved"] else "revoked"
         return {"status": status, "skill": private_skill}
     if principal.role != "admin":
-        raise HTTPException(status_code=403, detail="Apenas administradores podem alterar skills globais.")
+        raise HTTPException(
+            status_code=403, detail="Apenas administradores podem alterar skills globais."
+        )
     if skill:
         revoked = skills_catalog.revoke_skill(skill_id, reason="Desativado via dashboard")
         return {"status": "revoked", "skill": revoked}
@@ -102,7 +103,8 @@ async def toggle_skill_endpoint(
 
 @router.post("/api/v1/skills/{skill_id}/assign-agents")
 async def assign_agents_endpoint(
-    skill_id: str, payload: AssignAgentsRequest,
+    skill_id: str,
+    payload: AssignAgentsRequest,
     principal: Principal = Depends(get_principal),
 ):
     owner = _skill_owner(principal)
@@ -112,7 +114,9 @@ async def assign_agents_endpoint(
         db_manager.save_user_skill(private_skill, owner_user_id=owner)
         return {"status": "updated", "skill": private_skill}
     if principal.role != "admin":
-        raise HTTPException(status_code=403, detail="Apenas administradores podem alterar skills globais.")
+        raise HTTPException(
+            status_code=403, detail="Apenas administradores podem alterar skills globais."
+        )
     try:
         updated = skills_catalog.assign_agents(skill_id, payload.agent_roles)
         return {"status": "updated", "skill": updated}
@@ -135,7 +139,10 @@ async def set_ponytail_level_endpoint(
     payload: PonytailConfigRequest, principal: Principal = Depends(get_principal)
 ):
     if principal.role != "admin":
-        raise HTTPException(status_code=403, detail="Apenas administradores podem alterar a política global Ponytail.")
+        raise HTTPException(
+            status_code=403,
+            detail="Apenas administradores podem alterar a política global Ponytail.",
+        )
     valid_levels = ("off", "lite", "senior", "ultra")
     clean_level = payload.level.lower().strip()
     if clean_level not in valid_levels:
@@ -151,8 +158,14 @@ async def create_user_skill_endpoint(
     skill_id = payload.id or payload.name.lower().replace(" ", "_").replace("-", "_")
     _ensure_skill_id_available(skill_id)
     content_hash = _validate_private_skill(
-        skill_id, payload.name, "user_created", "Proprietary", payload.description,
-        payload.domain, payload.assigned_agents, payload.instructions,
+        skill_id,
+        payload.name,
+        "user_created",
+        "Proprietary",
+        payload.description,
+        payload.domain,
+        payload.assigned_agents,
+        payload.instructions,
     )
     skill_dict = {
         "id": skill_id,
@@ -176,9 +189,7 @@ async def create_user_skill_endpoint(
 
 
 @router.delete("/api/v1/skills/{skill_id}")
-async def delete_user_skill_endpoint(
-    skill_id: str, principal: Principal = Depends(get_principal)
-):
+async def delete_user_skill_endpoint(skill_id: str, principal: Principal = Depends(get_principal)):
     owner = _skill_owner(principal)
     if not db_manager.get_user_skill(skill_id, owner_user_id=owner):
         raise HTTPException(status_code=404, detail="Skill não encontrada.")
@@ -215,8 +226,14 @@ async def import_ecc_skill_endpoint(
     skill_id = name.lower().replace(" ", "_").replace("-", "_")[:32]
     _ensure_skill_id_available(skill_id)
     content_hash = _validate_private_skill(
-        skill_id, name, "imported_ecc", license_name, desc, domain,
-        ["jarvis_master"], instructions,
+        skill_id,
+        name,
+        "imported_ecc",
+        license_name,
+        desc,
+        domain,
+        ["jarvis_master"],
+        instructions,
     )
     skill_dict = {
         "id": skill_id,

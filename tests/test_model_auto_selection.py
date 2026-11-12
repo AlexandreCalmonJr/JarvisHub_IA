@@ -1,7 +1,8 @@
-import pytest
 from types import SimpleNamespace
 
-from services.model_runtime import InferenceRequest, ModelManager, MockAdapter
+import pytest
+
+from services.model_runtime import InferenceRequest, MockAdapter, ModelManager
 from services.model_runtime.types import ModelMetadata
 from services.observability.telemetry_store import SqliteTelemetryStore
 

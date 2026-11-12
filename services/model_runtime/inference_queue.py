@@ -39,15 +39,14 @@ class InferenceQueue:
         timeout_scope = asyncio.timeout(timeout_seconds)
         try:
             # Distingue timeout da fila de TimeoutError lançado pelo próprio provider.
-            async with timeout_scope:
-                async with self._semaphore:
-                    acquired = True
-                    self._waiting_count -= 1
-                    self._active_count += 1
-                    try:
-                        return await coro_func()
-                    finally:
-                        self._active_count -= 1
+            async with timeout_scope, self._semaphore:
+                acquired = True
+                self._waiting_count -= 1
+                self._active_count += 1
+                try:
+                    return await coro_func()
+                finally:
+                    self._active_count -= 1
         except TimeoutError:
             if not timeout_scope.expired():
                 if acquired:

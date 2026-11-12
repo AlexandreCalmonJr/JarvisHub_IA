@@ -1,25 +1,26 @@
 import difflib
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from apps.api.auth import Principal, get_principal, require_admin, require_permission
-from apps.api.schemas import (
-    ApprovalDecisionRequest,
-    KillSwitchRequest,
-    DevicePairRequest,
-    DeviceRevokeRequest,
-    NetworkIsolationPayload,
-    ApplySecurityPolicyPayload,
-)
 from apps.api.deps import (
-    security_core,
-    jarvis_master,
-    workspace_service,
-    cyber_shield,
     UnauthorizedApprovalError,
     coding_broker,
-    tool_gateway,
+    cyber_shield,
     db_manager,
+    jarvis_master,
+    security_core,
+    tool_gateway,
+    workspace_service,
+)
+from apps.api.schemas import (
+    ApplySecurityPolicyPayload,
+    ApprovalDecisionRequest,
+    DevicePairRequest,
+    DeviceRevokeRequest,
+    KillSwitchRequest,
+    NetworkIsolationPayload,
 )
 from packages.contracts.agent import AgentRole
 from packages.contracts.approval import ApprovalStatus
@@ -54,16 +55,14 @@ async def decide_approval(
 ):
     try:
         owner = _approval_owner(principal)
-        owned_request = security_core.approval_engine.get_request(
-            request_id, owner_user_id=owner
-        )
+        owned_request = security_core.approval_engine.get_request(request_id, owner_user_id=owner)
         if owned_request is None:
             raise HTTPException(status_code=404, detail="Aprovação não encontrada.")
 
         # Rejeita imediatamente qualquer tentativa de autoaprovação por agentes
         known_agents = {r.value for r in AgentRole}
         candidate = (payload.decided_by or "").lower().strip()
-        if candidate and (candidate in known_agents or candidate.startswith("agent_") or candidate.startswith("agent")):
+        if candidate and (candidate in known_agents or candidate.startswith("agent")):
             raise UnauthorizedApprovalError(
                 "Agentes de IA não possuem permissão para autoaprovar pedidos!"
             )
@@ -111,7 +110,9 @@ async def decide_approval(
                         owner_user_id=owner,
                     )
                 except ValueError as ve:
-                    logger.debug("JarvisMaster não encontrou checkpoint para '%s': %s", decided.task_id, ve)
+                    logger.debug(
+                        "JarvisMaster não encontrou checkpoint para '%s': %s", decided.task_id, ve
+                    )
                 except PermissionDeniedError as exc:
                     logger.warning("Execução bloqueada após aprovação %s: %s", request_id, exc)
                     raise HTTPException(
@@ -202,7 +203,9 @@ async def pair_mobile_device(
     principal: Principal = Depends(require_permission("mobile:pair")),
 ):
     if principal.kind != "human":
-        raise HTTPException(status_code=403, detail="Apenas uma conta humana pode emparelhar dispositivos.")
+        raise HTTPException(
+            status_code=403, detail="Apenas uma conta humana pode emparelhar dispositivos."
+        )
     try:
         reg = security_core.device_auth.pair_device(
             device_name=payload.device_name,
@@ -257,13 +260,15 @@ async def list_audit_logs_endpoint(
     # cuja identidade de origem corresponde ao principal autenticado.
     allowed_actors = {principal.subject_id, principal.display_id}
     events = [
-        event for event in security_core.audit.list_events()
+        event
+        for event in security_core.audit.list_events()
         if getattr(event, "user_id", None) in allowed_actors
     ]
     if severity:
         sev_clean = severity.upper()
         events = [
-            e for e in events
+            e
+            for e in events
             if getattr(e, "severity", None) == sev_clean
             or getattr(getattr(e, "severity", None), "value", None) == sev_clean
         ]
@@ -280,7 +285,9 @@ async def list_audit_logs_endpoint(
                 "timestamp": getattr(e, "timestamp", ""),
                 "operation": getattr(e, "operation", ""),
                 "status": getattr(e, "status", ""),
-                "severity": getattr(getattr(e, "severity", None), "value", str(getattr(e, "severity", "INFO"))),
+                "severity": getattr(
+                    getattr(e, "severity", None), "value", str(getattr(e, "severity", "INFO"))
+                ),
                 "parameters": getattr(e, "parameters", {}),
                 "reason": getattr(e, "reason", None),
             }
@@ -305,9 +312,7 @@ async def scan_project_cves_endpoint(
 
 
 @router.post("/api/v1/security/red-team/{project_id}")
-async def red_team_audit_endpoint(
-    project_id: str, principal: Principal = Depends(get_principal)
-):
+async def red_team_audit_endpoint(project_id: str, principal: Principal = Depends(get_principal)):
     """Executa auditoria apenas em projetos pertencentes à conta."""
     owner = _approval_owner(principal)
     if not db_manager.get_project(project_id, owner_user_id=owner):
@@ -339,7 +344,9 @@ async def apply_security_policy_endpoint(
             raise HTTPException(status_code=404, detail="Projeto não encontrado.")
         proj_dir = workspace_service.get_project_dir(payload.project_id)
         if not proj_dir.exists() or not proj_dir.is_dir():
-            raise HTTPException(status_code=404, detail=f"Projeto '{payload.project_id}' não encontrado.")
+            raise HTTPException(
+                status_code=404, detail=f"Projeto '{payload.project_id}' não encontrado."
+            )
 
         # Garante registro no PermissionEngine para validação estrita de caminho
         if payload.project_id not in security_core.permission_engine._project_allowlists:
@@ -356,13 +363,19 @@ async def apply_security_policy_endpoint(
         target_file = security_core.permission_engine.validate_path_access(
             payload.project_id, tmpl["filename"]
         )
-        old_content = target_file.read_text(encoding="utf-8", errors="replace") if target_file.is_file() else ""
-        diff = "".join(difflib.unified_diff(
-            old_content.splitlines(keepends=True),
-            tmpl["code"].splitlines(keepends=True),
-            fromfile=f"a/{tmpl['filename']}",
-            tofile=f"b/{tmpl['filename']}",
-        ))
+        old_content = (
+            target_file.read_text(encoding="utf-8", errors="replace")
+            if target_file.is_file()
+            else ""
+        )
+        diff = "".join(
+            difflib.unified_diff(
+                old_content.splitlines(keepends=True),
+                tmpl["code"].splitlines(keepends=True),
+                fromfile=f"a/{tmpl['filename']}",
+                tofile=f"b/{tmpl['filename']}",
+            )
+        )
         task_id = f"security-policy:{payload.project_id}:{payload.template_id}"
         owner = _approval_owner(principal)
         if not payload.approval_id:
@@ -412,7 +425,11 @@ async def apply_security_policy_endpoint(
             project_id=payload.project_id,
             tool_name="write_file",
             status="SUCCESS",
-            parameters={"project_id": payload.project_id, "template_id": payload.template_id, "target_file": str(target_file)},
+            parameters={
+                "project_id": payload.project_id,
+                "template_id": payload.template_id,
+                "target_file": str(target_file),
+            },
         )
         return {
             "status": "applied",

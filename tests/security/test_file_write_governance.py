@@ -11,10 +11,11 @@ Cobre rigorosamente os 7 cenários obrigatórios:
 7. Operações ficam registradas na trilha de auditoria inviolável.
 """
 
-import os
 import logging
+import os
 import tempfile
 from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -22,9 +23,9 @@ from apps.api.deps import security_core, tool_gateway, workspace_service
 from apps.api.main import app, db_manager
 from packages.contracts.agent import AgentRole
 from packages.contracts.security import AuditEventSeverity
+from services.orchestration.workspace_actions import execute_workspace_modification
 from services.security_core import PermissionDeniedError
 from services.tool_gateway import ToolExecutionRequest
-from services.orchestration.workspace_actions import execute_workspace_modification
 
 
 @pytest.fixture
@@ -257,7 +258,9 @@ async def test_05_read_only_agents_cannot_write(test_project_id):
         agent_role=AgentRole.RESEARCH_ANALYST.value,
         project_id=test_project_id,
     )
-    read_result = await tool_gateway.execute_tool(req_read, owner_user_id="admin", actor_role="admin")
+    read_result = await tool_gateway.execute_tool(
+        req_read, owner_user_id="admin", actor_role="admin"
+    )
     assert read_result.success is True
     assert "initial content" in read_result.stdout
 
@@ -306,9 +309,7 @@ async def test_07_file_operations_recorded_in_audit_trail(test_project_id):
     """7. Operações de modificação e tentativas de violação são auditadas no AuditTrail."""
     # Dispara uma violação de path traversal para auditar
     try:
-        security_core.permission_engine.validate_path_access(
-            test_project_id, "../../etc/shadow"
-        )
+        security_core.permission_engine.validate_path_access(test_project_id, "../../etc/shadow")
     except PermissionDeniedError:
         pass
 
@@ -324,7 +325,8 @@ async def test_07_file_operations_recorded_in_audit_trail(test_project_id):
 
     # Verifica se evento de alerta de path traversal foi gravado
     traversal_events = [
-        e for e in events
+        e
+        for e in events
         if e.operation == "PATH_TRAVERSAL_BLOCKED" and e.project_id == test_project_id
     ]
     assert len(traversal_events) > 0, "Alerta PATH_TRAVERSAL_BLOCKED não registrado na auditoria!"
@@ -332,7 +334,8 @@ async def test_07_file_operations_recorded_in_audit_trail(test_project_id):
 
     # Verifica se evento de modificação foi gravado
     modify_events = [
-        e for e in events
+        e
+        for e in events
         if e.operation == "PROJECT_FILE_MODIFIED" and e.project_id == test_project_id
     ]
     assert len(modify_events) > 0, "PROJECT_FILE_MODIFIED não registrado na auditoria!"
@@ -391,6 +394,7 @@ async def test_09_protected_files_blocked_from_modification(test_project_id):
             rel_path=".git/config",
             new_content="[core] hacked = true",
         )
+
 
 @pytest.mark.asyncio
 async def test_08_workspace_api_write_requires_matching_human_approval(test_project_id):
@@ -451,7 +455,6 @@ def test_09_external_import_requires_an_explicitly_allowed_root(monkeypatch, tmp
 
     monkeypatch.setenv("JARVIS_WORKSPACE_IMPORT_ROOTS", str(external_root))
     assert workspace_service.validate_import_root(str(project)) == project.resolve()
-
 
 
 def test_10_orchestrator_workspace_edit_is_preview_only_until_approved(tmp_path):

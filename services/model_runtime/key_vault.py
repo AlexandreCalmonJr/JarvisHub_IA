@@ -88,7 +88,9 @@ def _chmod_private(path: Path) -> None:
     if os.name == "nt":
         username = os.environ.get("USERNAME") or os.environ.get("USER")
         if not username:
-            raise OSError("Não foi possível identificar o utilizador para proteger a chave do cofre.")
+            raise OSError(
+                "Não foi possível identificar o utilizador para proteger a chave do cofre."
+            )
         result = subprocess.run(
             ["icacls", str(path), "/inheritance:r", "/grant:r", f"{username}:F"],
             check=False,
@@ -220,7 +222,9 @@ class KeyVaultService:
                 return
             except Exception as exc:
                 self._keys.clear()
-                logger.error("Falha ao ler o cofre de APIs cifrado; inicialização bloqueada: %s", exc)
+                logger.error(
+                    "Falha ao ler o cofre de APIs cifrado; inicialização bloqueada: %s", exc
+                )
                 raise RuntimeError(
                     "O KeyVault existente não pôde ser aberto com segurança. "
                     "Não será ignorado nem substituído automaticamente."
@@ -363,22 +367,15 @@ class KeyVaultService:
         if not default_model:
             default_model = default_model_for_provider(provider)
         else:
-            default_model = (
-                normalize_model_for_provider(provider, default_model) or default_model
-            )
+            default_model = normalize_model_for_provider(provider, default_model) or default_model
 
         storage_id = self._storage_id(key_id, owner_user_id)
         existing = self._keys.get(storage_id)
         has_owner_default = any(
-            p.owner_user_id == owner_user_id
-            and p.is_default
-            and p.is_active
-            and p.key_id != key_id
+            p.owner_user_id == owner_user_id and p.is_default and p.is_active and p.key_id != key_id
             for p in self._keys.values()
         )
-        make_default = bool(owner_user_id) and (
-            is_default or not has_owner_default
-        )
+        make_default = bool(owner_user_id) and (is_default or not has_owner_default)
         if make_default:
             for other in self._keys.values():
                 if other.owner_user_id == owner_user_id:

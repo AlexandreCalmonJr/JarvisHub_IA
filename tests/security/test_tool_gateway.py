@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from packages.contracts.agent import AgentRole
@@ -101,9 +103,34 @@ async def test_sandbox_timeout_terminates_subprocess(tmp_path):
         await sandbox.run_command(cmd, cwd=tmp_path)
 
 
+@pytest.mark.asyncio
+async def test_sandbox_cancellation_terminates_subprocess(tmp_path):
+    sandbox = SubprocessSandbox(default_timeout_seconds=10)
+    command = asyncio.create_task(
+        sandbox.run_command(["python", "-c", "import time; time.sleep(10)"], cwd=tmp_path)
+    )
+    await asyncio.sleep(0.1)
+    command.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await command
+
 
 @pytest.mark.asyncio
-async def test_vector_search_is_blocked_until_private_account_indexes_exist(gateway_and_project, monkeypatch):
+async def test_shell_sandbox_cancellation_terminates_subprocess(tmp_path):
+    sandbox = SubprocessSandbox(default_timeout_seconds=10)
+    command = asyncio.create_task(
+        sandbox.run_shell_command('python -c "import time; time.sleep(10)"', cwd=tmp_path)
+    )
+    await asyncio.sleep(0.1)
+    command.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await command
+
+
+@pytest.mark.asyncio
+async def test_vector_search_is_blocked_until_private_account_indexes_exist(
+    gateway_and_project, monkeypatch
+):
     gw, _, _ = gateway_and_project
     monkeypatch.setattr(gw.agent_registry, "get_allowed_tools", lambda _role: ["vector_search"])
     req = ToolExecutionRequest(
@@ -114,7 +141,6 @@ async def test_vector_search_is_blocked_until_private_account_indexes_exist(gate
     )
     with pytest.raises(PermissionDeniedError, match="isolamento dos índices por conta"):
         await gw.execute_tool(req, owner_user_id="test-owner")
-
 
 
 @pytest.mark.asyncio

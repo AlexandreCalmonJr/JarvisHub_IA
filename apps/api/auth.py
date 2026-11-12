@@ -56,6 +56,7 @@ ALLOWED_DEVICE_SCOPES = {
     "system:feedback",
     "coding:use",
     "security:kill",
+    "voice:use",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -200,12 +201,28 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     # Voz
     ({"POST"}, re.compile(r"^/api/v1/voice/.*$"), "voice:use"),
     # Mock Server: execução dos endpoints simulados apenas para utilizadores autenticados com escopo dedicado.
-    ({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}, re.compile(r"^/api/v1/mock/.*$"), "mock:serve"),
+    (
+        {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"},
+        re.compile(r"^/api/v1/mock/.*$"),
+        "mock:serve",
+    ),
     # SQL Playground: endpoints POST estritamente de leitura continuam acessíveis a auditores.
     ({"POST"}, re.compile(r"^/api/v1/backend-studio/sql/(?:inspect|query|audit)$"), "studios:read"),
     # Studios
-    ({"GET"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:read"),
-    ({"POST", "DELETE"}, re.compile(r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"), "studios:use"),
+    (
+        {"GET"},
+        re.compile(
+            r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"
+        ),
+        "studios:read",
+    ),
+    (
+        {"POST", "DELETE"},
+        re.compile(
+            r"^/api/v1/(?:mock-server|backend-studio|quality-studio|design-studio|intelligence|reports).*$"
+        ),
+        "studios:use",
+    ),
     # Aprendizagem por conta
     ({"GET"}, re.compile(r"^/api/v1/learning/progress$"), "profile:read"),
     ({"PUT"}, re.compile(r"^/api/v1/learning/progress$"), "profile:write"),
@@ -249,7 +266,9 @@ class Principal:
             "kind": self.kind,
             "role": self.role,
             "scopes": sorted(self.scopes),
-            "permissions": sorted(self.scopes if self.kind == "device" else ROLE_PERMISSIONS.get(self.role, set())),
+            "permissions": sorted(
+                self.scopes if self.kind == "device" else ROLE_PERMISSIONS.get(self.role, set())
+            ),
             "session_id": self.session_id,
             "device_id": self.device_id,
             "device_name": self.device_name,
@@ -341,9 +360,11 @@ class AuthService:
         A redefinição de uma conta existente ocorre uma única vez, controlada
         por um marcador local. Em produção, uma senha conhecida nunca é aplicada.
         """
-        environment = os.environ.get(
-            "JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development")
-        ).strip().lower()
+        environment = (
+            os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development"))
+            .strip()
+            .lower()
+        )
         is_production = environment in {"prod", "production"}
         password = os.environ.get("JARVIS_BOOTSTRAP_ADMIN_PASSWORD")
         if not password and not is_production:
@@ -355,9 +376,11 @@ class AuthService:
 
         users = self.user_store.list_users()
         admin_user = next(
-            (user for user in users
-             if user.get("username", "").casefold() == "admin"
-             and user.get("role") == "admin"),
+            (
+                user
+                for user in users
+                if user.get("username", "").casefold() == "admin" and user.get("role") == "admin"
+            ),
             None,
         )
 
@@ -395,7 +418,8 @@ class AuthService:
             self.user_store.set_active("admin", True)
 
         active_admins = [
-            user for user in self.user_store.list_users()
+            user
+            for user in self.user_store.list_users()
             if user.get("role") == "admin" and user.get("is_active")
         ]
         if not active_admins:
@@ -434,8 +458,10 @@ class AuthService:
         ttl_seconds: int | None = None,
         persist: bool = True,
     ) -> str:
-        ttl = ttl_seconds if ttl_seconds is not None else int(
-            os.environ.get("JARVIS_BOOTSTRAP_TTL", "600")
+        ttl = (
+            ttl_seconds
+            if ttl_seconds is not None
+            else int(os.environ.get("JARVIS_BOOTSTRAP_TTL", "600"))
         )
         if ttl < 1 or ttl > 3600:
             raise ValueError("A validade do bootstrap deve estar entre 1 e 3600 segundos.")
@@ -586,7 +612,7 @@ class AuthService:
         user_id: str,
         role: str,
         scopes: list[str] | None = None,
-        expiry_hours: int | float | None = None,
+        expiry_hours: float | None = None,
     ):
         if role not in ALLOWED_HUMAN_ROLES:
             raise ValueError(f"Role humano inválido: {role}")
@@ -659,8 +685,7 @@ class AuthService:
                     (now - max(window_seconds * 4, 3600),),
                 )
                 count = conn.execute(
-                    "SELECT COUNT(*) FROM auth_attempts "
-                    "WHERE bucket_key = ? AND attempted_at >= ?",
+                    "SELECT COUNT(*) FROM auth_attempts WHERE bucket_key = ? AND attempted_at >= ?",
                     (key, cutoff),
                 ).fetchone()[0]
                 if count >= limit:

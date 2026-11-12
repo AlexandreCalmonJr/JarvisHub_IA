@@ -79,9 +79,7 @@ class McpStdioClient:
                 f"Comando do servidor MCP '{self.config.id}' não encontrado: {self.config.command}"
             ) from exc
         except Exception as exc:
-            raise McpError(
-                f"Falha ao iniciar o servidor MCP '{self.config.id}': {exc}"
-            ) from exc
+            raise McpError(f"Falha ao iniciar o servidor MCP '{self.config.id}': {exc}") from exc
 
         self._stderr_task = asyncio.create_task(self._drain_stderr())
         try:
@@ -150,17 +148,14 @@ class McpStdioClient:
                     f"Tempo limite excedido ao aguardar resposta do servidor MCP '{self.config.id}'."
                 )
             try:
-                line = await asyncio.wait_for(
-                    self.process.stdout.readline(), timeout=remaining
-                )
+                line = await asyncio.wait_for(self.process.stdout.readline(), timeout=remaining)
             except TimeoutError as exc:
                 raise McpError(
                     f"Tempo limite excedido ao aguardar resposta do servidor MCP '{self.config.id}'."
                 ) from exc
             if not line:
                 raise McpError(
-                    f"Servidor MCP '{self.config.id}' encerrou a conexão. "
-                    f"{self._stderr_hint()}"
+                    f"Servidor MCP '{self.config.id}' encerrou a conexão. {self._stderr_hint()}"
                 )
             if len(line) > MAX_LINE_BYTES:
                 raise McpError("Resposta MCP excedeu o limite de tamanho.")
@@ -234,9 +229,7 @@ class McpStdioClient:
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> McpToolOutcome:
         await self.start()
         try:
-            result = await self._request(
-                "tools/call", {"name": name, "arguments": arguments or {}}
-            )
+            result = await self._request("tools/call", {"name": name, "arguments": arguments or {}})
         except McpError as exc:
             return McpToolOutcome(success=False, error=str(exc))
 
@@ -255,7 +248,9 @@ class McpStdioClient:
                 parts.append(json.dumps(block, ensure_ascii=False))
         output = "\n".join(part for part in parts if part)
         if is_error:
-            return McpToolOutcome(success=False, output=output, error=output or "Ferramenta MCP falhou.")
+            return McpToolOutcome(
+                success=False, output=output, error=output or "Ferramenta MCP falhou."
+            )
         return McpToolOutcome(success=True, output=output or "(sem saída)")
 
     async def _drain_stderr(self) -> None:

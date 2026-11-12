@@ -19,8 +19,9 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable
+from typing import Any
 
 from services.security_core import PermissionDeniedError, SecurityCore
 
@@ -152,7 +153,9 @@ class CodingAgentRuntime:
         messages: list[ChatTurn] = [ChatTurn(role="system", content=system_prompt)]
         messages.extend(history)
         messages.append(ChatTurn(role="user", content=config.prompt))
-        self._persist(session_id, config.project_id, "user", config.prompt, owner_user_id=config.owner_user_id)
+        self._persist(
+            session_id, config.project_id, "user", config.prompt, owner_user_id=config.owner_user_id
+        )
 
         available_tools = self._tools_for_mode(config.mode)
         if not available_tools:
@@ -180,9 +183,7 @@ class CodingAgentRuntime:
 
             remaining = deadline - time.perf_counter()
             if remaining <= 1.0:
-                result.error = (
-                    f"Tempo limite global de {config.timeout_seconds:.0f}s excedido."
-                )
+                result.error = f"Tempo limite global de {config.timeout_seconds:.0f}s excedido."
                 yield {"type": "error", "task_id": task_id, "error": result.error}
                 break
 
@@ -200,8 +201,11 @@ class CodingAgentRuntime:
             except ProviderError as exc:
                 result.error = str(exc)
                 self._persist(
-                    session_id, config.project_id, "assistant", f"[erro do provedor] {exc}",
-                    owner_user_id=config.owner_user_id
+                    session_id,
+                    config.project_id,
+                    "assistant",
+                    f"[erro do provedor] {exc}",
+                    owner_user_id=config.owner_user_id,
                 )
                 yield {"type": "error", "task_id": task_id, "error": str(exc)}
                 break
@@ -416,15 +420,39 @@ class CodingAgentRuntime:
                         denied=True,
                         error=ticket.reason or "Operação rejeitada pelo utilizador.",
                     )
-                    async for event in self._finish_tool(
-                        tool_result, config, messages, result
-                    ):
+                    async for event in self._finish_tool(tool_result, config, messages, result):
+                        yield event
+                    return
+
+                # The approval is scoped to the exact preview and consumed before
+                # any mutation or command can run. This closes replay and race paths.
+                resources = preview.get("affected_resources") or []
+                try:
+                    self.security_core.approval_engine.consume_approved_request(
+                        ticket.request_id,
+                        operation=preview["operation"],
+                        task_id=task_id,
+                        resource=resources[0] if resources else "",
+                        proposed_diff=preview.get("proposed_diff"),
+                        owner_user_id=config.owner_user_id,
+                    )
+                except (ValueError, KeyError) as exc:
+                    tool_result = ToolResult(
+                        call_id=call.id,
+                        name=call.name,
+                        success=False,
+                        denied=True,
+                        error=f"Aprovação não pôde ser validada para uso único: {exc}",
+                    )
+                    async for event in self._finish_tool(tool_result, config, messages, result):
                         yield event
                     return
 
         # Execução real
         try:
-            tool_result = await self.tools.execute(call, config.project_id)
+            tool_result = await self.tools.execute(
+                call, config.project_id, owner_user_id=config.owner_user_id
+            )
         except PermissionDeniedError as exc:
             tool_result = ToolResult(
                 call_id=call.id,
@@ -513,8 +541,10 @@ class CodingAgentRuntime:
             return []
         try:
             rows = self.db_manager.list_chat_messages(
-                session_id, limit=MAX_HISTORY_MESSAGES, ascending=False,
-                owner_user_id=config.owner_user_id
+                session_id,
+                limit=MAX_HISTORY_MESSAGES,
+                ascending=False,
+                owner_user_id=config.owner_user_id,
             )
         except Exception as exc:
             logger.warning("Falha ao carregar histórico da sessão %s: %s", session_id, exc)
@@ -533,7 +563,9 @@ class CodingAgentRuntime:
                 try:
                     tool_calls.append(ToolCall(**raw))
                 except Exception:
-                    logger.debug("Chamada de ferramenta inválida ignorada no histórico.", exc_info=True)
+                    logger.debug(
+                        "Chamada de ferramenta inválida ignorada no histórico.", exc_info=True
+                    )
                     continue
             turns.append(
                 ChatTurn(

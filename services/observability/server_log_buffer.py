@@ -57,11 +57,7 @@ class InMemoryLogHandler(logging.Handler):
             results = [e for e in results if e["level"] == lvl]
         if search:
             q = search.lower()
-            results = [
-                e
-                for e in results
-                if q in e["message"].lower() or q in e["logger"].lower()
-            ]
+            results = [e for e in results if q in e["message"].lower() or q in e["logger"].lower()]
         return results[-limit:]
 
     def clear(self) -> None:

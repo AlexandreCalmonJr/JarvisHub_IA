@@ -14,7 +14,9 @@ logger = logging.getLogger("jarvis.design_studio")
 
 
 def _hex_to_rgb(hex_code: str) -> tuple[int, int, int]:
-    if not isinstance(hex_code, str) or not re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", hex_code):
+    if not isinstance(hex_code, str) or not re.fullmatch(
+        r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", hex_code
+    ):
         raise ValueError("Informe uma cor hexadecimal válida (#RGB ou #RRGGBB).")
     clean = hex_code.lstrip("#")
     if len(clean) == 3:
@@ -29,7 +31,9 @@ def _rgb_to_hex(r: int, g: int, b: int) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def _blend_color(color_rgb: tuple[int, int, int], target_rgb: tuple[int, int, int], factor: float) -> str:
+def _blend_color(
+    color_rgb: tuple[int, int, int], target_rgb: tuple[int, int, int], factor: float
+) -> str:
     r = color_rgb[0] + (target_rgb[0] - color_rgb[0]) * factor
     g = color_rgb[1] + (target_rgb[1] - color_rgb[1]) * factor
     b = color_rgb[2] + (target_rgb[2] - color_rgb[2]) * factor
@@ -41,7 +45,9 @@ class DesignStudioService:
         """Gera escala completa de cores (50 a 900), contraste e variáveis CSS/Tailwind."""
         base_rgb = _hex_to_rgb(hex_primary)
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
-            raise ValueError("O nome da paleta deve conter apenas letras, números, hífen ou sublinhado (até 40 caracteres).")
+            raise ValueError(
+                "O nome da paleta deve conter apenas letras, números, hífen ou sublinhado (até 40 caracteres)."
+            )
         white_rgb = (255, 255, 255)
         black_rgb = (10, 15, 26)
 
@@ -63,7 +69,7 @@ class DesignStudioService:
         accent_hex = _rgb_to_hex(*accent_rgb)
 
         # Snippet CSS Variables
-        css_vars = [f":root {{"]
+        css_vars = [":root {"]
         for shade, val in shades.items():
             css_vars.append(f"  --color-{name}-{shade}: {val};")
         css_vars.append(f"  --color-{name}-accent: {accent_hex};")
@@ -85,15 +91,19 @@ class DesignStudioService:
 
         for idx, line in enumerate(lines, start=1):
             # 1. Imagens sem atributo alt
-            if re.search(r"<img\b", line, re.IGNORECASE) and not re.search(r"\balt\s*=", line, re.IGNORECASE):
-                findings.append({
-                    "line": idx,
-                    "rule": "WCAG_1.1.1_NON_TEXT_CONTENT",
-                    "severity": "HIGH",
-                    "description": "Tag <img> sem atributo 'alt' de texto descritivo.",
-                    "snippet": line.strip()[:100],
-                    "remediation": "Adicione alt=\"Descrição da imagem\" ou alt=\"\" se a imagem for puramente decorativa.",
-                })
+            if re.search(r"<img\b", line, re.IGNORECASE) and not re.search(
+                r"\balt\s*=", line, re.IGNORECASE
+            ):
+                findings.append(
+                    {
+                        "line": idx,
+                        "rule": "WCAG_1.1.1_NON_TEXT_CONTENT",
+                        "severity": "HIGH",
+                        "description": "Tag <img> sem atributo 'alt' de texto descritivo.",
+                        "snippet": line.strip()[:100],
+                        "remediation": 'Adicione alt="Descrição da imagem" ou alt="" se a imagem for puramente decorativa.',
+                    }
+                )
 
             # 2. Botões vazios ou sem label acessível
             if re.search(r"<button\b", line, re.IGNORECASE):
@@ -101,41 +111,53 @@ class DesignStudioService:
                 has_title = bool(re.search(r"\btitle\s*=", line, re.IGNORECASE))
                 has_text = bool(re.search(r"<button[^>]*>\s*[^<\s]+", line, re.IGNORECASE))
                 if not (has_aria or has_title or has_text):
-                    findings.append({
-                        "line": idx,
-                        "rule": "WCAG_4.1.2_NAME_ROLE_VALUE",
-                        "severity": "HIGH",
-                        "description": "Elemento <button> sem texto visível ou aria-label de acessibilidade.",
-                        "snippet": line.strip()[:100],
-                        "remediation": "Insira texto descritivo ou o atributo aria-label=\"Nome da Ação\".",
-                    })
+                    findings.append(
+                        {
+                            "line": idx,
+                            "rule": "WCAG_4.1.2_NAME_ROLE_VALUE",
+                            "severity": "HIGH",
+                            "description": "Elemento <button> sem texto visível ou aria-label de acessibilidade.",
+                            "snippet": line.strip()[:100],
+                            "remediation": 'Insira texto descritivo ou o atributo aria-label="Nome da Ação".',
+                        }
+                    )
 
             # 3. Inputs sem rótulo ou aria-label
-            if re.search(r"<input\b", line, re.IGNORECASE) and not re.search(r"type\s*=\s*['\"]hidden['\"]", line, re.IGNORECASE):
+            if re.search(r"<input\b", line, re.IGNORECASE) and not re.search(
+                r"type\s*=\s*['\"]hidden['\"]", line, re.IGNORECASE
+            ):
                 has_aria = bool(re.search(r"\baria-label\s*=", line, re.IGNORECASE))
                 has_id = bool(re.search(r"\bid\s*=", line, re.IGNORECASE))
                 has_placeholder = bool(re.search(r"\bplaceholder\s*=", line, re.IGNORECASE))
                 if not (has_aria or has_id or has_placeholder):
-                    findings.append({
-                        "line": idx,
-                        "rule": "WCAG_3.3.2_LABELS_OR_INSTRUCTIONS",
-                        "severity": "MEDIUM",
-                        "description": "Campo de entrada <input> sem id para label ou aria-label.",
-                        "snippet": line.strip()[:100],
-                        "remediation": "Vincule o input a uma tag <label for=\"id\"> ou utilize aria-label=\"...\".",
-                    })
+                    findings.append(
+                        {
+                            "line": idx,
+                            "rule": "WCAG_3.3.2_LABELS_OR_INSTRUCTIONS",
+                            "severity": "MEDIUM",
+                            "description": "Campo de entrada <input> sem id para label ou aria-label.",
+                            "snippet": line.strip()[:100],
+                            "remediation": 'Vincule o input a uma tag <label for="id"> ou utilize aria-label="...".',
+                        }
+                    )
 
             # 4. Links genéricos não descritivos
-            generic_link_matches = re.finditer(r"<a\b[^>]*>(?:clique aqui|click here|leia mais|read more|saiba mais)</a>", line, re.IGNORECASE)
+            generic_link_matches = re.finditer(
+                r"<a\b[^>]*>(?:clique aqui|click here|leia mais|read more|saiba mais)</a>",
+                line,
+                re.IGNORECASE,
+            )
             for _ in generic_link_matches:
-                findings.append({
-                    "line": idx,
-                    "rule": "WCAG_2.4.4_LINK_PURPOSE_IN_CONTEXT",
-                    "severity": "MEDIUM",
-                    "description": "Link com texto genérico ('clique aqui', 'leia mais') prejudica a navegação por leitores de tela.",
-                    "snippet": line.strip()[:100],
-                    "remediation": "Utilize textos com propósito explícito, como 'Consulte a documentação completa da API'.",
-                })
+                findings.append(
+                    {
+                        "line": idx,
+                        "rule": "WCAG_2.4.4_LINK_PURPOSE_IN_CONTEXT",
+                        "severity": "MEDIUM",
+                        "description": "Link com texto genérico ('clique aqui', 'leia mais') prejudica a navegação por leitores de tela.",
+                        "snippet": line.strip()[:100],
+                        "remediation": "Utilize textos com propósito explícito, como 'Consulte a documentação completa da API'.",
+                    }
+                )
 
         severity_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
         for f in findings:
@@ -176,17 +198,17 @@ class DesignStudioService:
                     "import React from 'react';\n\n"
                     "export const Navbar: React.FC = () => {\n"
                     "  return (\n"
-                    "    <nav className=\"flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800 text-white\" role=\"navigation\" aria-label=\"Navegação Principal\">\n"
-                    "      <div className=\"flex items-center gap-3\">\n"
-                    "        <div className=\"w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white\">J</div>\n"
-                    "        <span className=\"font-bold text-lg tracking-tight\">JARVIS Platform</span>\n"
+                    '    <nav className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800 text-white" role="navigation" aria-label="Navegação Principal">\n'
+                    '      <div className="flex items-center gap-3">\n'
+                    '        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white">J</div>\n'
+                    '        <span className="font-bold text-lg tracking-tight">JARVIS Platform</span>\n'
                     "      </div>\n"
-                    "      <div className=\"flex items-center gap-6 text-sm text-slate-300\">\n"
-                    "        <a href=\"#\" className=\"hover:text-white transition-colors\">Recursos</a>\n"
-                    "        <a href=\"#\" className=\"hover:text-white transition-colors\">Documentação</a>\n"
-                    "        <a href=\"#\" className=\"hover:text-white transition-colors\">Painel</a>\n"
+                    '      <div className="flex items-center gap-6 text-sm text-slate-300">\n'
+                    '        <a href="#" className="hover:text-white transition-colors">Recursos</a>\n'
+                    '        <a href="#" className="hover:text-white transition-colors">Documentação</a>\n'
+                    '        <a href="#" className="hover:text-white transition-colors">Painel</a>\n'
                     "      </div>\n"
-                    "      <button className=\"px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-colors\" aria-label=\"Iniciar teste gratuito\">\n"
+                    '      <button className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition-colors" aria-label="Iniciar teste gratuito">\n'
                     "        Acessar Estúdio\n"
                     "      </button>\n"
                     "    </nav>\n"
@@ -206,12 +228,12 @@ class DesignStudioService:
                     "}\n\n"
                     "export const FeatureCard: React.FC<FeatureCardProps> = ({ title, description, iconText = '⚡' }) => {\n"
                     "  return (\n"
-                    "    <div className=\"p-6 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-indigo-500/50 transition-all shadow-lg flex flex-col gap-3\">\n"
-                    "      <div className=\"w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl\">\n"
+                    '    <div className="p-6 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-indigo-500/50 transition-all shadow-lg flex flex-col gap-3">\n'
+                    '      <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl">\n'
                     "        {iconText}\n"
                     "      </div>\n"
-                    "      <h3 className=\"text-lg font-semibold text-white\">{title}</h3>\n"
-                    "      <p className=\"text-sm text-slate-400 leading-relaxed\">{description}</p>\n"
+                    '      <h3 className="text-lg font-semibold text-white">{title}</h3>\n'
+                    '      <p className="text-sm text-slate-400 leading-relaxed">{description}</p>\n'
                     "    </div>\n"
                     "  );\n"
                     "};\n"
@@ -229,11 +251,11 @@ class DesignStudioService:
                     "    { label: 'Agentes Ativos', value: '26 Especialistas' },\n"
                     "  ];\n"
                     "  return (\n"
-                    "    <div className=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n"
+                    '    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">\n'
                     "      {stats.map((s, idx) => (\n"
-                    "        <div key={idx} className=\"p-5 bg-slate-900 border border-slate-800 rounded-xl flex flex-col gap-1\">\n"
-                    "          <span className=\"text-xs font-semibold text-slate-400 uppercase tracking-wider\">{s.label}</span>\n"
-                    "          <span className=\"text-2xl font-bold text-indigo-400 font-mono\">{s.value}</span>\n"
+                    '        <div key={idx} className="p-5 bg-slate-900 border border-slate-800 rounded-xl flex flex-col gap-1">\n'
+                    '          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{s.label}</span>\n'
+                    '          <span className="text-2xl font-bold text-indigo-400 font-mono">{s.value}</span>\n'
                     "        </div>\n"
                     "      ))}\n"
                     "    </div>\n"

@@ -4,11 +4,12 @@ JARVIS AI HUB - Backend Studio: Mock Server Nativo.
 Mocks são privados por conta. Registros legados sem owner_user_id permanecem
 preservados, mas não são publicados para nenhuma conta automaticamente.
 """
+
 import json
 import logging
 import uuid
+from datetime import UTC, datetime
 from typing import Any
-from datetime import datetime, UTC
 
 logger = logging.getLogger("jarvis.mock_server")
 
@@ -105,8 +106,14 @@ class MockServerService:
             if status_code < 100 or status_code > 599:
                 raise ValueError("Código HTTP inválido.")
             response_body = endpoint_data.get("response_body", {})
-            body_json = response_body if isinstance(response_body, str) else json.dumps(response_body, ensure_ascii=False)
-            headers_json = json.dumps(endpoint_data.get("headers", {"Content-Type": "application/json"}))
+            body_json = (
+                response_body
+                if isinstance(response_body, str)
+                else json.dumps(response_body, ensure_ascii=False)
+            )
+            headers_json = json.dumps(
+                endpoint_data.get("headers", {"Content-Type": "application/json"})
+            )
             latency_ms = max(0, min(10000, int(endpoint_data.get("latency_ms", 0))))
             enabled = 1 if endpoint_data.get("enabled", True) else 0
             conn.execute(
@@ -127,8 +134,20 @@ class MockServerService:
                     updated_at = excluded.updated_at
                 WHERE mock_endpoints.owner_user_id = excluded.owner_user_id
                 """,
-                (ep_id, owner_user_id, name, method, path, status_code, body_json,
-                 headers_json, latency_ms, enabled, now, now),
+                (
+                    ep_id,
+                    owner_user_id,
+                    name,
+                    method,
+                    path,
+                    status_code,
+                    body_json,
+                    headers_json,
+                    latency_ms,
+                    enabled,
+                    now,
+                    now,
+                ),
             )
         return self.get_endpoint(ep_id, owner_user_id) or {}
 
@@ -142,9 +161,7 @@ class MockServerService:
             )
             return cursor.rowcount > 0
 
-    def match_and_serve(
-        self, method: str, path: str, owner_user_id: str
-    ) -> dict[str, Any] | None:
+    def match_and_serve(self, method: str, path: str, owner_user_id: str) -> dict[str, Any] | None:
         if not self.db or not owner_user_id:
             return None
         normalized_method = method.upper().strip()

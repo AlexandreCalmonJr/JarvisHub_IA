@@ -6,6 +6,7 @@ Alterna automaticamente para modos ultraleves e silenciosos quando o notebook op
 
 import logging
 from typing import Any
+
 import psutil
 
 logger = logging.getLogger("jarvis.hardware.performance")
@@ -79,7 +80,9 @@ class HardwarePerformanceManager:
             status_msg = "Modo Turbo forçado: aceleração total de inferência."
         elif mode == "balanced":
             effective_mode = "balanced"
-            effective_threads = max(2, min(saved_threads, logical_cores - 2 if logical_cores > 4 else logical_cores))
+            effective_threads = max(
+                2, min(saved_threads, logical_cores - 2 if logical_cores > 4 else logical_cores)
+            )
             model_override = None
             status_msg = "Modo Balanceado: velocidade estável preservando fluidez para o sistema operacional."
         else:  # eco
@@ -142,7 +145,9 @@ class HardwarePerformanceManager:
             try:
                 clamped_threads = max(1, min(logical_cores, int(cpu_threads)))
             except (ValueError, TypeError):
-                clamped_threads = max(2, min(6, logical_cores - 2 if logical_cores >= 6 else logical_cores))
+                clamped_threads = max(
+                    2, min(6, logical_cores - 2 if logical_cores >= 6 else logical_cores)
+                )
         else:
             current = self.get_performance_profile()
             clamped_threads = current["cpu_threads"]
@@ -168,6 +173,10 @@ class HardwarePerformanceManager:
         eff_threads = profile["effective_threads"]
         try:
             self.model_manager.set_cpu_threads(eff_threads)
-            logger.info("Threads dinâmicas do Ollama atualizadas para %d (Modo: %s)", eff_threads, profile["effective_mode"])
+            logger.info(
+                "Threads dinâmicas do Ollama atualizadas para %d (Modo: %s)",
+                eff_threads,
+                profile["effective_mode"],
+            )
         except Exception as exc:
             logger.warning("Falha ao definir threads no runtime: %s", exc)

@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from packages.agent_sdk import AgentProfile, AutonomousAgent
 from packages.contracts import (

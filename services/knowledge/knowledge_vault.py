@@ -16,8 +16,24 @@ logger = logging.getLogger("jarvis.knowledge")
 MAX_INDEX_FILE_BYTES = 25 * 1024 * 1024
 
 SUPPORTED_EXTENSIONS = {
-    ".md", ".txt", ".json", ".yaml", ".yml", ".py", ".ts", ".tsx",
-    ".js", ".jsx", ".java", ".go", ".cs", ".sql", ".html", ".css", ".pdf", ".docx",
+    ".md",
+    ".txt",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".java",
+    ".go",
+    ".cs",
+    ".sql",
+    ".html",
+    ".css",
+    ".pdf",
+    ".docx",
 }
 
 
@@ -58,8 +74,8 @@ class KnowledgeVaultService:
         ext = file_path.suffix.lower()
         if ext == ".docx":
             try:
-                import zipfile
                 import xml.etree.ElementTree as ET
+                import zipfile
 
                 with zipfile.ZipFile(file_path) as z:
                     xml_content = z.read("word/document.xml")
@@ -67,7 +83,9 @@ class KnowledgeVaultService:
                 namespaces = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
                 paragraphs = []
                 for p_elem in root.iterfind(".//w:p", namespaces):
-                    texts = [node.text for node in p_elem.iterfind(".//w:t", namespaces) if node.text]
+                    texts = [
+                        node.text for node in p_elem.iterfind(".//w:t", namespaces) if node.text
+                    ]
                     if texts:
                         paragraphs.append("".join(texts))
                 return "\n\n".join(paragraphs)
@@ -79,6 +97,7 @@ class KnowledgeVaultService:
             # Tenta usar pypdf se disponível, ou fallback de extração textual
             try:
                 import pypdf
+
                 reader = pypdf.PdfReader(str(file_path))
                 pages_text = []
                 for idx, page in enumerate(reader.pages):
@@ -91,6 +110,7 @@ class KnowledgeVaultService:
                     raw_bytes = file_path.read_bytes()
                     # Fallback leve para extração de strings legíveis do PDF
                     import re
+
                     text_parts = re.findall(rb"[\x20-\x7E\xA0-\xFF]{4,}", raw_bytes)
                     return b"\n".join(text_parts).decode("latin-1", errors="ignore")
                 except Exception as e:
@@ -102,7 +122,12 @@ class KnowledgeVaultService:
             try:
                 return file_path.read_text(encoding=enc)
             except Exception:
-                logger.debug("Codificação %s falhou para %s; a tentar a seguinte.", enc, file_path.name, exc_info=True)
+                logger.debug(
+                    "Codificação %s falhou para %s; a tentar a seguinte.",
+                    enc,
+                    file_path.name,
+                    exc_info=True,
+                )
                 continue
         return ""
 
@@ -114,7 +139,9 @@ class KnowledgeVaultService:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
 
     def index_file(
-        self, file_path: Path | str, category: str = "geral",
+        self,
+        file_path: Path | str,
+        category: str = "geral",
         owner_user_id: str | None = None,
     ) -> dict[str, Any]:
         """Processa um arquivo físico e indexa seus blocos na Base de Conhecimento."""
@@ -155,7 +182,10 @@ class KnowledgeVaultService:
         }
 
     def index_text_snippet(
-        self, doc_name: str, content: str, category: str = "anotacoes",
+        self,
+        doc_name: str,
+        content: str,
+        category: str = "anotacoes",
         owner_user_id: str | None = None,
     ) -> dict[str, Any]:
         """Indexa um texto avulso digitado ou colado pelo usuário."""
@@ -178,7 +208,9 @@ class KnowledgeVaultService:
         }
 
     def index_directory(
-        self, dir_path: Path | str, category: str = "projeto",
+        self,
+        dir_path: Path | str,
+        category: str = "projeto",
         owner_user_id: str | None = None,
     ) -> dict[str, Any]:
         """Varre e indexa todos os arquivos suportados em um diretório local."""
@@ -198,7 +230,10 @@ class KnowledgeVaultService:
                 continue
             # Ignora pastas de cache, dependências e arquivos acima do limite.
             parts = p.parts
-            if any(k in parts for k in ("node_modules", ".venv", "__pycache__", ".git", "dist", "build")):
+            if any(
+                k in parts
+                for k in ("node_modules", ".venv", "__pycache__", ".git", "dist", "build")
+            ):
                 continue
             try:
                 res = self.index_file(p, category=category, owner_user_id=owner_user_id)
@@ -218,20 +253,12 @@ class KnowledgeVaultService:
         self, query: str, limit: int = 4, owner_user_id: str | None = None
     ) -> list[dict[str, Any]]:
         """Realiza busca textual restrita ao proprietário."""
-        return self.db.search_knowledge_vault(
-            query, limit=limit, owner_user_id=owner_user_id
-        )
+        return self.db.search_knowledge_vault(query, limit=limit, owner_user_id=owner_user_id)
 
-    def list_documents(
-        self, owner_user_id: str | None = None
-    ) -> list[dict[str, Any]]:
+    def list_documents(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
         """Lista inventário de documentos do proprietário."""
         return self.db.list_knowledge_documents(owner_user_id=owner_user_id)
 
-    def delete_document(
-        self, doc_name: str, owner_user_id: str | None = None
-    ) -> bool:
+    def delete_document(self, doc_name: str, owner_user_id: str | None = None) -> bool:
         """Exclui documento apenas do proprietário."""
-        return self.db.delete_knowledge_document(
-            doc_name, owner_user_id=owner_user_id
-        )
+        return self.db.delete_knowledge_document(doc_name, owner_user_id=owner_user_id)

@@ -3,14 +3,14 @@ import logging
 from fastapi import APIRouter, Depends
 
 from apps.api.auth import Principal, require_admin
-from apps.api.schemas import PerformanceModePayload
 from apps.api.deps import (
-    scan_hardware,
-    generate_recommendations,
-    hardware_performance_manager,
     AGENT_PROFILES,
     db_manager,
+    generate_recommendations,
+    hardware_performance_manager,
+    scan_hardware,
 )
+from apps.api.schemas import PerformanceModePayload
 
 logger = logging.getLogger("jarvis.api.hardware")
 router = APIRouter(tags=["hardware"])
