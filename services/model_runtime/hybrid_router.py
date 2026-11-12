@@ -11,6 +11,10 @@ from packages.contracts.security import AuditEventSeverity
 from services.security_core import ApprovalEngine, AuditTrail, contains_sensitive_data
 
 from .adapter import BaseModelAdapter
+from .provider_defaults import (
+    default_model_for_provider,
+    normalize_model_for_provider,
+)
 from .types import InferenceRequest, InferenceResponse
 
 logger = logging.getLogger("jarvis.model_runtime.hybrid_router")
@@ -34,11 +38,11 @@ PROVIDER_PRESETS: list[dict[str, Any]] = [
     },
     {
         "id": "groq",
-        "name": "Groq (Qwen 3.8 27B / LPU Ultra Rápido)",
-        "default_model": "qwen/qwen3.8-27b",
+        "name": "Groq (GPT-OSS 120B / LPU Ultra Rápido)",
+        "default_model": "openai/gpt-oss-120b",
         "base_url": "https://api.groq.com/openai/v1",
-        "cost_per_1k_input": 0.00059,
-        "cost_per_1k_output": 0.00079,
+        "cost_per_1k_input": 0.00015,
+        "cost_per_1k_output": 0.00060,
     },
     {
         "id": "deepseek",
@@ -119,7 +123,12 @@ def load_hybrid_config_from_disk(file_path: Path) -> OnlineProviderConfig:
     if file_path.exists():
         try:
             data = json.loads(file_path.read_text(encoding="utf-8"))
-            return OnlineProviderConfig(**data)
+            cfg = OnlineProviderConfig(**data)
+            cfg.default_model = (
+                normalize_model_for_provider(cfg.provider_name, cfg.default_model)
+                or default_model_for_provider(cfg.provider_name)
+            )
+            return cfg
         except Exception:
             logger.warning("Configuração híbrida inválida em %s; a usar predefinições.", file_path)
     return OnlineProviderConfig()
@@ -163,22 +172,30 @@ class HybridModelRouter:
         self._reserved_spend_usd: float = 0.0
         self._budget_lock = asyncio.Lock()
 
-    def get_adapter_for_key(self, key_id: str) -> BaseModelAdapter | None:
+    def get_adapter_for_key(
+        self, key_id: str, owner_user_id: str | None = None
+    ) -> BaseModelAdapter | None:
         """Recupera ou instancia dinamicamente um adaptador a partir do KeyVault."""
         if not self.key_vault:
             return None
-        profile = self.key_vault.get_key(key_id)
+        resolver = getattr(self.key_vault, "get_key_for_request", None)
+        profile = (
+            resolver(key_id, owner_user_id)
+            if resolver
+            else self.key_vault.get_key(key_id)
+        )
         if not profile or not profile.api_key:
             return None
-        if key_id not in self._vault_adapters:
+        cache_key = key_id if not owner_user_id else f"{owner_user_id}::{key_id}"
+        if cache_key not in self._vault_adapters:
             from services.model_runtime.adapter import UniversalOnlineAdapter
-            self._vault_adapters[key_id] = UniversalOnlineAdapter(
+            self._vault_adapters[cache_key] = UniversalOnlineAdapter(
                 api_key=profile.api_key,
                 provider_name=profile.provider,
                 base_url=profile.base_url,
                 default_model=profile.default_model,
             )
-        return self._vault_adapters[key_id]
+        return self._vault_adapters[cache_key]
 
     def _resolve_external_candidate(
         self, request: InferenceRequest
@@ -194,9 +211,15 @@ class HybridModelRouter:
 
         req_key_id = getattr(request, "key_id", None)
         if req_key_id:
+            owner_user_id = getattr(request, "owner_user_id", None)
             try:
-                profile = self.key_vault.get_key(req_key_id) if self.key_vault else None
-                vault_adapter = self.get_adapter_for_key(req_key_id) if profile else None
+                resolver = getattr(self.key_vault, "get_key_for_request", None)
+                profile = (
+                    resolver(req_key_id, owner_user_id)
+                    if (resolver and self.key_vault)
+                    else (self.key_vault.get_key(req_key_id) if self.key_vault else None)
+                )
+                vault_adapter = self.get_adapter_for_key(req_key_id, owner_user_id) if profile else None
             except Exception as exc:
                 logger.warning(
                     "Falha ao resolver a chave '%s' do KeyVault: %s", req_key_id, exc

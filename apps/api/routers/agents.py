@@ -2,9 +2,9 @@ import asyncio
 import json
 import logging
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pathlib import Path
 from fastapi.responses import StreamingResponse
 
 from apps.api.auth import Principal, get_principal, require_admin, require_permission
@@ -16,6 +16,7 @@ from apps.api.deps import (
     autonomous_agent_runtime,
     build_specialist_prompt,
     db_manager,
+    key_vault,
     model_manager,
     security_core,
     skills_catalog,
@@ -25,14 +26,17 @@ from apps.api.schemas import (
     AgentConfigUpdateRequest,
     AgentMemoryCreateRequest,
     AgentPlaygroundRequest,
+    AgentRouteUpdateRequest,
     AutonomousAgentRunRequest,
 )
-from packages.contracts.security import ProjectWorkMode
 from packages.contracts.agent import (
     AgentRole,
     AutonomousAgentMode,
     AutonomousAgentRunConfig,
 )
+from packages.contracts.security import ProjectWorkMode
+from services.model_runtime.agent_routing import resolve_account_agent_route
+from services.model_runtime.provider_defaults import normalize_model_for_provider
 
 logger = logging.getLogger("jarvis.api.agents")
 router = APIRouter(tags=["agents"])
@@ -47,6 +51,16 @@ def _private_owner(principal: Principal) -> str:
             detail="Dispositivo sem associação a uma conta. Emparelhe novamente com uma conta autorizada.",
         )
     return principal.subject_id
+
+
+def _account_owner(principal: Principal) -> str:
+    """Exige uma conta humana para configurações privadas do cofre."""
+    if principal.kind != "human":
+        raise HTTPException(
+            status_code=403,
+            detail="A configuração de rota por agente exige uma conta humana autenticada.",
+        )
+    return _private_owner(principal)
 
 
 @router.get("/api/v1/agents")
@@ -231,13 +245,25 @@ async def agent_playground_endpoint(
         project_id=payload.project_id,
     )
 
+    route = resolve_account_agent_route(
+        db_manager=db_manager,
+        key_vault=key_vault,
+        owner_user_id=owner_user_id,
+        agent_role=clean_role,
+        fallback_key_id=getattr(profile, "assigned_key_id", None),
+        fallback_model=profile.preferred_model,
+    )
+
     req = InferenceRequest(
         prompt=payload.prompt,
         system_prompt=prompt,
-        model_name=profile.preferred_model,
+        model_name=route.model or profile.preferred_model,
         max_tokens=2048,
         temperature=0.3,
-        timeout_seconds=120.0,
+        timeout_seconds=300.0,
+        owner_user_id=owner_user_id,
+        agent_role=clean_role,
+        key_id=route.key_id,
     )
     try:
         resp = await model_manager.generate(req)
@@ -322,6 +348,85 @@ def _resolve_agent_role(role_str: str) -> AgentRole:
         return AgentRole(clean)
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Papel de especialista '{role_str}' não existe.")
+
+
+@router.get("/api/v1/agent-routes")
+async def list_agent_routes_endpoint(
+    principal: Principal = Depends(get_principal),
+):
+    """Lista as rotas de chave + modelo configuradas pela conta."""
+    owner_user_id = _account_owner(principal)
+    routes = db_manager.list_agent_routes(owner_user_id)
+    for route in routes:
+        profile = key_vault.get_key(route["key_id"], owner_user_id)
+        route["key_label"] = profile.label if profile else None
+        route["provider"] = profile.provider if profile else None
+        route["key_available"] = bool(
+            profile and profile.is_active and profile.api_key
+        )
+    return {"routes": routes}
+
+
+@router.put("/api/v1/agent-routes/{role}")
+async def set_agent_route_endpoint(
+    role: str,
+    payload: AgentRouteUpdateRequest,
+    principal: Principal = Depends(get_principal),
+):
+    """Define a chave e o modelo que esta conta usa para o especialista."""
+    agent_role = _resolve_agent_role(role)
+    owner_user_id = _account_owner(principal)
+
+    profile = key_vault.get_key(payload.key_id.strip(), owner_user_id)
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Chave não encontrada no cofre da conta.",
+        )
+    if not profile.is_active or not profile.api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="A chave selecionada está inativa ou sem segredo configurado.",
+        )
+
+    model = (payload.model or "").strip() or profile.default_model
+    if not model:
+        raise HTTPException(
+            status_code=400,
+            detail="Indique o modelo a usar com a chave selecionada.",
+        )
+    model = normalize_model_for_provider(profile.provider, model) or model
+
+    db_manager.set_agent_route(
+        agent_role=agent_role.value,
+        key_id=profile.key_id,
+        model=model,
+        owner_user_id=owner_user_id,
+    )
+    return {
+        "status": "saved",
+        "agent_role": agent_role.value,
+        "key_id": profile.key_id,
+        "key_label": profile.label,
+        "provider": profile.provider,
+        "model": model,
+    }
+
+
+@router.delete("/api/v1/agent-routes/{role}")
+async def delete_agent_route_endpoint(
+    role: str,
+    principal: Principal = Depends(get_principal),
+):
+    """Remove a rota da conta; o especialista volta ao perfil global."""
+    agent_role = _resolve_agent_role(role)
+    owner_user_id = _account_owner(principal)
+    if not db_manager.delete_agent_route(agent_role.value, owner_user_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Não existe rota configurada para este especialista.",
+        )
+    return {"status": "deleted", "agent_role": agent_role.value}
 
 
 @router.post("/api/v1/agents/{role}/stream")

@@ -37,19 +37,19 @@ from services.model_runtime import (
     load_hybrid_config_from_disk,
     save_hybrid_config_to_disk,  # noqa: F401
 )
-from services.model_runtime.key_vault import KeyVaultService
 from services.model_runtime.huggingface_service import (
     AGENT_MODEL_RECOMMENDATIONS,  # noqa: F401
     CURATED_HUGGINGFACE_MODELS,  # noqa: F401
     search_huggingface_hub,  # noqa: F401
     stream_ollama_pull,  # noqa: F401
 )
-from services.observability.telemetry_store import SqliteTelemetryStore
+from services.model_runtime.key_vault import KeyVaultService
 from services.observability import (
     attach_server_logging,  # noqa: F401
     inference_tracker,  # noqa: F401
     log_buffer,  # noqa: F401
 )
+from services.observability.telemetry_store import SqliteTelemetryStore
 from services.orchestration import JarvisMaster
 from services.orchestration.graph import build_specialist_prompt  # noqa: F401
 from services.proactive_operations import WebhookNotificationService
@@ -363,6 +363,13 @@ autonomous_agent_runtime = AutonomousAgentRuntime(
     provider_factory=lambda: resolve_governed_chat_provider(
         hybrid_router.online_config, hybrid_router
     ),
+    routed_provider_factory=lambda key_id, owner_user_id: resolve_governed_chat_provider(
+        hybrid_router.online_config,
+        hybrid_router,
+        key_id=key_id,
+        owner_user_id=owner_user_id,
+    ),
+    key_vault=key_vault,
 )
 
 # Servidores MCP opcionais (descoberta sob demanda em /api/v1/mcp/reload)

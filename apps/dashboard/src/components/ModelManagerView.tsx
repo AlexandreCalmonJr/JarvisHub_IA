@@ -329,7 +329,7 @@ export const ModelManagerView: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {isAdmin && <button
+          <button
             type="button"
             onClick={() => setActiveTab('vault')}
             style={{
@@ -346,7 +346,7 @@ export const ModelManagerView: React.FC = () => {
             }}
           >
             Cofre de Chaves (KeyVault)
-          </button>}
+          </button>
 
           <button
             type="button"
@@ -454,7 +454,7 @@ export const ModelManagerView: React.FC = () => {
       </div>
 
       {/* Conteúdo Aba 0: Cofre de Chaves de API (KeyVault) */}
-      {isAdmin && activeTab === 'vault' && <KeyVaultManager />}
+      {activeTab === 'vault' && <KeyVaultManager />}
 
       {/* Conteúdo Aba 1: Modelos Locais & Status do Sistema */}
       {activeTab === 'local' && (

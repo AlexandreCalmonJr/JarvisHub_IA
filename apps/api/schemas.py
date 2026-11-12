@@ -177,6 +177,16 @@ class AgentPlaygroundRequest(BaseModel):
     project_id: str | None = Field(None, description="Projeto associado opcional")
 
 
+class AgentRouteUpdateRequest(BaseModel):
+    """Rota (chave + modelo) de um especialista para a conta autenticada."""
+
+    key_id: str = Field(..., min_length=1, description="Chave do cofre da conta")
+    model: str | None = Field(
+        None,
+        description="Modelo a usar com a chave; se omitido, usa o modelo predefinido da chave",
+    )
+
+
 class PerformanceModePayload(BaseModel):
     mode: str = Field(default="auto", description="Modo de desempenho: auto, turbo, balanced, eco")
     cpu_threads: int | None = Field(default=None, description="Número de threads de CPU do Ollama")

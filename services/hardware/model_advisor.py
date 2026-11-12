@@ -96,16 +96,16 @@ def generate_recommendations(specs: dict[str, Any]) -> dict[str, Any]:
     # 3. Recomendações de Aceleração Híbrida / Nuvem Gratuita
     cloud_recommendations = [
         {
-            "provider": "Groq LPU (Nuvem Gratuita)",
-            "model": "llama-3.3-70b-versatile",
-            "speed": "250 a 320 tokens/s",
+            "provider": "Groq LPU (Nuvem)",
+            "model": "openai/gpt-oss-120b",
+            "speed": "400 a 500 tokens/s",
             "latency": "1 a 2 segundos",
-            "cost": "R$ 0,00 (Tier Gratuito)",
+            "cost": "US$ 0,15/1M entrada · US$ 0,60/1M saída",
             "highlight": "Ideal para código gigante instantâneo sem esquentar seu notebook.",
         },
         {
             "provider": "Google Gemini Flash (Nuvem Gratuita)",
-            "model": "gemini-1.5-flash ou 2.0",
+            "model": "gemini-2.5-flash",
             "speed": "150 a 200 tokens/s",
             "latency": "1.5 a 3 segundos",
             "cost": "R$ 0,00 (1M tokens grátis/dia)",

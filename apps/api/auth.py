@@ -19,8 +19,8 @@ import re
 import secrets
 import sqlite3
 import subprocess
-import time
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -75,6 +75,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "agents:use",
         "mobile:pair",
         "models:read",
+        "models:vault",
         "skills:read",
         "skills:write",
         "knowledge:read",

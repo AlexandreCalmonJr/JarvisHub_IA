@@ -10,10 +10,11 @@ from langgraph.graph import END, START, StateGraph
 
 from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
 from services.model_runtime import InferenceRequest, ModelManager
+from services.model_runtime.agent_routing import resolve_account_agent_route
 from services.security_core import PermissionDeniedError, SecurityCore
 
-from .state import TaskState
 from .self_correction import SelfCorrectionEngine
+from .state import TaskState
 
 AGENT_ROLE_LABELS: dict[str, str] = {
     AgentRole.JARVIS_MASTER.value: "JARVIS Maestro",
@@ -52,7 +53,7 @@ def get_agent_label(role: str | AgentRole) -> str:
 
 
 
-from .prompt_builder import build_specialist_prompt, INTENT_DOMAIN_MAP
+from .prompt_builder import INTENT_DOMAIN_MAP, build_specialist_prompt
 from .workspace_actions import execute_workspace_modification
 
 __all__ = [
@@ -470,6 +471,27 @@ def create_master_graph(
             # Preferências explícitas e personalizadas do perfil são preservadas.
             model_name = pref
 
+        key_vault = getattr(
+            getattr(model_manager, "hybrid_router", None), "key_vault", None
+        )
+
+        def _route_for(
+            role_name: str, profile_obj: Any, fallback_model: str
+        ) -> Any:
+            return resolve_account_agent_route(
+                db_manager=db_manager,
+                key_vault=key_vault,
+                owner_user_id=state.get("owner_user_id"),
+                agent_role=role_name,
+                fallback_key_id=getattr(profile_obj, "assigned_key_id", None),
+                fallback_model=fallback_model,
+            )
+
+        prim_route = _route_for(primary_agent, prim_profile, model_name)
+        if prim_route.source == "account" and prim_route.model:
+            model_name = prim_route.model
+        primary_key_id = prim_route.key_id
+
         # Tenta inferir target_project se não especificado explicitamente
         if not project_id and workspace_service:
             try:
@@ -572,6 +594,11 @@ def create_master_graph(
                 project_id=slug,
                 domain="frontend" if project_type in ("web", "flutter") else "backend",
             )
+            arch_profile = (
+                agent_registry.get_profile(arch_role) if agent_registry else None
+            )
+            arch_route = _route_for(arch_role.value, arch_profile, model_name)
+            arch_model = arch_route.model or model_name
             arch_req = InferenceRequest(
                 prompt=(
                     f"Como Arquiteto de Software, analise e delibere sobre a concepção técnica, modularidade e estrutura "
@@ -579,13 +606,14 @@ def create_master_graph(
                     f"Apresente seu parecer de arquitetura, separação de responsabilidades e componentes que serão gerados."
                 ),
                 system_prompt=arch_sys,
-                model_name=model_name,
+                model_name=arch_model,
                 max_tokens=300,
                 temperature=0.3,
                 timeout_seconds=20.0,
                 task_id=state.get("task_id"),
                 owner_user_id=state.get("owner_user_id"),
                 agent_role=arch_role.value,
+                key_id=arch_route.key_id,
             )
             arch_p_tokens = 35
             arch_c_tokens = 110
@@ -626,25 +654,30 @@ def create_master_graph(
                     agent_registry=agent_registry,
                     skills_catalog=skills_catalog,
                     db_manager=db_manager,
-                owner_user_id=state.get("owner_user_id"),
+                    owner_user_id=state.get("owner_user_id"),
                     intent="security_audit",
                     user_prompt=user_prompt,
                     project_id=slug,
                     domain="security",
                 )
+                sec_profile = (
+                    agent_registry.get_profile(sec_role) if agent_registry else None
+                )
+                sec_route = _route_for(sec_role.value, sec_profile, model_name)
                 sec_req = InferenceRequest(
                     prompt=(
                         f"Como Engenheiro de Cibersegurança, analise os requisitos de defesa ativa, modelagem de ameaças "
                         f"e conformidade com o OWASP Top 10 para o projeto '{name_clean}' solicitado pelo usuário: '{user_prompt}'."
                     ),
                     system_prompt=sec_sys,
-                    model_name=model_name,
+                    model_name=sec_route.model or model_name,
                     max_tokens=300,
                     temperature=0.3,
                     timeout_seconds=20.0,
                     task_id=state.get("task_id"),
                     owner_user_id=state.get("owner_user_id"),
                     agent_role=sec_role.value,
+                    key_id=sec_route.key_id,
                 )
                 try:
                     sec_resp = await model_manager.generate(sec_req)
@@ -686,6 +719,10 @@ def create_master_graph(
             dev_summary = f"Plano de implementação preparado para {name_clean}; a escrita aguarda aprovação."
             dev_tokens = 0
             dev_duration = 0.0
+            dev_profile = (
+                agent_registry.get_profile(dev_role) if agent_registry else None
+            )
+            dev_route = _route_for(dev_role.value, dev_profile, model_name)
             try:
                 dev_resp = await model_manager.generate(
                     InferenceRequest(
@@ -699,19 +736,20 @@ def create_master_graph(
                             agent_registry=agent_registry,
                             skills_catalog=skills_catalog,
                             db_manager=db_manager,
-                owner_user_id=state.get("owner_user_id"),
+                            owner_user_id=state.get("owner_user_id"),
                             intent="project_creation",
                             user_prompt=user_prompt,
                             project_id=slug,
                             domain="frontend" if project_type in ("web", "flutter") else "backend",
                         ),
-                        model_name=model_name,
+                        model_name=dev_route.model or model_name,
                         max_tokens=300,
                         temperature=0.3,
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
                         agent_role=dev_role.value,
+                        key_id=dev_route.key_id,
                     )
                 )
                 dev_summary = dev_resp.content.strip()
@@ -726,6 +764,10 @@ def create_master_graph(
             )
             qa_tokens = 0
             qa_duration = 0.0
+            qa_profile = (
+                agent_registry.get_profile(qa_role) if agent_registry else None
+            )
+            qa_route = _route_for(qa_role.value, qa_profile, model_name)
             try:
                 qa_resp = await model_manager.generate(
                     InferenceRequest(
@@ -739,19 +781,20 @@ def create_master_graph(
                             agent_registry=agent_registry,
                             skills_catalog=skills_catalog,
                             db_manager=db_manager,
-                owner_user_id=state.get("owner_user_id"),
+                            owner_user_id=state.get("owner_user_id"),
                             intent="project_creation",
                             user_prompt=user_prompt,
                             project_id=slug,
                             domain="quality_assurance",
                         ),
-                        model_name=model_name,
+                        model_name=qa_route.model or model_name,
                         max_tokens=300,
                         temperature=0.2,
                         timeout_seconds=20.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
                         agent_role=qa_role.value,
+                        key_id=qa_route.key_id,
                     )
                 )
                 qa_summary = qa_resp.content.strip()
@@ -936,6 +979,7 @@ def create_master_graph(
                     task_id=state.get("task_id"),
                     owner_user_id=state.get("owner_user_id"),
                     agent_role=primary_agent,
+                    key_id=primary_key_id,
                 )
                 try:
                     conv_resp = await model_manager.generate(conv_req)
@@ -1052,22 +1096,28 @@ def create_master_graph(
                         specialist_profile = agent_registry.get_profile(AgentRole(specialist_role))
                     except Exception as exc:
                         logger.debug("Perfil de %s indisponível: %s", specialist_role, exc)
-                specialist_model = (
+                specialist_fallback_model = (
                     specialist_profile.preferred_model
                     if specialist_profile and specialist_profile.preferred_model
                     else model_name
                 )
+                specialist_route = _route_for(
+                    specialist_role,
+                    specialist_profile,
+                    specialist_fallback_model,
+                )
+                specialist_model = specialist_route.model or model_name
                 specialist_request = InferenceRequest(
                     prompt=specialist_task,
                     system_prompt=specialist_system,
                     model_name=specialist_model,
-                    max_tokens=900,
+                    max_tokens=500,
                     temperature=0.25,
-                    timeout_seconds=120.0,
+                    timeout_seconds=300.0,
                     task_id=state.get("task_id"),
                     owner_user_id=state.get("owner_user_id"),
                     agent_role=specialist_role,
-                    key_id=getattr(specialist_profile, "assigned_key_id", None),
+                    key_id=specialist_route.key_id,
                 )
                 try:
                     specialist_response = await model_manager.generate(specialist_request)
@@ -1128,18 +1178,27 @@ def create_master_graph(
                 domain="planning",
                 previous_outputs=peer_outputs,
             )
+            master_profile = (
+                agent_registry.get_profile(AgentRole.JARVIS_MASTER)
+                if agent_registry
+                else None
+            )
+            master_route = _route_for(
+                AgentRole.JARVIS_MASTER.value, master_profile, model_name
+            )
             try:
                 master_response = await model_manager.generate(
                     InferenceRequest(
                         prompt=master_prompt,
                         system_prompt=master_system,
-                        model_name=model_name,
+                        model_name=master_route.model or model_name,
                         max_tokens=1200,
                         temperature=0.2,
-                        timeout_seconds=120.0,
+                        timeout_seconds=240.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
                         agent_role=AgentRole.JARVIS_MASTER.value,
+                        key_id=master_route.key_id,
                     )
                 )
             except Exception as exc:
@@ -1206,11 +1265,11 @@ def create_master_graph(
                 model_name=model_name,
                 max_tokens=req_max_tokens,
                 temperature=0.3,
-                timeout_seconds=90.0,
+                timeout_seconds=240.0,
                 task_id=state.get("task_id"),
                 owner_user_id=state.get("owner_user_id"),
                 agent_role=primary_agent,
-                key_id=getattr(prim_profile, "assigned_key_id", None),
+                key_id=primary_key_id,
             )
 
             try:
@@ -1278,6 +1337,12 @@ def create_master_graph(
                 if secondary_profile and secondary_profile.preferred_model
                 else model_name
             )
+            secondary_route = _route_for(
+                secondary_role,
+                secondary_profile,
+                secondary_model,
+            )
+            secondary_model = secondary_route.model or model_name
             secondary_system = build_specialist_prompt(
                 agent_role=secondary_role,
                 agent_registry=agent_registry,
@@ -1305,11 +1370,11 @@ def create_master_graph(
                         model_name=secondary_model,
                         max_tokens=1000,
                         temperature=0.25,
-                        timeout_seconds=120.0,
+                        timeout_seconds=300.0,
                         task_id=state.get("task_id"),
                         owner_user_id=state.get("owner_user_id"),
                         agent_role=secondary_role,
-                        key_id=getattr(secondary_profile, "assigned_key_id", None),
+                        key_id=secondary_route.key_id,
                     )
                 )
                 secondary_text = (secondary_response.content or "").strip()

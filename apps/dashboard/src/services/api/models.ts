@@ -85,6 +85,8 @@ export interface KeyVaultItem {
   default_model?: string;
   assigned_agents?: string[];
   is_active: boolean;
+  owner_user_id?: string | null;
+  is_default?: boolean;
 }
 
 export async function fetchKeyVault(): Promise<KeyVaultItem[]> {
@@ -107,6 +109,8 @@ export async function registerVaultKey(payload: {
   base_url?: string;
   default_model?: string;
   is_active?: boolean;
+  is_default?: boolean;
+  scope?: 'account' | 'global';
 }): Promise<any> {
   const res = await fetch(`${API_BASE}/models/vault`, {
     method: 'POST',
@@ -120,8 +124,8 @@ export async function registerVaultKey(payload: {
   return res.json();
 }
 
-export async function deleteVaultKey(key_id: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}`, {
+export async function deleteVaultKey(key_id: string, scope: 'account' | 'global' = 'account'): Promise<any> {
+  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}?scope=${scope}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -131,8 +135,19 @@ export async function deleteVaultKey(key_id: string): Promise<any> {
   return res.json();
 }
 
-export async function testVaultKey(key_id: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}/test`, {
+export async function setDefaultVaultKey(key_id: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}/default`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao definir chave predefinida' }));
+    throw new Error(err.detail || 'Falha ao definir chave predefinida');
+  }
+  return res.json();
+}
+
+export async function testVaultKey(key_id: string, scope: 'account' | 'global' = 'account'): Promise<any> {
+  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}/test?scope=${scope}`, {
     method: 'POST',
   });
   if (!res.ok) {

@@ -1,32 +1,33 @@
 import json
 import logging
-from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from apps.api.auth import get_principal, require_admin
-
-from apps.api.schemas import (
-    HybridConfigRequest,
-    HybridTestRequest,
-    HFInstallPayload,
-)
 from apps.api.deps import (
+    AGENT_MODEL_RECOMMENDATIONS,
+    CURATED_HUGGINGFACE_MODELS,
+    HYBRID_CONFIG_PATH,
+    PROVIDER_PRESETS,
+    AuditEventSeverity,
+    UniversalOnlineAdapter,
+    build_online_adapter,
     hybrid_router,
+    inference_tracker,
     key_vault,
     model_manager,
-    security_core,
-    build_online_adapter,
     save_hybrid_config_to_disk,
-    HYBRID_CONFIG_PATH,
-    CURATED_HUGGINGFACE_MODELS,
     search_huggingface_hub,
-    AGENT_MODEL_RECOMMENDATIONS,
+    security_core,
     stream_ollama_pull,
-    PROVIDER_PRESETS,
-    UniversalOnlineAdapter,
-    AuditEventSeverity,
-    inference_tracker,
+)
+from apps.api.schemas import (
+    HFInstallPayload,
+    HybridConfigRequest,
+    HybridTestRequest,
 )
 
 logger = logging.getLogger("jarvis.api.models")
@@ -69,18 +70,32 @@ async def list_models_endpoint(principal=Depends(get_principal)):
     # Só anuncia um modelo online quando o gateway está ativo e a credencial correspondente existe.
     online_models = []
     active_key = key_vault.get_key(cfg.key_id) if cfg.key_id else None
+    owner_key = (
+        key_vault.resolve_active_key(principal.subject_id)
+        if getattr(principal, "kind", None) == "human"
+        else None
+    )
     gateway_active = bool(
         cfg.enabled
         and active_key
         and active_key.is_active
         and hybrid_router.online_adapter is not None
     )
-    if gateway_active and cfg.default_model:
+    account_key_active = bool(owner_key and owner_key.is_active)
+    if (gateway_active or account_key_active) and (owner_key or cfg.default_model):
+        if owner_key:
+            online_name = owner_key.default_model
+            online_provider = owner_key.provider
+            online_label = f"{online_name} ({online_provider.upper()} — cofre da conta)"
+        else:
+            online_name = cfg.default_model
+            online_provider = cfg.provider_name
+            online_label = f"{online_name} ({online_provider.upper()} — configurado e ativo)"
         online_models.append({
-            "name": cfg.default_model,
-            "provider": cfg.provider_name,
+            "name": online_name,
+            "provider": online_provider,
             "is_default": True,
-            "label": f"{cfg.default_model} ({cfg.provider_name.upper()} — configurado e ativo)",
+            "label": online_label,
         })
 
     response = {
@@ -89,9 +104,9 @@ async def list_models_endpoint(principal=Depends(get_principal)):
         # Chat clients need only the active route and model name; budget,
         # spend, credential state and global queue telemetry are admin-only.
         "hybrid_gateway": {
-            "enabled": gateway_active,
-            "provider": cfg.provider_name,
-            "model": cfg.default_model,
+            "enabled": gateway_active or account_key_active,
+            "provider": (owner_key.provider if owner_key else cfg.provider_name),
+            "model": (owner_key.default_model if owner_key else cfg.default_model),
             "fallback_route": "ollama_local",
         },
     }
@@ -258,19 +273,43 @@ class KeyProfilePayload(BaseModel):
     base_url: str | None = None
     default_model: str | None = None
     is_active: bool = True
+    # "account" isola a credencial na conta autenticada; "global" exige admin.
+    scope: Literal["account", "global"] = "account"
+    is_default: bool = False
+
+
+def _vault_account(principal) -> str:
+    if getattr(principal, "kind", None) != "human":
+        raise HTTPException(
+            status_code=403,
+            detail="O cofre privado exige uma conta humana autenticada.",
+        )
+    return principal.subject_id
+
+
+def _vault_scope_owner(principal, scope: str) -> str | None:
+    if scope == "global":
+        if getattr(principal, "role", None) != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Apenas administradores podem gerir credenciais globais.",
+            )
+        return None
+    return _vault_account(principal)
 
 
 @router.get("/api/v1/models/vault")
-async def list_vault_keys_endpoint(principal=Depends(require_admin)):
-    """Lista todas as chaves cadastradas no cofre com máscaras de segurança."""
-    from apps.api.deps import key_vault
-    return key_vault.list_keys()
+async def list_vault_keys_endpoint(principal=Depends(get_principal)):
+    """Lista as chaves privadas da conta (e, para admin, também as globais)."""
+    owner = _vault_account(principal)
+    include_global = getattr(principal, "role", None) == "admin"
+    return key_vault.list_keys(owner_user_id=owner, include_global=include_global)
 
 
 @router.post("/api/v1/models/vault")
-async def save_vault_key_endpoint(payload: KeyProfilePayload, principal=Depends(require_admin)):
-    """Cadastra ou atualiza uma chave de API nomeada no cofre."""
-    from apps.api.deps import key_vault
+async def save_vault_key_endpoint(payload: KeyProfilePayload, principal=Depends(get_principal)):
+    """Cadastra ou atualiza uma chave no cofre privado da conta autenticada."""
+    owner = _vault_scope_owner(principal, payload.scope)
     prof = key_vault.save_key(
         key_id=payload.key_id,
         label=payload.label,
@@ -279,24 +318,47 @@ async def save_vault_key_endpoint(payload: KeyProfilePayload, principal=Depends(
         base_url=payload.base_url,
         default_model=payload.default_model,
         is_active=payload.is_active,
+        owner_user_id=owner,
+        is_default=payload.is_default,
     )
-    return {"status": "saved", "key_id": prof.key_id, "label": prof.label}
+    return {
+        "status": "saved",
+        "key_id": prof.key_id,
+        "scope": "global" if prof.owner_user_id is None else "account",
+    }
+
+
+@router.post("/api/v1/models/vault/{key_id}/default")
+async def set_default_vault_key_endpoint(key_id: str, principal=Depends(get_principal)):
+    """Define a chave da conta usada automaticamente nas suas inferências."""
+    owner = _vault_account(principal)
+    if not key_vault.set_default_key(key_id, owner):
+        raise HTTPException(status_code=404, detail="Chave não encontrada no cofre da conta.")
+    return {"status": "default", "key_id": key_id}
 
 
 @router.delete("/api/v1/models/vault/{key_id}")
-async def delete_vault_key_endpoint(key_id: str, principal=Depends(require_admin)):
-    """Exclui uma chave de API do cofre."""
-    from apps.api.deps import key_vault
-    deleted = key_vault.delete_key(key_id)
+async def delete_vault_key_endpoint(
+    key_id: str,
+    scope: Literal["account", "global"] = "account",
+    principal=Depends(get_principal),
+):
+    """Exclui uma chave do cofre privado da conta (ou global, se admin)."""
+    owner = _vault_scope_owner(principal, scope)
+    deleted = key_vault.delete_key(key_id, owner_user_id=owner)
     if not deleted:
         raise HTTPException(status_code=404, detail="Chave não encontrada no cofre.")
     return {"status": "deleted", "key_id": key_id}
 
 
 @router.post("/api/v1/models/vault/{key_id}/test")
-async def test_vault_key_endpoint(key_id: str, principal=Depends(require_admin)):
-    """Testa a conectividade de uma chave específica com o provedor correspondente."""
-    from apps.api.deps import key_vault
-    res = await key_vault.test_key_connectivity(key_id)
+async def test_vault_key_endpoint(
+    key_id: str,
+    scope: Literal["account", "global"] = "account",
+    principal=Depends(get_principal),
+):
+    """Testa a conectividade de uma chave do cofre da conta."""
+    owner = _vault_scope_owner(principal, scope)
+    res = await key_vault.test_key_connectivity(key_id, owner_user_id=owner)
     return res
 

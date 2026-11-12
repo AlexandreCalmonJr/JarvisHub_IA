@@ -4,6 +4,7 @@ import pytest
 
 from services.model_runtime import (
     InferenceQueue,
+    InferenceQueueError,
     InferenceRequest,
     MockAdapter,
     ModelManager,
@@ -75,3 +76,38 @@ async def test_inference_queue_concurrency():
 
     await asyncio.gather(t1, t2)
     assert len(results) == 2
+
+
+@pytest.mark.asyncio
+async def test_inference_queue_reports_execution_timeout():
+    queue = InferenceQueue(max_concurrent=1)
+
+    async def slow_job():
+        await asyncio.sleep(0.2)
+        return "ok"
+
+    with pytest.raises(InferenceQueueError, match="tempo limite de execução"):
+        await queue.execute(slow_job, timeout_seconds=0.05)
+
+    assert queue.waiting_count == 0
+    assert queue.active_count == 0
+
+
+@pytest.mark.asyncio
+async def test_inference_queue_reports_queue_wait_timeout():
+    queue = InferenceQueue(max_concurrent=1)
+    gate = asyncio.Event()
+
+    async def held_job():
+        await gate.wait()
+        return "held"
+
+    first = asyncio.create_task(queue.execute(held_job))
+    await asyncio.sleep(0.01)
+
+    with pytest.raises(InferenceQueueError, match="espera na fila"):
+        await queue.execute(lambda: asyncio.sleep(0, result="segundo"), timeout_seconds=0.05)
+
+    gate.set()
+    assert await first == "held"
+    assert queue.waiting_count == 0

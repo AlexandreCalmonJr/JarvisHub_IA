@@ -1,29 +1,30 @@
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
 import os
+from datetime import UTC, datetime
 from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from apps.api.auth import Principal, get_principal, require_permission, require_admin
+from apps.api.auth import Principal, get_principal, require_admin, require_permission
+from apps.api.deps import (
+    data_dir,
+    db_manager,
+    hybrid_config,
+    key_vault,
+    log_buffer,
+    model_manager,
+    resource_manager,
+    security_core,
+    telemetry_store,
+    webhook_service,
+)
 from apps.api.schemas import (
+    InferenceQualityFeedbackPayload,
     UserProfilePayload,
     WebhookConfigPayload,
-    InferenceQualityFeedbackPayload,
-)
-from apps.api.deps import (
-    model_manager,
-    security_core,
-    resource_manager,
-    log_buffer,
-    db_manager,
-    webhook_service,
-    telemetry_store,
-    hybrid_config,
-    data_dir,
-    key_vault,
 )
 
 logger = logging.getLogger("jarvis.api.system")
@@ -149,7 +150,13 @@ async def get_onboarding_status(principal: Principal = Depends(require_admin)):
     except Exception:
         ollama_available = False
     try:
-        configured_keys = sum(1 for item in key_vault.list_keys() if item.get("is_active") and item.get("has_api_key"))
+        configured_keys = sum(
+            1
+            for item in key_vault.list_keys(
+                owner_user_id=principal.subject_id, include_global=True
+            )
+            if item.get("is_active") and item.get("has_api_key")
+        )
         vault_encryption_ready = os.name == "nt" or key_vault._fernet_key_path.exists()
     except Exception:
         configured_keys = 0

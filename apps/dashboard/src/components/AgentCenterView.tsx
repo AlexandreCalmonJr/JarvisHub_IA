@@ -5,6 +5,7 @@ import { notify } from './common/Toast';
 import { AgentActionsModal } from './agents/AgentActionsModal';
 import { AgentDetailModal } from './agents/AgentDetailModal';
 import { AgentPlayground } from './agents/AgentPlayground';
+import { AgentRouteModal } from './agents/AgentRouteModal';
 import { API_BASE } from '../services/api/client';
 
 export const AgentCenterView: React.FC = () => {
@@ -19,6 +20,7 @@ export const AgentCenterView: React.FC = () => {
   const [selectedModalAgent, setSelectedModalAgent] = useState<AgentInfo | null>(null);
   const [selectedPlaygroundAgent, setSelectedPlaygroundAgent] = useState<AgentInfo | null>(null);
   const [selectedActionsAgent, setSelectedActionsAgent] = useState<AgentInfo | null>(null);
+  const [selectedRouteAgent, setSelectedRouteAgent] = useState<AgentInfo | null>(null);
 
     const handleResetAgentToHybrid = async (role: string) => {
     try {
@@ -362,7 +364,7 @@ export const AgentCenterView: React.FC = () => {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: canManageAgents ? '1fr 1fr' : '1fr',
+                gridTemplateColumns: canManageAgents ? '1fr 1fr 1fr' : '1fr',
                 gap: '8px',
                 paddingTop: '8px',
               }}
@@ -385,11 +387,24 @@ export const AgentCenterView: React.FC = () => {
                   >
                     Ações
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setSelectedRouteAgent(agent)}
+                    style={{ fontSize: '0.78rem', padding: '7px 10px' }}
+                  >
+                    Rota
+                  </button>
                 </>
               ) : (
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', textAlign: 'center' }}>
-                  Consulta disponível · gestão restrita a perfis autorizados
-                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedRouteAgent(agent)}
+                  style={{ fontSize: '0.78rem', padding: '7px 10px' }}
+                >
+                  Configurar Rota da Conta
+                </button>
               )}
             </div>
           </div>
@@ -425,6 +440,16 @@ export const AgentCenterView: React.FC = () => {
           isOpen={true}
           agent={selectedPlaygroundAgent}
           onClose={() => setSelectedPlaygroundAgent(null)}
+        />
+      )}
+
+      {/* Modal de Rota por Conta (chave + modelo) */}
+      {selectedRouteAgent && (
+        <AgentRouteModal
+          isOpen={true}
+          agent={selectedRouteAgent}
+          onClose={() => setSelectedRouteAgent(null)}
+          onSaved={loadAgents}
         />
       )}
     </div>

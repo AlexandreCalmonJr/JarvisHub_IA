@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from .provider_defaults import default_model_for_provider
 from .types import InferenceRequest, InferenceResponse, ModelMetadata
 
 logger = logging.getLogger("jarvis.model_runtime.adapter")
@@ -461,15 +462,7 @@ class UniversalOnlineAdapter(BaseModelAdapter):
 
     @staticmethod
     def _default_model_for_provider(provider: str) -> str:
-        models = {
-            "openai": "gpt-4o-mini",
-            "gemini": "gemini-2.5-flash",
-            "groq": "llama-3.3-70b-versatile",
-            "deepseek": "deepseek-chat",
-            "anthropic": "claude-3-5-haiku-20241022",
-            "openrouter": "meta-llama/llama-3.3-70b-instruct",
-        }
-        return models.get(provider, "gpt-4o-mini")
+        return default_model_for_provider(provider)
 
     async def health_check(self) -> bool:
         try:

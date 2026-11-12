@@ -35,11 +35,13 @@ class InferenceQueue:
         timeout_seconds: float = 240.0,
     ) -> Any:
         self._waiting_count += 1
+        acquired = False
         timeout_scope = asyncio.timeout(timeout_seconds)
         try:
             # Distingue timeout da fila de TimeoutError lançado pelo próprio provider.
             async with timeout_scope:
                 async with self._semaphore:
+                    acquired = True
                     self._waiting_count -= 1
                     self._active_count += 1
                     try:
@@ -47,9 +49,17 @@ class InferenceQueue:
                     finally:
                         self._active_count -= 1
         except TimeoutError:
-            self._waiting_count = max(0, self._waiting_count - 1)
             if not timeout_scope.expired():
+                if acquired:
+                    raise
+                self._waiting_count = max(0, self._waiting_count - 1)
                 raise
+            if not acquired:
+                self._waiting_count = max(0, self._waiting_count - 1)
+                raise InferenceQueueError(
+                    f"A inferência excedeu o tempo limite de espera na fila "
+                    f"({timeout_seconds}s) antes de iniciar a execução."
+                )
             raise InferenceQueueError(
-                f"A inferência excedeu o tempo limite na fila ({timeout_seconds}s)."
+                f"A inferência excedeu o tempo limite de execução ({timeout_seconds}s)."
             )

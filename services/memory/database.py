@@ -142,6 +142,15 @@ class DatabaseManager:
                 updated_at TIMESTAMP NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS agent_route_assignments (
+                owner_user_id TEXT NOT NULL,
+                agent_role TEXT NOT NULL,
+                key_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (owner_user_id, agent_role)
+            );
+
             CREATE TABLE IF NOT EXISTS user_skills (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -1013,6 +1022,73 @@ class DatabaseManager:
                         r_dict["allowed_tools"] = []
                 configs[r_dict["role"]] = r_dict
             return configs
+
+    def set_agent_route(
+        self,
+        agent_role: str,
+        key_id: str,
+        model: str,
+        owner_user_id: str,
+    ) -> None:
+        """Guarda a rota (chave + modelo) escolhida pela conta para um especialista."""
+        clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
+        now = datetime.now(UTC).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_route_assignments
+                    (owner_user_id, agent_role, key_id, model, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(owner_user_id, agent_role) DO UPDATE SET
+                    key_id = excluded.key_id,
+                    model = excluded.model,
+                    updated_at = excluded.updated_at
+                """,
+                (owner_user_id, clean_role, key_id, model, now),
+            )
+
+    def get_agent_route(
+        self, agent_role: str, owner_user_id: str
+    ) -> dict[str, Any] | None:
+        """Devolve a rota da conta para o especialista, se existir."""
+        clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT owner_user_id, agent_role, key_id, model, updated_at
+                FROM agent_route_assignments
+                WHERE owner_user_id = ? AND agent_role = ?
+                """,
+                (owner_user_id, clean_role),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_agent_routes(self, owner_user_id: str) -> list[dict[str, Any]]:
+        """Lista as rotas configuradas pela conta autenticada."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT owner_user_id, agent_role, key_id, model, updated_at
+                FROM agent_route_assignments
+                WHERE owner_user_id = ?
+                ORDER BY agent_role
+                """,
+                (owner_user_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_agent_route(self, agent_role: str, owner_user_id: str) -> bool:
+        """Remove a rota da conta, devolvendo o especialista ao perfil global."""
+        clean_role = agent_role.value if hasattr(agent_role, "value") else str(agent_role)
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                """
+                DELETE FROM agent_route_assignments
+                WHERE owner_user_id = ? AND agent_role = ?
+                """,
+                (owner_user_id, clean_role),
+            )
+            return cur.rowcount > 0
 
     @staticmethod
     def _account_setting_key(key: str, owner_user_id: str | None) -> str:

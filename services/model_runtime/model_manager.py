@@ -70,6 +70,32 @@ class ModelManager:
                 logger.warning("Catálogo online indisponível durante descoberta: %s", type(exc).__name__)
         return models
 
+    def _apply_owner_default_key(self, request: InferenceRequest) -> InferenceRequest:
+        """Usa a chave predefinida da conta quando o pedido não indica uma.
+
+        Isto permite que cada conta utilize a sua própria credencial externa sem
+        alterar a configuração global de agentes ou o gateway híbrido partilhado.
+        """
+        if request.key_id or not request.owner_user_id or not self.hybrid_router:
+            return request
+        vault = getattr(self.hybrid_router, "key_vault", None)
+        resolver = getattr(vault, "resolve_active_key", None)
+        if resolver is None:
+            return request
+        try:
+            profile = resolver(request.owner_user_id)
+        except Exception:
+            logger.exception("Não foi possível resolver a chave predefinida da conta.")
+            return request
+        if not profile or not profile.api_key:
+            return request
+        return request.model_copy(
+            update={
+                "key_id": profile.key_id,
+                "model_name": profile.default_model or request.model_name,
+            }
+        )
+
     async def _prepare_model_selection(
         self, request: InferenceRequest, has_external_data_approval: bool
     ) -> InferenceRequest:
@@ -159,6 +185,7 @@ class ModelManager:
             if request.task_id and self.kill_switch.is_task_cancelled(request.task_id):
                 raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
 
+        request = self._apply_owner_default_key(request)
         request = await self._prepare_model_selection(request, has_external_data_approval)
 
         # 2. Execução protegida pela fila de concorrência com suporte a Hybrid Gateway
@@ -266,6 +293,7 @@ class ModelManager:
             if request.task_id and self.kill_switch.is_task_cancelled(request.task_id):
                 raise RuntimeError(f"A tarefa '{request.task_id}' foi cancelada.")
 
+        request = self._apply_owner_default_key(request)
         request = await self._prepare_model_selection(request, has_external_data_approval)
 
         # 2. Streaming via Hybrid Router ou Adapter Local

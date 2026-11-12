@@ -27,6 +27,8 @@ from typing import Any
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 
+from .provider_defaults import default_model_for_provider, normalize_model_for_provider
+
 logger = logging.getLogger("jarvis.model_runtime.key_vault")
 
 _VAULT_ENVELOPE_VERSION = 2
@@ -110,6 +112,10 @@ class KeyProfile:
     default_model: str
     is_active: bool = True
     created_at: str = ""
+    # None identifica credenciais globais/legadas geridas por administradores.
+    owner_user_id: str | None = None
+    # Chave usada automaticamente nas inferências da própria conta.
+    is_default: bool = False
 
 
 class KeyVaultService:
@@ -196,7 +202,14 @@ class KeyVaultService:
                     # Migração automática de cofre legado em texto puro.
                     migrated = True
                 for k, v in data.items():
-                    self._keys[k] = KeyProfile(**v)
+                    profile = KeyProfile(**v)
+                    normalized = normalize_model_for_provider(
+                        profile.provider, profile.default_model
+                    )
+                    if normalized and normalized != profile.default_model:
+                        profile.default_model = normalized
+                        migrated = True
+                    self._keys[k] = profile
                 if migrated:
                     self._save_vault()
                     logger.warning(
@@ -226,7 +239,8 @@ class KeyVaultService:
                         provider=prov,
                         api_key=legacy["api_key"],
                         base_url=legacy.get("base_url") or "https://api.groq.com/openai/v1",
-                        default_model=legacy.get("default_model") or "qwen/qwen3.8-27b",
+                        default_model=legacy.get("default_model")
+                        or default_model_for_provider(prov),
                         is_active=bool(legacy.get("enabled", True)),
                     )
                     self._save_vault()
@@ -246,10 +260,30 @@ class KeyVaultService:
             logger.error("Falha ao persistir cofre de chaves cifrado: %s", exc)
             raise RuntimeError("Não foi possível persistir o KeyVault cifrado.") from exc
 
-    def list_keys(self) -> list[dict[str, Any]]:
-        """Retorna todas as chaves cadastradas, sem nunca expor a chave crua."""
+    @staticmethod
+    def _storage_id(key_id: str, owner_user_id: str | None) -> str:
+        return key_id if owner_user_id is None else f"{owner_user_id}::{key_id}"
+
+    def list_keys(
+        self,
+        owner_user_id: str | None = None,
+        include_global: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Lista chaves visíveis para a conta, sem nunca expor a chave crua.
+
+        - ``owner_user_id=None`` devolve apenas credenciais globais/legadas.
+        - Com conta, devolve as chaves dessa conta e, se ``include_global``,
+          também as globais (visão administrativa).
+        """
         res = []
         for k in self._keys.values():
+            if owner_user_id is None:
+                if k.owner_user_id is not None:
+                    continue
+            elif k.owner_user_id != owner_user_id and not (
+                include_global and k.owner_user_id is None
+            ):
+                continue
             d = asdict(k)
             # A chave crua jamais sai do cofre. Apenas a versão mascarada é exposta.
             raw = d.pop("api_key", "")
@@ -264,8 +298,42 @@ class KeyVaultService:
             res.append(d)
         return res
 
-    def get_key(self, key_id: str) -> KeyProfile | None:
-        return self._keys.get(key_id)
+    def get_key(self, key_id: str, owner_user_id: str | None = None) -> KeyProfile | None:
+        """Obtém uma chave no âmbito exato indicado (conta ou global)."""
+        return self._keys.get(self._storage_id(key_id, owner_user_id))
+
+    def get_key_for_request(
+        self, key_id: str, owner_user_id: str | None = None
+    ) -> KeyProfile | None:
+        """Resolve a chave da conta e, se não existir, a credencial global/legada."""
+        if owner_user_id:
+            owned = self.get_key(key_id, owner_user_id)
+            if owned is not None:
+                return owned
+        return self.get_key(key_id)
+
+    def resolve_active_key(self, owner_user_id: str) -> KeyProfile | None:
+        """Devolve a chave predefinida ativa da conta (ou a primeira ativa)."""
+        owned = [
+            p
+            for p in self._keys.values()
+            if p.owner_user_id == owner_user_id and p.is_active and p.api_key
+        ]
+        for profile in owned:
+            if profile.is_default:
+                return profile
+        return owned[0] if owned else None
+
+    def set_default_key(self, key_id: str, owner_user_id: str) -> bool:
+        """Marca uma chave da conta como predefinida para as suas inferências."""
+        target = self.get_key(key_id, owner_user_id)
+        if target is None:
+            return False
+        for profile in self._keys.values():
+            if profile.owner_user_id == owner_user_id:
+                profile.is_default = profile is target
+        self._save_vault()
+        return True
 
     def save_key(
         self,
@@ -276,6 +344,8 @@ class KeyVaultService:
         base_url: str | None = None,
         default_model: str | None = None,
         is_active: bool = True,
+        owner_user_id: str | None = None,
+        is_default: bool = False,
     ) -> KeyProfile:
         provider = provider.lower().strip()
         if not base_url:
@@ -291,16 +361,28 @@ class KeyVaultService:
                 base_url = "https://api.openai.com/v1"
 
         if not default_model:
-            if provider == "groq":
-                default_model = "qwen/qwen3.8-27b"
-            elif provider == "deepseek":
-                default_model = "deepseek-chat"
-            elif provider == "openai":
-                default_model = "gpt-4o-mini"
-            elif provider == "gemini":
-                default_model = "gemini-1.5-flash"
-            else:
-                default_model = "default"
+            default_model = default_model_for_provider(provider)
+        else:
+            default_model = (
+                normalize_model_for_provider(provider, default_model) or default_model
+            )
+
+        storage_id = self._storage_id(key_id, owner_user_id)
+        existing = self._keys.get(storage_id)
+        has_owner_default = any(
+            p.owner_user_id == owner_user_id
+            and p.is_default
+            and p.is_active
+            and p.key_id != key_id
+            for p in self._keys.values()
+        )
+        make_default = bool(owner_user_id) and (
+            is_default or not has_owner_default
+        )
+        if make_default:
+            for other in self._keys.values():
+                if other.owner_user_id == owner_user_id:
+                    other.is_default = False
 
         profile = KeyProfile(
             key_id=key_id,
@@ -310,20 +392,26 @@ class KeyVaultService:
             base_url=base_url.rstrip("/"),
             default_model=default_model,
             is_active=is_active,
+            created_at=existing.created_at if existing else "",
+            owner_user_id=owner_user_id,
+            is_default=make_default,
         )
-        self._keys[key_id] = profile
+        self._keys[storage_id] = profile
         self._save_vault()
         return profile
 
-    def delete_key(self, key_id: str) -> bool:
-        if key_id in self._keys:
-            del self._keys[key_id]
+    def delete_key(self, key_id: str, owner_user_id: str | None = None) -> bool:
+        storage_id = self._storage_id(key_id, owner_user_id)
+        if storage_id in self._keys:
+            del self._keys[storage_id]
             self._save_vault()
             return True
         return False
 
-    async def test_key_connectivity(self, key_id: str) -> dict[str, Any]:
-        profile = self.get_key(key_id)
+    async def test_key_connectivity(
+        self, key_id: str, owner_user_id: str | None = None
+    ) -> dict[str, Any]:
+        profile = self.get_key_for_request(key_id, owner_user_id)
         if not profile:
             return {"success": False, "error": f"Chave '{key_id}' não encontrada."}
 

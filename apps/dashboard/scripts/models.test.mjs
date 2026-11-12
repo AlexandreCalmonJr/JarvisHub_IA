@@ -22,13 +22,19 @@ test('unavailable model catalogs and metrics are not replaced with fabricated va
   assert.doesNotMatch(api, /total_inferences: 0|return \[\]|return \{\}/);
 });
 
-test('global hybrid configuration and KeyVault routes require administrator authorization', () => {
+test('global hybrid configuration requires admin and the KeyVault stays account-scoped', () => {
   assert.match(backend, /async def get_hybrid_config_endpoint\(principal=Depends\(require_admin\)\)/);
   assert.match(backend, /async def update_hybrid_config_endpoint\(payload: HybridConfigRequest, principal=Depends\(require_admin\)\)/);
-  assert.match(backend, /async def list_vault_keys_endpoint\(principal=Depends\(require_admin\)\)/);
-  assert.match(backend, /async def save_vault_key_endpoint\(payload: KeyProfilePayload, principal=Depends\(require_admin\)\)/);
-  assert.match(backend, /async def delete_vault_key_endpoint\(key_id: str, principal=Depends\(require_admin\)\)/);
-  assert.match(backend, /async def test_vault_key_endpoint\(key_id: str, principal=Depends\(require_admin\)\)/);
+  // O cofre privado exige sessão, mas não é exclusivo de administradores.
+  assert.match(backend, /async def list_vault_keys_endpoint\(principal=Depends\(get_principal\)\)/);
+  assert.match(backend, /async def save_vault_key_endpoint\(payload: KeyProfilePayload, principal=Depends\(get_principal\)\)/);
+  assert.match(backend, /async def set_default_vault_key_endpoint\(key_id: str, principal=Depends\(get_principal\)\)/);
+  assert.match(backend, /async def delete_vault_key_endpoint\(\s*key_id: str,\s*scope: Literal\["account", "global"\] = "account",\s*principal=Depends\(get_principal\),?\s*\)/);
+  assert.match(backend, /async def test_vault_key_endpoint\(\s*key_id: str,\s*scope: Literal\["account", "global"\] = "account",\s*principal=Depends\(get_principal\),?\s*\)/);
+  // Escritas globais continuam reservadas a administradores.
+  assert.match(backend, /def _vault_scope_owner\(principal, scope: str\)/);
+  assert.match(backend, /Apenas administradores podem gerir credenciais globais/);
+  assert.match(backend, /list_keys\(owner_user_id=owner, include_global=include_global\)/);
 });
 
 test('model discovery and local installation require an authenticated or privileged account', () => {

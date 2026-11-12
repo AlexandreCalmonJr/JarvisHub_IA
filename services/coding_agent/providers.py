@@ -16,13 +16,15 @@ from __future__ import annotations
 
 import json
 import logging
-from types import SimpleNamespace
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
+
+from services.model_runtime.provider_defaults import default_model_for_provider
 
 from .types import ChatTurn, ProviderReply, ToolCall, ToolSpec
 
@@ -1011,7 +1013,7 @@ def resolve_chat_provider(
         primary = OpenAICompatibleChatProvider(
             api_key=api_key,
             base_url=base_url or "https://api.openai.com/v1",
-            default_model=default_model or "llama-3.3-70b-versatile",
+            default_model=default_model or default_model_for_provider(provider_name),
             provider_name=provider_name,
         )
 
@@ -1023,18 +1025,50 @@ def resolve_governed_chat_provider(
     router: Any,
     local_provider: ChatProvider | None = None,
     has_external_data_approval: bool = False,
+    key_id: str | None = None,
+    owner_user_id: str | None = None,
 ) -> ChatProvider:
-    """Resolve o provedor de chat e aplica a política central do HybridRouter."""
+    """Resolve o provedor de chat e aplica a política central do HybridRouter.
+
+    Quando ``key_id`` ou ``owner_user_id`` são indicados, a credencial da conta
+    tem prioridade sobre o gateway global. Isto permite que cada especialista
+    use a chave e o modelo atribuídos à conta autenticada.
+    """
     effective_config = online_config
+    vault = getattr(router, "key_vault", None) if router is not None else None
+
+    account_profile = None
+    if vault is not None and (key_id or owner_user_id):
+        try:
+            if key_id:
+                account_profile = vault.get_key_for_request(key_id, owner_user_id)
+            else:
+                account_profile = vault.resolve_active_key(owner_user_id)
+        except Exception as exc:
+            logger.warning("Falha ao resolver a chave da conta: %s", exc)
+
     if (
+        account_profile is not None
+        and account_profile.is_active
+        and account_profile.api_key
+    ):
+        # Segredo recuperado em memória apenas para criar o provider;
+        # nunca é persistido na configuração de agentes.
+        effective_config = SimpleNamespace(
+            enabled=True,
+            api_key=account_profile.api_key,
+            provider_name=account_profile.provider,
+            base_url=account_profile.base_url,
+            default_model=account_profile.default_model,
+        )
+    elif (
         online_config is not None
         and getattr(online_config, "enabled", False)
         and not (getattr(online_config, "api_key", None) or "").strip()
         and getattr(online_config, "key_id", None)
-        and router is not None
-        and getattr(router, "key_vault", None) is not None
+        and vault is not None
     ):
-        profile = router.key_vault.get_key(online_config.key_id)
+        profile = vault.get_key(online_config.key_id)
         if profile and profile.is_active and profile.api_key:
             # Segredo recuperado em memória apenas para criar o provider;
             # o JSON de configuração contém somente o identificador da chave.

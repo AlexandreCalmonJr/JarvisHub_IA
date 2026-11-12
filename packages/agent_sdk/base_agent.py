@@ -177,7 +177,7 @@ class AutonomousAgent(BaseAgent):
             model_name=self.profile.preferred_model,
             max_tokens=2048,
             temperature=0.3,
-            timeout_seconds=120.0,
+            timeout_seconds=300.0,
             task_id=task_request.task_id,
             key_id=self.profile.assigned_key_id,
         )

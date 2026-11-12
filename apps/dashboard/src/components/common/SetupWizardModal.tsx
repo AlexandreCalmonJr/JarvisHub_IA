@@ -12,6 +12,7 @@ import {
   Server,
 } from 'lucide-react';
 import { API_BASE } from '../../services/api/client';
+import { registerVaultKey } from '../../services/api/models';
 
 interface SetupWizardModalProps {
   isOpen: boolean;
@@ -19,9 +20,24 @@ interface SetupWizardModalProps {
   onCompleted?: () => void;
 }
 
+type CloudProvider = 'gemini' | 'openai' | 'groq' | 'deepseek' | 'anthropic' | 'custom';
+
+const CLOUD_PRESETS: Record<CloudProvider, { model: string; baseUrl: string }> = {
+  gemini: { model: 'gemini-2.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  openai: { model: 'gpt-4o-mini', baseUrl: 'https://api.openai.com/v1' },
+  groq: { model: 'openai/gpt-oss-120b', baseUrl: 'https://api.groq.com/openai/v1' },
+  deepseek: { model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com/v1' },
+  anthropic: { model: 'claude-3-5-haiku-20241022', baseUrl: 'https://api.anthropic.com/v1' },
+  custom: { model: '', baseUrl: '' },
+};
+
 export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onClose, onCompleted }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [mode, setMode] = useState<'cloud' | 'local'>('local');
+  const [cloudProvider, setCloudProvider] = useState<CloudProvider>('gemini');
+  const [cloudApiKey, setCloudApiKey] = useState('');
+  const [cloudModel, setCloudModel] = useState(CLOUD_PRESETS.gemini.model);
+  const [cloudBaseUrl, setCloudBaseUrl] = useState(CLOUD_PRESETS.gemini.baseUrl);
 
   const [saving, setSaving] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
@@ -43,12 +59,33 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
     return () => { cancelled = true; };
   }, [isOpen]);
 
+  const handleProviderChange = (provider: CloudProvider) => {
+    setCloudProvider(provider);
+    setCloudModel(CLOUD_PRESETS[provider].model);
+    setCloudBaseUrl(CLOUD_PRESETS[provider].baseUrl);
+  };
+
   const handleFinish = async () => {
     setSaving(true);
     setFinishError(null);
     try {
-      if (mode !== 'local') {
-        throw new Error('A configuração de provedores na nuvem ficará disponível após a implantação do Cofre Privado por Conta.');
+      if (mode === 'cloud') {
+        const apiKey = cloudApiKey.trim();
+        if (!apiKey) {
+          throw new Error('Informe a chave de API do provedor escolhido.');
+        }
+        await registerVaultKey({
+          key_id: 'account_primary',
+          label: `${cloudProvider.toUpperCase()} — chave da minha conta`,
+          provider: cloudProvider,
+          api_key: apiKey,
+          base_url: cloudBaseUrl.trim() || undefined,
+          default_model: cloudModel.trim() || undefined,
+          is_active: true,
+          is_default: true,
+          scope: 'account',
+        });
+        setCloudApiKey('');
       }
       const response = await fetch(`${API_BASE}/system/onboarding/complete`, { method: 'POST', credentials: 'include' });
       if (!response.ok) throw new Error('O servidor não confirmou a conclusão da configuração.');
@@ -175,19 +212,23 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                   Passo 1: Como você deseja rodar a inteligência do JARVIS?
                 </h3>
                 <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  O modo local fica disponível de imediato. A configuração em nuvem será liberada após a implantação do Cofre Privado por Conta.
+                  O modo local fica disponível de imediato. O modo nuvem usa o Cofre Privado por Conta: a sua chave fica cifrada e isolada na sua conta.
                 </p>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                 {/* Opção Nuvem Híbrida */}
                 <div
-                  aria-disabled={true}
+                  onClick={() => setMode('cloud')}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') setMode('cloud');
+                  }}
                   style={{
                     padding: '18px 20px',
                     borderRadius: '14px',
-                    cursor: 'not-allowed',
-                    opacity: 0.55,
+                    cursor: 'pointer',
                     backgroundColor: mode === 'cloud' ? 'var(--accent-glow)' : 'rgba(255, 255, 255, 0.03)',
                     border: mode === 'cloud' ? '2px solid var(--accent-color)' : '1px solid rgba(255, 255, 255, 0.08)',
                     boxShadow: mode === 'cloud' ? '0 8px 24px var(--accent-glow)' : 'none',
@@ -213,7 +254,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                       <Zap size={20} />
                     </div>
                     <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>
-                      Em implementação
+                      Cofre por conta
                     </span>
                   </div>
 
@@ -222,13 +263,13 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                       Modo Nuvem Híbrido
                     </h4>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.45', margin: 0 }}>
-                      A configuração de provedores e credenciais ficará disponível após a implantação do Cofre Privado por Conta. Não insira chaves nesta etapa.
+                      Conecte o seu provedor externo (Gemini, OpenAI, Groq, DeepSeek ou Anthropic). A chave fica cifrada no cofre privado da sua conta.
                     </p>
                   </div>
 
                   <div style={{ fontSize: '0.74rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <CheckCircle2 size={13} />
-                    <span>Cofre Privado por Conta em implementação</span>
+                    <span>Chave cifrada e isolada na sua conta</span>
                   </div>
                 </div>
 
@@ -312,8 +353,81 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 ].map(([label, ready]) => <div key={String(label)} style={{ fontSize: '.78rem', color: 'var(--text-secondary)' }}>{label}: <strong style={{ color: ready === true ? 'var(--success-color)' : ready === false ? 'var(--warning-color)' : 'var(--text-muted)' }}>{ready === true ? 'Disponível' : ready === false ? 'Não configurado' : 'A verificar'}</strong></div>)}
               </div>
               {mode === 'cloud' ? (
-                <div role="status" style={{ padding: '18px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
-                  O Cofre Privado por Conta está em implementação. A configuração global de APIs permanece bloqueada neste assistente para impedir que uma conta altere ou utilize credenciais compartilhadas.
+                <div
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    padding: '18px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Zap size={20} color="#fbbf24" />
+                    <span style={{ fontSize: '0.94rem', fontWeight: 600, color: '#f8fafc' }}>
+                      Cofre Privado por Conta
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.5', margin: 0 }}>
+                    A chave é gravada cifrada no cofre da sua conta e usada automaticamente nas suas inferências.
+                    As chamadas externas continuam sujeitas à política de dados sensíveis e ao orçamento global.
+                  </p>
+
+                  <label style={{ display: 'grid', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Provedor
+                    <select
+                      value={cloudProvider}
+                      onChange={(event) => handleProviderChange(event.target.value as CloudProvider)}
+                      style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                    >
+                      <option value="gemini">Google Gemini</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="groq">Groq</option>
+                      <option value="deepseek">DeepSeek</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="custom">Endpoint compatível (personalizado)</option>
+                    </select>
+                  </label>
+
+                  <label style={{ display: 'grid', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Chave de API
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={cloudApiKey}
+                      onChange={(event) => setCloudApiKey(event.target.value)}
+                      placeholder="A chave é enviada uma única vez e guardada cifrada"
+                      style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                    />
+                  </label>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                    <label style={{ display: 'grid', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Modelo predefinido
+                      <input
+                        value={cloudModel}
+                        onChange={(event) => setCloudModel(event.target.value)}
+                        placeholder="ex.: gemini-2.5-flash"
+                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Base URL
+                      <input
+                        value={cloudBaseUrl}
+                        onChange={(event) => setCloudBaseUrl(event.target.value)}
+                        placeholder="https://api.provedor.com/v1"
+                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                      />
+                    </label>
+                  </div>
+
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    Pode alterar, testar ou remover a chave mais tarde em Modelos → Cofre de Chaves. Nenhum segredo é devolvido ao navegador.
+                  </span>
                 </div>
               ) : (
                 /* Modo Local: Instruções e Verificação */
@@ -391,7 +505,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     Políticas de Segurança do JARVIS
                   </h4>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.5', margin: 0 }}>
-                    As políticas de autenticação, permissões e auditoria podem ser consultadas no Security Center. A configuração de provedores em nuvem permanece desativada até a implantação do Cofre Privado por Conta.
+                    As políticas de autenticação, permissões e auditoria podem ser consultadas no Security Center. No modo nuvem, a chave fica no Cofre Privado por Conta, cifrada em repouso e isolada das restantes contas.
                   </p>
                 </div>
               </div>
@@ -415,7 +529,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     Modo Configurado:
                   </span>
                   <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc' }}>
-                    100% Offline (Ollama)
+                    {mode === 'cloud' ? `Nuvem Híbrida (${cloudProvider})` : '100% Offline (Ollama)'}
                   </span>
                 </div>
 

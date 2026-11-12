@@ -50,7 +50,7 @@ Não é necessário executar comandos, abrir PowerShell administrativo ou criar 
 
 ## Bloqueios de segurança conhecidos a fechar antes da entrega ao colega
 
-- Implementar e testar o Credential Vault privado por conta; o KeyVault atual é global e protegido por permissão administrativa, o que não equivale a um cofre individual.
+- Credential Vault privado por conta implementado: cada chave é gravada com o `owner_user_id` da conta, os endpoints listam/alteram apenas as chaves dessa conta (administradores veem também as globais) e a chave predefinida da conta é aplicada automaticamente às suas inferências. O orçamento de chamadas externas permanece global.
 - Migrar Webhooks para armazenamento por conta e atualizar todos os emissores de notificações para indicar o proprietário.
 - Auditar runtime de Skills, Knowledge Vault, Tool Gateway, SQL Playground, relatórios e métricas para isolamento efetivo.
 - Validar migrações SQLite em cópia de segurança e manter registos legados sem proprietário sem os atribuir automaticamente.

@@ -46,6 +46,7 @@ from services.coding_agent.types import (
     ToolRisk,
     ToolSpec,
 )
+from services.model_runtime.agent_routing import resolve_account_agent_route
 from services.security_core import PermissionDeniedError, SecurityCore
 
 logger = logging.getLogger("jarvis.autonomous_agent.runtime")
@@ -67,6 +68,8 @@ class AutonomousAgentRuntime:
         db_manager: Any | None = None,
         agent_registry: AgentRegistry | None = None,
         provider_factory: Callable[[], ChatProvider] | None = None,
+        routed_provider_factory: Callable[[str | None, str | None], ChatProvider] | None = None,
+        key_vault: Any | None = None,
         skills_manager: Any | None = None,
     ):
         self.security_core = security_core
@@ -76,7 +79,25 @@ class AutonomousAgentRuntime:
         self.db_manager = db_manager
         self.agent_registry = agent_registry or AgentRegistry()
         self.provider_factory = provider_factory or (lambda: OllamaChatProvider())
+        self.routed_provider_factory = routed_provider_factory
+        self.key_vault = key_vault
         self.skills_manager = skills_manager
+
+    def _build_provider(
+        self, key_id: str | None, owner_user_id: str | None
+    ) -> ChatProvider:
+        """Constrói o provider com a credencial da conta quando disponível."""
+        if self.routed_provider_factory is None or (
+            key_id is None and owner_user_id is None
+        ):
+            return self.provider_factory()
+        try:
+            return self.routed_provider_factory(key_id, owner_user_id)
+        except Exception:
+            logger.exception(
+                "Falha ao construir o provider com a chave da conta; a usar o provider global."
+            )
+            return self.provider_factory()
 
     # ------------------------------------------------------------------
     # Streaming / SSE Engine
@@ -113,8 +134,17 @@ class AutonomousAgentRuntime:
             }
             return
 
-        provider = self.provider_factory()
-        model_name = provider.resolve_model(profile.preferred_model)
+        route = resolve_account_agent_route(
+            db_manager=self.db_manager,
+            key_vault=self.key_vault,
+            owner_user_id=config.owner_user_id,
+            agent_role=role.value,
+            fallback_key_id=getattr(profile, "assigned_key_id", None),
+            fallback_model=profile.preferred_model,
+        )
+        provider = self._build_provider(route.key_id, config.owner_user_id)
+        agent_model = route.model or profile.preferred_model
+        model_name = provider.resolve_model(agent_model)
 
         yield {
             "type": "start",
@@ -191,7 +221,7 @@ class AutonomousAgentRuntime:
                 reply = await provider.complete(
                     turns=messages,
                     tools=available_tools,
-                    model=profile.preferred_model,
+                    model=agent_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                     timeout_seconds=min(remaining, config.timeout_seconds),

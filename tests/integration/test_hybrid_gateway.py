@@ -158,6 +158,7 @@ async def test_universal_online_adapter_masking_and_config():
 @pytest.mark.asyncio
 async def test_hybrid_api_endpoints():
     from httpx import ASGITransport, AsyncClient
+
     from apps.api.main import app
 
     transport = ASGITransport(app=app)
@@ -169,6 +170,9 @@ async def test_hybrid_api_endpoints():
         assert "presets" in data
         assert any(p["id"] == "gemini" for p in data["presets"])
         assert any(p["id"] == "groq" for p in data["presets"])
+        groq_preset = next(p for p in data["presets"] if p["id"] == "groq")
+        # A Groq descontinuou os modelos Llama para os planos Free/Developer.
+        assert groq_preset["default_model"] == "openai/gpt-oss-120b"
         assert any(p["id"] == "deepseek" for p in data["presets"])
 
         # 2. Atualizar config
@@ -176,7 +180,7 @@ async def test_hybrid_api_endpoints():
             "provider_name": "groq",
             "enabled": True,
             "api_key": "gsk-mockkey123456789",
-            "default_model": "llama-3.3-70b-versatile",
+            "default_model": "openai/gpt-oss-120b",
             "base_url": "https://api.groq.com/openai/v1",
             "max_budget_usd": 10.0,
         }

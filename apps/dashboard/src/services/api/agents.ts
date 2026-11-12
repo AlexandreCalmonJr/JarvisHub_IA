@@ -31,6 +31,53 @@ export async function updateAgentConfig(
   return res.json();
 }
 
+export interface AgentRouteAssignment {
+  agent_role: string;
+  key_id: string;
+  model: string;
+  updated_at?: string;
+  key_label?: string | null;
+  provider?: string | null;
+  key_available?: boolean;
+}
+
+export async function fetchAgentRoutes(): Promise<AgentRouteAssignment[]> {
+  const res = await fetch(`${API_BASE}/agent-routes`);
+  const data = await handleApiResponse<{ routes: AgentRouteAssignment[] }>(
+    res,
+    'Falha ao carregar as rotas dos especialistas.'
+  );
+  return data.routes;
+}
+
+export async function setAgentRoute(
+  role: string,
+  keyId: string,
+  model?: string
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/agent-routes/${encodeURIComponent(role)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key_id: keyId, model: model || undefined }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao salvar rota do especialista' }));
+    throw new Error(err.detail || 'Falha ao salvar rota do especialista');
+  }
+  return res.json();
+}
+
+export async function deleteAgentRoute(role: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/agent-routes/${encodeURIComponent(role)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao remover rota do especialista' }));
+    throw new Error(err.detail || 'Falha ao remover rota do especialista');
+  }
+  return res.json();
+}
+
 export async function fetchAgentMemories(role: string): Promise<any[]> {
   const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}/memories`);
   return handleApiResponse<any[]>(res, 'Falha ao carregar memórias do agente.');

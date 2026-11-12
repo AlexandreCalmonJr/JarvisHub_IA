@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { deleteVaultKey, fetchKeyVault, KeyVaultItem, registerVaultKey, testVaultKey } from '../../services/api/models';
+import { deleteVaultKey, fetchKeyVault, KeyVaultItem, registerVaultKey, setDefaultVaultKey, testVaultKey } from '../../services/api/models';
 
 const providers = ['openai', 'gemini', 'groq', 'deepseek', 'anthropic', 'custom'];
+
+const keyScope = (item: KeyVaultItem): 'account' | 'global' =>
+  item.owner_user_id ? 'account' : 'global';
 
 export const KeyVaultManager: React.FC = () => {
   const [keys, setKeys] = useState<KeyVaultItem[]>([]);
@@ -48,20 +51,31 @@ export const KeyVaultManager: React.FC = () => {
     } finally { setSaving(false); }
   };
 
-  const test = async (id: string) => {
-    setTesting(id); setError(''); setMessage('');
+  const test = async (item: KeyVaultItem) => {
+    setTesting(item.key_id); setError(''); setMessage('');
     try {
-      const result = await testVaultKey(id);
+      const result = await testVaultKey(item.key_id, keyScope(item));
       setMessage(result.message || (result.success ? 'Ligação validada.' : 'O teste não foi concluído.'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao testar a chave.');
     } finally { setTesting(null); }
   };
 
+  const makeDefault = async (item: KeyVaultItem) => {
+    setError(''); setMessage('');
+    try {
+      await setDefaultVaultKey(item.key_id);
+      setMessage('Chave predefinida da conta atualizada.');
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao definir a chave predefinida.');
+    }
+  };
+
   const remove = async (item: KeyVaultItem) => {
     if (!window.confirm(`Remover a credencial "${item.label || item.key_id}" do KeyVault?`)) return;
     try {
-      await deleteVaultKey(item.key_id);
+      await deleteVaultKey(item.key_id, keyScope(item));
       setMessage('Credencial removida.');
       await load();
     } catch (cause) {
@@ -74,7 +88,7 @@ export const KeyVaultManager: React.FC = () => {
       <header className="glass-card" style={{ padding: 20, borderRadius: 14 }}>
         <h3 style={{ color: 'var(--text-primary)', margin: 0, fontSize: 20 }}>KeyVault seguro</h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '6px 0 0' }}>
-          Credenciais cifradas em repouso. A interface mostra apenas a máscara; o segredo nunca é recuperado para o navegador.
+          Cofre privado por conta: cada utilizador vê e gere apenas as suas credenciais. As chaves ficam cifradas em repouso; a interface mostra apenas a máscara e o segredo nunca é recuperado para o navegador.
         </p>
       </header>
 
@@ -100,10 +114,17 @@ export const KeyVaultManager: React.FC = () => {
           <article key={item.key_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: 13, borderRadius: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
             <div style={{ minWidth: 0 }}>
               <strong style={{ color: 'var(--text-primary)', display: 'block' }}>{item.label || item.key_id}</strong>
-              <small style={{ color: 'var(--text-muted)' }}>{item.provider || item.provider_name} · {item.key_id} · {item.masked_key}</small>
+              <small style={{ color: 'var(--text-muted)' }}>
+                {item.provider || item.provider_name} · {item.key_id} · {item.masked_key}
+                {item.owner_user_id ? ' · Conta' : ' · Global'}
+                {item.is_default ? ' · predefinida da conta' : ''}
+              </small>
             </div>
             <div style={{ display: 'flex', gap: 7 }}>
-              <button className="btn btn-secondary" type="button" disabled={testing === item.key_id} onClick={() => test(item.key_id)}>{testing === item.key_id ? 'A testar…' : 'Testar'}</button>
+              {item.owner_user_id && !item.is_default && (
+                <button className="btn btn-secondary" type="button" onClick={() => makeDefault(item)}>Usar nas minhas inferências</button>
+              )}
+              <button className="btn btn-secondary" type="button" disabled={testing === item.key_id} onClick={() => test(item)}>{testing === item.key_id ? 'A testar…' : 'Testar'}</button>
               <button className="btn btn-secondary" type="button" onClick={() => remove(item)} style={{ color: '#f87171' }}>Remover</button>
             </div>
           </article>

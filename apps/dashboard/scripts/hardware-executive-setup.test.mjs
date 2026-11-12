@@ -47,11 +47,17 @@ test('executive report UI distinguishes loading and access errors from empty dat
   assert.doesNotMatch(executiveView, /catch\(\) => \[\]/);
 });
 
-test('setup wizard does not collect or save shared provider API keys', () => {
+test('setup wizard saves cloud keys only in the per-account private vault', () => {
   assert.match(setupView, /\/system\/onboarding/);
   assert.match(setupView, /\/system\/onboarding\/complete/);
-  assert.doesNotMatch(setupView, /apiKey|saveHybridConfig|testHybridConnection|fetchHybridConfig/);
+  assert.match(setupView, /registerVaultKey/);
+  assert.match(setupView, /scope: 'account'/);
+  assert.doesNotMatch(setupView, /saveHybridConfig|testHybridConnection|fetchHybridConfig/);
   assert.match(setupView, /Cofre Privado por Conta/);
+  assert.doesNotMatch(setupView, /em implementação/i);
+  // A Groq descontinuou os modelos Llama nos planos Free/Developer em 16/08/2026.
+  assert.match(setupView, /groq: \{ model: 'openai\/gpt-oss-120b'/);
+  assert.doesNotMatch(setupView, /llama-3\.3-70b-versatile|llama-3\.1-8b-instant/);
   assert.match(app, /\/system\/onboarding/);
   assert.doesNotMatch(app, /jarvis_setup_completed/);
 });
