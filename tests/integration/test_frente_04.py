@@ -103,6 +103,72 @@ async def test_frente_04_ollama_adapter_performance_options(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_frente_04_ollama_adapter_warm_up(monkeypatch):
+    """Valida prompt vazio, keep_alive/num_ctx e deduplicação no warm-up do Ollama."""
+    monkeypatch.setenv("JARVIS_OLLAMA_KEEP_ALIVE", "20m")
+    monkeypatch.setenv("JARVIS_OLLAMA_NUM_CTX", "8192")
+    adapter = OllamaAdapter(base_url="http://127.0.0.1:11434")
+    adapter.set_cpu_threads(4)
+    payloads = []
+
+    async def mock_post(url, json=None, **kwargs):
+        payloads.append(json)
+        mock_resp = AsyncMock()
+        mock_resp.status_code = 200
+        return mock_resp
+
+    with (
+        patch.object(adapter, "resolve_model_name", AsyncMock(return_value="llama3.2:3b")),
+        patch("httpx.AsyncClient.post", side_effect=mock_post),
+    ):
+        results = await adapter.warm_up(["llama3.2:3b", "llama3.2:3b"])
+
+    assert results == {"llama3.2:3b": True}
+    assert len(payloads) == 1
+    assert payloads[0]["prompt"] == ""
+    assert payloads[0]["stream"] is False
+    assert payloads[0]["keep_alive"] == "20m"
+    assert payloads[0]["options"]["num_ctx"] == 8192
+    assert payloads[0]["options"]["num_thread"] == 4
+
+
+@pytest.mark.asyncio
+async def test_frente_04_warm_up_endpoint_requires_admin_and_reports_results():
+    """Valida autenticação administrativa e resposta do endpoint de warm-up."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        unauthorized = await ac.post(
+            "/api/v1/models/warm-up",
+            json={"models": []},
+            headers={"x-no-auth": "1"},
+        )
+        assert unauthorized.status_code == 401
+
+        with patch.object(
+            model_manager,
+            "warm_up_models",
+            AsyncMock(return_value={"llama3.2:3b": True}),
+        ) as warmup:
+            response = await ac.post(
+                "/api/v1/models/warm-up",
+                json={"models": ["llama3.2:3b"]},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ok",
+            "results": {"llama3.2:3b": True},
+        }
+        warmup.assert_awaited_once_with(["llama3.2:3b"])
+
+        with patch.object(model_manager, "warm_up_models", AsyncMock(return_value={})):
+            unavailable = await ac.post("/api/v1/models/warm-up", json={})
+
+        assert unavailable.status_code == 200
+        assert unavailable.json()["status"] == "unavailable"
+
+
+@pytest.mark.asyncio
 async def test_frente_04_api_performance_endpoints():
     """Valida os endpoints REST de controle de desempenho e threads."""
     transport = ASGITransport(app=app)

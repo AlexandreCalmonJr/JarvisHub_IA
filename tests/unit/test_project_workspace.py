@@ -220,9 +220,11 @@ def test_node_prisma_sqlite_scaffold_contains_api_database_and_test_setup(tmp_pa
     package = json.loads((project_dir / "package.json").read_text(encoding="utf-8"))
     assert "prisma db push" in package["scripts"]["db:setup"]
     assert "npm run db:setup" in package["scripts"]["test"]
-    assert "provider = \"sqlite\"" in (project_dir / "prisma/schema.prisma").read_text(
+    assert 'provider = "sqlite"' in (project_dir / "prisma/schema.prisma").read_text(
         encoding="utf-8"
     )
+
+
 def test_multilang_scaffolding_and_workspace_management(tmp_path):
     security_core = SecurityCore()
     workspace_service = ProjectWorkspaceService(security_core=security_core, base_dir=tmp_path)

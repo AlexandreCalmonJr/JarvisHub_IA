@@ -20,7 +20,14 @@ def metadata(name, family="unknown", cloud=False, context=8192):
     )
 
 
-def select(models, capability="general", sensitive=False, approval=False, allow_external=False):
+def select(
+    models,
+    capability="general",
+    sensitive=False,
+    approval=False,
+    allow_external=False,
+    loaded_models=None,
+):
     return ModelSelector().select(
         models=models,
         owner_user_id="account-1",
@@ -30,6 +37,7 @@ def select(models, capability="general", sensitive=False, approval=False, allow_
         allow_external=allow_external,
         contains_sensitive_data=sensitive,
         has_external_data_approval=approval,
+        loaded_models=loaded_models,
     )
 
 
@@ -197,3 +205,22 @@ def test_selector_uses_human_quality_feedback_after_minimum_samples():
     )
     assert result.candidate.model_name == "model-high"
     assert "avaliação humana média 5.00/5" in result.reason
+
+
+def test_selector_prefers_loaded_model_when_capabilities_are_equivalent():
+    result = select(
+        [metadata("model-b"), metadata("model-a")],
+        capability="general",
+        loaded_models=["model-a"],
+    )
+    assert result.candidate.model_name == "model-a"
+    assert "já carregado" in result.reason
+
+
+def test_loaded_model_bonus_does_not_override_specialized_capability():
+    result = select(
+        [metadata("generic-loaded"), metadata("qwen2.5-coder:7b", family="qwen2")],
+        capability="code",
+        loaded_models=["generic-loaded"],
+    )
+    assert result.candidate.model_name == "qwen2.5-coder:7b"

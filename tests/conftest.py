@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import httpx
+import pytest
 
 TEST_ADMIN_TOKEN = "jrv_admin_test_secret_for_suite_runs"
 os.environ["JARVIS_ADMIN_TOKEN"] = TEST_ADMIN_TOKEN
@@ -35,3 +36,19 @@ async def _patched_client_send(self, request, *args, **kwargs):
 
 
 httpx.AsyncClient.send = _patched_client_send
+
+
+@pytest.fixture(autouse=True)
+def _restore_agent_profiles():
+    """Evita que testes de configuração alterem o catálogo global para os seguintes."""
+    from agents.profiles.catalog import AGENT_PROFILES
+
+    snapshot = {role: profile.model_copy(deep=True) for role, profile in AGENT_PROFILES.items()}
+    from apps.api.deps import agent_registry
+
+    registry_snapshot = [p.model_copy(deep=True) for p in agent_registry.list_agents()]
+    yield
+    AGENT_PROFILES.clear()
+    AGENT_PROFILES.update(snapshot)
+    for profile in registry_snapshot:
+        agent_registry.register_profile(profile.model_copy(deep=True))

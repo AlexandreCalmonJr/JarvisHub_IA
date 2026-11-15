@@ -1,4 +1,6 @@
+import asyncio
 import os
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -62,6 +64,46 @@ if _api_docs_enabled and _runtime_environment in {"prod", "production"}:
     logger.warning("Documentação OpenAPI foi solicitada, mas permanece desativada em produção.")
     _api_docs_enabled = False
 
+
+def _ollama_warmup_enabled() -> bool:
+    return os.environ.get("JARVIS_OLLAMA_WARMUP", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+async def _warm_up_ollama() -> None:
+    configured_parallel = os.environ.get("OLLAMA_NUM_PARALLEL", "").strip()
+    if configured_parallel and configured_parallel != "1":
+        logger.warning(
+            "OLLAMA_NUM_PARALLEL=%s; para Ollama em CPU recomenda-se 1. "
+            "A fila interna mantém uma inferência pesada por vez.",
+            configured_parallel,
+        )
+    elif not configured_parallel:
+        logger.info("OLLAMA_NUM_PARALLEL não definido; para Ollama em CPU defina 1 no serviço.")
+    try:
+        results = await model_manager.warm_up_models()
+        if results:
+            logger.info("Warm-up Ollama concluído: %s", results)
+    except Exception:
+        logger.debug("Warm-up Ollama indisponível.", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    warmup_task = asyncio.create_task(_warm_up_ollama()) if _ollama_warmup_enabled() else None
+    try:
+        yield
+    finally:
+        if warmup_task and not warmup_task.done():
+            warmup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await warmup_task
+
+
 # Inicialização central do FastAPI
 app = FastAPI(
     title="JARVIS AI HUB 3.0",
@@ -70,6 +112,7 @@ app = FastAPI(
     docs_url="/docs" if _api_docs_enabled else None,
     redoc_url="/redoc" if _api_docs_enabled else None,
     openapi_url="/openapi.json" if _api_docs_enabled else None,
+    lifespan=lifespan,
 )
 
 DEFAULT_ALLOWED_ORIGINS = [

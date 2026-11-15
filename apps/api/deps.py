@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from agents.profiles.catalog import AGENT_PROFILES  # noqa: F401
+from agents.profiles.catalog import AGENT_PROFILES
 from agents.registry import AgentRegistry
 from packages.contracts.security import AuditEventSeverity  # noqa: F401
 from services.autonomous_agent import AutonomousAgentRuntime
@@ -216,7 +216,7 @@ agent_registry = AgentRegistry()
 try:
     saved_agent_configs = db_manager.get_agent_configs()
     for role_key, cfg in saved_agent_configs.items():
-        for p in agent_registry.list_agents():
+        for p in [*agent_registry.list_agents(), *AGENT_PROFILES.values()]:
             p_role = p.role.value if hasattr(p.role, "value") else str(p.role)
             if p_role == role_key:
                 if cfg.get("system_prompt"):

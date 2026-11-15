@@ -6,10 +6,12 @@ from services.model_runtime import (
     InferenceQueue,
     InferenceQueueError,
     InferenceRequest,
+    InferenceResponse,
     MockAdapter,
     ModelManager,
     ModelRoleMapping,
 )
+from services.model_runtime.agent_routing import resolve_agent_model
 from services.security_core import KillSwitch
 
 
@@ -18,6 +20,43 @@ def mock_manager():
     adapter = MockAdapter(default_response='{"answer": "ok"}')
     kill_switch = KillSwitch()
     return ModelManager(adapter=adapter, kill_switch=kill_switch)
+
+
+@pytest.mark.asyncio
+async def test_generate_grouped_preserves_order_and_batches_by_model():
+    class RecordingAdapter(MockAdapter):
+        def __init__(self):
+            super().__init__()
+            self.calls = []
+
+        async def generate(self, request):
+            self.calls.append(request.model_name)
+            return InferenceResponse(
+                content=f"answer:{request.prompt}",
+                model_name=request.model_name,
+                prompt_tokens=1,
+                completion_tokens=1,
+                duration_ms=1.0,
+                tokens_per_second=1.0,
+            )
+
+    adapter = RecordingAdapter()
+    manager = ModelManager(adapter=adapter)
+    requests = [
+        InferenceRequest(prompt="first", model_name="model-b"),
+        InferenceRequest(prompt="second", model_name="model-a"),
+        InferenceRequest(prompt="third", model_name="model-b"),
+    ]
+
+    responses = await manager.generate_grouped(requests)
+
+    assert adapter.calls == ["model-a", "model-b", "model-b"]
+    assert [response.content for response in responses] == [
+        "answer:first",
+        "answer:second",
+        "answer:third",
+    ]
+    assert await manager.generate_grouped([]) == []
 
 
 @pytest.mark.asyncio
@@ -42,6 +81,21 @@ async def test_model_manager_role_selection(mock_manager):
         mock_manager.select_model_for_role("threat_modeling_security_architect")
         == ModelRoleMapping.DEFAULT_REASONING.value
     )
+
+
+def test_resolve_agent_model_never_returns_auto_marker():
+    assert (
+        resolve_agent_model("auto_hybrid", "backend_developer")
+        == ModelRoleMapping.DEFAULT_CODER.value
+    )
+    assert (
+        resolve_agent_model("auto", "threat_modeling_security_architect")
+        == ModelRoleMapping.DEFAULT_REASONING.value
+    )
+    assert (
+        resolve_agent_model("auto_hybrid", "jarvis_master") == ModelRoleMapping.DEFAULT_MASTER.value
+    )
+    assert resolve_agent_model("qwen2.5:7b", "backend_developer") == "qwen2.5:7b"
 
 
 @pytest.mark.asyncio

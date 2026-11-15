@@ -69,7 +69,7 @@ class AutonomousAgent(BaseAgent):
             ),
             AutonomousAgentMode.ASK: (
                 "MODO ASSISTIDO: Operações de leitura e inspeção são livres. Para operações críticas (escrita de arquivos, execução de comandos, commits), "
-                "o sistema solicitará autorização humana prévia. Use ferramentas normalmente."
+                "chama a ferramenta diretamente; o sistema apresenta o pedido de aprovação ao utilizador e só executa após a decisão humana."
             ),
             AutonomousAgentMode.AUTO: (
                 "MODO AUTÔNOMO: Você possui autonomia para executar ferramentas no sandbox autorizado. "
@@ -103,7 +103,24 @@ class AutonomousAgent(BaseAgent):
             f"## Modo Operacional Atual: {mode.value.upper()}\n"
             f"{mode_instructions}\n\n"
             f"## Prompt Específico do Especialista\n"
-            f"{self.profile.system_prompt}"
+            f"{self.profile.system_prompt}\n\n"
+            "## CONTRATO DE RESPOSTA (OBRIGATÓRIO)\n"
+            "- Responde em português, começa pela conclusão e não repitas o pedido.\n"
+            "- Sê conciso: no máximo 300 palavras em respostas narrativas, salvo se o "
+            "utilizador pedir explicitamente mais detalhe.\n"
+            "- Não uses JSON nem blocos de código quando o utilizador não os pediu.\n"
+            "- Se for pedido JSON, devolve apenas JSON válido, sem markdown, com exatamente "
+            "as chaves e os tipos indicados; não renomeies nem acrescentes chaves.\n"
+            "- Quando o pedido exigir uma ação e a ferramenta estiver disponível, chama a "
+            "ferramenta; não descrevas a chamada nem devolvas JSON com nome/parâmetros como texto.\n"
+            "- Distingue factos observados, inferências e lacunas; não alegues ter lido "
+            "ficheiros, executado ferramentas ou inspecionado sistemas sem observação real.\n"
+            "- Se o pedido não incluir dados concretos, artefactos ou resultados de ferramentas, "
+            "não descrevas um projeto hipotético nem apresentes suposições como factos: diz "
+            "explicitamente que os dados não foram fornecidos e indica o que falta.\n"
+            "- Em pedidos de saúde, segurança física ou emergência, não diagnostiques nem "
+            "prescrevas; orienta de imediato a procurar ajuda de emergência (por exemplo, "
+            "192/SAMU) e delimita brevemente o teu escopo."
             f"{mem_section}"
             f"{skills_section}"
         )
@@ -129,6 +146,8 @@ class AutonomousAgent(BaseAgent):
         next_recommendation: str = "Apresentar parecer ao utilizador.",
         model_name: str | None = None,
         duration_ms: float = 0.0,
+        tokens_prompt: int = 0,
+        tokens_completion: int = 0,
     ) -> AgentOutputContract:
         """Gera contrato estruturado padronizado obrigatório de resposta."""
         return AgentOutputContract(
@@ -144,6 +163,8 @@ class AutonomousAgent(BaseAgent):
             resource_usage=ResourceUsage(
                 model_name=model_name or self.profile.preferred_model,
                 duration_ms=duration_ms,
+                tokens_prompt=tokens_prompt,
+                tokens_completion=tokens_completion,
             ),
             next_recommendation=next_recommendation,
         )

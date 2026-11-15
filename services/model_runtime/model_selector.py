@@ -33,6 +33,9 @@ class ModelSelector:
 
     MINIMUM_SAMPLES = 5
     MINIMUM_SUCCESS_RATE = 0.95
+    # Bónus suficiente para desempatar modelos equivalentes, mas inferior à
+    # diferença entre um especialista e um modelo genérico.
+    LOADED_MODEL_BONUS = 12.0
 
     @staticmethod
     def _capability_match(candidate: ModelCandidate, capability: str) -> tuple[int, str]:
@@ -95,8 +98,10 @@ class ModelSelector:
         prompt_text: str = "",
         system_prompt: str | None = None,
         max_tokens: int | None = 2048,
+        loaded_models: set[str] | list[str] | tuple[str, ...] | None = None,
     ) -> ModelSelection:
         capability = self._normalize_capability(task_capability, agent_role)
+        loaded = {str(name) for name in (loaded_models or ()) if name}
         performance: dict[tuple[str, str, str | None], dict[str, Any]] = {}
         quality: dict[tuple[str, str, str | None], dict[str, Any]] = {}
         if telemetry_store and owner_user_id:
@@ -194,6 +199,9 @@ class ModelSelector:
             if candidate.local:
                 score += 10
                 reasons.append("preferência local-first")
+            if candidate.local and candidate.model_name in loaded:
+                score += self.LOADED_MODEL_BONUS
+                reasons.append("modelo já carregado; evita recarregamento")
             if candidate.context_length >= 32000:
                 score += 2
                 reasons.append("janela de contexto ampla")

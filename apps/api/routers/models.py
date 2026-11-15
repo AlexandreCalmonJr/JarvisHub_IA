@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from apps.api.auth import get_principal, require_admin
 from apps.api.deps import (
@@ -38,6 +38,23 @@ def _mask_api_key(profile) -> str | None:
     if not profile:
         return None
     return f"{profile.api_key[:4]}...{profile.api_key[-4:]}" if len(profile.api_key) > 8 else "***"
+
+
+class ModelWarmupRequest(BaseModel):
+    models: list[str] = Field(default_factory=list, max_length=8)
+
+
+@router.post("/api/v1/models/warm-up")
+async def warm_up_models_endpoint(
+    payload: ModelWarmupRequest | None = None,
+    _principal=Depends(require_admin),
+):
+    """Pré-carrega modelos locais; reduz a latência do primeiro pedido."""
+    results = await model_manager.warm_up_models(payload.models if payload else None)
+    return {
+        "status": "ok" if any(results.values()) else "unavailable",
+        "results": results,
+    }
 
 
 @router.get("/api/v1/models")

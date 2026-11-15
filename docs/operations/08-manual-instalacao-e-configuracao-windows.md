@@ -36,6 +36,41 @@ ollama pull qwen2.5:7b
 
 > **Verificação**: Execute `ollama list` e confirme se `llama3.2:3b` está listado como pronto.
 
+### 2.1 Tuning do Ollama para CPU
+
+O JARVIS serializa inferências pesadas com `InferenceQueue(max_concurrent=1)`. No
+serviço Ollama, a configuração correspondente é `OLLAMA_NUM_PARALLEL=1`; sem ela,
+pedidos concorrentes podem dividir CPU/RAM e aumentar a latência.
+
+```powershell
+# Recomendado para Ollama em CPU: uma inferência em paralelo
+[Environment]::SetEnvironmentVariable("OLLAMA_NUM_PARALLEL", "1", "User")
+
+# Reinicie o Ollama (feche o ícone na bandeja e volte a iniciar, ou use):
+Stop-Process -Name ollama -ErrorAction SilentlyContinue
+ollama serve
+```
+
+Variáveis opcionais da aplicação:
+
+| Variável | Padrão | Efeito |
+| :--- | :---: | :--- |
+| `JARVIS_OLLAMA_KEEP_ALIVE` | `15m` | Tempo que o modelo permanece carregado em RAM/VRAM. |
+| `JARVIS_OLLAMA_NUM_CTX` | adaptativo | Contexto fixo entre 2.048 e 8.192 tokens; fora do intervalo é ignorado. |
+| `JARVIS_OLLAMA_WARMUP` | `1` | Pré-carrega modelos em background no arranque; `0` desativa. |
+| `JARVIS_OLLAMA_WARMUP_MODELS` | modelo mestre | Lista separada por vírgulas, por exemplo `llama3.2:3b,qwen2.5:7b`. |
+| `JARVIS_MODEL_AFFINITY_SECONDS` | `900` | Janela de afinidade pelo modelo local recente; `0` desativa. |
+
+O warm-up também pode ser forçado manualmente (requer admin):
+
+```powershell
+$headers = @{ Authorization = "Bearer $env:JARVIS_ADMIN_TOKEN" }
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/models/warm-up" `
+  -Headers $headers -ContentType "application/json" `
+  -Body '{"models":["llama3.2:3b"]}'
+```
+
 ---
 
 ## 3. Passo 2: Clonagem e Ambiente Virtual Python

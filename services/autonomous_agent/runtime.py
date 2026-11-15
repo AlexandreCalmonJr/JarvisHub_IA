@@ -18,8 +18,11 @@ Capacidades:
 
 from __future__ import annotations
 
+import ast
 import asyncio
+import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -46,13 +49,59 @@ from services.coding_agent.types import (
     ToolRisk,
     ToolSpec,
 )
-from services.model_runtime.agent_routing import resolve_account_agent_route
+from services.model_runtime.agent_routing import resolve_account_agent_route, resolve_agent_model
+from services.orchestration.output_validation import validate_summary_text
 from services.security_core import PermissionDeniedError, SecurityCore
 
 logger = logging.getLogger("jarvis.autonomous_agent.runtime")
 
 MAX_HISTORY_MESSAGES = 40
 MAX_EVENT_OUTPUT = 8_000
+
+
+def recover_textual_tool_call(content: str, allowed_names: set[str]) -> ToolCall | None:
+    """Converte um JSON textual ``{name, parameters}`` numa chamada de ferramenta.
+
+    Modelos pequenos às vezes devolvem a chamada como texto (JSON ou literal
+    Python) em vez de a emitir na estrutura nativa. A recuperação é estrita:
+    só aceita um objeto completo, um nome já autorizado no perfil e argumentos
+    em dicionário.
+    """
+    cleaned = (content or "").strip()
+    if not cleaned.startswith("{") or not cleaned.endswith("}"):
+        return None
+    try:
+        payload = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        try:
+            payload = ast.literal_eval(cleaned)
+        except (ValueError, SyntaxError):
+            return None
+    if not isinstance(payload, dict):
+        return None
+    if not set(payload) <= {"name", "parameters", "arguments"}:
+        return None
+    name = payload.get("name")
+    arguments = payload.get("parameters", payload.get("arguments"))
+    if not isinstance(name, str) or name not in allowed_names:
+        return None
+    if not isinstance(arguments, dict):
+        return None
+    return ToolCall(id=f"call_text_{uuid.uuid4().hex[:12]}", name=name, arguments=arguments)
+
+
+_TEXTUAL_TOOL_CALL_START = re.compile(
+    r"""^\s*\{\s*['"]name['"]\s*:\s*['"](?P<name>[A-Za-z0-9_]+)['"]"""
+)
+
+
+def looks_like_textual_tool_call(content: str, allowed_names: set[str]) -> bool:
+    """Deteta uma chamada de ferramenta colada em texto, mesmo malformada."""
+    match = _TEXTUAL_TOOL_CALL_START.match(content or "")
+    if match is None or match.group("name") not in allowed_names:
+        return False
+    lowered = (content or "").casefold()
+    return "parameters" in lowered or "arguments" in lowered
 
 
 class AutonomousAgentRuntime:
@@ -137,7 +186,7 @@ class AutonomousAgentRuntime:
             fallback_model=profile.preferred_model,
         )
         provider = self._build_provider(route.key_id, config.owner_user_id)
-        agent_model = route.model or profile.preferred_model
+        agent_model = resolve_agent_model(route.model or profile.preferred_model, role.value)
         model_name = provider.resolve_model(agent_model)
 
         yield {
@@ -180,9 +229,15 @@ class AutonomousAgentRuntime:
 
         # 3. Filtragem de Ferramentas Exclusivas do Especialista
         available_tools = self._tools_for_specialist(profile.allowed_tools, config.mode)
+        if not config.project_id:
+            # Sem projeto ativo, as ferramentas de workspace falham na resolução
+            # de caminhos e o modelo entra num ciclo de tool calls sem resposta.
+            available_tools = []
 
         deadline = started + max(10.0, config.timeout_seconds)
         final_content = ""
+        final_finish_reason = "stop"
+        execution_failed = False
         iterations = 0
         actions_taken: list[str] = []
         evidence_collected: list[str] = []
@@ -190,12 +245,19 @@ class AutonomousAgentRuntime:
         tests_executed: list[str] = []
         risks_identified: list[str] = []
         blockers_encountered: list[str] = []
+        tokens_prompt = 0
+        tokens_completion = 0
+        empty_retry_done = False
+        executed_signatures: set[tuple[str, str]] = set()
+        tools_disabled_next = False
 
         # 4. Loop ReAct (Thought -> Action -> Observation -> Reflexion)
         for iteration in range(1, max(1, config.max_iterations) + 1):
             iterations = iteration
             if self._is_cancelled(task_id):
                 err = "Execução interrompida pelo Kill Switch de segurança."
+                execution_failed = True
+                blockers_encountered.append(err)
                 yield {
                     "type": "error",
                     "code": "policy_denied",
@@ -208,6 +270,8 @@ class AutonomousAgentRuntime:
             remaining = deadline - time.perf_counter()
             if remaining <= 1.0:
                 err = f"Tempo limite de {config.timeout_seconds:.0f}s excedido durante a execução."
+                execution_failed = True
+                blockers_encountered.append(err)
                 yield {
                     "type": "error",
                     "code": "timeout",
@@ -219,16 +283,50 @@ class AutonomousAgentRuntime:
 
             yield {"type": "thinking", "iteration": iteration, "agent_role": role.value}
 
+            turn_tools = [] if tools_disabled_next else available_tools
+            tools_disabled_next = False
+            extra_prompt_tokens = 0
+            extra_completion_tokens = 0
             try:
                 reply = await provider.complete(
                     turns=messages,
-                    tools=available_tools,
+                    tools=turn_tools,
                     model=agent_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                     timeout_seconds=min(remaining, config.timeout_seconds),
                 )
+                if (
+                    available_tools
+                    and not empty_retry_done
+                    and not reply.content.strip()
+                    and not reply.tool_calls
+                ):
+                    empty_retry_done = True
+                    extra_prompt_tokens = reply.prompt_tokens or 0
+                    extra_completion_tokens = reply.completion_tokens or 0
+                    evidence_collected.append(
+                        "O modelo devolveu resposta vazia com ferramentas; "
+                        "foi repetida uma vez sem ferramentas."
+                    )
+                    try:
+                        reply = await provider.complete(
+                            turns=messages,
+                            tools=[],
+                            model=agent_model,
+                            temperature=config.temperature,
+                            max_tokens=config.max_tokens,
+                            timeout_seconds=min(remaining, config.timeout_seconds),
+                        )
+                    except ProviderError:
+                        logger.warning(
+                            "Repetição sem ferramentas do especialista %s falhou.",
+                            role.value,
+                            exc_info=True,
+                        )
             except ProviderError as exc:
+                execution_failed = True
+                blockers_encountered.append(str(exc))
                 self._persist(
                     session_id,
                     config.project_id,
@@ -250,6 +348,8 @@ class AutonomousAgentRuntime:
                 raise
             except Exception as exc:
                 err = f"Falha inesperada no provedor: {exc}"
+                execution_failed = True
+                blockers_encountered.append(err)
                 yield {
                     "type": "error",
                     "code": "internal",
@@ -258,6 +358,30 @@ class AutonomousAgentRuntime:
                     "error": err,
                 }
                 break
+
+            tokens_prompt += extra_prompt_tokens + (reply.prompt_tokens or 0)
+            tokens_completion += extra_completion_tokens + (reply.completion_tokens or 0)
+
+            if available_tools and not reply.tool_calls:
+                recovered = recover_textual_tool_call(
+                    reply.content, {spec.name for spec in available_tools}
+                )
+                if recovered is not None:
+                    logger.info(
+                        "Chamada textual de %s recuperada como tool call no especialista %s.",
+                        recovered.name,
+                        role.value,
+                    )
+                    evidence_collected.append(
+                        f"Chamada textual de {recovered.name} convertida em chamada de ferramenta."
+                    )
+                    reply = reply.model_copy(
+                        update={
+                            "content": "",
+                            "tool_calls": [recovered],
+                            "finish_reason": "tool_calls",
+                        }
+                    )
 
             if reply.content and reply.content.strip():
                 yield {
@@ -269,6 +393,7 @@ class AutonomousAgentRuntime:
 
             if not reply.tool_calls:
                 final_content = reply.content.strip()
+                final_finish_reason = reply.finish_reason
                 self._persist(
                     session_id,
                     config.project_id,
@@ -294,8 +419,45 @@ class AutonomousAgentRuntime:
                 tool_calls=[call.model_dump() for call in reply.tool_calls],
             )
 
+            # Evita ciclos em que o modelo repete a mesma chamada já executada.
+            call_signatures = [
+                (
+                    call.name,
+                    json.dumps(call.arguments, ensure_ascii=False, sort_keys=True, default=str),
+                )
+                for call in reply.tool_calls
+            ]
+            if all(signature in executed_signatures for signature in call_signatures):
+                messages.append(
+                    ChatTurn(
+                        role="user",
+                        content=(
+                            "[SISTEMA] Essa chamada já foi executada e a observação está no "
+                            "histórico. Não repitas a ferramenta; responde agora em texto."
+                        ),
+                    )
+                )
+                if iteration >= config.max_iterations:
+                    forced = await self._final_text_answer(
+                        provider=provider,
+                        model=agent_model,
+                        messages=messages,
+                        config=config,
+                        deadline=deadline,
+                    )
+                    if forced is not None:
+                        final_content, final_finish_reason, forced_prompt, forced_completion = (
+                            forced
+                        )
+                        tokens_prompt += forced_prompt
+                        tokens_completion += forced_completion
+                    break
+                tools_disabled_next = True
+                continue
+
             # Executa chamadas de ferramentas com governança e auto-correção
-            for call in reply.tool_calls:
+            for call, signature in zip(reply.tool_calls, call_signatures, strict=True):
+                executed_signatures.add(signature)
                 async for event in self._handle_tool_call(
                     call=call,
                     config=config,
@@ -312,9 +474,144 @@ class AutonomousAgentRuntime:
                 ):
                     yield event
 
-        # 5. Construção e Emissão do Contrato Padronizado de Saída
+        # Sem resposta final após esgotar iterações ou receber conteúdo vazio, a
+        # execução não pode ser reportada como concluída com sucesso.
+        if not execution_failed and not final_content.strip():
+            execution_failed = True
+            blockers_encountered.append(
+                "A execução terminou sem resposta final válida do modelo "
+                "(iterações esgotadas ou conteúdo vazio)."
+            )
+
+        # 5. Validação de output: schema, comprimento e uma única reparação.
+        if not execution_failed:
+            final_content, output_issues = validate_summary_text(
+                final_content, finish_reason=final_finish_reason
+            )
+            if output_issues:
+                remaining = deadline - time.perf_counter()
+                needs_model_repair = any(
+                    marker in issue
+                    for issue in output_issues
+                    for marker in ("vazio", "truncad", "inválido")
+                )
+                if needs_model_repair and remaining > 3.0:
+                    (
+                        repaired_content,
+                        repair_issues,
+                        repair_prompt_tokens,
+                        repair_completion_tokens,
+                    ) = await self._repair_output_once(
+                        provider=provider,
+                        model=agent_model,
+                        content=final_content,
+                        issues=output_issues,
+                        config=config,
+                        remaining=remaining,
+                    )
+                    if repaired_content.strip():
+                        final_content = repaired_content
+                        output_issues = repair_issues
+                        tokens_prompt += repair_prompt_tokens
+                        tokens_completion += repair_completion_tokens
+                if output_issues:
+                    evidence_collected.append(
+                        "Validação de output: " + "; ".join(output_issues[:3])
+                    )
+                    if any(
+                        "vazio" in issue or "truncad" in issue or "inválido" in issue
+                        for issue in output_issues
+                    ):
+                        blockers_encountered.append(
+                            "O output original precisou de validação/reparação."
+                        )
+                else:
+                    evidence_collected.append("Validação de output: reparação única aplicada.")
+
+        # 5b. Recuperação final: alguns modelos devolvem a chamada como texto
+        # (por vezes já corrigida pela reparação acima). A execução mantém a
+        # governança normal e só acontece para ferramentas autorizadas no perfil.
+        if not execution_failed and final_content.strip() and available_tools:
+            allowed_names = {spec.name for spec in available_tools}
+            recovered_final = recover_textual_tool_call(final_content, allowed_names)
+            textual_final = recovered_final is not None or looks_like_textual_tool_call(
+                final_content, allowed_names
+            )
+            if textual_final:
+                if recovered_final is not None:
+                    evidence_collected.append(
+                        f"Chamada textual final de {recovered_final.name} convertida em ferramenta."
+                    )
+                    signature = (
+                        recovered_final.name,
+                        json.dumps(
+                            recovered_final.arguments,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            default=str,
+                        ),
+                    )
+                    if signature not in executed_signatures:
+                        messages.append(ChatTurn(role="assistant", content=final_content))
+                        async for event in self._handle_tool_call(
+                            call=recovered_final,
+                            config=config,
+                            task_id=task_id,
+                            role=role,
+                            allowed_tools=profile.allowed_tools,
+                            messages=messages,
+                            actions_taken=actions_taken,
+                            evidence_collected=evidence_collected,
+                            affected_files=affected_files,
+                            tests_executed=tests_executed,
+                            risks_identified=risks_identified,
+                            blockers_encountered=blockers_encountered,
+                        ):
+                            yield event
+                        executed_signatures.add(signature)
+                else:
+                    evidence_collected.append(
+                        "Resposta final continha uma chamada de ferramenta em texto; "
+                        "foi pedida uma resposta narrativa."
+                    )
+
+                final_content = ""
+                forced = await self._final_text_answer(
+                    provider=provider,
+                    model=agent_model,
+                    messages=messages,
+                    config=config,
+                    deadline=deadline,
+                )
+                if forced is not None:
+                    candidate, candidate_finish, forced_prompt, forced_completion = forced
+                    tokens_prompt += forced_prompt
+                    tokens_completion += forced_completion
+                    if (
+                        not looks_like_textual_tool_call(candidate, allowed_names)
+                        and recover_textual_tool_call(candidate, allowed_names) is None
+                    ):
+                        final_content = candidate
+                        final_finish_reason = candidate_finish
+                if not final_content:
+                    if recovered_final is not None:
+                        prefix = f"A ferramenta {recovered_final.name} foi executada; "
+                    else:
+                        prefix = "A chamada de ferramenta em texto foi descartada; "
+                    final_content = (
+                        prefix + "não foi possível obter uma resposta narrativa final do modelo."
+                    )
+                    final_finish_reason = "stop"
+
+        # 6. Construção e Emissão do Contrato Padronizado de Saída
         if not final_content:
-            final_content = f"Parecer técnico executivo de {profile.name} concluído com sucesso."
+            if execution_failed:
+                final_content = f"A execução do especialista {profile.name} não foi concluída."
+                blockers_encountered.append("A execução terminou sem resposta final válida.")
+            else:
+                final_content = (
+                    f"Parecer técnico executivo de {profile.name} concluído com sucesso."
+                )
 
         contract = agent_instance.create_output_contract(
             objective=config.prompt,
@@ -325,9 +622,15 @@ class AutonomousAgentRuntime:
             tests_executed=tests_executed,
             risks=risks_identified,
             blockers=blockers_encountered,
-            next_recommendation="Apresentar parecer ao usuário e prosseguir conforme o plano.",
+            next_recommendation=(
+                "Verificar o erro, o provedor/modelo e repetir a execução."
+                if execution_failed
+                else "Apresentar parecer ao usuário e prosseguir conforme o plano."
+            ),
             model_name=model_name,
             duration_ms=(time.perf_counter() - started) * 1000.0,
+            tokens_prompt=tokens_prompt,
+            tokens_completion=tokens_completion,
         )
 
         yield {
@@ -345,7 +648,7 @@ class AutonomousAgentRuntime:
             "agent_role": role.value,
             "summary": contract.summary,
             "contract": contract.model_dump(),
-            "is_completed": True,
+            "is_completed": not execution_failed,
             "iterations": iterations,
             "tool_calls": len(actions_taken),
             "changed_files": contract.affected_files,
@@ -365,15 +668,118 @@ class AutonomousAgentRuntime:
         if contract is None:
             profile = self.agent_registry.get_profile(config.agent_role)
             name = profile.name if profile else config.agent_role.value
+            preferred = profile.preferred_model if profile else None
             return AgentOutputContract(
                 agent_role=config.agent_role,
                 objective=config.prompt,
                 summary=f"Execução por {name} finalizada sem emissão formal de contrato.",
                 evidence=["Execução headless concluída."],
                 actions_taken=["Processamento pelo especialista."],
-                resource_usage=ResourceUsage(model_name="auto_hybrid"),
+                resource_usage=ResourceUsage(
+                    model_name=resolve_agent_model(preferred, config.agent_role.value)
+                ),
             )
         return contract
+
+    async def _final_text_answer(
+        self,
+        *,
+        provider: ChatProvider,
+        model: str,
+        messages: list[ChatTurn],
+        config: AutonomousAgentRunConfig,
+        deadline: float,
+    ) -> tuple[str, str, int, int] | None:
+        """Pede uma resposta final em texto, sem ferramentas, para fechar o turno."""
+        remaining = deadline - time.perf_counter()
+        if remaining <= 3.0:
+            return None
+        try:
+            reply = await provider.complete(
+                turns=[
+                    *messages,
+                    ChatTurn(
+                        role="user",
+                        content=(
+                            "[SISTEMA] Responde agora em texto, em português, com base nas "
+                            "observações já recolhidas. Não chames ferramentas."
+                        ),
+                    ),
+                ],
+                tools=[],
+                model=model,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                timeout_seconds=min(remaining, config.timeout_seconds),
+            )
+        except Exception:
+            logger.warning(
+                "Resposta final em texto do especialista %s falhou.",
+                config.agent_role.value,
+                exc_info=True,
+            )
+            return None
+        if not reply.content.strip():
+            return None
+        return (
+            reply.content.strip(),
+            reply.finish_reason,
+            reply.prompt_tokens or 0,
+            reply.completion_tokens or 0,
+        )
+
+    async def _repair_output_once(
+        self,
+        *,
+        provider: ChatProvider,
+        model: str,
+        content: str,
+        issues: list[str],
+        config: AutonomousAgentRunConfig,
+        remaining: float,
+    ) -> tuple[str, list[str], int, int]:
+        """Tenta uma única reparação do output via modelo, sem ferramentas."""
+        if remaining <= 3.0:
+            return content, [*issues, "Reparação não tentada por falta de tempo."], 0, 0
+
+        excerpt = content.strip()[:6000] or "(vazio)"
+        prompt = (
+            "A resposta anterior de um especialista foi rejeitada pela validação interna "
+            f"do JARVIS: {'; '.join(issues)}.\n\n"
+            "Reescreva a resposta em português, mantendo apenas conteúdo factual e útil, "
+            "sem ferramentas e sem alegar ações que não foram executadas. "
+            "Não uses markdown incompleto. Limita a versão corrigida a 300 palavras. "
+            "Responde apenas com a versão corrigida.\n\n"
+            f"Resposta anterior:\n---\n{excerpt}\n---"
+        )
+        try:
+            reply = await provider.complete(
+                turns=[ChatTurn(role="user", content=prompt)],
+                tools=[],
+                model=model,
+                temperature=0.0,
+                max_tokens=min(config.max_tokens, 1024),
+                timeout_seconds=max(5.0, min(120.0, remaining)),
+            )
+        except Exception:
+            logger.warning(
+                "Reparação única do output do especialista %s falhou.",
+                config.agent_role.value,
+                exc_info=True,
+            )
+            return content, [*issues, "Reparação única tentada sem sucesso."], 0, 0
+
+        repaired, repair_issues = validate_summary_text(
+            reply.content, finish_reason=reply.finish_reason
+        )
+        if not repaired.strip():
+            return content, [*issues, "Reparação única devolveu output vazio."], 0, 0
+        return (
+            repaired,
+            repair_issues,
+            reply.prompt_tokens or 0,
+            reply.completion_tokens or 0,
+        )
 
     # ------------------------------------------------------------------
     # Tratamento de Tool Calling & Auto-Correção

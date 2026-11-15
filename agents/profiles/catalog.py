@@ -1,5 +1,13 @@
 from packages.agent_sdk.base_agent import AgentProfile
 from packages.contracts.agent import AgentRole
+from services.model_runtime.types import ModelRoleMapping
+
+# QUAL-04: modelo local predefinido por papel. A rota da conta (por exemplo,
+# uma chave Groq) continua a ter precedência; estes valores só servem de
+# fallback local quando não há rota de conta configurada.
+MASTER_MODEL = ModelRoleMapping.DEFAULT_MASTER.value
+REASONING_MODEL = ModelRoleMapping.DEFAULT_REASONING.value
+CODER_MODEL = ModelRoleMapping.DEFAULT_CODER.value
 
 AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
     AgentRole.JARVIS_MASTER: AgentProfile(
@@ -29,7 +37,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "- Use as ferramentas de consulta a arquivos, histórico e auditoria para embasar todas as decisões estratégicas.\n"
             "- Comunique-se sempre em Português do Brasil com tom assertivo, profissional e resolutivo."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=MASTER_MODEL,
         is_read_only=False,
     ),
     AgentRole.SOFTWARE_ARCHITECT: AgentProfile(
@@ -61,7 +69,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "- Inspecione o código real do workspace antes de emitir recomendações arquiteturais.\n"
             "- Use sql_query_explain para auditar queries críticas e inspect_dependencies para validar dependências estruturais."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.PROJECT_MANAGER: AgentProfile(
@@ -89,7 +97,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Escreva e mantenha arquivos de planejamento e documentação no workspace com critérios de aceitação mensuráveis."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.RESEARCH_ANALYST: AgentProfile(
@@ -116,7 +124,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Sempre cite fontes verificadas, versões estáveis e tipo de licença de cada tecnologia analisada."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=True,
     ),
     AgentRole.PROJECT_DESIGNER_PLANNER: AgentProfile(
@@ -144,7 +152,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Formate histórias no padrão: 'Como [persona], eu quero [ação] para que [benefício]' com cenários Dado-Quando-Então."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.UX_UI_DESIGNER: AgentProfile(
@@ -172,7 +180,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Priorize a identidade visual JARVIS: Glassmorphism refinado, tons escuros (#070a12, #0f172a), acentos em Indigo e Emerald."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.FRONTEND_MOBILE_DEVELOPER: AgentProfile(
@@ -207,7 +215,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "- Em React: utilize React 19, TypeScript estrito, Tailwind/CSS modular e hooks com dependências precisas.\n"
             "- Em Flutter: utilize separação em camadas (Data, Domain, Presentation) e imutabilidade de estado."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=False,
     ),
     AgentRole.BACKEND_DEVELOPER: AgentProfile(
@@ -242,7 +250,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Em FastAPI/Python: use async/await idiomático, routers modulares e injeção de dependências limpa."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=False,
     ),
     AgentRole.QA_ENGINEER: AgentProfile(
@@ -277,7 +285,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Construa testes determinísticos, isolados e que validem contratos ponta a ponta com rigor."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=False,
     ),
     AgentRole.CODE_REVIEWER: AgentProfile(
@@ -308,7 +316,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Baseie todas as revisões em linhas de código reais com exemplos claros de correção segura e idiomática."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=True,
     ),
     AgentRole.DATA_SCIENTIST: AgentProfile(
@@ -340,7 +348,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Utilize o DuckDB integrado para extrair insights analíticos ultrarrápidos sem necessidade de banco externo."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.BUSINESS_INTELLIGENCE: AgentProfile(
@@ -368,7 +376,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Garanta que cada KPI possua fórmula matemática clara, fonte de dados verificada e frequência de mensuração."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=True,
     ),
     AgentRole.DATA_ENGINEERING_INTELLIGENCE: AgentProfile(
@@ -401,7 +409,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Implemente transformações versionadas, auditáveis e com testes de integridade automatizados."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.DATA_ENGINEER_PIPELINES: AgentProfile(
@@ -436,7 +444,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Toda carga deve ser estritamente idempotente e auditável."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.DEVOPS_ENGINEER: AgentProfile(
@@ -470,7 +478,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Siga a metodologia 12-Factor Apps com segredos desacoplados e builds reproduzíveis."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=False,
     ),
     AgentRole.NETWORK_INFRASTRUCTURE_ENGINEER: AgentProfile(
@@ -497,7 +505,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Aplique sempre a menor superfície de exposição possível: portas fechadas por padrão."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.CYBERSECURITY_ENGINEER: AgentProfile(
@@ -528,7 +536,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Aplique Zero Trust rigoroso em todos os módulos e valide evidências com dados criptograficamente auditáveis."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.AUTOMATION_ENGINEER: AgentProfile(
@@ -560,7 +568,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Scripts devem ser 100% autônomos, determinísticos e seguros por padrão."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=False,
     ),
     AgentRole.THREAT_MODELING_SECURITY_ARCHITECT: AgentProfile(
@@ -588,7 +596,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Estruture pareceres claros com tabela: Ameaça | Eixo STRIDE | Impacto | Controle Mitigatório Obrigatório."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=True,
     ),
     AgentRole.SECURE_CODE_AUDITOR: AgentProfile(
@@ -621,7 +629,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Forneça correções defensivas precisas demonstrando o código vulnerável e o padrão seguro correspondente."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=False,
     ),
     AgentRole.API_SECURITY_SPECIALIST: AgentProfile(
@@ -652,7 +660,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Blindar respostas de erro para que nunca exponham detalhes internos ou stack traces."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=CODER_MODEL,
         is_read_only=False,
     ),
     AgentRole.IDENTITY_ACCESS_MANAGEMENT: AgentProfile(
@@ -682,7 +690,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- O princípio do menor privilégio deve ser aplicado estritamente em cada rota e serviço do sistema."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.SOFTWARE_SUPPLY_CHAIN_SECURITY: AgentProfile(
@@ -713,7 +721,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Gere e valide SBOMs formais para garantir rastreabilidade total de cada componente utilizado no software."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.SOC_INCIDENT_RESPONSE: AgentProfile(
@@ -741,7 +749,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Preserve a integridade e cadeia de custódia das evidências forenses antes de propor alterações corretivas."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.AI_SECURITY_RED_TEAM: AgentProfile(
@@ -770,7 +778,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Mantenha separação absoluta entre contexto de dados e contexto de comandos executivos."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=False,
     ),
     AgentRole.PRIVACY_DATA_PROTECTION: AgentProfile(
@@ -798,7 +806,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Aplique o princípio da Minimização de Dados: colete apenas os atributos estritamente essenciais à funcionalidade."
         ),
-        preferred_model="auto_hybrid",
+        preferred_model=REASONING_MODEL,
         is_read_only=True,
     ),
 }

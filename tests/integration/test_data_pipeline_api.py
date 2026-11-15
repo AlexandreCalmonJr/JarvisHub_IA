@@ -11,7 +11,9 @@ from services.security_core import SecurityCore
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("output_format,filename", [("sqlite", "clean.db"), ("parquet", "clean.parquet")])
+@pytest.mark.parametrize(
+    "output_format,filename", [("sqlite", "clean.db"), ("parquet", "clean.parquet")]
+)
 async def test_pipeline_api_requires_matching_approval_and_materializes_output(
     tmp_path, monkeypatch, output_format, filename
 ):
@@ -19,16 +21,35 @@ async def test_pipeline_api_requires_matching_approval_and_materializes_output(
     project_id = "pipeline-project"
     project_dir = tmp_path / project_id
     project_dir.mkdir()
-    (project_dir / "input.json").write_text(json.dumps([{"name": "Ana"}, {"name": "Ana"}, {"name": "Bia"}]))
+    (project_dir / "input.json").write_text(
+        json.dumps([{"name": "Ana"}, {"name": "Ana"}, {"name": "Bia"}])
+    )
     security = SecurityCore(auth_dir=tmp_path / "auth")
     monkeypatch.setattr(data_pipeline, "security_core", security)
-    monkeypatch.setattr(data_pipeline, "workspace_service", type("Workspace", (), {
-        "get_project_dir": lambda _self, _project_id: project_dir,
-    })())
-    monkeypatch.setattr(data_pipeline, "db_manager", type("DB", (), {
-        "get_project": lambda _self, _project_id, owner_user_id: {"id": _project_id}
-        if owner_user_id == owner else None,
-    })())
+    monkeypatch.setattr(
+        data_pipeline,
+        "workspace_service",
+        type(
+            "Workspace",
+            (),
+            {
+                "get_project_dir": lambda _self, _project_id: project_dir,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        data_pipeline,
+        "db_manager",
+        type(
+            "DB",
+            (),
+            {
+                "get_project": lambda _self, _project_id, owner_user_id: (
+                    {"id": _project_id} if owner_user_id == owner else None
+                ),
+            },
+        )(),
+    )
     principal = Principal(subject_id=owner, kind="human", role="admin")
     payload = PipelineRequest(
         project_id=project_id,
@@ -57,9 +78,12 @@ async def test_pipeline_api_requires_matching_approval_and_materializes_output(
         import duckdb
 
         with duckdb.connect() as connection:
-            assert connection.execute(
-                "SELECT COUNT(*) FROM read_parquet(?)", [str(output)]
-            ).fetchone()[0] == 2
+            assert (
+                connection.execute(
+                    "SELECT COUNT(*) FROM read_parquet(?)", [str(output)]
+                ).fetchone()[0]
+                == 2
+            )
 
 
 @pytest.mark.asyncio
@@ -68,15 +92,34 @@ async def test_pipeline_api_rejects_path_traversal_before_approval(tmp_path, mon
     project_dir.mkdir()
     security = SecurityCore(auth_dir=tmp_path / "auth")
     monkeypatch.setattr(data_pipeline, "security_core", security)
-    monkeypatch.setattr(data_pipeline, "workspace_service", type("Workspace", (), {
-        "get_project_dir": lambda _self, _project_id: project_dir,
-    })())
-    monkeypatch.setattr(data_pipeline, "db_manager", type("DB", (), {
-        "get_project": lambda *_args, **_kwargs: {"id": "pipeline-project"},
-    })())
+    monkeypatch.setattr(
+        data_pipeline,
+        "workspace_service",
+        type(
+            "Workspace",
+            (),
+            {
+                "get_project_dir": lambda _self, _project_id: project_dir,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        data_pipeline,
+        "db_manager",
+        type(
+            "DB",
+            (),
+            {
+                "get_project": lambda *_args, **_kwargs: {"id": "pipeline-project"},
+            },
+        )(),
+    )
     payload = PipelineRequest(
-        project_id="pipeline-project", source_path="../outside.csv", source_format="csv",
-        output_path="clean.db", output_format="sqlite",
+        project_id="pipeline-project",
+        source_path="../outside.csv",
+        source_format="csv",
+        output_path="clean.db",
+        output_format="sqlite",
     )
     with pytest.raises(HTTPException) as exc:
         await run_data_pipeline(payload, Principal(subject_id="owner", kind="human", role="admin"))

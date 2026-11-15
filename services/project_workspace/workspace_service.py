@@ -563,7 +563,9 @@ class ProjectWorkspaceService:
                 )
             elif p_type in ("node", "nodejs", "javascript", "typescript", "express"):
                 if database not in {"none", "sqlite"}:
-                    raise ValueError("O scaffold Node oferece database='none' ou database='sqlite'.")
+                    raise ValueError(
+                        "O scaffold Node oferece database='none' ou database='sqlite'."
+                    )
                 files = self.scaffolder._generate_default_node_scaffold(
                     project_id, name, description, database=database
                 )

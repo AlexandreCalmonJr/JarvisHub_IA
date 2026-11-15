@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import os
 import time
 from typing import Any
 
@@ -39,6 +40,13 @@ class ModelManager:
         self.telemetry_store = telemetry_store
         self.inference_cache = inference_cache
         self.model_selector = ModelSelector()
+        try:
+            affinity_seconds = float(os.getenv("JARVIS_MODEL_AFFINITY_SECONDS", "900"))
+        except ValueError:
+            affinity_seconds = 900.0
+        self._affinity_seconds = max(0.0, min(affinity_seconds, 3600.0))
+        self._last_local_model: str | None = None
+        self._last_local_model_at = 0.0
 
     def _cache_hash(self, request: InferenceRequest) -> str:
         """Owner-, model- and context-bound key for deterministic local requests."""
@@ -92,6 +100,80 @@ class ModelManager:
         if hasattr(self.adapter, "evict_model"):
             return await self.adapter.evict_model(model_name)
         return False
+
+    def _note_local_model(self, model_name: str | None) -> None:
+        """Registra o modelo local usado para manter afinidade entre pedidos."""
+        if model_name:
+            self._last_local_model = model_name
+            self._last_local_model_at = time.monotonic()
+
+    def _recent_local_models(self) -> list[str]:
+        """Devolve o modelo local recente enquanto o keep_alive o mantém carregado."""
+        if not self._last_local_model or self._affinity_seconds <= 0:
+            return []
+        if time.monotonic() - self._last_local_model_at > self._affinity_seconds:
+            return []
+        return [self._last_local_model]
+
+    async def warm_up_models(self, model_names: list[str] | None = None) -> dict[str, bool]:
+        """Pré-carrega modelos no runtime local para reduzir a latência inicial."""
+        warm_up = getattr(self.adapter, "warm_up", None)
+        if warm_up is None:
+            return {}
+
+        names = [name.strip() for name in (model_names or []) if name and name.strip()]
+        if not names:
+            raw = os.getenv("JARVIS_OLLAMA_WARMUP_MODELS", "").strip()
+            names = [item.strip() for item in raw.split(",") if item.strip()]
+        if not names:
+            names = [self.select_model_for_role("jarvis_master")]
+
+        health_check = getattr(self.adapter, "health_check", None)
+        if health_check is not None:
+            try:
+                if not await health_check():
+                    logger.info("Ollama indisponível; warm-up ignorado.")
+                    return {}
+            except Exception:
+                logger.debug("Health check falhou antes do warm-up.", exc_info=True)
+                return {}
+
+        try:
+            results = await warm_up(names)
+        except Exception:
+            logger.exception("Warm-up do Ollama falhou.")
+            return {}
+
+        for name, success in results.items():
+            if success:
+                self._note_local_model(name)
+                break
+        return results
+
+    async def generate_grouped(
+        self,
+        requests: list[InferenceRequest],
+        has_external_data_approval: bool = False,
+    ) -> list[InferenceResponse]:
+        """Executa pedidos em lote, agrupados pelo modelo resolvido.
+
+        O agrupamento evita alternar modelos equivalentes entre pedidos e reduz
+        recarregamentos no Ollama. A ordem dos resultados mantém a ordem de entrada.
+        """
+        if not requests:
+            return []
+
+        prepared: list[tuple[int, InferenceRequest]] = []
+        for index, request in enumerate(requests):
+            resolved = self._apply_owner_default_key(request)
+            resolved = await self._prepare_model_selection(resolved, has_external_data_approval)
+            prepared.append((index, resolved))
+
+        prepared.sort(key=lambda item: (item[1].model_name, item[0]))
+        results: list[InferenceResponse | None] = [None] * len(requests)
+        for index, request in prepared:
+            results[index] = await self.generate(request, has_external_data_approval)
+        return [result for result in results if result is not None]
 
     async def list_available_models(self) -> list[ModelMetadata]:
         models: list[ModelMetadata] = []
@@ -171,6 +253,7 @@ class ModelManager:
             prompt_text=request.prompt,
             system_prompt=request.system_prompt,
             max_tokens=request.max_tokens,
+            loaded_models=self._recent_local_models(),
         )
         selected_request = request.model_copy(deep=True)
         selected_request.model_name = selection.candidate.model_name
@@ -302,6 +385,8 @@ class ModelManager:
             cost_usd=response.cost_usd,
             model_name=response.model_name,
         )
+        if used_provider.startswith("ollama_local"):
+            self._note_local_model(response.model_name)
 
         if (
             cache_hash
@@ -399,3 +484,4 @@ class ModelManager:
         else:
             async for chunk in self.adapter.generate_stream(request):
                 yield chunk
+            self._note_local_model(request.model_name)

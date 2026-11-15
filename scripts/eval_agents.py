@@ -171,7 +171,7 @@ def main() -> int:
                             "session_id": f"eval-{uuid4().hex[:12]}",
                             "mode": "plan",
                             "max_iterations": 2,
-                            "max_tokens": 512,
+                            "max_tokens": 1024,
                             "timeout_seconds": 300,
                             "include_history": False,
                         },

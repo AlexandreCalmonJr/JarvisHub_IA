@@ -18,11 +18,14 @@ PROMPTS = (
     ("explain", "Explique em até duas frases o que é uma API REST e quando usar paginação."),
     (
         "checks",
-        "Liste três verificações práticas para avaliar a qualidade de uma resposta técnica.",
+        (
+            "Liste três verificações práticas para avaliar a qualidade de uma resposta técnica. "
+            "Responda em no máximo 60 palavras, sem introdução."
+        ),
     ),
     (
         "structured",
-        'Responda somente com JSON válido contendo "status":"ok" e "checks":3.',
+        'Responda somente com JSON válido: {"status":"ok","checks":3}',
     ),
 )
 
@@ -49,9 +52,9 @@ def _read_sse(response: httpx.Response, started: float) -> dict:
         if event.get("type") == "start":
             result["model"] = event.get("model")
         elif event.get("type") == "final":
-            result.update(
-                success=bool(event.get("is_completed")), duration_ms=event.get("duration_ms")
-            )
+            completed = bool(event.get("is_completed")) and not result.get("error")
+            result.update(success=completed, duration_ms=event.get("duration_ms"))
+            result["summary"] = str(event.get("summary", ""))
             contract = event.get("contract") or {}
             usage = contract.get("resource_usage") or {}
             result.update(
@@ -59,6 +62,7 @@ def _read_sse(response: httpx.Response, started: float) -> dict:
                 completion_tokens=usage.get("tokens_completion"),
             )
         elif event.get("type") == "error":
+            result["success"] = False
             result["error"] = str(event.get("error", "Erro do agente"))[:500]
     return result
 
@@ -67,7 +71,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--role", help="Executa apenas um papel; sem role, exige --all.")
     parser.add_argument(
-        "--all", action="store_true", help="Executa 3 prompts para cada agente (pode demorar)."
+        "--all", action="store_true", help="Executa todos os agentes (pode demorar)."
+    )
+    parser.add_argument(
+        "--prompt",
+        choices=[name for name, _ in PROMPTS],
+        help="Executa apenas um dos prompts; por padrão executa os três.",
     )
     parser.add_argument("--base-url", default=os.getenv("JARVIS_API_URL", "http://127.0.0.1:8000"))
     parser.add_argument("--token", default=os.getenv("JARVIS_ADMIN_TOKEN"))
@@ -97,8 +106,9 @@ def main() -> int:
             parser.error(f"Papel(is) desconhecido(s): {', '.join(unknown)}")
 
         results = []
+        prompts = [item for item in PROMPTS if args.prompt is None or item[0] == args.prompt]
         for role in selected:
-            for prompt_name, prompt in PROMPTS:
+            for prompt_name, prompt in prompts:
                 started = time.perf_counter()
                 item = {
                     "role": role,
@@ -113,7 +123,7 @@ def main() -> int:
                             "prompt": prompt,
                             "session_id": f"bench-{uuid4().hex[:12]}",
                             "mode": "plan",
-                            "max_iterations": 1,
+                            "max_iterations": 3,
                             "max_tokens": 256,
                             "timeout_seconds": 300,
                             "include_history": False,

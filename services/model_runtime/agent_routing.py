@@ -11,7 +11,29 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from services.model_runtime.types import ModelRoleMapping
+
 logger = logging.getLogger("jarvis.model_runtime.agent_routing")
+
+AUTO_MODEL_NAMES = {"auto", "auto_hybrid"}
+
+
+def resolve_agent_model(model: str | None, agent_role: str) -> str:
+    """Converte ``auto``/``auto_hybrid`` num modelo concreto para o runtime ReAct.
+
+    O caminho ReAct fala diretamente com o provedor de chat e não passa pelo
+    ``ModelManager``; por isso não pode receber o marcador ``auto_hybrid``.
+    A escolha é determinística e usa o mesmo mapeamento de papel do runtime.
+    """
+    cleaned = (model or "").strip()
+    if cleaned and cleaned not in AUTO_MODEL_NAMES:
+        return cleaned
+    role = (agent_role or "").lower()
+    if any(term in role for term in ("developer", "code", "devops", "qa", "auditor")):
+        return ModelRoleMapping.DEFAULT_CODER.value
+    if any(term in role for term in ("data", "intelligence", "threat", "soc")):
+        return ModelRoleMapping.DEFAULT_REASONING.value
+    return ModelRoleMapping.DEFAULT_MASTER.value
 
 
 @dataclass(frozen=True)

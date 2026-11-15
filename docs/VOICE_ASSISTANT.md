@@ -1,8 +1,8 @@
 # VOICE ASSISTANT — Assistente por voz em segundo plano
 
-> **Versão:** 1.0
+> **Versão:** 1.1
 > **Data:** 12/11/2026
-> **Estado:** V0 implementado; V1 em implementação inicial; V2–V6 em aberto
+> **Estado:** V0 concluído; V1 parcial no desktop (`hey_jarvis`); V2–V6 em aberto
 > **Âmbito:** wake word, STT, TTS, execução em segundo plano, desktop e celular
 > **Documento principal:** [PLANO_COMPLETO.md](./PLANO_COMPLETO.md) — Fase 8
 
@@ -20,7 +20,9 @@ O objetivo é adicionar ao JARVIS AI HUB uma experiência semelhante à Alexa:
 6. Pode ser incorporado no celular.
 7. Ações sensíveis continuam a exigir aprovação humana.
 
-A base já existe: chat, 26 agentes, orquestrador, aprovações, workspace e app Flutter. O que falta é a **camada de voz real** e o **modo de execução em segundo plano**.
+A base já existe: chat, 26 agentes, orquestrador, aprovações, workspace e app Flutter. A camada de voz local (V0) e um daemon desktop inicial (V1) já estão implementados; falta validar em hardware, completar a conversa por voz e levar a voz ao Android.
+
+> **Nota sobre a wake word:** o modelo openWakeWord implementado é `hey_jarvis`, treinado para “Hey Jarvis”. Dizer apenas “Jarvis” pode funcionar, mas com mais falsos negativos. O requisito literal exige treinar ou validar um modelo dedicado; isso faz parte do V1.
 
 ---
 
@@ -68,14 +70,16 @@ Telefone no bolso
 | Peça | Estado | Onde |
 |---|---|---|
 | Backend local | ✅ Funciona | `apps/api/main.py` |
-| Arranque silencioso no Windows | ✅ Parcial | `iniciar_jarvis_silencioso.vbs` |
+| Arranque silencioso no Windows | ✅ Parcial | `iniciar_jarvis_silencioso.vbs` inicia o backend, mas **não** inicia o daemon de voz |
 | Microfone no dashboard | ✅ Push-to-talk | `apps/dashboard/src/hooks/useChatStream.ts` |
-| STT cloud | ⚠️ Se houver chave | `apps/api/routers/voice.py` (Groq/OpenAI Whisper) |
+| STT cloud | ⚠️ Se houver chave | `apps/api/routers/voice.py` (Groq/OpenAI Whisper); usado primeiro no push-to-talk web |
 | STT local | ✅ Real opcional | `services/voice_runtime/stt_adapter.py` usa faster-whisper quando instalado e configurado |
 | TTS backend | ✅ Real opcional | `services/voice_runtime/tts_adapter.py` usa Piper configurado e devolve WAV válido |
 | TTS no browser | ✅ Real, robótico | `speechSynthesis` em `MessageBubble.tsx` |
-| Wake word | 🟡 Implementação inicial | `apps/voice_daemon/`; modelo `hey_jarvis`, exige `.[voice]`, token autorizado e Piper configurado |
-| Voz no celular | ❌ Não existe | `apps/mobile/lib/main.dart` |
+| Wake word | 🟡 Parcial | `apps/voice_daemon/`; modelo `hey_jarvis` (“Hey Jarvis”), exige `.[voice]`, token autorizado e Piper configurado |
+| Daemon desktop | 🟡 Parcial | `apps/voice_daemon/main.py`: bandeja, mute, instância única, backend sob demanda; sem atalho global, autostart, follow-up ou barge-in |
+| Comandos determinísticos | 🟡 Mínimo | `/voice/command` resolve hora, data e pedido de aprovação; o resto cai no chat |
+| Voz no celular | ❌ Não existe | `apps/mobile/lib/main.dart`; `pubspec.yaml` só tem `cupertino_icons` e `flutter_secure_storage` |
 | Serviço em segundo plano no celular | ❌ Não existe | — |
 | Aprovações | ✅ Funciona | Dashboard + mobile |
 | Kill switch | ✅ Funciona | `services/security_core/kill_switch.py` |
@@ -157,6 +161,10 @@ Tudo no dispositivo: mais privado, mas consome bateria, aquece e a qualidade cai
 | **Transporte** | HTTPS local + Tailscale | WebSocket para streaming | Não expor o backend na Internet |
 | **Autenticação** | Token de dispositivo existente | Novo scope `voice` | Revogável por dispositivo |
 
+### O que está realmente implementado
+
+**Implementado nesta ronda:** `faster-whisper`, Piper, `sounddevice`, openWakeWord (`hey_jarvis`) e `pystray`/`Pillow`. **Ainda não implementado:** Silero/`webrtcvad`, Porcupine, `flutter_tts`, `flutter_foreground_task` e o serviço Android. O `pyproject.toml` não inclui `webrtcvad`; o VAD do daemon é RMS.
+
 ### Aviso importante sobre o Windows
 
 **Não corra o ouvinte de microfone como serviço do Windows.** Serviços correm na *Session 0* e não têm acesso ao microfone do utilizador. O correto é uma **app de bandeja** iniciada no logon do utilizador, via Task Scheduler.
@@ -167,69 +175,68 @@ Tudo no dispositivo: mais privado, mas consome bateria, aquece e a qualidade cai
 
 ### 5.1 O que mudar
 
-Hoje o `apps/desktop/main_window.py` inicia o Uvicorn e **mata o backend quando a janela fecha** (linhas 109–111).
+O daemon já existe em `apps/voice_daemon/main.py` e é iniciado em separado. `apps/desktop/main_window.py` inicia o backend se necessário e, ao fechar, só o encerra se o daemon de voz não estiver ativo (verifica `data/run/voice-daemon.lock`). O daemon, por sua vez, inicia o backend se ainda não estiver a correr e só encerra o processo que ele próprio criou.
 
-Para ficar em segundo plano:
+Para operar em segundo plano:
 
-1. Criar um **processo daemon** separado: `apps/voice_daemon/`.
-2. O daemon:
-   - inicia o backend se ainda não estiver a correr;
-   - corre o loop de wake word + VAD;
-   - mostra ícone na bandeja;
-   - permite mutar o microfone;
-   - abre o dashboard com duplo clique;
-   - encerra tudo de forma limpa.
-3. O `main_window.py` passa a ser só a janela; se o daemon já estiver ativo, liga-se a ele.
-4. Arranque no logon:
-   - Task Scheduler → “Ao iniciar sessão” → `pythonw.exe apps\voice_daemon\main.py`;
-   - ou manter o `.vbs` para esconder a consola.
+1. Instalar o extra: `python -m pip install -e ".[voice]"`.
+2. Configurar `JARVIS_VOICE_TOKEN`, `JARVIS_PIPER_EXECUTABLE` e `JARVIS_PIPER_MODEL`.
+3. Executar `pythonw.exe -m apps.voice_daemon.main` com a raiz do projeto como diretório inicial.
+4. Registar esse comando no **Task Scheduler ao iniciar sessão** — a configuração automática ainda não está incluída no instalador.
+5. O daemon fica na bandeja com mute e sair; o menu ainda não abre o dashboard com duplo clique.
 
-### 5.2 Estrutura sugerida
+O `iniciar_jarvis_silencioso.vbs` atual inicia apenas o backend (`iniciar_jarvis.bat`); é preciso acrescentar o daemon ao arranque para ter escuta em segundo plano.
+
+### 5.2 Estrutura atual
 
 ```
 apps/voice_daemon/
-├── main.py           # entrada, single instance, sinais
-├── tray.py           # ícone, menu, mute, sair
-├── listener.py       # wake word + VAD + captura
-├── client.py         # HTTP/WebSocket para o backend
-├── playback.py       # reprodução de TTS
-└── config.py         # dispositivo, threshold, atalhos
+├── main.py           # entrada, lock, bandeja, captura, wake word, STT/TTS, cliente HTTP
+├── README.md         # requisitos, execução e limites
+└── __init__.py
 ```
+
+A separação em `tray.py`, `listener.py`, `client.py`, `playback.py` e `config.py` continua a ser uma refatoração recomendada, **não implementada**.
 
 ### 5.3 Comportamentos
 
-- **Instância única:** mutex/lock file; se já houver uma, foca a existente.
-- **Mute:** atalho global (`Ctrl+Alt+J` ou configurável) e menu da bandeja.
-- **Estado visível:** verde = a ouvir; amarelo = a processar; vermelho = mutado/erro.
-- **Logs:** rotação em `data/logs/voice.log`.
-- **Kill switch:** o daemon consulta o estado e para de ouvir.
-- **Echo cancellation:** enquanto o TTS fala, o microfone ignora o áudio do próprio JARVIS.
-- **Dispositivo de áudio:** detetar mudança de dispositivo padrão e reabrir o stream.
+- **Instância única:** ✅ lock em `data/run/voice-daemon.lock`.
+- **Mute:** ✅ menu da bandeja; ❌ atalho global (`Ctrl+Alt+J`) ainda não existe.
+- **Estado visível:** ✅ ícone e título mudam entre “a ouvir” e “mutado”; não há estado amarelo de processamento.
+- **Logs:** ✅ `data/logs/voice.log`.
+- **Kill switch:** ❌ o daemon não consulta o kill switch; pendente.
+- **Echo cancellation:** 🟡 o microfone não é lido enquanto o TTS fala (`sd.play(blocking=True)`), mas não há AEC dedicado.
+- **Mudança de dispositivo de áudio:** ❌ não tratada.
+- **Autostart:** ❌ não configurado; o README explica como registar manualmente no Task Scheduler.
 
 ### 5.4 Fluxo
 
 ```
-Diz "Jarvis"
-  → chime curto
-  → "Sim?"
-  → grava até detetar silêncio (VAD)
-  → STT local
-  → /api/v1/chat ou /api/v1/voice/command
-  → resposta
-  → TTS local
-  → alto-falante
+Diz "Hey Jarvis" (modelo hey_jarvis)
+  → "Sim?" por TTS
+  → grava até 12 s ou 1 s de silêncio (RMS)
+  → STT local (faster-whisper)
+  → POST /api/v1/voice/command
+  → se intent != command.unsupported: usa a resposta
+  → senão: POST /api/v1/chat com sessão persistida
+  → TTS local (Piper) e reprodução
 ```
+
+Não há chime separado: a resposta “Sim?” é o sinal. A gravação tem um máximo de 12 s e o timeout do chat é de 240 s. Se o comando for sensível, o daemon responde “Preciso que aprove a ação no painel” e não aprova nada sozinho.
 
 ### 5.5 Detalhes de UX
 
-- **Janela de follow-up:** 5–10 segundos para continuar a conversa sem repetir “Jarvis”.
-- **Barge-in:** dizer “Jarvis” enquanto ele fala interrompe o TTS.
-- **Mute visível:** ícone na bandeja muda de cor; atalho global.
-- **Confirmação curta:** “Feito”, “Não encontrei”, “Preciso de aprovação no painel”.
+- **Janela de follow-up:** ❌ não implementada.
+- **Barge-in:** ❌ não implementado.
+- **Mute visível:** 🟡 menu da bandeja e ícone; sem atalho global.
+- **Confirmação curta:** ✅ resposta falada; aprovação sensível remete para o painel.
+- **Cancelar/repetir:** ❌ “cancelar” e “repete” ainda não são comandos de voz.
 
 ---
 
 ## 6. Celular
+
+**Estado:** não implementado. `apps/mobile/pubspec.yaml` só inclui `cupertino_icons` e `flutter_secure_storage`; não há `record`, `flutter_foreground_task`, permissões de microfone nem serviço Android. O plano abaixo é o alvo do V4.
 
 ### 6.1 Android — caminho recomendado
 
@@ -272,6 +279,8 @@ Se o objetivo é “igual à Alexa”, **Android é o alvo realista**; iOS fica 
 ## 7. “Fazer tudo que um assistente pessoal faria”
 
 Isso não é uma funcionalidade — é um conjunto de skills. A boa notícia é que o projeto já tem o sistema de **Skills** e o orquestrador. A má proposta é tentar fazer tudo de uma vez.
+
+**Cobertura atual:** `/voice/command` resolve apenas hora, data e pedido de aprovação; qualquer outro pedido é encaminhado ao chat/LLM. Timer, lembrete, clima, abrir app e integrações continuam por implementar (V3).
 
 ### Nível 1 — já suportado ou quase
 
@@ -367,16 +376,11 @@ Content-Type: application/json
 }
 ```
 
+**Estado:** o contrato existe, mas o endpoint é determinístico e não executa ferramentas. `command.unsupported` é o sinal para o daemon tentar `/api/v1/chat`.
+
 ### 8.3 Streaming
 
-Para streaming de áudio, um WebSocket (`/ws/voice`) é melhor:
-
-- envia chunks de áudio;
-- recebe transcrição parcial;
-- recebe resposta em texto e áudio;
-- permite barge-in e cancelamento.
-
-O MVP pode começar com gravação completa + POST; o streaming entra na fase V2.
+Um WebSocket (`/ws/voice`) permitiria streaming de áudio, transcrição parcial, barge-in e cancelamento, mas **ainda não existe**. O MVP usa gravação completa + POST.
 
 ---
 
@@ -384,27 +388,27 @@ O MVP pode começar com gravação completa + POST; o streaming entra na fase V2
 
 ### V0 — Voz real (3–4 dias)
 
-- Substituir `LocalSTTAdapter` por **faster-whisper** real, com fallback para o comportamento atual se o modelo não estiver disponível.
-- Substituir `LocalTTSAdapter` por **Piper** real, devolvendo WAV válido.
-- Adicionar VAD.
-- Adicionar `/api/v1/voice/synthesize` e `/api/v1/voice/command`.
-- Testes com ficheiros WAV de fixture, sem microfone.
+- `LocalSTTAdapter` usa **faster-whisper** quando o extra `.[voice]` está instalado; sem o extra/modelo devolve erro explícito (não há frase simulada).
+- `LocalTTSAdapter` usa **Piper** configurado e devolve WAV; sem binário/modelo devolve erro explícito (não há WAV vazio).
+- VAD RMS para WAV e para o daemon.
+- Endpoints `/api/v1/voice/transcribe`, `/api/v1/voice/synthesize` e `/api/v1/voice/command`.
+- Testes com WAV de fixture e rotas.
 
-**Aceite:** enviar um WAV e receber texto correto; enviar texto e receber WAV audível.
+**Estado:** ✅ concluído. Falta apenas validar os modelos reais (voz e transcrição) no equipamento-alvo.
+
+**Aceite:** enviar um WAV e receber texto; enviar texto e receber WAV audível.
 
 ### V1 — Wake word no desktop (3–4 dias)
 
-- `apps/voice_daemon/` com wake word, VAD, STT, chamada ao chat e TTS.
+- `apps/voice_daemon/main.py` com wake word, VAD, STT, chamada ao chat e TTS.
 - Ícone na bandeja: a ouvir / mutado / sair.
 - Arranque no logon via Task Scheduler.
 - Instância única.
 - Botão de mute e atalho global.
 
-**Estado:** implementação inicial em `apps/voice_daemon/`: bandeja, mute,
-instância única, wake word local, VAD, STT/TTS local e encaminhamento autenticado
-ao chat. O atalho global e o ensaio em hardware continuam pendentes.
+**Estado:** 🟡 parcial. Implementado: daemon, bandeja, mute, instância única, backend sob demanda, `hey_jarvis`, VAD, STT/TTS e encaminhamento autenticado ao chat. Pendente: atalho global, autostart configurado, notificações de aprovação, ensaio com microfone/Piper e decisão sobre um modelo “Jarvis” dedicado.
 
-**Aceite:** dizer “Jarvis” com o dashboard fechado → chime → pergunta → resposta falada.
+**Aceite:** dizer “Hey Jarvis” (ou “Jarvis”, se o modelo dedicado for validado) com o dashboard fechado → “Sim?” → pergunta → resposta falada.
 
 ### V2 — Conversa por voz (3–4 dias)
 
@@ -414,6 +418,8 @@ ao chat. O atalho global e o ensaio em hardware continuam pendentes.
 - Comandos “cancelar”, “silêncio”, “repete”.
 - Sessão de voz separada da sessão de texto.
 
+**Estado:** ⬜ em aberto.
+
 **Aceite:** conversa de 3 turnos sem repetir a wake word.
 
 ### V3 — Assistente pessoal (1–2 semanas)
@@ -422,6 +428,8 @@ ao chat. O atalho global e o ensaio em hardware continuam pendentes.
 - Skills novas registadas no catálogo.
 - Aprovações por notificação.
 - Auditoria e retenção de transcrições.
+
+**Estado:** ⬜ em aberto; apenas hora, data e pedido de aprovação existem.
 
 **Aceite:** 10 comandos do dia a dia funcionam sem LLM e com latência < 2 s.
 
@@ -435,6 +443,8 @@ ao chat. O atalho global e o ensaio em hardware continuam pendentes.
 - Pareamento com token existente.
 - Teste em aparelho físico, bateria e ecrã bloqueado.
 
+**Estado:** ⬜ não implementado.
+
 **Aceite:** telefone no bolso → “Jarvis” → resposta pelo alto-falante.
 
 ### V5 — iOS e extras (opcional)
@@ -444,12 +454,16 @@ ao chat. O atalho global e o ensaio em hardware continuam pendentes.
 - Live Activity para aprovações.
 - Sem promessa de escuta contínua.
 
+**Estado:** ⬜ opcional.
+
 ### V6 — Hardening (contínuo)
 
 - Privacidade, retenção, auditoria.
 - Verificação de locutor (opcional).
 - Kill switch para o ouvinte.
 - Métricas de falsos positivos e latência.
+
+**Estado:** 🟡 parcial. Áudio local, token e auditoria de comandos existem; retenção configurável, kill switch, verificação de locutor e métricas pendentes.
 
 ---
 
@@ -486,19 +500,19 @@ Sem isto, o assistente funciona, mas não vai ter a sensação de instantaneidad
 
 Escuta permanente é a funcionalidade mais sensível do projeto. Regras mínimas:
 
-- **Indicador visível sempre**: ícone na bandeja, notificação no Android.
-- **Mute por hardware/atalho**, não só por menu.
-- **Wake word 100% local**: nenhum áudio sai do dispositivo antes da ativação.
-- **Ring buffer em memória**: o áudio anterior à wake word é descartado.
-- **Áudio não é guardado por padrão**; só transcrição, com retenção configurável.
-- **Token por dispositivo**, com revogação.
-- **TLS/Tailscale** para acesso remoto; nunca expor o backend na Internet.
-- **Auditoria de cada comando**: dispositivo, transcrição, intent, ferramentas, resultado.
-- **Aprovação humana** para ações sensíveis; voz não aprova sozinha.
-- **Kill switch** para o ouvinte e para tarefas.
-- **Sem modo furtivo**: o utilizador tem de saber que está a ser ouvido.
-- **Prompt injection**: a transcrição é conteúdo não confiável; as permissões de ferramentas mantêm-se.
-- **Verificação de locutor** (opcional, futuro): reduz spoofing, mas não é MVP.
+- **Indicador visível sempre**: ✅ ícone na bandeja; no Android será a notificação permanente (V4).
+- **Mute por hardware/atalho**: 🟡 menu da bandeja; atalho global ainda não existe.
+- **Wake word 100% local**: ✅ openWakeWord local; nenhum áudio sai antes da ativação.
+- **Ring buffer em memória**: ✅ o daemon só grava depois da wake word; o áudio fica em memória.
+- **Áudio não é guardado por padrão**: ✅ o daemon grava apenas `data/voice-session-id.txt`; a transcrição segue para o chat e herda a retenção das mensagens.
+- **Token por dispositivo**: ✅ `JARVIS_VOICE_TOKEN`; revogação e registry de dispositivos ainda não existem.
+- **TLS/Tailscale**: 🟡 `JARVIS_VOICE_API` é configurável; o padrão é `http://127.0.0.1:8000`, sem TLS próprio.
+- **Auditoria de cada comando**: ✅ `/voice/command` regista `VOICE_COMMAND`; o fluxo de chat audita pelo caminho normal.
+- **Aprovação humana**: ✅ ações sensíveis não são executadas pelo endpoint de voz; são encaminhadas para o painel.
+- **Kill switch**: ❌ o daemon ainda não consulta o kill switch; pendente.
+- **Sem modo furtivo**: ✅ o ícone da bandeja é visível.
+- **Prompt injection**: ✅ a transcrição é conteúdo não confiável; as permissões de ferramentas mantêm-se.
+- **Verificação de locutor**: ❌ futuro, não MVP.
 
 ---
 
@@ -525,25 +539,27 @@ Escuta permanente é a funcionalidade mais sensível do projeto. Regras mínimas
 
 **Não começar pelo celular.** Começar pelo Windows, onde o backend já corre e o ciclo é mais rápido.
 
+**Estado em 12/11/2026:** Semana 1 concluída; Semana 2 parcial (daemon e wake word `hey_jarvis`, sem autostart/atalho global). O aceite do MVP ainda não foi validado em hardware.
+
 ### Semana 1
 
 - STT local real (faster-whisper `base` int8).
-- TTS local real (Piper pt-BR).
+- TTS local real (Piper pt-BR/pt-PT).
 - VAD.
 - Endpoint `/voice/command`.
 - Testes com WAV.
 
 ### Semana 2
 
-- Wake word “Jarvis” (Porcupine ou openWakeWord).
-- Daemon + bandeja + autostart.
+- Wake word `hey_jarvis` (openWakeWord).
+- Daemon + bandeja; autostart ainda pendente.
 - Fluxo completo: wake → pergunta → resposta falada.
-- 5 intents determinísticos: hora, data, timer, clima, abrir app.
+- 2 intents determinísticos implementados (hora, data) + pedido de aprovação; timer, clima e abrir app pendentes.
 - Auditoria, mute e retenção.
 
 ### Aceite do MVP
 
-Com o dashboard fechado, dizer “Jarvis, que horas são?” e ouvir a resposta em menos de 5 segundos.
+Com o dashboard fechado, dizer “Hey Jarvis, que horas são?” e ouvir a resposta em menos de 5 segundos.
 
 ### Depois
 
@@ -579,35 +595,41 @@ Com o dashboard fechado, dizer “Jarvis, que horas são?” e ouvir a resposta 
 
 ## 15. Mapa de ficheiros
 
-### Novos
+### Implementados
 
 | Ficheiro | Função |
 |---|---|
-| `apps/voice_daemon/main.py` | Daemon inicial, bandeja, captura, cliente e playback |
+| `apps/voice_daemon/main.py` | Daemon: lock, backend sob demanda, bandeja, captura, wake word, STT/TTS e cliente HTTP |
 | `apps/voice_daemon/README.md` | Configuração, execução e limites do daemon |
-| `services/voice_runtime/wake_word.py` | Deteção da palavra de ativação |
-| `services/voice_runtime/vad.py` | Deteção de atividade de voz |
-| `services/voice_runtime/audio_io.py` | Abstração de microfone/alto-falante |
-| `tests/integration/test_voice_pipeline.py` | Testes com WAV |
+| `services/voice_runtime/vad.py` | Deteção de atividade de voz por RMS em WAV |
+| `tests/unit/test_voice_daemon.py` | Captura PCM → WAV e VAD |
+| `tests/integration/test_voice_pipeline.py` | Rotas de transcrição, síntese e comando |
 | `docs/VOICE_ASSISTANT.md` | Este documento |
 
 ### Modificados
 
 | Ficheiro | Alteração |
 |---|---|
-| `services/voice_runtime/stt_adapter.py` | STT local real com fallback |
-| `services/voice_runtime/tts_adapter.py` | TTS local real com fallback |
-| `services/voice_runtime/voice_engine.py` | Orquestração de voz |
-| `apps/api/routers/voice.py` | `/voice/command`, `/voice/synthesize` |
-| `apps/api/deps.py` | Wiring dos serviços de voz |
-| `apps/desktop/main_window.py` | Não matar o backend se o daemon for dono |
-| `iniciar_jarvis_silencioso.vbs` | Arranque do daemon no logon |
-| `pyproject.toml` | Dependências opcionais de voz |
+| `services/voice_runtime/stt_adapter.py` | faster-whisper real; erro explícito sem extra/modelo |
+| `services/voice_runtime/tts_adapter.py` | Piper real; erro explícito sem binário/modelo |
+| `services/voice_runtime/voice_engine.py` | Orquestração STT/TTS |
+| `services/voice_runtime/__init__.py` | Exporta os adapters e o engine |
+| `apps/api/routers/voice.py` | `/voice/transcribe`, `/voice/synthesize`, `/voice/command` |
+| `apps/api/main.py` | Registo do router de voz |
+| `pyproject.toml` | Extra opcional `voice` |
+
+### Planeados, não implementados
+
+| Ficheiro | Função |
+|---|---|
+| `apps/voice_daemon/tray.py`, `listener.py`, `client.py`, `playback.py`, `config.py` | Refatoração do daemon em módulos |
+| `services/voice_runtime/wake_word.py`, `audio_io.py` | Abstrações hoje inline no daemon |
 | `apps/mobile/pubspec.yaml` | `record`, `just_audio`, `flutter_foreground_task`, `permission_handler`, `flutter_local_notifications`, `porcupine_flutter` |
 | `apps/mobile/lib/main.dart` | Modo voz e serviço em primeiro plano |
 | `apps/mobile/android/app/src/main/AndroidManifest.xml` | Permissões e serviço de microfone |
+| `iniciar_jarvis_silencioso.vbs` | Arranque do daemon no logon (hoje só inicia o backend) |
 
-### Dependências Python sugeridas
+### Dependências Python atuais
 
 ```toml
 [project.optional-dependencies]
@@ -619,31 +641,30 @@ voice = [
     "openwakeword>=0.6.0",
     "pystray>=0.19.5",
     "Pillow>=10.0.0",
-    "webrtcvad>=2.0.10",
 ]
 ```
 
-> A escolha final depende de licenças e do instalador. Porcupine não é open source; openWakeWord é Apache 2.0.
+> O `pyproject.toml` **não** inclui `webrtcvad` nem Silero; o VAD atual é RMS. A escolha final de wake word depende de licenças: Porcupine não é open source; openWakeWord é Apache 2.0.
 
 ---
 
 ## 16. Plano de testes
 
-### Automatizados
+### Automatizados (estado atual)
 
-- WAV de fixture → STT devolve texto esperado.
-- Texto → TTS devolve WAV válido (cabeçalho RIFF, duração > 0).
-- VAD deteta início/fim em WAV com silêncio.
-- Wake word: WAV com “Jarvis” deteta; WAV sem “Jarvis” não deteta.
-- `/voice/command`: intent correto, resposta, aprovação.
-- Isolamento: dispositivo A não vê sessão de B.
-- Falha de rede: erro explícito, sem bloqueio.
-- Timeout de STT/TTS.
-- Mute: nenhum áudio processado.
+- `/voice/transcribe` usa o adaptador local quando não há chave cloud e devolve texto (mock).
+- `/voice/synthesize` devolve WAV válido com cabeçalho RIFF (mock).
+- `/voice/command`: hora, comando desconhecido sem execução, pedido de aprovação e auditoria.
+- `/voice/command`: valida a propriedade do projeto.
+- VAD distingue sinal de silêncio em WAV PCM.
+- `VoiceEngine` desativado por omissão e pipeline com adapters falsos.
+- Daemon converte PCM bruto em WAV e aplica o limiar de VAD.
+
+**Lacunas:** não há fixture de wake word real, teste com faster-whisper/Piper reais, teste de mute/kill switch nem teste Android.
 
 ### Manuais
 
-- Dizer “Jarvis” com o dashboard fechado.
+- Dizer “Hey Jarvis” (ou “Jarvis”) com o dashboard fechado.
 - Falar baixo, longe do microfone, com ruído.
 - Interromper o TTS com “Jarvis”.
 - Mudar de dispositivo de áudio a meio.
@@ -662,15 +683,25 @@ voice = [
 
 ---
 
-## 17. Perguntas em aberto
+## 17. Decisões e perguntas em aberto
+
+### Já decidido
+
+- **Windows primeiro**; Android depois.
+- **Aprovação sensível** só no dashboard/celular, nunca só por voz.
+- **openWakeWord** no MVP, com o modelo `hey_jarvis`; Porcupine fica como alternativa.
+- **STT/TTS local** no daemon; o push-to-talk web pode usar o provedor cloud configurado e cair para o local.
+- **Áudio não é guardado** pelo daemon; só a transcrição segue para o backend.
+
+### Em aberto
 
 - O JARVIS deve responder sempre, ou só quando o utilizador estiver na mesma sala?
 - Vai haver mais do que um utilizador na casa? Perfis de voz?
 - O PC fica sempre ligado? Se não, qual o fallback no celular?
 - Autorizas cloud para STT/LLM quando o CPU estiver lento?
 - A voz deve ser pt-BR, pt-PT ou configurável?
-- Queres que o JARVIS tenha um nome de ativação alternativo?
-- A aprovação por voz de baixo risco é aceitável, ou tudo passa pelo painel?
+- Queres manter “Hey Jarvis” ou treinar/validar um modelo dedicado a “Jarvis”?
+- Queres aprovação por voz de baixo risco, ou tudo passa pelo painel?
 
 ---
 

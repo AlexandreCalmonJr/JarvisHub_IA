@@ -3304,10 +3304,17 @@ O arquivo APK gerado ficará em `build/app/outputs/flutter-apk/app-release.apk`.
                 "dev": "tsx watch src/server.ts",
                 "build": "tsc",
                 "start": "node dist/server.js",
-                "test": ("npm run db:setup && node --import tsx --test" if sqlite else "node --import tsx --test"),
+                "test": (
+                    "npm run db:setup && node --import tsx --test"
+                    if sqlite
+                    else "node --import tsx --test"
+                ),
                 **({"db:setup": "prisma db push && tsx prisma/seed.ts"} if sqlite else {}),
             },
-            "dependencies": {"express": "^5.1.0", **({"@prisma/client": "^6.16.2"} if sqlite else {})},
+            "dependencies": {
+                "express": "^5.1.0",
+                **({"@prisma/client": "^6.16.2"} if sqlite else {}),
+            },
             "devDependencies": {
                 "@types/express": "^5.0.3",
                 "@types/node": "^22.18.6",
@@ -3318,21 +3325,39 @@ O arquivo APK gerado ficará em `build/app/outputs/flutter-apk/app-release.apk`.
         }
         files = {
             "package.json": json.dumps(package, ensure_ascii=False, indent=2) + "\n",
-            "tsconfig.json": json.dumps({"compilerOptions": {"target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext", "outDir": "dist", "rootDir": ".", "strict": True, "esModuleInterop": True, "skipLibCheck": True}, "include": ["src/**/*.ts"]}, indent=2) + "\n",
+            "tsconfig.json": json.dumps(
+                {
+                    "compilerOptions": {
+                        "target": "ES2022",
+                        "module": "NodeNext",
+                        "moduleResolution": "NodeNext",
+                        "outDir": "dist",
+                        "rootDir": ".",
+                        "strict": True,
+                        "esModuleInterop": True,
+                        "skipLibCheck": True,
+                    },
+                    "include": ["src/**/*.ts"],
+                },
+                indent=2,
+            )
+            + "\n",
             ".gitignore": "node_modules/\ndist/\n.env\n*.db\n*.db-journal\n",
-            ".env.example": 'DATABASE_URL="file:./dev.db"\nPORT=3000\n' if sqlite else "PORT=3000\n",
-            "src/app.ts": '''import express from "express";
+            ".env.example": 'DATABASE_URL="file:./dev.db"\nPORT=3000\n'
+            if sqlite
+            else "PORT=3000\n",
+            "src/app.ts": """import express from "express";
 
 export const app = express();
 app.use(express.json({ limit: "64kb" }));
 app.get("/health", (_request, response) => response.json({ status: "ok" }));
-''',
-            "src/server.ts": '''import { app } from "./app.js";
+""",
+            "src/server.ts": """import { app } from "./app.js";
 
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, "127.0.0.1", () => console.log(`API listening on ${port}`));
-''',
-            "tests/health.test.ts": '''import assert from "node:assert/strict";
+""",
+            "tests/health.test.ts": """import assert from "node:assert/strict";
 import { test } from "node:test";
 import { app } from "../src/app.js";
 
@@ -3348,12 +3373,15 @@ test("health endpoint returns ok", async () => {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 });
-''',
-            "README.md": f"# {title}\n\n{desc}\n\n## Uso\n\n```bash\nnpm install\n" + ("cp .env.example .env\nnpm run db:setup\n" if sqlite else "") + "npm run dev\n```\n\n`GET /health` verifica a API. Execute `npm test` para validar o scaffold.\n",
+""",
+            "README.md": f"# {title}\n\n{desc}\n\n## Uso\n\n```bash\nnpm install\n"
+            + ("cp .env.example .env\nnpm run db:setup\n" if sqlite else "")
+            + "npm run dev\n```\n\n`GET /health` verifica a API. Execute `npm test` para validar o scaffold.\n",
         }
         if sqlite:
-            files.update({
-                "prisma/schema.prisma": '''generator client {
+            files.update(
+                {
+                    "prisma/schema.prisma": """generator client {
   provider = "prisma-client-js"
 }
 
@@ -3369,8 +3397,8 @@ model Item {
   priority    Int    @default(1)
   createdAt   DateTime @default(now())
 }
-''',
-                "prisma/seed.ts": '''import { PrismaClient } from "@prisma/client";
+""",
+                    "prisma/seed.ts": """import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 try {
@@ -3378,12 +3406,12 @@ try {
 } finally {
   await prisma.$disconnect();
 }
-''',
-                "src/db.ts": '''import { PrismaClient } from "@prisma/client";
+""",
+                    "src/db.ts": """import { PrismaClient } from "@prisma/client";
 
 export const prisma = new PrismaClient();
-''',
-                "src/app.ts": '''import express from "express";
+""",
+                    "src/app.ts": """import express from "express";
 import { prisma } from "./db.js";
 
 export const app = express();
@@ -3396,8 +3424,8 @@ app.post("/items", async (request, response) => {
   const item = await prisma.item.create({ data: { title, description: typeof request.body.description === "string" ? request.body.description : null } });
   return response.status(201).json(item);
 });
-''',
-                "tests/database.test.ts": '''import assert from "node:assert/strict";
+""",
+                    "tests/database.test.ts": """import assert from "node:assert/strict";
 import { test } from "node:test";
 import { prisma } from "../src/db.js";
 
@@ -3409,8 +3437,9 @@ test("SQLite persists an item", async () => {
     await prisma.$disconnect();
   }
 });
-''',
-            })
+""",
+                }
+            )
         return files
 
     def _generate_default_python_scaffold(

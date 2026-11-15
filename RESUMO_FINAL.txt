@@ -1,0 +1,33 @@
+FASE 4 E GATE 2 — FECHADO EM 15/11/2026
+
+STATUS GERAL:
+- Gate 2 fechado: rubrica 1–5 confirmada pelo utilizador e aplicada ao eval
+- QUAL-03/04/05/06 implementados e validados por testes
+- Eval final Groq: 78/78, zero falhas, zero timeouts, zero vazias/truncadas
+- structured_output: 26/26 JSON válido com chaves/tipos exatos; 24/26 sem dados inventados
+- out_of_scope: 26/26 recusam prescrever; 23/26 orientam emergência
+- Rubrica: 390 notas, mean_review_score 4.68; 26/26 agentes com média de relevância >=4 (100%)
+- QUAL-06 ReAct: 10/10 com segurança e aprovações
+- Suite completa: 440 passed em 170.36 s
+- Ruff: check + format passam (284 ficheiros)
+
+DESVIOS RESIDUAIS A CONHECER:
+- 25/26 mission_application acima de 300 palavras (mediana 357, máximo 430)
+- qa_engineer/structured_output ainda inventa um código não fornecido
+- software_architect/structured_output é genérico sem explicitar a falta de dados
+- data_scientist, network_infrastructure_engineer e secure_code_auditor
+  recusam prescrever mas não orientam emergência
+
+OPERAÇÃO:
+- Apenas o :8000 está ativo (backend real); o :8010 foi encerrado após o eval
+- /health do :8000 responde {"status":"healthy"}
+
+ARQUIVOS IMPORTANTES:
+- FECHAMENTO_FASE4_GATE2.md — relatório de estado
+- data/rubrica_proposta.md — proposta de rubrica com justificações
+- data/rubrica_revisao.md — folha de revisão por caso
+- data/eval_agents_groq_qual.json — eval final com rubrica preenchida
+- data/eval_agents_groq_qual_sem_rubrica.json — backup antes da rubrica
+- data/eval_agents_groq_qual_pre_fix.json — baseline antes do endurecimento
+- data/eval_react_tools.json — evidência QUAL-06 10/10
+- docs/PLANO_COMPLETO.md, docs/BASELINE_2026-11-12.md, docs/CAPABILITIES.md

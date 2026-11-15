@@ -222,14 +222,16 @@ class DatabaseManager:
             CREATE INDEX IF NOT EXISTS idx_audit_operation ON audit_events(operation);
 
 
-            -- Semeia modelos de alta velocidade para CPU (3B) por padrão
+            -- Semeia o modelo local por papel (QUAL-04). O catálogo em
+            -- agents/profiles/catalog.py usa os mesmos valores; configurações
+            -- já persistidas pelo utilizador continuam a ter precedência.
             INSERT OR IGNORE INTO agent_configs (role, preferred_model, updated_at) VALUES
             ('jarvis_master', 'llama3.2:3b', datetime('now')),
-            ('software_architect', 'llama3.2:3b', datetime('now')),
-            ('project_manager', 'llama3.2:3b', datetime('now')),
+            ('software_architect', 'qwen2.5:7b', datetime('now')),
+            ('project_manager', 'qwen2.5:7b', datetime('now')),
             ('general_assistant', 'llama3.2:3b', datetime('now')),
-            ('code_explanation', 'llama3.2:3b', datetime('now')),
-            ('requirements_analyst', 'llama3.2:3b', datetime('now'));
+            ('code_explanation', 'qwen2.5-coder:7b', datetime('now')),
+            ('requirements_analyst', 'qwen2.5:7b', datetime('now'));
             """)
             try:
                 conn.execute("ALTER TABLE approvals ADD COLUMN reversible INTEGER DEFAULT 1;")

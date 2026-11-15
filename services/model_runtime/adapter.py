@@ -156,6 +156,38 @@ class OllamaAdapter(BaseModelAdapter):
         except Exception:
             return False
 
+    async def warm_up(
+        self, model_names: list[str], timeout_seconds: float = 30.0
+    ) -> dict[str, bool]:
+        """Carrega modelos no Ollama sem gerar tokens, respeitando keep_alive/num_ctx.
+
+        O warm-up reduz a latência do primeiro pedido e, com um único modelo
+        carregado, evita recarregamentos causados pela troca entre agentes.
+        """
+        results: dict[str, bool] = {}
+        unique_names = [name for name in dict.fromkeys(model_names) if name]
+        if not unique_names:
+            return results
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+            for name in unique_names:
+                try:
+                    resolved = await self.resolve_model_name(name)
+                    payload = {
+                        "model": resolved,
+                        "prompt": "",
+                        "stream": False,
+                        "keep_alive": self.keep_alive,
+                        "options": {"num_ctx": self.context_window or 2048},
+                    }
+                    if self.cpu_threads and self.cpu_threads > 0:
+                        payload["options"]["num_thread"] = self.cpu_threads
+                    response = await client.post(f"{self.base_url}/api/generate", json=payload)
+                    results[name] = response.status_code == 200
+                except Exception:
+                    logger.debug("Warm-up falhou para o modelo %s.", name, exc_info=True)
+                    results[name] = False
+        return results
+
     async def health_check(self) -> bool:
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:

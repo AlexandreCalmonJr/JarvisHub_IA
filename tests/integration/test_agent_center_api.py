@@ -35,6 +35,14 @@ async def test_agent_config_and_memories_api(monkeypatch):
         assert updated["agent"]["preferred_model"] == "llama3.2:3b"
         assert "run_tests" in updated["agent"]["allowed_tools"]
 
+        # O runtime autónomo usa o registo interno: a alteração tem de chegar lá
+        # sem reiniciar o backend.
+        runtime_profile = next(
+            p for p in agents_router.agent_registry.list_agents() if p.role.value == "qa_engineer"
+        )
+        assert runtime_profile.preferred_model == "llama3.2:3b"
+        assert "run_tests" in runtime_profile.allowed_tools
+
         # 3. Criar memória episódica para o agente via API
         mem_payload = {
             "category": "qa_guideline",

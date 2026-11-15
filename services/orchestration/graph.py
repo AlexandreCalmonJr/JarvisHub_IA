@@ -13,6 +13,7 @@ from services.model_runtime import InferenceRequest, ModelManager
 from services.model_runtime.agent_routing import resolve_account_agent_route
 from services.security_core import PermissionDeniedError, SecurityCore
 
+from .output_validation import OutputContractError, validate_and_repair_contract
 from .self_correction import SelfCorrectionEngine
 from .state import TaskState
 
@@ -648,7 +649,10 @@ def create_master_graph(
                 project_type = "python"
                 prefix = "py"
                 dev_role = AgentRole.BACKEND_DEVELOPER
-            elif any(w in p_lower for w in ("node.js", "nodejs", "node", "express", "typescript", "javascript")):
+            elif any(
+                w in p_lower
+                for w in ("node.js", "nodejs", "node", "express", "typescript", "javascript")
+            ):
                 project_type = "node"
                 prefix = "node"
                 dev_role = AgentRole.BACKEND_DEVELOPER
@@ -1713,7 +1717,7 @@ def create_master_graph(
         return res_dict
 
     async def validate_output(state: TaskState) -> dict[str, Any]:
-        # Valida conformidade de cada output com o contrato dos agentes e aplica Self-Correction Loop
+        # Valida schema, comprimento e sintaxe e aplica no máximo uma reparação por output.
         outputs = state.get("agent_outputs", [])
         validated = []
         for out in outputs:
@@ -1726,8 +1730,37 @@ def create_master_graph(
                     evidence_list.append(
                         f"Auto-correção sintática aplicada: {len(corrections)} correções"
                     )
-            contract = AgentOutputContract(**out)
-            validated.append(contract.model_dump())
+            try:
+                repaired = validate_and_repair_contract(out)
+            except OutputContractError:
+                logger.warning(
+                    "Contrato de saída inválido para %s; a aplicar fallback seguro.",
+                    out.get("agent_role"),
+                    exc_info=True,
+                )
+                try:
+                    repaired = validate_and_repair_contract(
+                        {
+                            "agent_role": AgentRole.JARVIS_MASTER.value,
+                            "objective": out.get("objective")
+                            or "Objetivo não especificado pelo especialista.",
+                            "summary": out.get("summary")
+                            or "Sem resumo produzido pelo especialista.",
+                            "next_recommendation": out.get("next_recommendation")
+                            or "Revisar a resposta e repetir a execução.",
+                        }
+                    )
+                except OutputContractError:
+                    logger.exception("Fallback do contrato de saída também falhou.")
+                    repaired = validate_and_repair_contract(
+                        {
+                            "agent_role": AgentRole.JARVIS_MASTER.value,
+                            "objective": "Objetivo não especificado pelo especialista.",
+                            "summary": "Sem resumo produzido pelo especialista.",
+                            "next_recommendation": "Revisar a resposta e repetir a execução.",
+                        }
+                    )
+            validated.append(repaired.contract.model_dump())
         res: dict[str, Any] = {"agent_outputs": validated}
         if state.get("final_summary"):
             res["final_summary"] = state["final_summary"]

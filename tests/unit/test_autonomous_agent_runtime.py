@@ -8,6 +8,8 @@ from packages.contracts.agent import (
 )
 from packages.contracts.security import ProjectWorkMode
 from services.autonomous_agent import AutonomousAgentRuntime
+from services.autonomous_agent.runtime import recover_textual_tool_call
+from services.coding_agent import ProviderError
 from services.coding_agent.broker import ApprovalBroker
 from services.coding_agent.tools import CodingToolExecutor
 from services.coding_agent.types import ChatTurn, ProviderReply, ToolCall, ToolSpec
@@ -346,3 +348,444 @@ async def test_plan_mode_blocks_mutations_and_warns(tmp_path):
     assert tool_res["denied"] is True
     assert "estritamente de leitura" in tool_res["error"]
     assert not (tmp_path / "bad.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_truncated_output_is_repaired_once(tmp_path):
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-output", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(
+                content="Resumo incompleto",
+                finish_reason="length",
+                prompt_tokens=10,
+                completion_tokens=4,
+            ),
+            ProviderReply(
+                content="Resumo reparado e completo.",
+                finish_reason="stop",
+                prompt_tokens=20,
+                completion_tokens=8,
+            ),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Resuma a arquitetura do projeto",
+        project_id="proj-output",
+        session_id="ses-output-repair",
+        mode=AutonomousAgentMode.ASK,
+    )
+
+    contract = await runtime.run_task(config)
+
+    assert len(provider.call_history) == 2
+    assert "300 palavras" in provider.call_history[1]["turns"][0].content
+    assert contract.summary == "Resumo reparado e completo."
+    assert contract.resource_usage.tokens_prompt == 30
+    assert contract.resource_usage.tokens_completion == 12
+    assert any("Validação de output" in item for item in contract.evidence)
+    assert not any("precisou de validação" in item for item in contract.blockers)
+
+
+@pytest.mark.asyncio
+async def test_empty_reply_with_tools_retries_without_tools(tmp_path):
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-empty-retry", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(content="", tool_calls=[], prompt_tokens=100, completion_tokens=10),
+            ProviderReply(
+                content="Resposta direta sem ferramentas.",
+                tool_calls=[],
+                prompt_tokens=50,
+                completion_tokens=20,
+            ),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Explique a arquitetura em duas frases",
+        project_id="proj-empty-retry",
+        session_id="ses-empty-retry",
+        mode=AutonomousAgentMode.ASK,
+        max_iterations=1,
+    )
+
+    contract = await runtime.run_task(config)
+
+    assert len(provider.call_history) == 2
+    assert provider.call_history[1]["tools"] == []
+    assert contract.summary == "Resposta direta sem ferramentas."
+    assert contract.resource_usage.tokens_prompt == 150
+    assert contract.resource_usage.tokens_completion == 30
+    assert any("sem ferramentas" in item for item in contract.evidence)
+
+
+def test_recover_textual_tool_call_only_accepts_authorized_tools():
+    content = '{"name": "write_file", "parameters": {"path": "x.py", "content": "x"}}'
+
+    recovered = recover_textual_tool_call(content, {"write_file"})
+    assert recovered is not None
+    assert recovered.name == "write_file"
+    assert recovered.arguments["path"] == "x.py"
+
+    python_literal = "{'name': 'write_file', 'parameters': {'path': 'y.py', 'content': 'y'}}"
+    recovered_literal = recover_textual_tool_call(python_literal, {"write_file"})
+    assert recovered_literal is not None
+    assert recovered_literal.arguments["path"] == "y.py"
+
+    assert recover_textual_tool_call(content, {"read_file"}) is None
+    assert recover_textual_tool_call("texto antes do JSON", {"write_file"}) is None
+    assert recover_textual_tool_call('{"name": "write_file"}', {"write_file"}) is None
+
+
+@pytest.mark.asyncio
+async def test_textual_tool_call_json_is_executed_as_real_tool(tmp_path):
+    """Recupera a chamada textual e mantém a governança normal (QUAL-06)."""
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-textual", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(
+                content=(
+                    '{"name": "write_file", "parameters": '
+                    '{"path": "textual.py", "content": "print(1)"}}'
+                ),
+                prompt_tokens=15,
+                completion_tokens=10,
+            ),
+            ProviderReply(content="Ficheiro criado pela chamada recuperada."),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.AUTOMATION_ENGINEER,
+        prompt="Cria textual.py",
+        project_id="proj-textual",
+        mode=AutonomousAgentMode.ASK,
+    )
+
+    async def run_and_approve():
+        events = []
+        async for ev in runtime.run_stream(config):
+            events.append(ev)
+            if ev.get("type") == "approval_required":
+                broker.decide(ev["approval_id"], approved=True, decided_by="human_operator")
+        return events
+
+    events = await run_and_approve()
+
+    assert (tmp_path / "textual.py").exists()
+    assert any(
+        event.get("type") == "tool_result"
+        and event.get("name") == "write_file"
+        and event.get("success") is True
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_call_forces_text_answer(tmp_path):
+    """Uma chamada repetida não entra em ciclo: o modelo é forçado a responder."""
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-repeat", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+    (tmp_path / "app.py").write_text("print('x')\n", encoding="utf-8")
+
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(
+                content="Lendo app.py.",
+                tool_calls=[
+                    ToolCall(id="call_read_1", name="read_file", arguments={"path": "app.py"})
+                ],
+            ),
+            ProviderReply(
+                content="Lendo outra vez.",
+                tool_calls=[
+                    ToolCall(id="call_read_2", name="read_file", arguments={"path": "app.py"})
+                ],
+            ),
+            ProviderReply(content="O app.py imprime x."),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Lê app.py",
+        project_id="proj-repeat",
+        mode=AutonomousAgentMode.PLAN,
+        max_iterations=3,
+    )
+
+    events = []
+    async for event in runtime.run_stream(config):
+        events.append(event)
+
+    assert len([event for event in events if event.get("type") == "tool_result"]) == 1
+    assert provider.call_history[2]["tools"] == []
+    final = next(event for event in events if event.get("type") == "final")
+    assert final["is_completed"] is True
+    assert final["summary"] == "O app.py imprime x."
+
+
+@pytest.mark.asyncio
+async def test_repaired_textual_call_is_executed_before_final_answer(tmp_path):
+    """A reparação pode devolver a chamada em texto; ela ainda deve ser executada."""
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-repaired-call", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    broken = '{"name":"write_file","parameters":{"content":"print(1)" "path":"created.py"}}'
+    repaired = '{"name":"write_file","parameters":{"content":"print(1)","path":"created.py"}}'
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(content=broken, finish_reason="stop"),
+            ProviderReply(content=repaired, finish_reason="stop"),
+            ProviderReply(content="O ficheiro created.py foi criado."),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.BACKEND_DEVELOPER,
+        prompt="Cria created.py",
+        project_id="proj-repaired-call",
+        mode=AutonomousAgentMode.ASK,
+        max_iterations=1,
+    )
+
+    async def run_and_approve():
+        events = []
+        async for event in runtime.run_stream(config):
+            events.append(event)
+            if event.get("type") == "approval_required":
+                broker.decide(event["approval_id"], approved=True, decided_by="human_operator")
+        return events
+
+    events = await run_and_approve()
+
+    assert (tmp_path / "created.py").exists()
+    final = next(event for event in events if event.get("type") == "final")
+    assert final["is_completed"] is True
+    assert final["summary"] == "O ficheiro created.py foi criado."
+
+
+@pytest.mark.asyncio
+async def test_malformed_textual_tool_sequence_forces_text_answer(tmp_path):
+    """Uma sequência de chamadas em texto não pode ser aceite como parecer final."""
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-textual-sequence", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+    (tmp_path / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
+
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(
+                content=(
+                    "{'name': 'list_directory', 'parameters': {'path': '.'}}; "
+                    "{'name': 'glob_find', 'parameters': {'path': './*.py'}}; 'app.py'"
+                )
+            ),
+            ProviderReply(content="O ficheiro relevante para o build é o requirements.txt."),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.DEVOPS_ENGINEER,
+        prompt="Lista os ficheiros e indica um ficheiro de build",
+        project_id="proj-textual-sequence",
+        mode=AutonomousAgentMode.PLAN,
+        max_iterations=1,
+    )
+
+    events = []
+    async for event in runtime.run_stream(config):
+        events.append(event)
+
+    final = next(event for event in events if event.get("type") == "final")
+    assert final["is_completed"] is True
+    assert final["summary"] == "O ficheiro relevante para o build é o requirements.txt."
+
+
+@pytest.mark.asyncio
+async def test_no_project_runs_without_tools(tmp_path):
+    sec = SecurityCore()
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    provider = ScriptedChatProvider(
+        [ProviderReply(content="Resposta direta sem projeto.", tool_calls=[])]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Explique a arquitetura em duas frases",
+        session_id="ses-no-project",
+        mode=AutonomousAgentMode.ASK,
+        max_iterations=1,
+    )
+
+    contract = await runtime.run_task(config)
+
+    assert len(provider.call_history) == 1
+    assert provider.call_history[0]["tools"] == []
+    assert contract.summary == "Resposta direta sem projeto."
+
+
+@pytest.mark.asyncio
+async def test_provider_error_finalizes_as_incomplete(tmp_path):
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-error", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    class FailingProvider(ScriptedChatProvider):
+        async def complete(self, *args, **kwargs):
+            raise ProviderError("model 'auto_hybrid' not found")
+
+    provider = FailingProvider([])
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Resuma a arquitetura",
+        project_id="proj-error",
+        session_id="ses-provider-error",
+        mode=AutonomousAgentMode.ASK,
+    )
+
+    events = []
+    async for event in runtime.run_stream(config):
+        events.append(event)
+
+    error_event = next(event for event in events if event["type"] == "error")
+    final_event = next(event for event in events if event["type"] == "final")
+
+    assert error_event["code"] == "provider_unavailable"
+    assert final_event["is_completed"] is False
+    assert "não foi concluída" in final_event["summary"]
+    assert final_event["contract"]["blockers"]
+
+
+@pytest.mark.asyncio
+async def test_empty_output_finalizes_as_incomplete(tmp_path):
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-empty", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(content="   ", tool_calls=[]),
+            ProviderReply(content="   ", tool_calls=[]),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Resuma a arquitetura",
+        project_id="proj-empty",
+        session_id="ses-empty-output",
+        mode=AutonomousAgentMode.ASK,
+        max_iterations=1,
+    )
+
+    events = []
+    async for event in runtime.run_stream(config):
+        events.append(event)
+
+    final_event = next(event for event in events if event["type"] == "final")
+    assert final_event["is_completed"] is False
+    assert "não foi concluída" in final_event["summary"]
+    assert any("sem resposta final" in blocker for blocker in final_event["contract"]["blockers"])

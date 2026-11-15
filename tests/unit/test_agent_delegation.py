@@ -142,6 +142,55 @@ def test_specialist_prompt_uses_project_source_only_for_project_intents(tmp_path
     assert "restante do arquivo truncado" in detailed
 
 
+def test_conversation_prompt_stays_lean_and_skips_project_context():
+    from services.orchestration.prompt_builder import build_specialist_prompt
+
+    class ExplodingDb:
+        def list_project_memory(self, *args, **kwargs):
+            raise AssertionError("memórias de projeto não devem ser consultadas em conversa")
+
+        def list_agent_memories(self, *args, **kwargs):
+            raise AssertionError("memórias episódicas não devem ser consultadas em conversa")
+
+        def search_knowledge_vault(self, *args, **kwargs):
+            raise AssertionError("RAG não deve ser consultado em conversa")
+
+        def list_user_skills(self, *args, **kwargs):
+            raise AssertionError("skills privadas não devem ser consultadas em conversa")
+
+        def get_user_profile(self, owner_user_id=None):
+            return {"custom_instructions": "Prefira respostas curtas."}
+
+    class ExplodingCatalog:
+        def get_skills_for_agent(self, *args, **kwargs):
+            raise AssertionError("skills não devem ser consultadas em conversa")
+
+        def get_relevant_skills(self, *args, **kwargs):
+            raise AssertionError("skills não devem ser consultadas em conversa")
+
+    prompt = build_specialist_prompt(
+        agent_role="jarvis_master",
+        agent_registry=AgentRegistry(),
+        skills_catalog=ExplodingCatalog(),
+        db_manager=ExplodingDb(),
+        intent="conversation",
+        user_prompt="Olá, tudo bem?",
+        project_id="prompt-project",
+        previous_outputs=[{"agent_role": "qa_engineer", "summary": "SECRET_HISTORY"}],
+        owner_user_id="account-1",
+    )
+
+    assert "Prefira respostas curtas." in prompt
+    assert "SECRET_HISTORY" not in prompt
+    assert "REGRAS E MEMÓRIAS DO PROJETO" not in prompt
+    assert "MEMÓRIAS EPISÓDICAS" not in prompt
+    assert "CÓDIGO FONTE REAL DO PROJETO EM DISCO" not in prompt
+    assert "BASE DE CONHECIMENTO LOCAL" not in prompt
+    assert "HABILIDADES TÉCNICAS E DIRETRIZES ECC ATIVAS" not in prompt
+    assert "FLUXO DE COLABORAÇÃO MULTI-AGENTE" not in prompt
+    assert len(prompt) < 2400
+
+
 @pytest.mark.asyncio
 async def test_multi_agent_sequential_execution_in_jarvis_master():
     from services.model_runtime import MockAdapter, ModelManager

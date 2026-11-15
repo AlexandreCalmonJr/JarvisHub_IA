@@ -4,6 +4,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+# Limites do contrato de saída. São aplicados na validação Pydantic e também
+# usados pelo reparador único em `services.orchestration.output_validation`.
+MAX_AGENT_OBJECTIVE_CHARS = 2_000
+MAX_AGENT_SUMMARY_CHARS = 8_000
+MAX_AGENT_RECOMMENDATION_CHARS = 1_000
+MAX_AGENT_LIST_ITEMS = 50
+MAX_AGENT_LIST_ITEM_CHARS = 2_000
+
 
 class AgentRole(str, Enum):
     JARVIS_MASTER = "jarvis_master"
@@ -49,32 +57,56 @@ class AgentOutputContract(BaseModel):
     """
 
     agent_role: AgentRole
-    objective: str = Field(..., description="Objetivo específico atribuído à execução")
-    summary: str = Field(..., description="Resumo executivo do trabalho realizado")
+    objective: str = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_AGENT_OBJECTIVE_CHARS,
+        description="Objetivo específico atribuído à execução",
+    )
+    summary: str = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_AGENT_SUMMARY_CHARS,
+        description="Resumo executivo do trabalho realizado",
+    )
     evidence: list[str] = Field(
-        default_factory=list, description="Fatos, linhas de código e dados verificáveis"
+        default_factory=list,
+        max_length=MAX_AGENT_LIST_ITEMS,
+        description="Fatos, linhas de código e dados verificáveis",
     )
     actions_taken: list[str] = Field(
-        default_factory=list, description="Ações concretas executadas pelo agente"
+        default_factory=list,
+        max_length=MAX_AGENT_LIST_ITEMS,
+        description="Ações concretas executadas pelo agente",
     )
     affected_files: list[str] = Field(
-        default_factory=list, description="Caminhos de arquivos lidos, analisados ou alterados"
+        default_factory=list,
+        max_length=MAX_AGENT_LIST_ITEMS,
+        description="Caminhos de arquivos lidos, analisados ou alterados",
     )
     tests_executed: list[str] = Field(
-        default_factory=list, description="Testes unitários/integração ou verificações realizadas"
+        default_factory=list,
+        max_length=MAX_AGENT_LIST_ITEMS,
+        description="Testes unitários/integração ou verificações realizadas",
     )
     risks: list[str] = Field(
         default_factory=list,
+        max_length=MAX_AGENT_LIST_ITEMS,
         description="Riscos técnicos, de segurança ou de regressão identificados",
     )
     blockers: list[str] = Field(
-        default_factory=list, description="Bloqueios ou necessidades de autorização humana pendente"
+        default_factory=list,
+        max_length=MAX_AGENT_LIST_ITEMS,
+        description="Bloqueios ou necessidades de autorização humana pendente",
     )
     resource_usage: ResourceUsage = Field(
         default_factory=lambda: ResourceUsage(model_name="unknown")
     )
     next_recommendation: str = Field(
-        ..., description="Próximo passo recomendado para o JARVIS Master ou utilizador"
+        ...,
+        min_length=1,
+        max_length=MAX_AGENT_RECOMMENDATION_CHARS,
+        description="Próximo passo recomendado para o JARVIS Master ou utilizador",
     )
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
