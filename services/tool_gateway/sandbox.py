@@ -1,10 +1,13 @@
 import asyncio
+import logging
 import os
 import signal
 import time
 from pathlib import Path
 
 from services.security_core.redaction import redact_string
+
+logger = logging.getLogger(__name__)
 
 
 class SandboxTimeoutError(Exception):
@@ -153,3 +156,121 @@ class SubprocessSandbox:
             redact_string(stderr),
             duration_ms,
         )
+
+
+class ContainerSandbox(SubprocessSandbox):
+    """Executor isolado em contentor Docker/Podman para execução de ferramentas com alto nível de confinamento (SIM-08).
+
+    Aplica limites estritos de memória, CPU, isolamento de rede (--network=none) e sistema de arquivos
+    restrito ao volume montado. Caso o daemon de contentores não esteja ativo, efetua fallback seguro
+    para SubprocessSandbox.
+    """
+
+    def __init__(
+        self,
+        default_timeout_seconds: float = 60.0,
+        max_output_chars: int = 250_000,
+        image: str = "python:3.12-slim",
+        memory_limit: str = "512m",
+        cpus: float = 1.0,
+        network: str = "none",
+        enable_fallback: bool = True,
+    ):
+        super().__init__(
+            default_timeout_seconds=default_timeout_seconds,
+            max_output_chars=max_output_chars,
+        )
+        self.image = image
+        self.memory_limit = memory_limit
+        self.cpus = cpus
+        self.network = network
+        self.enable_fallback = enable_fallback
+        self._container_cli: str | None = None
+        self._available: bool | None = None
+
+    async def is_available(self) -> bool:
+        """Verifica se Docker ou Podman estão disponíveis e com daemon operacional."""
+        if self._available is not None:
+            return self._available
+
+        if os.getenv("JARVIS_SANDBOX_DRIVER", "").lower() == "subprocess":
+            self._available = False
+            return False
+
+        for cli in ("docker", "podman"):
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    cli,
+                    "info",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                code = await asyncio.wait_for(proc.wait(), timeout=3.0)
+                if code == 0:
+                    self._container_cli = cli
+                    self._available = True
+                    return True
+            except Exception as exc:
+                logger.debug("CLI de contentor '%s' não respondeu ao comando info: %s", cli, exc)
+                continue
+
+        self._available = False
+        return False
+
+    def build_container_args(self, command: list[str], cwd: Path) -> list[str]:
+        """Constrói os argumentos para o docker run com confinamento total."""
+        cli = self._container_cli or "docker"
+        abs_cwd = str(cwd.resolve()).replace("\\", "/")
+        return [
+            cli,
+            "run",
+            "--rm",
+            "-i",
+            f"--network={self.network}",
+            f"--memory={self.memory_limit}",
+            f"--cpus={self.cpus}",
+            "-v",
+            f"{abs_cwd}:/workspace:rw",
+            "-w",
+            "/workspace",
+            self.image,
+            *command,
+        ]
+
+    async def run_command(
+        self,
+        command: list[str],
+        cwd: Path,
+        timeout_seconds: float | None = None,
+    ) -> tuple[int, str, str, float]:
+        if await self.is_available():
+            container_cmd = self.build_container_args(command, cwd)
+            return await super().run_command(
+                container_cmd, cwd=cwd, timeout_seconds=timeout_seconds
+            )
+
+        if not self.enable_fallback:
+            raise RuntimeError(
+                "Contentor Docker/Podman indisponível e fallback para subprocesso está desativado."
+            )
+
+        return await super().run_command(command, cwd=cwd, timeout_seconds=timeout_seconds)
+
+    async def run_shell_command(
+        self,
+        command: str,
+        cwd: Path,
+        timeout_seconds: float | None = None,
+    ) -> tuple[int, str, str, float]:
+        if await self.is_available():
+            container_cmd = self.build_container_args(["sh", "-c", command], cwd)
+            return await super().run_command(
+                container_cmd, cwd=cwd, timeout_seconds=timeout_seconds
+            )
+
+        if not self.enable_fallback:
+            raise RuntimeError(
+                "Contentor Docker/Podman indisponível e fallback para subprocesso está desativado."
+            )
+
+        return await super().run_shell_command(command, cwd=cwd, timeout_seconds=timeout_seconds)

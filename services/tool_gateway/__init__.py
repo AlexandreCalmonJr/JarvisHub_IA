@@ -1,6 +1,6 @@
 from .gateway import ToolGateway
 from .registry import PERMITTED_TOOLS, ToolRegistry
-from .sandbox import SandboxTimeoutError, SubprocessSandbox
+from .sandbox import ContainerSandbox, SandboxTimeoutError, SubprocessSandbox
 from .specialized_tools import (
     VectorMemoryManager,
     execute_audit_dependencies,
@@ -28,6 +28,7 @@ from .web_search import (
 
 __all__ = [
     "PERMITTED_TOOLS",
+    "ContainerSandbox",
     "SafeWebSearchEngine",
     "SandboxTimeoutError",
     "SearchResult",

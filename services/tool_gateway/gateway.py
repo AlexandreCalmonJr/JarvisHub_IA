@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import shlex
 import time
@@ -15,7 +16,7 @@ from packages.contracts.security import AuditEventSeverity
 from services.security_core import PermissionDeniedError, SecurityCore
 
 from .registry import ToolRegistry
-from .sandbox import SubprocessSandbox
+from .sandbox import ContainerSandbox, SubprocessSandbox
 from .specialized_tools import (
     execute_audit_dependencies,
     execute_duckdb_query,
@@ -43,7 +44,12 @@ class ToolGateway:
         self.security_core = security_core
         self.agent_registry = agent_registry or AgentRegistry()
         self.tool_registry = ToolRegistry()
-        self.sandbox = sandbox or SubprocessSandbox()
+        if sandbox is not None:
+            self.sandbox = sandbox
+        elif os.getenv("JARVIS_SANDBOX_DRIVER", "").lower() in ("container", "docker"):
+            self.sandbox = ContainerSandbox()
+        else:
+            self.sandbox = SubprocessSandbox()
 
     async def execute_tool(
         self, request: ToolExecutionRequest, owner_user_id: str, actor_role: str = "developer"

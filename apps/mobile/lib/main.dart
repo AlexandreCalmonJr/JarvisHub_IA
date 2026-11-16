@@ -824,8 +824,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // ==========================================
-// 1. TELA DE CHAT
+// 1. TELA DE CHAT E COMANDOS DE VOZ (V4)
 // ==========================================
+
+class ChatMessage {
+  final String role;
+  final String text;
+  final bool isVoice;
+  final String? intent;
+  final bool approvalRequired;
+
+  const ChatMessage({
+    required this.role,
+    required this.text,
+    this.isVoice = false,
+    this.intent,
+    this.approvalRequired = false,
+  });
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -835,11 +852,11 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _msgController = TextEditingController();
-  final List<Map<String, String>> _messages = [
-    {
-      'role': 'assistant',
-      'text': 'Olá! Sou o JARVIS Master. Pronto para orquestrar seus 26 agentes especializados com segurança local-first.',
-    }
+  final List<ChatMessage> _messages = [
+    const ChatMessage(
+      role: 'assistant',
+      text: 'Olá! Sou o JARVIS Master. Pronto para orquestrar seus 26 agentes especializados e comandos de voz com segurança local-first.',
+    ),
   ];
   bool _isLoading = false;
 
@@ -848,7 +865,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty) return;
 
     setState(() {
-      _messages.add({'role': 'user', 'text': text});
+      _messages.add(ChatMessage(role: 'user', text: text));
       _isLoading = true;
     });
     _msgController.clear();
@@ -862,18 +879,175 @@ class _ChatScreenState extends State<ChatScreen> {
     if (response.isSuccess && response.json is Map) {
       final reply = response.json['final_response'] ?? 'Tarefa concluída ou despachada com sucesso.';
       setState(() {
-        _messages.add({'role': 'assistant', 'text': reply.toString()});
+        _messages.add(ChatMessage(role: 'assistant', text: reply.toString()));
       });
     } else {
       final err = response.errorMessage ?? 'Erro na comunicação com o servidor.';
       setState(() {
-        _messages.add({'role': 'assistant', 'text': err});
+        _messages.add(ChatMessage(role: 'assistant', text: err));
       });
     }
 
     setState(() {
       _isLoading = false;
     });
+  }
+
+  Future<void> _sendVoiceCommand(String commandText) async {
+    final text = commandText.trim();
+    if (text.isEmpty) return;
+
+    setState(() {
+      _messages.add(ChatMessage(role: 'user', text: text, isVoice: true));
+      _isLoading = true;
+    });
+
+    final response = await JarvisApiClient.request(
+      method: 'POST',
+      path: '/api/v1/voice/command',
+      jsonBody: {
+        'text': text,
+        'device_id': 'flutter-mobile-client',
+      },
+    );
+
+    if (response.isSuccess && response.json is Map) {
+      final reply = response.json['reply']?.toString() ?? 'Comando processado.';
+      final intent = response.json['intent']?.toString();
+      final approval = response.json['approval_required'] == true;
+
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            role: 'assistant',
+            text: reply,
+            isVoice: true,
+            intent: intent,
+            approvalRequired: approval,
+          ),
+        );
+      });
+    } else {
+      final err = response.errorMessage ?? 'Falha ao processar comando de voz.';
+      setState(() {
+        _messages.add(ChatMessage(role: 'assistant', text: err, isVoice: true));
+      });
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  void _openVoiceDialog() {
+    final TextEditingController voiceInputController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.mic, color: Color(0xFF38BDF8), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Assistente de Voz JARVIS',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Execute comandos determinísticos seguros diretamente no servidor:',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _quickActionChip('Que horas são?', ctx),
+                  _quickActionChip('Qual a data de hoje?', ctx),
+                  _quickActionChip('Status do sistema', ctx),
+                  _quickActionChip('Quanto é 15% de 240', ctx),
+                  _quickActionChip('Põe um timer de 15 minutos', ctx),
+                  _quickActionChip('Como está o tempo', ctx),
+                  _quickActionChip('Repete', ctx),
+                  _quickActionChip('Cancela', ctx),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: voiceInputController,
+                      decoration: InputDecoration(
+                        hintText: 'Fale ou digite o comando...',
+                        hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+                        filled: true,
+                        fillColor: const Color(0xFF0F172A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                      onSubmitted: (val) {
+                        Navigator.pop(ctx);
+                        _sendVoiceCommand(val);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Color(0xFF38BDF8)),
+                    onPressed: () {
+                      final val = voiceInputController.text;
+                      Navigator.pop(ctx);
+                      _sendVoiceCommand(val);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _quickActionChip(String label, BuildContext sheetCtx) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 12, color: Colors.white)),
+      backgroundColor: const Color(0xFF0F172A),
+      side: const BorderSide(color: Colors.white24),
+      onPressed: () {
+        Navigator.pop(sheetCtx);
+        _sendVoiceCommand(label);
+      },
+    );
   }
 
   @override
@@ -886,7 +1060,7 @@ class _ChatScreenState extends State<ChatScreen> {
             itemCount: _messages.length,
             itemBuilder: (ctx, index) {
               final msg = _messages[index];
-              final isUser = msg['role'] == 'user';
+              final isUser = msg.role == 'user';
               return Align(
                 alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
@@ -900,9 +1074,50 @@ class _ChatScreenState extends State<ChatScreen> {
                       color: isUser ? Colors.transparent : Colors.white12,
                     ),
                   ),
-                  child: Text(
-                    msg['text']!,
-                    style: const TextStyle(fontSize: 14, height: 1.4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (msg.isVoice)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.mic, size: 14, color: Color(0xFF38BDF8)),
+                              const SizedBox(width: 4),
+                              Text(
+                                msg.intent != null ? '[voz: ${msg.intent}]' : '[comando de voz]',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Text(
+                        msg.text,
+                        style: const TextStyle(fontSize: 14, height: 1.4),
+                      ),
+                      if (msg.approvalRequired)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFF59E0B)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock_clock, size: 14, color: Color(0xFFF59E0B)),
+                              SizedBox(width: 6),
+                              Text(
+                                'Ação pendente de aprovação humana no painel.',
+                                style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B), fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               );
@@ -917,7 +1132,7 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                 SizedBox(width: 10),
-                Text('JARVIS a deliberar...', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                Text('JARVIS a processar...', style: TextStyle(color: Colors.grey, fontSize: 13)),
               ],
             ),
           ),
@@ -926,12 +1141,17 @@ class _ChatScreenState extends State<ChatScreen> {
           color: const Color(0xFF1E293B),
           child: Row(
             children: [
+              IconButton(
+                icon: const Icon(Icons.mic, color: Color(0xFF38BDF8)),
+                onPressed: _openVoiceDialog,
+                tooltip: 'Comando de Voz',
+              ),
               Expanded(
                 child: TextField(
                   controller: _msgController,
                   decoration: const InputDecoration(
-                    hintText: 'Digite uma instrução para o Master...',
-                    hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                    hintText: 'Digite uma instrução ou fale com o JARVIS...',
+                    hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
                     border: InputBorder.none,
                   ),
                   onSubmitted: (_) => _sendMessage(),
@@ -940,6 +1160,7 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(
                 icon: const Icon(Icons.send, color: Color(0xFF38BDF8)),
                 onPressed: _sendMessage,
+                tooltip: 'Enviar mensagem',
               ),
             ],
           ),
@@ -963,18 +1184,30 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   List<dynamic> _pendingApprovals = [];
   bool _loading = false;
   String? _errorMessage;
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchApprovals();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) _fetchApprovals(silent: true);
+    });
   }
 
-  Future<void> _fetchApprovals() async {
-    setState(() {
-      _loading = true;
-      _errorMessage = null;
-    });
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchApprovals({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _errorMessage = null;
+      });
+    }
 
     final response = await JarvisApiClient.request(
       method: 'GET',
@@ -982,18 +1215,24 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     );
 
     if (response.isSuccess && response.json is List) {
-      setState(() {
-        _pendingApprovals = response.json;
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          _pendingApprovals = response.json;
+          _errorMessage = null;
+        });
+      }
     } else {
-      setState(() {
-        _pendingApprovals = [];
-        _errorMessage = response.errorMessage;
-      });
+      if (mounted) {
+        setState(() {
+          _pendingApprovals = [];
+          _errorMessage = response.errorMessage;
+        });
+      }
     }
 
-    setState(() => _loading = false);
+    if (!silent && mounted) {
+      setState(() => _loading = false);
+    }
   }
 
   Future<void> _decide(String requestId, String action) async {

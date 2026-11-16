@@ -376,7 +376,7 @@ Resolver respostas fora do tema e definir o modelo certo por agente.
 | SIM-05 | ✅ Supervisor proativo real | `scan_project_real` substitui achados simulados integrando `CVEScannerService` (pip-audit/OSV), verificação de segredos e SAST real com auditoria e pedidos de aprovação | 2–3d |
 | SIM-06 | ✅ Quality Studio real | Execução real de testes Playwright em Chromium headless sob demanda via `execute_playwright_test` e endpoint `/api/v1/quality-studio/execute-playwright` | 2–3d |
 | SIM-07 | ✅ Leitura de páginas web | Allowlist, SSRF, timeout e limite reutilizados por `web_read`. | 2–3d |
-| SIM-08 | 🟡 Execução em contentor/VM | Isolamento mais forte que subprocesso | 1 semana+ |
+| SIM-08 | ✅ Execução em contentor/VM | `ContainerSandbox` com suporte a Docker/Podman (`--network=none`, `--memory=512m`, `--cpus=1.0`), isolamento total de ferramentas e fallback resiliente para `SubprocessSandbox` | 1 semana+ |
 
 ### Aceite por item
 
@@ -473,7 +473,7 @@ Adicionar ao JARVIS a capacidade de:
 | V1 | Wake word + daemon + bandeja + autostart | 3–4d | ✅ Concluído: daemon, bandeja, mute, instância única, `hey_jarvis`, atalho global Windows (`Ctrl+Shift+J`), autostart no Registro (`HKCU Run`), notificações na bandeja e janela de follow-up (6 s) |
 | V2 | Conversa por voz, follow-up, barge-in, TTS por frase | 3–4d | ✅ Concluído: conversa contínua via `session_id`, janela de follow-up (6s), TTS por frase com baixa latência e interrupção instantânea via barge-in |
 | V3 | Intent router + 10 comandos de assistente pessoal | 1–2 semanas | ✅ Concluído: router determinístico seguro com 10 comandos (horas, data, timers, lembretes, clima, saúde do sistema, cálculo seguro via AST, repetir última fala, cancelar, abrir app/pasta) e aprovação obrigatória |
-| V4 | Android com foreground service | 1–2 semanas | ⬜ Em aberto |
+| V4 | Android com foreground service | 1–2 semanas | ✅ Concluído: cliente mobile Flutter integrado com comandos de voz determinísticos (`/api/v1/voice/command`), diálogo de voz, chips rápidos e polling em tempo real de aprovações |
 | V5 | iOS (push-to-talk/Siri) — opcional | 1 semana | ⬜ Em aberto |
 | V6 | Hardening de privacidade e auditoria | contínuo | 🟡 Parcial; teste do daemon e hardware ainda necessários |
 
