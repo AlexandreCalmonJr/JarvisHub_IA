@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
-  FileDiff,
   FolderGit2,
   Play,
   RefreshCw,
@@ -28,6 +27,7 @@ import {
 } from '../services/api';
 import { fetchWorkspaceProjects } from '../services/api';
 import { notify } from './common/Toast';
+import { DiffViewer } from './common/DiffViewer';
 import { getAccountStorageKey } from '../services/accountScope';
 import { API_BASE } from '../services/api/client';
 import { getOperationLabel, getProjectTypeLabel, getRiskLabel, getToolLabel } from '../types';
@@ -714,12 +714,12 @@ export const CodingAgentView: React.FC = () => {
             </div>
           )}
           {pendingApproval.proposed_diff && (
-            <div style={{ marginTop: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                <FileDiff size={14} color="var(--accent-color)" />
-                {pendingApproval.operation === 'RUN_COMMAND' ? 'Pré-visualização dry-run' : 'Diff proposto'}
-              </div>
-              <pre style={{ ...styles.pre, maxHeight: '240px', color: 'var(--text-primary)' }}>{pendingApproval.proposed_diff}</pre>
+            <div style={{ marginTop: '12px' }}>
+              <DiffViewer
+                diff={pendingApproval.proposed_diff}
+                filename={pendingApproval.affected_resources?.[0]}
+                maxHeight="280px"
+              />
             </div>
           )}
         </div>

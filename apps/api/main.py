@@ -39,8 +39,10 @@ from apps.api.routers import (
     security,
     skills,
     studios,
+    symbols,
     system,
     teammates,
+    terminal,
     vision,
     voice,
     workspace,
@@ -167,6 +169,8 @@ app.include_router(voice.router)
 app.include_router(vision.router)
 app.include_router(omnichannel.router)
 app.include_router(teammates.router)
+app.include_router(symbols.router)
+app.include_router(terminal.router)
 app.include_router(learning.router)
 
 # Monta aplicativo mobile Flutter (PWA) se compilado
