@@ -79,6 +79,12 @@ PERMITTED_TOOLS: dict[str, ToolDefinition] = {
         category=ToolCategory.READ_ONLY,
         requires_approval=False,
     ),
+    "audit_dependencies": ToolDefinition(
+        name="audit_dependencies",
+        description="Audita vulnerabilidades e CVEs conhecidas nas dependências do projeto via pip-audit e base offline.",
+        category=ToolCategory.SECURITY_SCAN,
+        requires_approval=False,
+    ),
     "generate_sbom": ToolDefinition(
         name="generate_sbom",
         description="Gera inventário SBOM (Software Bill of Materials) padronizado no formato CycloneDX para o projeto ativo.",

@@ -260,6 +260,54 @@ SAST_PATTERNS: list[tuple[str, re.Pattern, str, str]] = [
 ]
 
 
+def _run_bandit_ast_scan(target_dir: Path, project_root: Path) -> list[dict[str, Any]]:
+    """Executa auditoria SAST baseada em AST via Bandit com isolamento e timeout."""
+    try:
+        import subprocess
+        import sys
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "bandit",
+            "-r",
+            str(target_dir),
+            "-f",
+            "json",
+            "-q",
+        ]
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if res.stdout:
+            data = json.loads(res.stdout)
+            ast_findings = []
+            for item in data.get("results", []):
+                fn = item.get("filename", "")
+                try:
+                    rel_p = str(Path(fn).resolve().relative_to(project_root.resolve()))
+                except Exception:
+                    rel_p = Path(fn).name
+                cwe_id = item.get("issue_cwe", {}).get("id") if isinstance(item.get("issue_cwe"), dict) else "N/A"
+                ast_findings.append(
+                    {
+                        "file": rel_p,
+                        "line": int(item.get("line_number", 1)),
+                        "name": f"[{item.get('test_id', 'AST')}] {item.get('issue_text', '')}",
+                        "desc": f"CWE-{cwe_id}: Detecção AST Bandit ({item.get('test_name', '')})",
+                        "severity": str(item.get("issue_severity", "MEDIUM")).capitalize(),
+                        "snippet": (item.get("code") or "").strip()[:100],
+                    }
+                )
+            return ast_findings
+    except Exception as exc:
+        logger.debug("Bandit AST scanner ignorado ou falhou: %s", exc)
+    return []
+
+
 def execute_scan_sast_patterns(
     project_root: Path,
     target_path: str = ".",
@@ -271,6 +319,7 @@ def execute_scan_sast_patterns(
         return False, "", f"Caminho '{target_path}' não existe no projeto."
 
     findings: list[dict[str, Any]] = []
+    has_python_files = False
 
     for root, dirs, files in os.walk(target_dir):
         dirs[:] = [
@@ -284,6 +333,8 @@ def execute_scan_sast_patterns(
                 file_p.resolve().relative_to(project_root)
             except (OSError, ValueError):
                 continue
+            if file_p.suffix.lower() == ".py":
+                has_python_files = True
             if file_p.suffix.lower() not in {".py", ".js", ".ts", ".dart", ".go", ".java", ".php"}:
                 continue
 
@@ -308,6 +359,14 @@ def execute_scan_sast_patterns(
                                 "snippet": line.strip()[:100],
                             }
                         )
+
+    # Executa análise AST complementar via Bandit para arquivos Python
+    if has_python_files:
+        ast_findings = _run_bandit_ast_scan(target_dir, project_root)
+        existing_locs = {(f["file"], f["line"]) for f in findings}
+        for af in ast_findings:
+            if (af["file"], af["line"]) not in existing_locs:
+                findings.append(af)
 
     if not findings:
         return (
@@ -419,6 +478,39 @@ def execute_inspect_dependencies(project_root: Path) -> tuple[bool, str, str]:
         lines.append("")
 
     return True, "\n".join(lines), ""
+
+
+def execute_audit_dependencies(project_root: Path) -> tuple[bool, str, str]:
+    """Realiza auditoria aprofundada de vulnerabilidades e CVEs em dependências do projeto."""
+    project_root = Path(project_root).resolve()
+    from services.security_core.cve_scanner import CVEScannerService
+
+    scanner = CVEScannerService()
+    try:
+        report = scanner.scan_project_dependencies(project_root)
+    except Exception as exc:
+        return False, "", f"Erro ao auditar dependências: {exc}"
+
+    scanned_str = ", ".join(report.get("files_scanned", [])) or "nenhum manifesto"
+    if report.get("vulnerabilities_found", 0) == 0:
+        return (
+            True,
+            f"✅ Auditoria de Dependências Concluída: Nenhuma vulnerabilidade ou CVE conhecida encontrada nos manifestos ({scanned_str}). Score de Segurança: 100/100.",
+            "",
+        )
+
+    findings = report.get("findings", [])
+    md_lines = [
+        f"🚨 **Auditoria de Vulnerabilidades & CVEs**: Detectadas {len(findings)} vulnerabilidades conhecidas (Score de Segurança: {report.get('security_score', 0)}/100):\n",
+        "| Pacote | Versão Detectada | CVE / Vulnerabilidade | Severidade | Remediação Recomendada |",
+        "| :--- | :---: | :--- | :---: | :--- |",
+    ]
+    for f in findings[:60]:
+        md_lines.append(
+            f"| `{f['package']}` | `{f['detected_version']}` | `{f['cve']}` - {f.get('title', '')[:50]} | **{f['severity']}** | {f['remediation']} |"
+        )
+
+    return True, "\n".join(md_lines), ""
 
 
 def execute_generate_sbom(project_root: Path) -> tuple[bool, str, str]:

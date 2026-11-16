@@ -27,15 +27,108 @@ CHUNK_SAMPLES = 1_280
 logger = logging.getLogger("jarvis.voice_daemon")
 
 
+def is_autostart_enabled() -> bool:
+    """Verifica se o daemon de voz está configurado para iniciar com o Windows."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_READ,
+        ) as key:
+            winreg.QueryValueEx(key, "JARVISVoiceDaemon")
+            return True
+    except OSError:
+        return False
+
+
+def set_autostart(enabled: bool) -> bool:
+    """Ativa ou desativa a inicialização automática no Registro do Windows (HKCU Run)."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_SET_VALUE,
+        ) as key:
+            if enabled:
+                pythonw = Path(sys.executable).parent / "pythonw.exe"
+                exe = str(pythonw) if pythonw.exists() else sys.executable
+                cmd = f'"{exe}" -m apps.voice_daemon.main'
+                winreg.SetValueEx(key, "JARVISVoiceDaemon", 0, winreg.REG_SZ, cmd)
+            else:
+                try:
+                    winreg.DeleteValue(key, "JARVISVoiceDaemon")
+                except FileNotFoundError:
+                    pass
+        return True
+    except Exception as exc:
+        logger.warning("Falha ao configurar autostart: %s", exc)
+        return False
+
+
+class GlobalHotkeyListener:
+    """Escuta o atalho global Ctrl+Shift+J em segundo plano no Windows."""
+
+    def __init__(self, callback, stop_event: threading.Event) -> None:
+        self.callback = callback
+        self.stop_event = stop_event
+        self.thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if sys.platform != "win32":
+            return
+        self.thread = threading.Thread(target=self._run, name="jarvis-global-hotkey", daemon=True)
+        self.thread.start()
+
+    def _run(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hotkey_id = 101
+        mod_control = 0x0002
+        mod_shift = 0x0004
+        vk_j = 0x4A
+
+        if not user32.RegisterHotKey(None, hotkey_id, mod_control | mod_shift, vk_j):
+            logger.warning("Não foi possível registrar o atalho global Ctrl+Shift+J (pode estar em uso).")
+            return
+
+        logger.info("Atalho global Ctrl+Shift+J registrado com sucesso.")
+        try:
+            msg = wintypes.MSG()
+            while not self.stop_event.is_set():
+                has_msg = user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1)  # PM_REMOVE = 1
+                if has_msg and msg.message == 0x0312 and msg.wParam == hotkey_id:
+                    try:
+                        self.callback()
+                    except Exception:
+                        logger.exception("Erro ao processar ativação por atalho global.")
+                time.sleep(0.05)
+        finally:
+            user32.UnregisterHotKey(None, hotkey_id)
+
+
 class VoiceDaemon:
     def __init__(self) -> None:
         self.stop_event = threading.Event()
         self.muted = threading.Event()
+        self.hotkey_wake_requested = threading.Event()
         self.tray = None
         self.stt = LocalSTTAdapter(os.getenv("JARVIS_STT_MODEL", "base"))
         self.tts = LocalTTSAdapter()
         self.backend: subprocess.Popen | None = None
         self._lock_file = None
+        self.hotkey_listener: GlobalHotkeyListener | None = None
 
     def acquire_single_instance(self) -> None:
         LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -162,15 +255,34 @@ class VoiceDaemon:
             return None
         return self._wav(np.concatenate(chunks))
 
-    def _handle_wake(self, stream) -> None:
-        self._say("Sim?")
-        time.sleep(0.25)
-        audio = self._record_utterance(stream)
-        if not audio:
-            return
-        transcript = self.stt.transcribe_audio_bytes(audio).text.strip()
-        if not transcript:
-            return
+    def notify(self, message: str, title: str = "JARVIS") -> None:
+        """Emite notificação visual na bandeja do sistema."""
+        if self.tray and hasattr(self.tray, "notify"):
+            try:
+                self.tray.notify(message, title=title)
+            except Exception as exc:
+                logger.debug("Falha na notificação de bandeja: %s", exc)
+
+    def _toggle_autostart(self, _icon=None, _item=None) -> None:
+        """Alterna a inicialização automática com o Windows no Registro."""
+        current = is_autostart_enabled()
+        new_state = not current
+        set_autostart(new_state)
+        msg = (
+            "Inicialização automática ativada."
+            if new_state
+            else "Inicialização automática desativada."
+        )
+        self.notify(msg, title="JARVIS")
+
+    def _on_hotkey_pressed(self) -> None:
+        """Callback acionado pelo atalho global Ctrl+Shift+J."""
+        logger.info("Ativação via atalho global Ctrl+Shift+J.")
+        self.hotkey_wake_requested.set()
+        self.notify("Atalho global acionado. Ouvindo...", title="JARVIS")
+
+    def _dispatch_command(self, transcript: str, stream) -> None:
+        """Encaminha o comando transcrito para a API local e vocaliza a resposta."""
         token = os.getenv("JARVIS_VOICE_TOKEN", "").strip()
         if not token:
             self._say("Configure o token de voz para continuar.")
@@ -208,12 +320,62 @@ class VoiceDaemon:
                 result = response.json()
                 if result.get("approval_required"):
                     reply = "Preciso que aprove a ação no painel."
+                    self.notify("Ação requer aprovação no painel do JARVIS.", title="JARVIS Approval")
                 else:
                     reply = result.get("final_summary") or result.get("response") or "Concluído."
             self._say(str(reply)[:1200])
+
+            # Follow-up: janela de 6 segundos para continuidade sem nova wake word
+            time.sleep(0.3)
+            self._check_follow_up(stream)
         except httpx.HTTPError:
             logger.exception("Falha ao chamar o comando de voz local.")
             self._say("Não consegui contactar o JARVIS.")
+
+    def _check_follow_up(self, stream) -> None:
+        """Janela de escuta ativa (6s) após uma resposta para conversas encadeadas."""
+        import numpy as np
+
+        chunks: list[np.ndarray] = []
+        voiced = False
+        silent_chunks = 0
+        followup_limit = int(6.0 * SAMPLE_RATE / CHUNK_SAMPLES)
+        for _ in range(followup_limit):
+            if self.stop_event.is_set() or self.muted.is_set() or self.hotkey_wake_requested.is_set():
+                return
+            chunk, overflowed = stream.read(CHUNK_SAMPLES)
+            if overflowed or not chunk:
+                continue
+            pcm = np.frombuffer(chunk, dtype=np.int16)
+            rms = float(np.sqrt(np.mean(pcm.astype(np.float32) ** 2)))
+            if rms >= int(os.getenv("JARVIS_VAD_RMS", "600")):
+                voiced = True
+                chunks.append(pcm.copy())
+                silent_chunks = 0
+            elif voiced:
+                chunks.append(pcm.copy())
+                silent_chunks += 1
+                if silent_chunks >= int(1.0 * SAMPLE_RATE / CHUNK_SAMPLES):
+                    break
+
+        if voiced and chunks:
+            logger.info("Fala identificada na janela de follow-up.")
+            audio = self._wav(np.concatenate(chunks))
+            transcript = self.stt.transcribe_audio_bytes(audio).text.strip()
+            if transcript:
+                self._dispatch_command(transcript, stream)
+
+    def _handle_wake(self, stream) -> None:
+        self.notify("Ouvindo pergunta...", title="JARVIS Voice")
+        self._say("Sim?")
+        time.sleep(0.25)
+        audio = self._record_utterance(stream)
+        if not audio:
+            return
+        transcript = self.stt.transcribe_audio_bytes(audio).text.strip()
+        if not transcript:
+            return
+        self._dispatch_command(transcript, stream)
 
     def _listen(self) -> None:
         import numpy as np
@@ -234,6 +396,16 @@ class VoiceDaemon:
                 if self.muted.is_set():
                     time.sleep(0.2)
                     continue
+
+                # Ativação via atalho global (Ctrl+Shift+J)
+                if self.hotkey_wake_requested.is_set():
+                    self.hotkey_wake_requested.clear()
+                    try:
+                        self._handle_wake(stream)
+                    except Exception:
+                        logger.exception("Falha no ciclo acionado por atalho.")
+                    continue
+
                 chunk, overflowed = stream.read(CHUNK_SAMPLES)
                 if overflowed:
                     logger.warning("Overflow na entrada do microfone.")
@@ -276,12 +448,25 @@ class VoiceDaemon:
         listener = None
         try:
             self._ensure_backend()
+
+            # Inicia escuta do atalho global Ctrl+Shift+J no Windows
+            self.hotkey_listener = GlobalHotkeyListener(
+                callback=self._on_hotkey_pressed, stop_event=self.stop_event
+            )
+            self.hotkey_listener.start()
+
             self.tray = pystray.Icon(
                 "jarvis-voice",
                 self._icon_image(),
                 "JARVIS — ouvindo Jarvis",
                 menu=pystray.Menu(
                     pystray.MenuItem("Mutar / ativar microfone", self._set_muted),
+                    pystray.MenuItem(
+                        "Iniciar com o Windows",
+                        self._toggle_autostart,
+                        checked=lambda item: is_autostart_enabled(),
+                    ),
+                    pystray.MenuItem("Atalho: Ctrl+Shift+J", None, enabled=False),
                     pystray.MenuItem("Sair", self._quit),
                 ),
             )
@@ -292,6 +477,8 @@ class VoiceDaemon:
             self.tray.run()
         finally:
             self.stop_event.set()
+            if self.hotkey_listener and self.hotkey_listener.thread:
+                self.hotkey_listener.thread.join(timeout=2)
             if listener:
                 listener.join(timeout=5)
             if self.backend and self.backend.poll() is None:

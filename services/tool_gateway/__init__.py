@@ -3,6 +3,7 @@ from .registry import PERMITTED_TOOLS, ToolRegistry
 from .sandbox import SandboxTimeoutError, SubprocessSandbox
 from .specialized_tools import (
     VectorMemoryManager,
+    execute_audit_dependencies,
     execute_duckdb_query,
     execute_generate_sbom,
     execute_inspect_dependencies,
@@ -38,6 +39,7 @@ __all__ = [
     "ToolGateway",
     "ToolRegistry",
     "VectorMemoryManager",
+    "execute_audit_dependencies",
     "execute_duckdb_query",
     "execute_generate_sbom",
     "execute_inspect_dependencies",

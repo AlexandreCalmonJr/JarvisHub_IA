@@ -17,6 +17,7 @@ from services.security_core import PermissionDeniedError, SecurityCore
 from .registry import ToolRegistry
 from .sandbox import SubprocessSandbox
 from .specialized_tools import (
+    execute_audit_dependencies,
     execute_duckdb_query,
     execute_generate_sbom,
     execute_inspect_dependencies,
@@ -292,6 +293,16 @@ class ToolGateway:
 
             elif request.tool_name == "inspect_dependencies":
                 ok, out, err = execute_inspect_dependencies(project_root=project_root)
+                result = ToolExecutionResult(
+                    tool_name=request.tool_name,
+                    success=ok,
+                    stdout=out,
+                    stderr=err,
+                    duration_ms=(time.perf_counter() - start_time) * 1000.0,
+                )
+
+            elif request.tool_name == "audit_dependencies":
+                ok, out, err = execute_audit_dependencies(project_root=project_root)
                 result = ToolExecutionResult(
                     tool_name=request.tool_name,
                     success=ok,

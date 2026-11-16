@@ -8,6 +8,8 @@ Opera 100% local e blindado.
 import json
 import logging
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +119,69 @@ OFFLINE_CVE_DATABASE: dict[str, list[dict[str, Any]]] = {
             "remediation": "Atualizar express para >= 4.20.0",
         }
     ],
+    "pyyaml": [
+        {
+            "cve": "CVE-2020-14343",
+            "severity": "CRITICAL",
+            "vulnerable_below": "5.4",
+            "title": "Deserialização de código arbitrário via yaml.load",
+            "remediation": "Utilizar yaml.safe_load ou atualizar pyyaml para >= 5.4",
+        }
+    ],
+    "jinja2": [
+        {
+            "cve": "CVE-2024-22195",
+            "severity": "HIGH",
+            "vulnerable_below": "3.1.3",
+            "title": "Server-Side Template Injection (SSTI) via xmlattr filter",
+            "remediation": "Atualizar Jinja2 para >= 3.1.3",
+        }
+    ],
+    "werkzeug": [
+        {
+            "cve": "CVE-2023-46136",
+            "severity": "HIGH",
+            "vulnerable_below": "3.0.1",
+            "title": "Negação de serviço via processamento excessivo de dados multipart",
+            "remediation": "Atualizar Werkzeug para >= 3.0.1",
+        }
+    ],
+    "sqlparse": [
+        {
+            "cve": "CVE-2024-4340",
+            "severity": "HIGH",
+            "vulnerable_below": "0.5.0",
+            "title": "Recursion depth bypass que permite negação de serviço",
+            "remediation": "Atualizar sqlparse para >= 0.5.0",
+        }
+    ],
+    "pillow": [
+        {
+            "cve": "CVE-2023-44271",
+            "severity": "HIGH",
+            "vulnerable_below": "10.0.1",
+            "title": "Negação de serviço via processamento de imagens malformadas",
+            "remediation": "Atualizar Pillow para >= 10.0.1",
+        }
+    ],
+    "jsonwebtoken": [
+        {
+            "cve": "CVE-2022-23529",
+            "severity": "CRITICAL",
+            "vulnerable_below": "9.0.0",
+            "title": "Execução remota de código via key retrieval inseguro",
+            "remediation": "Atualizar jsonwebtoken para >= 9.0.0",
+        }
+    ],
+    "semver": [
+        {
+            "cve": "CVE-2022-25883",
+            "severity": "HIGH",
+            "vulnerable_below": "7.5.2",
+            "title": "ReDoS em parsing de expressões regulares de versões",
+            "remediation": "Atualizar semver para >= 7.5.4",
+        }
+    ],
 }
 
 
@@ -182,8 +247,65 @@ class CVEScannerService:
             )
         return packages
 
+    def scan_with_pip_audit(self, req_path: Path) -> list[dict[str, Any]] | None:
+        """Executa pip-audit no arquivo de requisitos para auditoria autoritativa via PyPI/OSV."""
+        try:
+            cmd = [
+                sys.executable,
+                "-m",
+                "pip_audit",
+                "-r",
+                str(req_path),
+                "-f",
+                "json",
+                "--no-deps",
+            ]
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=12,
+            )
+            if res.stdout:
+                data = json.loads(res.stdout)
+                findings: list[dict[str, Any]] = []
+                for dep in data.get("dependencies", []):
+                    pkg_name = dep.get("name", "")
+                    pkg_ver = dep.get("version", "")
+                    for vuln in dep.get("vulns", []):
+                        vuln_id = vuln.get("id", "")
+                        aliases = vuln.get("aliases", [])
+                        cve = next((a for a in aliases if a.startswith("CVE-")), vuln_id)
+                        fix_vers = vuln.get("fix_versions", [])
+                        remediation = (
+                            f"Atualizar {pkg_name} para >= {fix_vers[0]}"
+                            if fix_vers
+                            else f"Consultar advisory oficial para {pkg_name}"
+                        )
+                        raw_desc = vuln.get("description", "")
+                        title = (
+                            raw_desc.splitlines()[0][:120]
+                            if raw_desc
+                            else f"Vulnerabilidade conhecida em {pkg_name}"
+                        )
+                        findings.append(
+                            {
+                                "package": pkg_name,
+                                "detected_version": pkg_ver,
+                                "cve": cve,
+                                "severity": "HIGH",
+                                "title": title,
+                                "remediation": remediation,
+                                "source": "pip-audit / OSV",
+                            }
+                        )
+                return findings
+        except Exception as exc:
+            logger.debug("pip-audit indisponível ou falhou (usando base offline): %s", exc)
+        return None
+
     def scan_project_dependencies(self, project_dir: Path) -> dict[str, Any]:
-        """Realiza varredura offline completa no projeto procurando por CVEs em dependências."""
+        """Realiza varredura híbrida (pip-audit autoritativo + base estática offline) de CVEs."""
         p_dir = Path(project_dir).resolve()
         if not p_dir.exists():
             raise FileNotFoundError(f"Diretório não encontrado: {p_dir}")
@@ -205,10 +327,22 @@ class CVEScannerService:
             txt = pkg_file.read_text(encoding="utf-8", errors="replace")
             detected_deps.update(self.parse_package_json(txt))
 
-        # 3. Cruzamento com a base de CVEs
-        findings = []
+        # 3. Auditoria com pip-audit para requirements.txt (se disponível)
+        findings: list[dict[str, Any]] = []
+        pip_audit_covered_pkgs: set[str] = set()
+        if req_file.exists():
+            pip_results = self.scan_with_pip_audit(req_file)
+            if pip_results is not None:
+                findings.extend(pip_results)
+                for f in pip_results:
+                    pip_audit_covered_pkgs.add(f["package"].lower().replace("_", "-"))
+
+        # 4. Cruzamento complementar com a base estática de CVEs (NPM e PyPI offline)
         for pkg, version in detected_deps.items():
             norm_pkg = pkg.replace("_", "-")
+            # Se o pip-audit já reportou CVEs para este pacote, evitamos duplicações exatas
+            if norm_pkg in pip_audit_covered_pkgs:
+                continue
             cve_list = OFFLINE_CVE_DATABASE.get(norm_pkg) or OFFLINE_CVE_DATABASE.get(pkg)
             if cve_list:
                 for cve_info in cve_list:
@@ -223,6 +357,7 @@ class CVEScannerService:
                                     "severity": cve_info["severity"],
                                     "title": cve_info["title"],
                                     "remediation": cve_info["remediation"],
+                                    "source": "offline_db",
                                 }
                             )
                     else:
@@ -235,6 +370,7 @@ class CVEScannerService:
                                 "severity": "LOW",
                                 "title": f"Pacote '{pkg}' possui histórico de vulnerabilidades. Fixe a versão segura.",
                                 "remediation": cve_info["remediation"],
+                                "source": "offline_db",
                             }
                         )
 

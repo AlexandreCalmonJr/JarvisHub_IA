@@ -9,6 +9,7 @@ from services.tool_gateway import (
     ToolExecutionRequest,
     ToolGateway,
     VectorMemoryManager,
+    execute_audit_dependencies,
     execute_duckdb_query,
     execute_generate_sbom,
     execute_inspect_dependencies,
@@ -107,6 +108,32 @@ def test_inspect_dependencies_and_sbom_generation(tmp_path: Path):
     assert "bomFormat" in out_sbom
     assert "CycloneDX" in out_sbom
     assert "pkg:pypi/fastapi" in out_sbom
+
+
+def test_audit_dependencies_detects_vulnerabilities(tmp_path: Path):
+    req_txt = tmp_path / "requirements.txt"
+    req_txt.write_text("requests==2.18.0\nurllib3==1.24.1\n", encoding="utf-8")
+    pkg_json = tmp_path / "package.json"
+    pkg_json.write_text('{"dependencies": {"lodash": "4.17.10"}}', encoding="utf-8")
+
+    ok, out, err = execute_audit_dependencies(project_root=tmp_path)
+    assert ok is True
+    assert err == ""
+    assert "Auditoria de Vulnerabilidades & CVEs" in out
+    assert "requests" in out or "urllib3" in out
+    assert "lodash" in out
+
+
+def test_audit_dependencies_safe_project(tmp_path: Path):
+    safe_dir = tmp_path / "safe"
+    safe_dir.mkdir()
+    req_txt = safe_dir / "requirements.txt"
+    req_txt.write_text("fastapi==0.115.0\npydantic==2.9.0\n", encoding="utf-8")
+
+    ok, out, err = execute_audit_dependencies(project_root=safe_dir)
+    assert ok is True
+    assert err == ""
+    assert "Nenhuma vulnerabilidade ou CVE conhecida encontrada" in out
 
 
 def test_sql_query_explain(tmp_path: Path):

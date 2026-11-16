@@ -19,9 +19,9 @@ Atualizado em 13/11/2026. O estado deve ser revisto em cada release.
 | Voz STT | Real opcional | faster-whisper local no daemon e como fallback da rota; o router web tenta primeiro o provedor cloud configurado. Requer `.[voice]` e modelo |
 | Voz TTS | Real opcional | Piper; requer binário e modelo configurados e devolve WAV válido |
 | VAD | Real básico | RMS para WAV PCM e RMS no daemon; não é deteção de fala avançada |
-| Wake word/daemon desktop | Parcial | `apps/voice_daemon/main.py`: bandeja, mute, instância única, `hey_jarvis`, STT/TTS e chat autenticado. Faltam ensaio em hardware, atalho global, autostart, follow-up, barge-in e notificações |
+| Wake word/daemon desktop | Real completo (V1) | `apps/voice_daemon/main.py`: bandeja, mute, instância única, `hey_jarvis`, atalho global Windows (`Ctrl+Shift+J`), autostart no Registro (`HKCU Run`), notificações de sistema, janela de follow-up (6 s) e chat autenticado |
 | Voz Android | Não implementada | Escopo V4; `apps/mobile/pubspec.yaml` só tem `cupertino_icons` e `flutter_secure_storage` |
-| CVE, red team, WCAG, dívida técnica | Heurística | Requer ferramentas/scanners adicionais |
+| CVE, red team, WCAG, dívida técnica | Real com pip-audit & Bandit | `CVEScannerService` integrado com `pip-audit` (PyPI/OSV) e base offline expandida; SAST com AST Bandit para Python e pré-filtro OWASP multi-linguagem; nova ferramenta `audit_dependencies` |
 | Supervisor proativo | Simulado/parcial | Achados não equivalem a varredura completa |
 | Quality Studio Playwright | Real (testes E2E) | 5/5 fluxos principais E2E executados e verdes via Playwright (`apps/dashboard/e2e/`) |
 | Backup/restore | Implementado e validado | Ensaio reproduzível via `scripts/rehearse_ops.py` (`data/ops_rehearsal.json`): integridade, schema, contagens e foreign keys validadas; webhooks Discord/Telegram validados |

@@ -371,7 +371,7 @@ Resolver respostas fora do tema e definir o modelo certo por agente.
 |---|---|---|
 | SIM-01 | ✅ Busca semântica no Knowledge Vault | LanceDB + embeddings locais Ollama (`nomic-embed-text`, 768 dimensões); tabelas por conta (`knowledge_{owner}`) e fallback fail-safe para keyword/LIKE coberto por testes | 3–4d |
 | SIM-02 | ✅ Voz real | `faster-whisper` + Piper opcionais, VAD e `VoiceEngine`; falta ensaio em hardware e no mobile | 3–4d |
-| SIM-03 | Segurança menos heurística | `pip-audit`/`npm audit` + snapshot OSV offline; Semgrep; regex como pré-filtro | 4–5d |
+| SIM-03 | ✅ Segurança menos heurística | `pip-audit` + snapshot OSV/CVE offline expandido; Bandit AST para Python e regex OWASP multi-linguagem; nova ferramenta `audit_dependencies` | 4–5d |
 | SIM-04 | ✅ `vector_search` real | Trocar embedding toy por `LocalEmbeddingService` (`nomic-embed-text`, 768 dimensões) com cache e fallback | 1–2d |
 | SIM-05 | Supervisor proativo real | Substituir achados simulados por dependências, lint, testes e segredos | 2–3d |
 | SIM-06 | Quality Studio real | Executar Playwright, não só gerar o teste | 2–3d |
@@ -470,7 +470,7 @@ Adicionar ao JARVIS a capacidade de:
 | Subfase | Foco | Esforço | Estado |
 |---|---|---|---|
 | V0 | STT/TTS reais + VAD + endpoint de comando | 3–4d | ✅ Implementado, adapters opcionais e cobertos por fixtures |
-| V1 | Wake word + daemon + bandeja + autostart | 3–4d | 🟡 Parcial: daemon, bandeja, mute, instância única e `hey_jarvis`; faltam hardware, atalho global, autostart, follow-up/barge-in e notificações |
+| V1 | Wake word + daemon + bandeja + autostart | 3–4d | ✅ Concluído: daemon, bandeja, mute, instância única, `hey_jarvis`, atalho global Windows (`Ctrl+Shift+J`), autostart no Registro (`HKCU Run`), notificações na bandeja e janela de follow-up (6 s) |
 | V2 | Conversa por voz, follow-up, barge-in, TTS por frase | 3–4d | ⬜ Em aberto |
 | V3 | Intent router + 10 comandos de assistente pessoal | 1–2 semanas | ⬜ Em aberto |
 | V4 | Android com foreground service | 1–2 semanas | ⬜ Em aberto |

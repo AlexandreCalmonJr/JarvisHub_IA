@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 from services.security_core import PermissionDeniedError, SecurityCore
 from services.tool_gateway.specialized_tools import (
+    execute_audit_dependencies,
     execute_duckdb_query,
     execute_generate_sbom,
     execute_inspect_dependencies,
@@ -341,6 +342,12 @@ def _tool_specs() -> list[ToolSpec]:
         ToolSpec(
             name="inspect_dependencies",
             description="Lê manifestos de pacotes (requirements.txt, package.json, pyproject.toml) e lista todas as dependências declaradas.",
+            parameters={"type": "object", "properties": {}, "required": []},
+            risk=ToolRisk.READ,
+        ),
+        ToolSpec(
+            name="audit_dependencies",
+            description="Audita vulnerabilidades e CVEs conhecidas nas dependências via pip-audit e base offline.",
             parameters={"type": "object", "properties": {}, "required": []},
             risk=ToolRisk.READ,
         ),
@@ -1144,6 +1151,17 @@ class CodingToolExecutor:
         return ToolResult(
             call_id="",
             name="inspect_dependencies",
+            success=ok,
+            output=out,
+            error=err or None,
+        )
+
+    async def _run_audit_dependencies(self, args: dict[str, Any], project_id: str) -> ToolResult:
+        root = self._project_root(project_id)
+        ok, out, err = execute_audit_dependencies(project_root=root)
+        return ToolResult(
+            call_id="",
+            name="audit_dependencies",
             success=ok,
             output=out,
             error=err or None,
