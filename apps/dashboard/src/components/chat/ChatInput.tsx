@@ -7,10 +7,21 @@ import {
   Plus,
   ChevronDown,
   ArrowUp,
+  Paperclip,
+  FileText,
+  X,
+  Upload,
 } from 'lucide-react';
 import { fetchModels } from '../../api';
+import { notify } from '../common/Toast';
 import { getAccountStorageKey } from '../../services/accountScope';
 import { humanizeLabel } from '../../types';
+
+interface AttachedFile {
+  name: string;
+  size: number;
+  content: string;
+}
 
 export interface RealChatModel {
   id: string;
@@ -52,10 +63,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isFloatingCenter = false,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [modelOptions, setModelOptions] = useState<RealChatModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<RealChatModel | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -119,18 +133,62 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      if (file.size > 5 * 1024 * 1024) {
+        notify('Arquivo muito grande. Limite de 5MB por arquivo.', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        if (text) {
+          setAttachedFiles((prev) => [...prev, { name: file.name, size: file.size, content: text }]);
+          notify(`Arquivo '${file.name}' anexado ao contexto.`, 'success');
+        }
+      };
+      reader.readAsText(file);
+    });
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleActualSubmit = (overrideText?: string, modelOverride?: string) => {
+    const textToSubmit = overrideText ?? input;
+    if (!textToSubmit.trim() && attachedFiles.length === 0) return;
+
+    let payload = textToSubmit.trim();
+    if (attachedFiles.length > 0) {
+      const attachmentsBlock = attachedFiles
+        .map(
+          (f) =>
+            `\n[ARQUIVO ANEXADO: ${f.name} (${(f.size / 1024).toFixed(1)} KB)]\n\`\`\`${
+              f.name.split('.').pop() || 'text'
+            }\n${f.content}\n\`\`\``
+        )
+        .join('\n');
+      payload = payload ? `${payload}\n\n---\n${attachmentsBlock}` : attachmentsBlock;
+      setAttachedFiles([]);
+    }
+
+    onSubmit(payload, modelOverride ?? selectedModel?.id);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (input.trim() && !loading) {
-        onSubmit(undefined, selectedModel?.id);
+      if ((input.trim() || attachedFiles.length > 0) && !loading) {
+        handleActualSubmit(undefined, selectedModel?.id);
       }
     }
   };
 
   const handleSelectCommand = (cmd: string) => {
     setShowPlusMenu(false);
-    onSubmit(cmd, selectedModel?.id);
+    handleActualSubmit(cmd, selectedModel?.id);
   };
 
   return (
@@ -177,17 +235,103 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {/* Cápsula Flutuante de Entrada (Claude Capsule) */}
+      {/* Cápsula Flutuante de Entrada (Claude Capsule com Dropzone Universal) */}
       <div
         className="claude-capsule"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          handleFiles(e.dataTransfer.files);
+        }}
         style={{
           padding: '14px 18px 12px 18px',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           gap: '10px',
+          border: isDragging ? '2px dashed var(--accent-color)' : undefined,
+          backgroundColor: isDragging ? 'rgba(217, 119, 87, 0.08)' : undefined,
+          transition: 'all 0.2s ease',
         }}
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            handleFiles(e.target.files);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }}
+        />
+
+        {/* Banner de Drag & Drop ativo */}
+        {isDragging && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '8px',
+              color: 'var(--accent-color)',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+            }}
+          >
+            <Upload size={18} />
+            <span>Solte arquivos aqui para anexar ao contexto (Código, Markdown, Logs, JSON, PDF)</span>
+          </div>
+        )}
+
+        {/* Chips de Arquivos Anexados */}
+        {attachedFiles.length > 0 && (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingBottom: '4px' }}>
+            {attachedFiles.map((file, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(217, 119, 87, 0.15)',
+                  border: '1px solid rgba(217, 119, 87, 0.3)',
+                  fontSize: '0.74rem',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <FileText size={13} color="var(--accent-color)" />
+                <span>
+                  {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(i)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title="Remover anexo"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Campo de Texto Auto-expansível */}
         <textarea
           ref={textareaRef}
@@ -264,6 +408,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   gap: '2px',
                 }}
               >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPlusMenu(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="btn btn-ghost"
+                  style={{
+                    justifyContent: 'flex-start',
+                    padding: '7px 10px',
+                    fontSize: '0.80rem',
+                    width: '100%',
+                    gap: '8px',
+                  }}
+                >
+                  <Paperclip size={14} color="var(--accent-color)" />
+                  <span>Anexar Arquivo (Código, Log, PDF)</span>
+                </button>
+
                 {onOpenProjectModal && (
                   <button
                     type="button"
@@ -540,8 +703,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ) : (
               <button
                 type="button"
-                onClick={() => onSubmit(undefined, selectedModel?.id)}
-                disabled={!input.trim()}
+                onClick={() => handleActualSubmit(undefined, selectedModel?.id)}
+                disabled={!input.trim() && attachedFiles.length === 0}
                 style={{
                   width: '32px',
                   height: '32px',
@@ -549,12 +712,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: input.trim() ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.08)',
+                  backgroundColor:
+                    input.trim() || attachedFiles.length > 0
+                      ? 'var(--accent-color)'
+                      : 'rgba(255, 255, 255, 0.08)',
                   border: 'none',
-                  color: input.trim() ? '#fff' : 'var(--text-muted)',
-                  cursor: input.trim() ? 'pointer' : 'default',
+                  color: input.trim() || attachedFiles.length > 0 ? '#fff' : 'var(--text-muted)',
+                  cursor: input.trim() || attachedFiles.length > 0 ? 'pointer' : 'default',
                   transition: 'all 0.18s ease',
-                  boxShadow: input.trim() ? '0 2px 10px rgba(217, 119, 87, 0.35)' : 'none',
+                  boxShadow:
+                    input.trim() || attachedFiles.length > 0
+                      ? '0 2px 10px rgba(217, 119, 87, 0.35)'
+                      : 'none',
                 }}
                 title="Enviar mensagem (Enter)"
               >

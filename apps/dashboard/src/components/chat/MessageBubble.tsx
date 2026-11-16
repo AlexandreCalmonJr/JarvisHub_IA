@@ -157,13 +157,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
     const codeMatch = text.match(/```(?:html|dart|javascript|typescript|tsx|jsx)?\n([\s\S]*?)\n```/);
     const codeContent = codeMatch ? codeMatch[1] : undefined;
 
+    const isHtmlOrVisual = codeContent && (
+      codeContent.toLowerCase().includes('<html') ||
+      codeContent.toLowerCase().includes('<!doctype') ||
+      codeContent.toLowerCase().includes('<svg') ||
+      codeContent.toLowerCase().includes('<canvas') ||
+      codeContent.toLowerCase().includes('<div')
+    );
+
     if (diffContent || codeContent || projectId) {
       return {
-        title: projectId ? `Projeto: ${projectId}` : 'Artefato de Código',
+        title: projectId ? `Projeto: ${projectId}` : 'Artefato de Código / Canvas',
         projectId,
         content: codeContent,
         diffContent,
-        htmlContent: codeContent && codeContent.includes('<html') ? codeContent : undefined,
+        htmlContent: isHtmlOrVisual ? codeContent : undefined,
       };
     }
     return null;
