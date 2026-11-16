@@ -35,10 +35,13 @@ from apps.api.routers import (
     learning,
     mcp,
     models,
+    omnichannel,
     security,
     skills,
     studios,
     system,
+    teammates,
+    vision,
     voice,
     workspace,
 )
@@ -161,6 +164,9 @@ app.include_router(coding.router)
 app.include_router(data_pipeline.router)
 app.include_router(mcp.router)
 app.include_router(voice.router)
+app.include_router(vision.router)
+app.include_router(omnichannel.router)
+app.include_router(teammates.router)
 app.include_router(learning.router)
 
 # Monta aplicativo mobile Flutter (PWA) se compilado

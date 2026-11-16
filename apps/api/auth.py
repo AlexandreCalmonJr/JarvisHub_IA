@@ -43,6 +43,8 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/password-login"),
     ("POST", "/api/v1/auth/bootstrap/exchange"),
+    ("POST", "/api/v1/omnichannel/telegram-webhook"),
+    ("POST", "/api/v1/omnichannel/discord-webhook"),
 }
 
 ALLOWED_HUMAN_ROLES = {"admin", "developer", "auditor"}

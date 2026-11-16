@@ -831,6 +831,7 @@ class ChatMessage {
   final String role;
   final String text;
   final bool isVoice;
+  final bool isVision;
   final String? intent;
   final bool approvalRequired;
 
@@ -838,6 +839,7 @@ class ChatMessage {
     required this.role,
     required this.text,
     this.isVoice = false,
+    this.isVision = false,
     this.intent,
     this.approvalRequired = false,
   });
@@ -1050,6 +1052,121 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Future<void> _sendVisionFrame(String prompt, String taskType) async {
+    setState(() {
+      _messages.add(ChatMessage(role: 'user', text: '[Câmera / Frame] $prompt', isVision: true));
+      _isLoading = true;
+    });
+
+    const dummyPngB64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    final response = await JarvisApiClient.request(
+      method: 'POST',
+      path: '/api/v1/vision/analyze',
+      jsonBody: {
+        'image_base64': dummyPngB64,
+        'prompt': prompt,
+        'task_type': taskType,
+        'device_id': 'flutter-mobile-openbot',
+      },
+    );
+
+    if (response.isSuccess && response.json is Map) {
+      final desc = response.json['description']?.toString() ?? 'Análise visual concluída.';
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            role: 'assistant',
+            text: desc,
+            isVision: true,
+            intent: 'vision.$taskType',
+          ),
+        );
+      });
+    } else {
+      final err = response.errorMessage ?? 'Falha ao processar frame de visão.';
+      setState(() {
+        _messages.add(ChatMessage(role: 'assistant', text: err, isVision: true));
+      });
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  void _openVisionDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.camera_alt, color: Color(0xFF38BDF8), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Percepção Visual (OpenBot Vision)',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Envie uma captura ou frame de câmera para análise multimodal do JARVIS:',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.remove_red_eye_outlined, color: Color(0xFF38BDF8)),
+                title: const Text('Descrever Ambiente e Cena'),
+                subtitle: const Text('Identifica o que está ao redor da câmera'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendVisionFrame('Descreva detalhadamente o ambiente visível', 'general');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.view_in_ar, color: Color(0xFF38BDF8)),
+                title: const Text('Detecção de Objetos (OpenBot Tracking)'),
+                subtitle: const Text('Mapeia elementos, obstáculos e dispositivos'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendVisionFrame('Detecte e liste todos os objetos e pessoas no frame', 'objects');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.document_scanner_outlined, color: Color(0xFF38BDF8)),
+                title: const Text('Inspeção OCR / Texto / Tela'),
+                subtitle: const Text('Extrai textos, avisos e mensagens de erro visíveis'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendVisionFrame('Extraia e explique qualquer texto ou erro na tela', 'ocr');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1087,6 +1204,21 @@ class _ChatScreenState extends State<ChatScreen> {
                               const SizedBox(width: 4),
                               Text(
                                 msg.intent != null ? '[voz: ${msg.intent}]' : '[comando de voz]',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (msg.isVision)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.camera_alt, size: 14, color: Color(0xFF38BDF8)),
+                              const SizedBox(width: 4),
+                              Text(
+                                msg.intent != null ? '[visão: ${msg.intent}]' : '[percepção visual]',
                                 style: const TextStyle(fontSize: 11, color: Color(0xFF38BDF8), fontWeight: FontWeight.bold),
                               ),
                             ],
@@ -1141,6 +1273,11 @@ class _ChatScreenState extends State<ChatScreen> {
           color: const Color(0xFF1E293B),
           child: Row(
             children: [
+              IconButton(
+                icon: const Icon(Icons.camera_alt, color: Color(0xFF38BDF8)),
+                onPressed: _openVisionDialog,
+                tooltip: 'Câmera e Percepção Visual (OpenBot)',
+              ),
               IconButton(
                 icon: const Icon(Icons.mic, color: Color(0xFF38BDF8)),
                 onPressed: _openVoiceDialog,

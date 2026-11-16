@@ -8,6 +8,7 @@ from agents.profiles.catalog import AGENT_PROFILES
 from agents.registry import AgentRegistry
 from packages.contracts.security import AuditEventSeverity  # noqa: F401
 from services.autonomous_agent import AutonomousAgentRuntime
+from services.autonomous_agent.teammate_manager import TeammateManager
 from services.backend_studio import MockServerService, SQLPlaygroundService
 from services.coding_agent import (
     ApprovalBroker,
@@ -50,9 +51,11 @@ from services.observability import (
     log_buffer,  # noqa: F401
 )
 from services.observability.telemetry_store import SqliteTelemetryStore
+from services.observability.vision_engine import VisionEngine
 from services.orchestration import JarvisMaster
 from services.orchestration.graph import build_specialist_prompt  # noqa: F401
 from services.proactive_operations import WebhookNotificationService
+from services.proactive_operations.omnichannel_gateway import OmnichannelGateway
 from services.project_workspace import ProjectWorkspaceService
 from services.quality_studio import QualityStudioService
 from services.resource_manager import ResourceManager
@@ -388,3 +391,15 @@ autonomous_agent_runtime = AutonomousAgentRuntime(
 
 # Servidores MCP opcionais (descoberta sob demanda em /api/v1/mcp/reload)
 mcp_service = McpService(config_path=data_dir / "mcp_servers.json")
+
+# Engine de Visão Computacional (Intel OpenBot Vision)
+vision_engine = VisionEngine(hybrid_router=hybrid_router)
+
+# Gateway Omnicanal (Telegram, Discord, Inbound Webhooks)
+omnichannel_gateway = OmnichannelGateway(
+    webhook_service=webhook_service,
+    security_core=security_core,
+)
+
+# AI Teammates Manager (OpenBot Workspace / ACP)
+teammate_manager = TeammateManager(security_core=security_core)

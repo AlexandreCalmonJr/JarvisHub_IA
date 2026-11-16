@@ -29,6 +29,15 @@ void main() {
       );
       expect(msg3.approvalRequired, true);
       expect(msg3.intent, 'approval.required');
+
+      const msg4 = ChatMessage(
+        role: 'assistant',
+        text: 'Ambiente com 2 computadores e 1 monitor.',
+        isVision: true,
+        intent: 'vision.objects',
+      );
+      expect(msg4.isVision, true);
+      expect(msg4.intent, 'vision.objects');
     });
   });
 }

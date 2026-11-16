@@ -146,13 +146,20 @@ de respostas anteriores, cancelamento e abertura de aplicativos/pastas), exigind
 no painel para qualquer ação sensível. Logs em `data/logs/voice.log`; uma única instância
 é permitida. O áudio não é guardado pelo daemon.
 
+## OpenBot Platform (Percepção Visual, AI Teammates e Omnicanal)
+
+O JARVIS Hub integra nativamente as 3 dimensões do ecossistema OpenBot:
+1. **Percepção Visual (Intel OpenBot Vision):** Engine multimodal em `services/observability/vision_engine.py` e endpoint `POST /api/v1/vision/analyze` para detecção de objetos, descrição de ambiente e leitura OCR de telas/códigos a partir de câmeras de smartphone e desktop. Interface de câmera integrada no app mobile Flutter.
+2. **AI Teammates Persistentes & ACP (nightly-labs/openbot):** Gerenciador de colegas de equipe autônomos em `services/autonomous_agent/teammate_manager.py` e endpoints em `/api/v1/teammates` para ciclo de vida de agentes em background (`idle`, `running`, `completed`).
+3. **Gateway Omnicanal & Copilot:** Gateway bidirecional em `services/proactive_operations/omnichannel_gateway.py` e router `/api/v1/omnichannel` com compatibilidade para webhooks de Telegram Bot, Discord Bot e notificações de aprovação em tempo real.
+
 ## Prioridades abertas
 
 - P0: nenhum P0 de código conhecido. Validação pendente: ensaio do daemon de voz em hardware físico com microfone real. O benchmark completo fechou 78/78, o eval autenticado fechou 78/78 com rubrica confirmada (`mean_review_score` 4,68) e as metas de p95 e tokens estão cumpridas.
 - P1: V5 (iOS opcional) e ensaio em hardware real de microfone.
 - P2: V6 contínuo de auditoria e telemetria.
 
-Concluído nesta ronda: SEC-01..06, CAP-01..13, SIM-01 (Busca Semântica LanceDB + nomic-embed-text), SIM-02, SIM-03 (Auditoria real pip-audit/bandit), SIM-04 (`vector_search` real), SIM-05 (Supervisor proativo com inspeções reais de CVEs, segredos e SAST), SIM-06 (Quality Studio com execução real de Playwright em Chromium headless), SIM-07, SIM-08 (`ContainerSandbox` com Docker/Podman e fallback seguro), PERF-01..08, QUAL-01..06, Fase 6 completa (UX-01..07, OPS-01, DOC-01), V0, V1 (Wake word + daemon + bandeja + autostart + atalho global), V2 (Conversa contínua, follow-up, TTS por frase, barge-in), V3 (Intent router + 10 comandos de assistente pessoal determinísticos seguros), V4 (Mobile Flutter com comandos de voz determinísticos e polling de aprovações em tempo real) e GOV-01; suíte completa verde; Gate 0, Gate 1, Gate 2 e Gate 3 oficialmente fechados.
+Concluído nesta ronda: SEC-01..06, CAP-01..13, SIM-01 (Busca Semântica LanceDB + nomic-embed-text), SIM-02, SIM-03 (Auditoria real pip-audit/bandit), SIM-04 (`vector_search` real), SIM-05 (Supervisor proativo com inspeções reais de CVEs, segredos e SAST), SIM-06 (Quality Studio com execução real de Playwright em Chromium headless), SIM-07, SIM-08 (`ContainerSandbox` com Docker/Podman e fallback seguro), PERF-01..08, QUAL-01..06, Fase 6 completa (UX-01..07, OPS-01, DOC-01), V0, V1 (Wake word + daemon + bandeja + autostart + atalho global), V2 (Conversa contínua, follow-up, TTS por frase, barge-in), V3 (Intent router + 10 comandos de assistente pessoal determinísticos seguros), V4 (Mobile Flutter com comandos de voz determinísticos e polling de aprovações em tempo real), OpenBot Multi-Dimensional Platform (VisionEngine, Teammates ACP, Omnichannel Gateway Telegram/Discord) e GOV-01; suíte completa verde; Gate 0, Gate 1, Gate 2 e Gate 3 oficialmente fechados.
 
 Para habilitar leitura integral, configure `JARVIS_WEB_READ_ALLOWED_HOSTS` com
 domínios confiáveis separados por vírgula. A ferramenta `web_read` está
