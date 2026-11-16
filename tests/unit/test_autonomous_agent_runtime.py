@@ -14,6 +14,7 @@ from services.coding_agent.broker import ApprovalBroker
 from services.coding_agent.tools import CodingToolExecutor
 from services.coding_agent.types import ChatTurn, ProviderReply, ToolCall, ToolSpec
 from services.memory.database import DatabaseManager
+from services.orchestration.output_validation import count_words
 from services.security_core import SecurityCore
 
 
@@ -403,6 +404,127 @@ async def test_truncated_output_is_repaired_once(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_long_output_is_repaired_to_word_limit(tmp_path):
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-words", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    long_text = " ".join(f"palavra{index}" for index in range(360))
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(
+                content=long_text,
+                finish_reason="stop",
+                prompt_tokens=10,
+                completion_tokens=100,
+            ),
+            ProviderReply(
+                content="Resposta curta e conforme ao contrato.",
+                finish_reason="stop",
+                prompt_tokens=20,
+                completion_tokens=8,
+            ),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Explique a análise inicial",
+        project_id="proj-words",
+        session_id="ses-output-words",
+        mode=AutonomousAgentMode.ASK,
+    )
+
+    contract = await runtime.run_task(config)
+
+    assert len(provider.call_history) == 2
+    assert "excede 300 palavras" in provider.call_history[1]["turns"][0].content
+    assert contract.summary == "Resposta curta e conforme ao contrato."
+    assert count_words(contract.summary) <= 300
+
+
+@pytest.mark.asyncio
+async def test_long_output_is_compacted_when_repair_stays_long(tmp_path):
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-words-fallback", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    long_text = " ".join(f"palavra{index}" for index in range(420))
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(content=long_text, finish_reason="stop"),
+            ProviderReply(content=long_text, finish_reason="stop"),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Explique a análise inicial",
+        project_id="proj-words-fallback",
+        session_id="ses-output-words-fallback",
+        mode=AutonomousAgentMode.ASK,
+    )
+
+    contract = await runtime.run_task(config)
+
+    assert count_words(contract.summary) <= 300
+    assert any("compactado" in item for item in contract.evidence)
+
+
+@pytest.mark.asyncio
+async def test_explicit_detail_request_skips_word_limit(tmp_path):
+    sec = SecurityCore()
+    sec.permission_engine.register_project(
+        "proj-detail", str(tmp_path), mode=ProjectWorkMode.EDIT_APPROVED
+    )
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    long_text = " ".join(f"detalhe{index}" for index in range(360))
+    provider = ScriptedChatProvider([ProviderReply(content=long_text, finish_reason="stop")])
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.SOFTWARE_ARCHITECT,
+        prompt="Explique em detalhe a arquitetura completa",
+        project_id="proj-detail",
+        session_id="ses-output-detail",
+        mode=AutonomousAgentMode.ASK,
+    )
+
+    contract = await runtime.run_task(config)
+
+    assert len(provider.call_history) == 1
+    assert count_words(contract.summary) == 360
+
+
+@pytest.mark.asyncio
 async def test_empty_reply_with_tools_retries_without_tools(tmp_path):
     sec = SecurityCore()
     sec.permission_engine.register_project(
@@ -447,6 +569,47 @@ async def test_empty_reply_with_tools_retries_without_tools(tmp_path):
     assert contract.resource_usage.tokens_prompt == 150
     assert contract.resource_usage.tokens_completion == 30
     assert any("sem ferramentas" in item for item in contract.evidence)
+
+
+@pytest.mark.asyncio
+async def test_empty_reply_without_project_retries_once(tmp_path):
+    sec = SecurityCore()
+    tools = CodingToolExecutor(security_core=sec, workspace_service=MockWorkspaceService(tmp_path))
+    broker = ApprovalBroker(approval_engine=sec.approval_engine, audit_trail=sec.audit)
+
+    provider = ScriptedChatProvider(
+        [
+            ProviderReply(content="", tool_calls=[], prompt_tokens=100, completion_tokens=10),
+            ProviderReply(
+                content="Resposta após repetição sem ferramentas.",
+                tool_calls=[],
+                prompt_tokens=50,
+                completion_tokens=20,
+            ),
+        ]
+    )
+    runtime = AutonomousAgentRuntime(
+        security_core=sec,
+        workspace_service=MockWorkspaceService(tmp_path),
+        tools=tools,
+        broker=broker,
+        provider_factory=lambda: provider,
+    )
+
+    config = AutonomousAgentRunConfig(
+        agent_role=AgentRole.AUTOMATION_ENGINEER,
+        prompt="Explique a análise inicial",
+        session_id="ses-empty-retry-no-project",
+        mode=AutonomousAgentMode.ASK,
+        max_iterations=1,
+    )
+
+    contract = await runtime.run_task(config)
+
+    assert len(provider.call_history) == 2
+    assert provider.call_history[1]["tools"] == []
+    assert contract.summary == "Resposta após repetição sem ferramentas."
+    assert any("resposta vazia" in item for item in contract.evidence)
 
 
 def test_recover_textual_tool_call_only_accepts_authorized_tools():

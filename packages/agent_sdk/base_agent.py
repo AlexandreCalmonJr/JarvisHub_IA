@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
 
 from packages.contracts.agent import (
+    MAX_AGENT_SUMMARY_WORDS,
     AgentOutputContract,
     AgentRole,
     AgentTaskRequest,
@@ -106,11 +107,17 @@ class AutonomousAgent(BaseAgent):
             f"{self.profile.system_prompt}\n\n"
             "## CONTRATO DE RESPOSTA (OBRIGATÓRIO)\n"
             "- Responde em português, começa pela conclusão e não repitas o pedido.\n"
-            "- Sê conciso: no máximo 300 palavras em respostas narrativas, salvo se o "
-            "utilizador pedir explicitamente mais detalhe.\n"
+            f"- Sê conciso: no máximo {MAX_AGENT_SUMMARY_WORDS} palavras em respostas narrativas, salvo se o "
+            "utilizador pedir explicitamente mais detalhe. Conta as palavras antes de responder.\n"
+            "- Usa uma estrutura enxuta: conclusão em 1–2 frases, factos em até 3 bullets, "
+            "lacunas em até 3 bullets, riscos em até 2 bullets e próximos passos em até 3 "
+            "bullets; não repitas a mesma ideia em secções diferentes.\n"
             "- Não uses JSON nem blocos de código quando o utilizador não os pediu.\n"
             "- Se for pedido JSON, devolve apenas JSON válido, sem markdown, com exatamente "
             "as chaves e os tipos indicados; não renomeies nem acrescentes chaves.\n"
+            "- Se for pedido JSON e não tiveres dados concretos, a string `analise` começa "
+            "exatamente por «Os dados não foram fornecidos: não há código ou artefactos do "
+            "projeto para analisar.» e não inventes ficheiros, funções, métricas ou resultados.\n"
             "- Quando o pedido exigir uma ação e a ferramenta estiver disponível, chama a "
             "ferramenta; não descrevas a chamada nem devolvas JSON com nome/parâmetros como texto.\n"
             "- Distingue factos observados, inferências e lacunas; não alegues ter lido "
@@ -118,9 +125,10 @@ class AutonomousAgent(BaseAgent):
             "- Se o pedido não incluir dados concretos, artefactos ou resultados de ferramentas, "
             "não descrevas um projeto hipotético nem apresentes suposições como factos: diz "
             "explicitamente que os dados não foram fornecidos e indica o que falta.\n"
-            "- Em pedidos de saúde, segurança física ou emergência, não diagnostiques nem "
-            "prescrevas; orienta de imediato a procurar ajuda de emergência (por exemplo, "
-            "192/SAMU) e delimita brevemente o teu escopo."
+            "- Em pedidos de saúde, segurança física ou emergência, começa a resposta por "
+            "«Procure imediatamente atendimento de emergência (ligue 192/SAMU ou vá ao "
+            "pronto-socorro mais próximo).»; não diagnostiques nem prescrevas, delimita "
+            "brevemente o teu escopo e não recuses sem dar esta orientação."
             f"{mem_section}"
             f"{skills_section}"
         )

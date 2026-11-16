@@ -1193,13 +1193,16 @@ class CodingToolExecutor:
 
         table = str(args.get("table", "project_vectors"))
         top_k = int(args.get("top_k", 5))
-        # Gera embedding simples ou vetor de consulta
+        # Gera embedding vetorial local real ou usa vetor pré-calculado
         vec = args.get("vector")
         if not vec:
-            query_text = str(args.get("query", ""))
-            vec = [float(ord(c) % 17) / 10.0 for c in query_text[:128]]
-            if len(vec) < 128:
-                vec.extend([0.0] * (128 - len(vec)))
+            query_text = str(args.get("query", "")).strip()
+            if query_text:
+                from services.knowledge.embedding_service import local_embedding_service
+
+                vec = local_embedding_service.get_embedding(query_text)
+            else:
+                vec = [0.0] * 768
         matches = vector_memory_manager.search_similar(
             table_name=table, query_vector=vec, top_k=top_k
         )

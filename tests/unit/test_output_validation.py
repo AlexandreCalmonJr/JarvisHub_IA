@@ -5,10 +5,12 @@ import pytest
 from packages.contracts.agent import (
     MAX_AGENT_LIST_ITEMS,
     MAX_AGENT_SUMMARY_CHARS,
+    MAX_AGENT_SUMMARY_WORDS,
     AgentRole,
 )
 from services.orchestration.output_validation import (
     OutputContractError,
+    count_words,
     validate_and_repair_contract,
     validate_summary_text,
 )
@@ -102,3 +104,46 @@ def test_summary_flags_truncation_and_empty():
     repaired_empty, empty_issues = validate_summary_text("")
     assert repaired_empty
     assert any("vazio" in issue for issue in empty_issues)
+
+
+def test_summary_flags_long_narrative_without_rewriting():
+    text = " ".join(f"palavra{index}" for index in range(MAX_AGENT_SUMMARY_WORDS + 20))
+
+    result, issues = validate_summary_text(text, max_words=MAX_AGENT_SUMMARY_WORDS)
+
+    assert result == text
+    assert any(f"excede {MAX_AGENT_SUMMARY_WORDS} palavras" in issue for issue in issues)
+
+
+def test_summary_compacts_long_narrative_when_enforced():
+    text = "Frase completa para teste. " * 120
+
+    result, issues = validate_summary_text(
+        text,
+        max_words=MAX_AGENT_SUMMARY_WORDS,
+        enforce_max_words=True,
+    )
+
+    assert count_words(result) <= MAX_AGENT_SUMMARY_WORDS
+    assert result.endswith(("…", "."))
+    assert any("compactado" in issue for issue in issues)
+
+
+def test_summary_word_limit_does_not_touch_json_or_code():
+    payload = json.dumps({"analise": "palavra " * 400})
+    result, issues = validate_summary_text(
+        payload,
+        max_words=MAX_AGENT_SUMMARY_WORDS,
+        enforce_max_words=True,
+    )
+    assert result == payload
+    assert not any("compactado" in issue for issue in issues)
+
+    code = "```python\n" + "print('linha')\n" * 400 + "```"
+    result_code, code_issues = validate_summary_text(
+        code,
+        max_words=MAX_AGENT_SUMMARY_WORDS,
+        enforce_max_words=True,
+    )
+    assert result_code == code
+    assert not any("compactado" in issue for issue in code_issues)

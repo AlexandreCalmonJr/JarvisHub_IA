@@ -28,12 +28,17 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [totalEvents, setTotalEvents] = useState(0);
+  const PAGE_SIZE = 20;
 
-  const loadAuditLogs = async () => {
+  const loadAuditLogs = async (targetPage?: number) => {
+    const activePage = typeof targetPage === 'number' ? targetPage : page;
     setLogsLoading(true);
     try {
-      const data = await fetchAuditLogs(20, 0, severityFilter || undefined);
+      const data = await fetchAuditLogs(PAGE_SIZE, (activePage - 1) * PAGE_SIZE, severityFilter || undefined);
       setAuditLogs(data.events || []);
+      setTotalEvents(data.total || 0);
       setLogsError(null);
     } catch (e) {
       setLogsError(e instanceof Error ? e.message : 'Não foi possível carregar a trilha de auditoria.');
@@ -58,7 +63,8 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   }, []);
 
   useEffect(() => {
-    loadAuditLogs();
+    setPage(1);
+    void loadAuditLogs(1);
   }, [severityFilter]);
 
   const handleGlobalKill = async () => {
@@ -239,7 +245,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
               <option value="INFO">Informativas</option>
             </select>
             <button
-              onClick={loadAuditLogs}
+              onClick={() => void loadAuditLogs(page)}
               disabled={logsLoading}
               className="btn btn-ghost"
               style={{ padding: '4px 8px' }}
@@ -347,6 +353,55 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
             })
           )}
         </div>
+
+        {totalEvents > PAGE_SIZE && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 4px 0',
+              borderTop: '1px solid var(--border-color)',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              Exibindo {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalEvents)} de {totalEvents} eventos
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                disabled={page <= 1 || logsLoading}
+                onClick={() => {
+                  const prev = Math.max(1, page - 1);
+                  setPage(prev);
+                  void loadAuditLogs(prev);
+                }}
+              >
+                Anterior
+              </button>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                {page} / {Math.max(1, Math.ceil(totalEvents / PAGE_SIZE))}
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                disabled={page >= Math.ceil(totalEvents / PAGE_SIZE) || logsLoading}
+                onClick={() => {
+                  const next = page + 1;
+                  setPage(next);
+                  void loadAuditLogs(next);
+                }}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Políticas Ativas */}

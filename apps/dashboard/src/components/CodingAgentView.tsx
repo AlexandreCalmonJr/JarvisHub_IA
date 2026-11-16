@@ -177,11 +177,12 @@ export const CodingAgentView: React.FC = () => {
         if (projectsResult.status === 'fulfilled') {
           const projectsData = projectsResult.value;
           setProjects(projectsData);
-          if (projectsData.length > 0 && !projectsData.some((project) => project.id === projectId)) {
-            setProjectId(projectsData[0].id);
-          } else if (projectsData.length === 0) {
-            setProjectId('');
-          }
+          // Preserva uma seleção feita enquanto a lista ainda estava a carregar.
+          setProjectId((current) => {
+            if (projectsData.length === 0) return '';
+            if (current && projectsData.some((project) => project.id === current)) return current;
+            return projectsData[0].id;
+          });
         } else {
           setError(projectsResult.reason instanceof Error ? projectsResult.reason.message : 'Falha ao carregar projetos.');
         }
@@ -501,7 +502,7 @@ export const CodingAgentView: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', paddingBottom: '52px' }}>
       {/* Header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
@@ -800,7 +801,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   timeline: {
     flex: 1,
-    minHeight: '220px',
+    minHeight: '120px',
     overflowY: 'auto',
     display: 'flex',
     flexDirection: 'column',

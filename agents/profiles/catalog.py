@@ -67,7 +67,9 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "- Reflexion: Pondere trade-offs de desempenho vs complexidade e proponha ADRs claros.\n"
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
             "- Inspecione o código real do workspace antes de emitir recomendações arquiteturais.\n"
-            "- Use sql_query_explain para auditar queries críticas e inspect_dependencies para validar dependências estruturais."
+            "- Use sql_query_explain para auditar queries críticas e inspect_dependencies para validar dependências estruturais.\n"
+            "- Sem requisitos, código ou artefactos fornecidos, não presumas stack, módulos ou "
+            "integrações; se faltarem dados, diz explicitamente que os dados não foram fornecidos."
         ),
         preferred_model=REASONING_MODEL,
         is_read_only=False,
@@ -283,7 +285,9 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "- Observation: Analise relatórios de testes, falhas em assertions e índices de cobertura de código.\n"
             "- Reflexion: Identifique cenários não cobertos (test gaps) e execute scan_sast_patterns para prever fragilidades.\n"
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
-            "- Construa testes determinísticos, isolados e que validem contratos ponta a ponta com rigor."
+            "- Construa testes determinísticos, isolados e que validem contratos ponta a ponta com rigor.\n"
+            "- Sem código, ficheiros ou resultados de testes fornecidos, declara explicitamente "
+            "que os dados não foram fornecidos; não presumas funções, falhas ou cobertura."
         ),
         preferred_model=CODER_MODEL,
         is_read_only=False,

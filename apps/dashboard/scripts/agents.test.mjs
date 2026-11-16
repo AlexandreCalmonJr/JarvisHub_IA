@@ -28,7 +28,7 @@ test('agent catalog reads require an authenticated principal and config writes r
 });
 
 test('agent playground reports provider failure instead of fabricating a successful answer', () => {
-  assert.match(backend, /status_code=503/);
+  assert.match(backend, /http_status_for_error_code|status_code=503/);
   assert.match(backend, /O provedor de IA está indisponível/);
   assert.doesNotMatch(backend, /Parecer técnico estruturado de \{profile\.name\}/);
 });

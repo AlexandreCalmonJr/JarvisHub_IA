@@ -24,7 +24,10 @@
     "test:backend-studio": "node --test scripts/backend-studio.test.mjs",
     "test:quality-studio": "node --test scripts/quality-studio.test.mjs",
     "test:design-studio": "node --test scripts/design-studio.test.mjs",
-    "test:hardware-executive-setup": "node --test scripts/hardware-executive-setup.test.mjs"
+    "test:hardware-executive-setup": "node --test scripts/hardware-executive-setup.test.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
@@ -32,6 +35,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

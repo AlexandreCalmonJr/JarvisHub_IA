@@ -87,3 +87,9 @@ workspace/*
 *.cert
 credentials.json
 secrets/
+
+# E2E (Playwright)
+tmp/
+apps/dashboard/e2e/.auth/
+apps/dashboard/playwright-report/
+apps/dashboard/test-results/

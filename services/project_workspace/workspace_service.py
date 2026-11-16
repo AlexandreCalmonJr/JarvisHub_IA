@@ -839,7 +839,7 @@ class ProjectWorkspaceService:
         for pid, inv in self._inventories.items():
             if pid not in seen_ids and inv.root_path and Path(inv.root_path).exists():
                 seen_ids.add(pid)
-                f_names = [f.name.lower() for f in inv.files]
+                f_names = [Path(f.relative_path).name.lower() for f in inv.files]
                 p_type = "external"
                 if any(f.endswith(".py") for f in f_names):
                     p_type = "python"
@@ -861,7 +861,7 @@ class ProjectWorkspaceService:
                         "path": str(inv.root_path),
                         "project_type": p_type,
                         "file_count": len(inv.files),
-                        "files": [f.rel_path for f in inv.files[:12]],
+                        "files": [f.relative_path for f in inv.files[:12]],
                     }
                 )
 

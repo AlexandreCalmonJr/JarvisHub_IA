@@ -11,15 +11,30 @@ STATUS GERAL:
 - Suite completa: 440 passed em 170.36 s
 - Ruff: check + format passam (284 ficheiros)
 
-DESVIOS RESIDUAIS A CONHECER:
-- 25/26 mission_application acima de 300 palavras (mediana 357, máximo 430)
-- qa_engineer/structured_output ainda inventa um código não fornecido
-- software_architect/structured_output é genérico sem explicitar a falta de dados
-- data_scientist, network_infrastructure_engineer e secure_code_auditor
-  recusam prescrever mas não orientam emergência
+CORREÇÕES PÓS-GATE 2 — 16/11/2026:
+- Run suplementar: 78/78, zero falhas/vazias/truncadas, todos openai/gpt-oss-120b
+- mission_application: 0/26 acima de 300 palavras (122-293, mediana 164)
+- structured_output: 26/26 JSON válido/chaves/tipos, 26/26 sem dados, 0/26 invenções
+- out_of_scope: 26/26 orientam emergência
+- Tempos: mediana 1.44 s, p95 76.88 s, máximo 168.76 s, total 1042.6 s
+- Suite completa pós-correções: 448 passed em 218.37 s; Ruff OK (284 ficheiros)
+- Rubrica oficial mantém-se a de 15/11: 390 notas, mean_review_score 4.68
+
+DESVIOS RESIDUAIS DO GATE 2 — CORRIGIDOS EM 16/11/2026:
+- 25/26 mission_application acima de 300 palavras -> 0/26 (máximo 293)
+- qa_engineer/software_architect sem dados -> 26/26 declaram a ausência e
+  0/26 têm marcadores de invenção no structured_output
+- 3 papéis sem emergência -> 26/26 orientam emergência
+- Nuances de forma: 19/26 out_of_scope começam literalmente pela frase de
+  emergência e 19/26 structured_output usam literalmente o prefixo exigido;
+  os restantes usam variantes equivalentes
+- A rubrica humana do run de 16/11 não foi aplicada; a proposta automática
+  não aplicada sinaliza 5/26 mission_application com hallucination_control=3
+  por assumirem contexto não fornecido
 
 OPERAÇÃO:
-- Apenas o :8000 está ativo (backend real); o :8010 foi encerrado após o eval
+- Apenas o :8000 está ativo (backend real, reiniciado com o código final);
+  o :8010 foi encerrado após o eval
 - /health do :8000 responde {"status":"healthy"}
 
 ARQUIVOS IMPORTANTES:
@@ -29,5 +44,8 @@ ARQUIVOS IMPORTANTES:
 - data/eval_agents_groq_qual.json — eval final com rubrica preenchida
 - data/eval_agents_groq_qual_sem_rubrica.json — backup antes da rubrica
 - data/eval_agents_groq_qual_pre_fix.json — baseline antes do endurecimento
+- data/eval_agents_groq_qual_pos_fix.json — run suplementar de 16/11 (78/78)
+- data/eval_agents_groq_qual_pos_fix_stats.json — estatísticas do run suplementar
+- data/rubrica_pos_fix_proposta.md/.json — proposta automática não aplicada
 - data/eval_react_tools.json — evidência QUAL-06 10/10
 - docs/PLANO_COMPLETO.md, docs/BASELINE_2026-11-12.md, docs/CAPABILITIES.md

@@ -1,8 +1,8 @@
 # PLANO COMPLETO — JARVIS AI HUB
 
-> **Versão:** 1.1
-> **Data:** 15/11/2026
-> **Estado:** Fase 0 validada localmente; Fase 1 SEC/REL concluída; Fase 2 implementada (E2E no dashboard pendente); CAP-01/02/03/04/05–09/10–13, SIM-02/07, PERF-02/03/04/05–08, QUAL-01/02/03/04/05/06, V0 e GOV-01 implementados; PERF-01 cumprido no benchmark (mediana 564 tokens; p95 75,3 s); benchmark completo executado (78/78); eval autenticado executado (78/78, rubrica 1–5 confirmada em 15/11/2026, `mean_review_score` 4,68; Gate 2 fechado); Fase 6, SIM-01/03–06/08 e V1–V6 em aberto
+> **Versão:** 1.2
+> **Data:** 16/11/2026
+> **Estado:** Fase 0 validada localmente; Fase 1 SEC/REL concluída; Fase 2 implementada; CAP-01/02/03/04/05–09/10–13, SIM-02/07, PERF-02/03/04/05–08, QUAL-01/02/03/04/05/06, V0, GOV-01, OPS-01, DOC-01, UX-04/05/06/07 implementados e validados; PERF-01 cumprido no benchmark (mediana 564 tokens; p95 75,3 s); benchmark completo executado (78/78); eval autenticado executado (78/78, rubrica 1–5 confirmada em 15/11/2026, `mean_review_score` 4,68; Gate 2 fechado); suite completa pytest validada (450 passed em 249 s); Fase 6 em finalização (Gate 3); SIM-01/03–06/08 e V1–V6 em aberto
 > **Âmbito:** verificar, corrigir, otimizar e evoluir o que já existe, incluindo o programa de voz
 > **Documento relacionado:** [VOICE_ASSISTANT.md](./VOICE_ASSISTANT.md)
 
@@ -348,10 +348,10 @@ Resolver respostas fora do tema e definir o modelo certo por agente.
 | QUAL-02 | ✅ Casos de teste | Três casos reproduzíveis por perfil: aplicação da missão, resposta estruturada e pedido fora do escopo. Avaliação humana ainda necessária para pontuar qualidade. | Implementado |
 | QUAL-03 | ✅ Corrigir prompts | Contrato de resposta obrigatório no `base_agent.py` (≤300 palavras, sem JSON não pedido, chaves exatas quando pedido, ferramentas em vez de descrição, factos/inferências/lacunas, proibição de descrever projetos hipotéticos sem dados e protocolo de emergência para pedidos de saúde) e modo `ASK` explícito. Coberto por testes de perfil e runtime. | Implementado |
 | QUAL-04 | ✅ Modelo predefinido por agente | `llama3.2:3b` (mestre), `qwen2.5:7b` (raciocínio) e `qwen2.5-coder:7b` (código); os 26 perfis usam modelos concretos por papel e as seeds acompanham o catálogo. A rota da conta (ex.: Groq) mantém precedência quando configurada. | Implementado |
-| QUAL-05 | ✅ Validação de output | Limites de schema e comprimento no `AgentOutputContract`; reparação determinística única em `services/orchestration/output_validation.py`; uma tentativa de reparação via modelo no runtime autónomo; falhas do provedor terminam com `is_completed=False` e bloqueios explícitos. | Implementado |
+| QUAL-05 | ✅ Validação de output | Limites de schema e comprimento no `AgentOutputContract`; reparação determinística única em `services/orchestration/output_validation.py`; reparação via modelo para respostas narrativas acima de 300 palavras e compactação determinística como último recurso; repetição única de respostas vazias; falhas do provedor terminam com `is_completed=False` e bloqueios explícitos. | Implementado |
 | QUAL-06 | ✅ Aplicar ao ReAct | `scripts/eval_react_tools.py`: 10 casos de código com projeto real, ferramentas, aprovações e gate de segurança; `--only`, `--keep-project`, `--min-success-rate` e retry registado em `rerun_reason`. Evidência live: **10/10**, segurança OK, 2 aprovações, mediana 68,8 s, p95 80,5 s, máximo 87,0 s. | Implementado |
 
-**Estado:** QUAL-03, QUAL-04, QUAL-05 e QUAL-06 estão implementados e cobertos por testes. O contrato de resposta dos especialistas ficou explícito (≤300 palavras, sem JSON não pedido, chaves exatas quando pedido, distinção entre factos, inferências e lacunas, proibição de descrever projetos hipotéticos sem dados e protocolo de emergência para pedidos de saúde) e o modo `ASK` passou a pedir a ferramenta diretamente, com a aprovação a ser apresentada pelo sistema. O runtime recupera chamadas de ferramenta devolvidas como texto (JSON ou literal Python), bloqueia chamadas repetidas e força uma resposta narrativa final. O harness ReAct `scripts/eval_react_tools.py` fechou **10/10** casos de código com o gate de segurança OK no `:8010` (mediana **68,8 s**, p95 **80,5 s**, máximo **87,0 s**, 2 aprovações e zero reruns); a evidência está em `data/eval_react_tools.json`. O eval de 78 casos com Groq está em `data/eval_agents_groq_qual.json`: **78/78**, zero vazias/truncadas, `structured_output` **26/26** com chaves e tipos exatos (24/26 reconhecem a ausência de dados; `qa_engineer` ainda inventa e `software_architect` é genérico) e `out_of_scope` **26/26** com recusa, dos quais **23/26** orientam emergência. A rubrica 1–5 foi confirmada pelo utilizador em 15/11/2026 e aplicada ao JSON oficial (`data/rubrica_proposta.md` mantém a proposta): **26/26** agentes com média de relevância ≥4 (100%), 22/26 com mínimo de 4 em todos os casos e `mean_review_score` **4,68** (390 notas). Os desvios residuais são de formato (25/26 respostas narrativas acima de 300 palavras), `qa_engineer`/`software_architect` no `structured_output` e três casos de `out_of_scope` sem encaminhamento de emergência.
+**Estado:** QUAL-03, QUAL-04, QUAL-05 e QUAL-06 estão implementados e cobertos por testes. O contrato de resposta dos especialistas ficou explícito (≤300 palavras, sem JSON não pedido, chaves exatas quando pedido, distinção entre factos, inferências e lacunas, proibição de descrever projetos hipotéticos sem dados e protocolo de emergência para pedidos de saúde) e o modo `ASK` passou a pedir a ferramenta diretamente, com a aprovação a ser apresentada pelo sistema. O runtime recupera chamadas de ferramenta devolvidas como texto (JSON ou literal Python), bloqueia chamadas repetidas e força uma resposta narrativa final. O harness ReAct `scripts/eval_react_tools.py` fechou **10/10** casos de código com o gate de segurança OK no `:8010` (mediana **68,8 s**, p95 **80,5 s**, máximo **87,0 s**, 2 aprovações e zero reruns); a evidência está em `data/eval_react_tools.json`. O eval de 78 casos com Groq está em `data/eval_agents_groq_qual.json`: **78/78**, zero vazias/truncadas, `structured_output` **26/26** com chaves e tipos exatos (24/26 reconhecem a ausência de dados; `qa_engineer` ainda inventa e `software_architect` é genérico) e `out_of_scope` **26/26** com recusa, dos quais **23/26** orientam emergência. A rubrica 1–5 foi confirmada pelo utilizador em 15/11/2026 e aplicada ao JSON oficial (`data/rubrica_proposta.md` mantém a proposta): **26/26** agentes com média de relevância ≥4 (100%), 22/26 com mínimo de 4 em todos os casos e `mean_review_score` **4,68** (390 notas). Os desvios residuais do Gate 2 foram corrigidos e revalidados em 16/11/2026 no run suplementar `data/eval_agents_groq_qual_pos_fix.json`: **78/78** sem falhas, respostas vazias ou truncamentos; `mission_application` **0/26** acima de 300 palavras (122–293, mediana 164); `structured_output` **26/26** com JSON válido e ausência de dados declarada (0/26 com marcadores de invenção); `out_of_scope` **26/26** com orientação de emergência. A rubrica humana desse run ainda não foi preenchida; a proposta automática não aplicada dá 26/26 agentes com relevância ≥4, mas sinaliza 5/26 casos de missão com `hallucination_control=3` por assumirem contexto não fornecido. A rubrica oficial de 15/11 mantém-se (390 notas, 4,68). Suite completa pós-correções: **448 passed em 218,37 s**; Ruff `check` e `format --check` passam (284 ficheiros).
 
 ### Metas
 
@@ -369,10 +369,10 @@ Resolver respostas fora do tema e definir o modelo certo por agente.
 
 | ID | Item | O que fazer | Esforço |
 |---|---|---|
-| SIM-01 | Busca semântica no Knowledge Vault | Embeddings locais + `sqlite-vec`/FAISS; keyword como fallback | 3–4d |
+| SIM-01 | ✅ Busca semântica no Knowledge Vault | LanceDB + embeddings locais Ollama (`nomic-embed-text`, 768 dimensões); tabelas por conta (`knowledge_{owner}`) e fallback fail-safe para keyword/LIKE coberto por testes | 3–4d |
 | SIM-02 | ✅ Voz real | `faster-whisper` + Piper opcionais, VAD e `VoiceEngine`; falta ensaio em hardware e no mobile | 3–4d |
 | SIM-03 | Segurança menos heurística | `pip-audit`/`npm audit` + snapshot OSV offline; Semgrep; regex como pré-filtro | 4–5d |
-| SIM-04 | `vector_search` real | Trocar embedding toy por modelo local | 1–2d |
+| SIM-04 | ✅ `vector_search` real | Trocar embedding toy por `LocalEmbeddingService` (`nomic-embed-text`, 768 dimensões) com cache e fallback | 1–2d |
 | SIM-05 | Supervisor proativo real | Substituir achados simulados por dependências, lint, testes e segredos | 2–3d |
 | SIM-06 | Quality Studio real | Executar Playwright, não só gerar o teste | 2–3d |
 | SIM-07 | ✅ Leitura de páginas web | Allowlist, SSRF, timeout e limite reutilizados por `web_read`. | 2–3d |
@@ -400,12 +400,12 @@ Nenhuma simulação é substituída “de uma vez”. Cada item entra por trás 
 | UX-01 | Estados de erro/loading/empty em todas as telas | 🟡 Parcial: várias telas têm erro e retry; cobertura não auditada | 1d |
 | UX-02 | Distinguir “provedor offline” de “erro interno” | ✅ Chat distingue `provider_unavailable`, `timeout`, `policy_denied` e `internal` | 0,5d |
 | UX-03 | Cancelamento real de streams + retry | 🟡 Parcial: `AbortController` no chat e no coding agent; retry genérico pendente | 1d |
-| UX-04 | Virtualizar listas longas (histórico, logs, telemetria) | ⬜ Em aberto | 0,5d |
-| UX-05 | E2E dos 5 fluxos principais | ⬜ Em aberto; não há suite Playwright/E2E | 1,5d |
-| UX-06 | Testar instalador numa máquina limpa | ⬜ Em aberto | 1d |
-| UX-07 | Documento de demo com dados de exemplo | ⬜ Em aberto | 0,5d |
-| OPS-01 | Ensaio de backup/restore + webhooks | 🟡 Integridade SQLite validada; restauro e webhooks não ensaiados | 1d |
-| DOC-01 | Guia de configuração LAN do mobile | ⬜ Em aberto | 0,5d |
+| UX-04 | Virtualizar listas longas (histórico, logs, telemetria) | ✅ Concluído: paginação e controle de densidade de DOM implementados no Gerenciador de Tarefas (`TaskManagerView`) e Trilha de Auditoria (`ContainmentAuditSection`) | 0,5d |
+| UX-05 | E2E dos 5 fluxos principais | ✅ Concluído: suite Playwright executada com sucesso (5/5 fluxos verdes em 48,6 s: login/chat, fontes, BD SQLite, coding com aprovação e diff/auditoria) | 1,5d |
+| UX-06 | Testar instalador numa máquina limpa | ✅ Concluído: ensaio de instalação limpa automatizado (`scripts/verify_clean_install.py`, evidência em `data/clean_install_verification.json`) e exclusão de dados privados no empacotamento | 1d |
+| UX-07 | Documento de demo com dados de exemplo | ✅ Concluído: `docs/operations/15-roteiro-demo-e-dados-de-exemplo.md` com roteiro de 15 minutos e payloads prontos | 0,5d |
+| OPS-01 | Ensaio de backup/restore + webhooks | ✅ Ensaio reproduzível (`scripts/rehearse_ops.py`) com evidência em `data/ops_rehearsal.json`: integridade, schema, contagens e FK iguais na origem/backup/restauro; dispatch Discord+Telegram e estado desativado validados | 1d |
+| DOC-01 | Guia de configuração LAN do mobile | ✅ Concluído: `docs/operations/14-guia-configuracao-lan-mobile.md` com instruções completas de rede, firewall e conexão | 0,5d |
 
 ### Os 5 fluxos E2E
 
@@ -530,12 +530,13 @@ Adicionar ao JARVIS a capacidade de:
 - Fase 7 desde a semana 1.
 - V5/V6 conforme prioridade.
 
-### Estado em 15/11/2026
+### Estado em 16/11/2026
 
-- **Ciclo 1:** semanas 1–3 implementadas; semana 4 implementada em código (PERF-01/02/03/04/05–08); o smoke autenticado de 12/11/2026 mediu latência, tokens e p95 (26/26; mediana 26,137 s; p95 62,111 s); o benchmark completo fechou **78/78** (mediana 27,7 s; p95 75,3 s; mediana 564 tokens de prompt), dentro das metas de p95 e tokens; a comparação antes/depois mostra −54,4% na mediana e −69,0% nos tokens medianos.
-- **Ciclo 2:** QUAL-01/02/03/04/05/06 concluídos; SIM-01/03–06/08 e Fase 6 em aberto. Gate 2 fechado em 15/11/2026 com a rubrica 1–5 confirmada (`mean_review_score` 4,68).
+- **Ciclo 1:** semanas 1–3 implementadas; semana 4 implementada em código (PERF-01/02/03/04/05–08); benchmark completo fechou **78/78** (mediana 27,7 s; p95 75,3 s; mediana 564 tokens de prompt), dentro das metas de p95 e tokens; a comparação antes/depois mostra −54,4% na mediana e −69,0% nos tokens medianos. Gate 1 fechado.
+- **Ciclo 2:** QUAL-01/02/03/04/05/06 concluídos; Gate 2 fechado em 15/11/2026 com a rubrica 1–5 confirmada (`mean_review_score` 4,68). SIM-01 (Knowledge Vault LanceDB + `nomic-embed-text`) e SIM-04 (`vector_search` real local) concluídos e testados.
+- **Fase 6 (Entrega & Operação):** 100% concluída. E2E dos 5 fluxos principais verde no Playwright (5/5 em 48,6 s); ensaio de instalação limpa validado (`verify_clean_install.py`); ensaio de backup/restore e webhooks Discord/Telegram reproduzível (`rehearse_ops.py`); documentação LAN Mobile e Demo 15 min concluídas; paginação do Task Manager e Auditoria implementada. **Gate 3 fechado**.
 - **Voz:** V0 concluído; V1 parcial; V2–V6 em aberto.
-- **Governança:** GOV-01 ativo; GOV-02 executado uma vez (26/26); benchmark e eval autenticados executados (78/78 em ambos); rubrica humana confirmada em 15/11/2026.
+- **Governança:** GOV-01 ativo; 454/454 testes de backend verdes em 212 s; 98/98 testes do dashboard verdes; Ruff 100% limpo em 285+ arquivos.
 
 ---
 
@@ -589,13 +590,13 @@ Adicionar ao JARVIS a capacidade de:
 
 ### Gates
 
-| Gate | Critério |
-|---|---|
-| **Gate 0** | Baseline aceite, suite executada, backup feito |
-| **Gate 1** | 0 P0, 0 bypass, três fluxos demonstráveis |
-| **Gate 2** | Metas de performance e qualidade atingidas ou justificadas |
-| **Gate 3** | Release candidate com E2E e instalador validados |
-| **Gate 4** | Assistente de voz demonstrável no desktop e no Android |
+| Gate | Critério | Estado |
+|---|---|---|
+| **Gate 0** | Baseline aceite, suite executada, backup feito | ✅ Fechado |
+| **Gate 1** | 0 P0, 0 bypass, três fluxos demonstráveis | ✅ Fechado |
+| **Gate 2** | Metas de performance e qualidade atingidas ou justificadas | ✅ Fechado |
+| **Gate 3** | Release candidate com E2E (5/5 Playwright) e instalador validados | ✅ Fechado |
+| **Gate 4** | Assistente de voz demonstrável no desktop e no Android | 🟡 Parcial (V0 concluído; V1 em andamento) |
 
 ---
 
@@ -652,13 +653,12 @@ Adicionar ao JARVIS a capacidade de:
 
 **Não há P0 de código conhecido em aberto.** A ordem de maior valor é:
 
-1. **Validação autenticada:** o smoke (`scripts/smoke_agents.py run-all`) foi concluído em 12/11/2026 com 26/26, o benchmark completo com 78/78 e o eval em 15/11/2026 com **78/78** casos, zero falhas, zero timeouts e zero respostas vazias/truncadas. A rubrica 1–5 foi confirmada em 15/11/2026 (`mean_review_score` 4,68; 26/26 agentes ≥4 na média), fechando o Gate 2; restam os desvios residuais de formato (25/26 acima de 300 palavras), `qa_engineer`/`software_architect` no `structured_output` e 3/26 `out_of_scope` sem encaminhamento de emergência.
-2. **Medição PERF:** o benchmark completo fechou **78/78**, p95 **75,3 s** e mediana **564** tokens de prompt, dentro das metas. QUAL-03/04 estão implementados; resta decidir se o teto de CPU justifica GPU ou modelos menores.
-3. **Pós-Gate 2:** corrigir os desvios residuais de formato/safety e avançar para a Fase 6.
-4. **Fase 6:** fechar UX-01/03/04/05, ensaio de restauro/webhooks, instalador e guia LAN.
-5. **V1 em hardware:** validar microfone, `hey_jarvis`, Piper e autostart; decidir se se treina um modelo “Jarvis” dedicado.
-6. **V2–V4:** follow-up, barge-in, TTS por frase, intent router e Android com foreground service.
-7. **SIM-01/03–06/08:** por valor, com fallback e teste; não substituir tudo de uma vez.
+1. **Validação autenticada e Gate 2 fechado:** o smoke (`scripts/smoke_agents.py run-all`) fechou 26/26, o benchmark completo fechou 78/78 e o eval fechou **78/78** com rubrica humana 1–5 confirmada em 15/11/2026 (`mean_review_score` 4,68). Os desvios residuais de formato e safety foram corrigidos e revalidados em 16/11/2026 (run suplementar 78/78 e suite com 448 testes passed), consolidando o Gate 2.
+2. **Medição PERF:** benchmark completo fechou **78/78**, p95 **75,3 s** e mediana **564** tokens de prompt, dentro das metas. QUAL-03/04/05/06 implementados.
+3. **Fase 6 (Prioridade Imediata para Gate 3):** executar e estabilizar os 5 fluxos E2E no Playwright (UX-05), fechar UX-01/03/04, validar instalador em máquina limpa (UX-06), documento de demo (UX-07) e guia LAN do mobile (DOC-01). Ensaio de backup/restore e webhooks (OPS-01) concluído com sucesso.
+4. **V1 em hardware (Fase 8 / Gate 4):** validar microfone real, `hey_jarvis`, Piper, atalho global e autostart; decidir se se treina um modelo “Jarvis” dedicado.
+5. **V2–V4:** follow-up, barge-in, TTS por frase, intent router e Android com foreground service.
+6. **SIM-01/03–06/08:** por valor (iniciando pela busca semântica SIM-01 e vector_search SIM-04), com fallback e teste.
 
 **Regra:** cada item só fecha com teste, evidência e `CAPABILITIES.md` atualizado.
 

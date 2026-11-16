@@ -34,7 +34,7 @@ test('project code execution is restricted until OS-level account isolation exis
 });
 
 test('test runner timeout is bounded at the API and service layers', () => {
-  assert.match(schema, /timeout_seconds: int = Field\(default=45, ge=5, le=300/);
+  assert.match(schema, /timeout_seconds:\s*int\s*=\s*Field\(\s*default=45,\s*ge=5,\s*le=300/);
   assert.match(backend, /max\(5, min\(int\(timeout_seconds\), 300\)\)/);
 });
 

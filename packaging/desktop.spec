@@ -8,8 +8,6 @@ added_files = [
     (str(PROJECT_ROOT / 'apps' / 'dashboard' / 'dist'), 'apps/dashboard/dist'),
     (str(PROJECT_ROOT / 'apps' / 'dashboard' / 'dist'), 'dist'),
     (str(PROJECT_ROOT / 'skills'), 'skills'),
-    (str(PROJECT_ROOT / 'data'), 'data'),
-    (str(PROJECT_ROOT / 'workspace'), 'workspace'),
     (str(PROJECT_ROOT / 'packaging' / 'jarvis.ico'), 'packaging'),
 ]
 

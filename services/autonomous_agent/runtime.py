@@ -32,6 +32,7 @@ from typing import Any
 from agents.registry import AgentRegistry
 from packages.agent_sdk.base_agent import AutonomousAgent
 from packages.contracts.agent import (
+    MAX_AGENT_SUMMARY_WORDS,
     AgentOutputContract,
     AgentRole,
     AutonomousAgentMode,
@@ -50,13 +51,28 @@ from services.coding_agent.types import (
     ToolSpec,
 )
 from services.model_runtime.agent_routing import resolve_account_agent_route, resolve_agent_model
-from services.orchestration.output_validation import validate_summary_text
+from services.orchestration.output_validation import count_words, validate_summary_text
 from services.security_core import PermissionDeniedError, SecurityCore
 
 logger = logging.getLogger("jarvis.autonomous_agent.runtime")
 
 MAX_HISTORY_MESSAGES = 40
 MAX_EVENT_OUTPUT = 8_000
+_DETAIL_REQUEST_MARKERS = (
+    "detalh",
+    "aprofund",
+    "passo a passo",
+    "explicação completa",
+    "explicacao completa",
+    "sem limite de palavras",
+    "mais de 300 palavras",
+)
+
+
+def prompt_requests_detail(prompt: str) -> bool:
+    """True quando o utilizador pediu explicitamente uma resposta longa."""
+    lowered = (prompt or "").casefold()
+    return any(marker in lowered for marker in _DETAIL_REQUEST_MARKERS)
 
 
 def recover_textual_tool_call(content: str, allowed_names: set[str]) -> ToolCall | None:
@@ -296,18 +312,12 @@ class AutonomousAgentRuntime:
                     max_tokens=config.max_tokens,
                     timeout_seconds=min(remaining, config.timeout_seconds),
                 )
-                if (
-                    available_tools
-                    and not empty_retry_done
-                    and not reply.content.strip()
-                    and not reply.tool_calls
-                ):
+                if not empty_retry_done and not reply.content.strip() and not reply.tool_calls:
                     empty_retry_done = True
                     extra_prompt_tokens = reply.prompt_tokens or 0
                     extra_completion_tokens = reply.completion_tokens or 0
                     evidence_collected.append(
-                        "O modelo devolveu resposta vazia com ferramentas; "
-                        "foi repetida uma vez sem ferramentas."
+                        "O modelo devolveu resposta vazia; foi repetida uma vez sem ferramentas."
                     )
                     try:
                         reply = await provider.complete(
@@ -485,15 +495,18 @@ class AutonomousAgentRuntime:
 
         # 5. Validação de output: schema, comprimento e uma única reparação.
         if not execution_failed:
+            word_limit = None if prompt_requests_detail(config.prompt) else MAX_AGENT_SUMMARY_WORDS
             final_content, output_issues = validate_summary_text(
-                final_content, finish_reason=final_finish_reason
+                final_content,
+                finish_reason=final_finish_reason,
+                max_words=word_limit,
             )
             if output_issues:
                 remaining = deadline - time.perf_counter()
                 needs_model_repair = any(
                     marker in issue
                     for issue in output_issues
-                    for marker in ("vazio", "truncad", "inválido")
+                    for marker in ("vazio", "truncad", "inválido", "excede")
                 )
                 if needs_model_repair and remaining > 3.0:
                     (
@@ -508,6 +521,7 @@ class AutonomousAgentRuntime:
                         issues=output_issues,
                         config=config,
                         remaining=remaining,
+                        max_words=word_limit,
                     )
                     if repaired_content.strip():
                         final_content = repaired_content
@@ -527,6 +541,20 @@ class AutonomousAgentRuntime:
                         )
                 else:
                     evidence_collected.append("Validação de output: reparação única aplicada.")
+
+            # Garantia final: se a reparação não correu por falta de tempo ou
+            # continuou acima do limite, compacta deterministicamente.
+            if word_limit is not None and count_words(final_content) > word_limit:
+                final_content, compact_issues = validate_summary_text(
+                    final_content,
+                    finish_reason=final_finish_reason,
+                    max_words=word_limit,
+                    enforce_max_words=True,
+                )
+                if compact_issues:
+                    evidence_collected.append(
+                        "Validação de output: " + "; ".join(compact_issues[:3])
+                    )
 
         # 5b. Recuperação final: alguns modelos devolvem a chamada como texto
         # (por vezes já corrigida pela reparação acima). A execução mantém a
@@ -737,18 +765,21 @@ class AutonomousAgentRuntime:
         issues: list[str],
         config: AutonomousAgentRunConfig,
         remaining: float,
+        max_words: int | None = None,
     ) -> tuple[str, list[str], int, int]:
         """Tenta uma única reparação do output via modelo, sem ferramentas."""
         if remaining <= 3.0:
             return content, [*issues, "Reparação não tentada por falta de tempo."], 0, 0
 
+        target_words = max_words or MAX_AGENT_SUMMARY_WORDS
         excerpt = content.strip()[:6000] or "(vazio)"
         prompt = (
             "A resposta anterior de um especialista foi rejeitada pela validação interna "
             f"do JARVIS: {'; '.join(issues)}.\n\n"
             "Reescreva a resposta em português, mantendo apenas conteúdo factual e útil, "
             "sem ferramentas e sem alegar ações que não foram executadas. "
-            "Não uses markdown incompleto. Limita a versão corrigida a 300 palavras. "
+            f"Limita a versão corrigida a {target_words} palavras e conta as palavras "
+            "antes de responder. "
             "Responde apenas com a versão corrigida.\n\n"
             f"Resposta anterior:\n---\n{excerpt}\n---"
         )
@@ -770,7 +801,10 @@ class AutonomousAgentRuntime:
             return content, [*issues, "Reparação única tentada sem sucesso."], 0, 0
 
         repaired, repair_issues = validate_summary_text(
-            reply.content, finish_reason=reply.finish_reason
+            reply.content,
+            finish_reason=reply.finish_reason,
+            max_words=max_words,
+            enforce_max_words=max_words is not None,
         )
         if not repaired.strip():
             return content, [*issues, "Reparação única devolveu output vazio."], 0, 0

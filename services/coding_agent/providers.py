@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
@@ -242,10 +243,11 @@ class OllamaChatProvider(ChatProvider):
 
     def __init__(
         self,
-        base_url: str = "http://127.0.0.1:11434",
+        base_url: str | None = None,
         default_model: str = "llama3.2:3b",
     ):
-        self.base_url = base_url.rstrip("/")
+        configured = base_url or os.environ.get("JARVIS_OLLAMA_BASE_URL", "").strip()
+        self.base_url = (configured or "http://127.0.0.1:11434").rstrip("/")
         self.default_model = default_model
 
     async def complete(

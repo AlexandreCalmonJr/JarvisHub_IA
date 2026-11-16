@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 # usados pelo reparador único em `services.orchestration.output_validation`.
 MAX_AGENT_OBJECTIVE_CHARS = 2_000
 MAX_AGENT_SUMMARY_CHARS = 8_000
+MAX_AGENT_SUMMARY_WORDS = 300
 MAX_AGENT_RECOMMENDATION_CHARS = 1_000
 MAX_AGENT_LIST_ITEMS = 50
 MAX_AGENT_LIST_ITEM_CHARS = 2_000

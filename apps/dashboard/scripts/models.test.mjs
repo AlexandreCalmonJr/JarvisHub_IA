@@ -24,7 +24,7 @@ test('unavailable model catalogs and metrics are not replaced with fabricated va
 
 test('global hybrid configuration requires admin and the KeyVault stays account-scoped', () => {
   assert.match(backend, /async def get_hybrid_config_endpoint\(principal=Depends\(require_admin\)\)/);
-  assert.match(backend, /async def update_hybrid_config_endpoint\(payload: HybridConfigRequest, principal=Depends\(require_admin\)\)/);
+  assert.match(backend, /async def update_hybrid_config_endpoint\(\s*payload: HybridConfigRequest,\s*principal=Depends\(require_admin\)\s*\)/);
   // O cofre privado exige sessão, mas não é exclusivo de administradores.
   assert.match(backend, /async def list_vault_keys_endpoint\(principal=Depends\(get_principal\)\)/);
   assert.match(backend, /async def save_vault_key_endpoint\(payload: KeyProfilePayload, principal=Depends\(get_principal\)\)/);
@@ -39,5 +39,5 @@ test('global hybrid configuration requires admin and the KeyVault stays account-
 
 test('model discovery and local installation require an authenticated or privileged account', () => {
   assert.match(backend, /async def list_models_endpoint\(principal=Depends\(get_principal\)\)/);
-  assert.match(backend, /async def install_huggingface_model_endpoint\(payload: HFInstallPayload, principal=Depends\(require_admin\)\)/);
+  assert.match(backend, /async def install_huggingface_model_endpoint\(\s*payload: HFInstallPayload,\s*principal=Depends\(require_admin\)\s*\)/);
 });

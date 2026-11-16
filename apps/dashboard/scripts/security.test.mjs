@@ -17,7 +17,7 @@ test('tool execution is authenticated, permission-checked and owner-scoped', () 
   assert.match(agentsRouter, /get_project\(request\.project_id, owner_user_id=owner_user_id\)/);
   assert.match(agentsRouter, /owner_user_id=owner_user_id, actor_role=principal\.role/);
   assert.match(auth, /\/api\/v1\/tools\/execute[\s\S]{0,80}coding:use/);
-  assert.match(toolGateway, /get_request\(request\.approval_id, owner_user_id=owner_user_id\)/);
+  assert.match(toolGateway, /get_request\(\s*request\.approval_id,\s*owner_user_id=owner_user_id\s*\)/);
   assert.match(toolGateway, /owner_user_id=owner_user_id/);
 });
 

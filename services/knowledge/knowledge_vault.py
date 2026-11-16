@@ -9,11 +9,18 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from services.knowledge.embedding_service import local_embedding_service
 from services.memory.database import DatabaseManager
+from services.tool_gateway.specialized_tools import vector_memory_manager
 
 logger = logging.getLogger("jarvis.knowledge")
 
 MAX_INDEX_FILE_BYTES = 25 * 1024 * 1024
+
+
+def _vector_table_for_owner(owner_user_id: str | None) -> str:
+    clean_id = (owner_user_id or "default").replace(":", "_").replace("-", "_")
+    return f"knowledge_{clean_id}"
 
 SUPPORTED_EXTENSIONS = {
     ".md",
@@ -170,6 +177,13 @@ class KnowledgeVaultService:
             source_path=str(p),
             owner_user_id=owner_user_id,
         )
+        self._index_chunks_vector(
+            doc_name=doc_name,
+            category=category,
+            chunks=chunks,
+            source_path=str(p),
+            owner_user_id=owner_user_id,
+        )
 
         return {
             "status": "indexed",
@@ -197,6 +211,13 @@ class KnowledgeVaultService:
             category=category,
             chunks=chunks,
             file_size_formatted=file_size_formatted,
+            source_path="Entrada Direta do Usuário",
+            owner_user_id=owner_user_id,
+        )
+        self._index_chunks_vector(
+            doc_name=doc_name,
+            category=category,
+            chunks=chunks,
             source_path="Entrada Direta do Usuário",
             owner_user_id=owner_user_id,
         )
@@ -249,11 +270,95 @@ class KnowledgeVaultService:
             "skipped_count": len(skipped_files),
         }
 
+    def _index_chunks_vector(
+        self,
+        doc_name: str,
+        category: str,
+        chunks: list[str],
+        source_path: str,
+        owner_user_id: str | None = None,
+    ) -> None:
+        """Gera e armazena embeddings dos blocos no LanceDB para busca semântica."""
+        try:
+            table_name = _vector_table_for_owner(owner_user_id)
+            for i, chunk in enumerate(chunks):
+                vec = local_embedding_service.get_embedding(chunk)
+                vector_memory_manager.store_memory(
+                    table_name=table_name,
+                    text=chunk,
+                    vector=vec,
+                    metadata={
+                        "doc_name": doc_name,
+                        "category": category,
+                        "chunk_index": i,
+                        "source_path": source_path,
+                        "owner_user_id": owner_user_id,
+                    },
+                )
+        except Exception as exc:
+            logger.debug("Falha ao indexar vetores no LanceDB para %s: %s", doc_name, exc)
+
     def search(
         self, query: str, limit: int = 4, owner_user_id: str | None = None
     ) -> list[dict[str, Any]]:
-        """Realiza busca textual restrita ao proprietário."""
-        return self.db.search_knowledge_vault(query, limit=limit, owner_user_id=owner_user_id)
+        """Realiza busca semântica vetorial com fallback determinístico por palavras-chave."""
+        clean_query = query.strip()
+        if not clean_query:
+            return []
+
+        results: list[dict[str, Any]] = []
+        seen: set[tuple[str, int]] = set()
+
+        # 1. Busca Semântica via Embeddings e LanceDB
+        try:
+            table_name = _vector_table_for_owner(owner_user_id)
+            query_vec = local_embedding_service.get_embedding(clean_query)
+            similar = vector_memory_manager.search_similar(
+                table_name=table_name, query_vector=query_vec, top_k=limit
+            )
+            for m in similar:
+                meta = m.get("metadata", {})
+                doc_name = meta.get("doc_name", "")
+                chunk_idx = meta.get("chunk_index", 0)
+                key = (doc_name, chunk_idx)
+                if key not in seen and doc_name:
+                    seen.add(key)
+                    score = round(1.0 / (1.0 + float(m.get("score", 0.0))), 3)
+                    results.append(
+                        {
+                            "doc_name": doc_name,
+                            "category": meta.get("category", "geral"),
+                            "chunk_index": chunk_idx,
+                            "content": m.get("text", ""),
+                            "source_path": meta.get("source_path", ""),
+                            "score": score,
+                            "match_type": "semantic",
+                        }
+                    )
+        except Exception as exc:
+            logger.debug("Busca semântica no LanceDB falhou: %s", exc)
+
+        # 2. Fallback por palavras-chave no SQLite
+        if len(results) < limit:
+            keyword_limit = limit - len(results)
+            try:
+                keyword_matches = self.db.search_knowledge_vault(
+                    clean_query, limit=keyword_limit, owner_user_id=owner_user_id
+                )
+                for km in keyword_matches:
+                    key = (km.get("doc_name", ""), km.get("chunk_index", 0))
+                    if key not in seen:
+                        seen.add(key)
+                        results.append(
+                            {
+                                **km,
+                                "match_type": "keyword",
+                            }
+                        )
+            except Exception as exc:
+                logger.warning("Fallback de busca textual no SQLite falhou: %s", exc)
+
+        return results[:limit]
 
     def list_documents(self, owner_user_id: str | None = None) -> list[dict[str, Any]]:
         """Lista inventário de documentos do proprietário."""

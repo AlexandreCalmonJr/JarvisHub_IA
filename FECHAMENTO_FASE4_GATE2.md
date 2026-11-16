@@ -1,7 +1,10 @@
-# Fecho da Fase 4 e Gate 2 — estado em 15/11/2026
+# Fecho da Fase 4 e Gate 2 — estado em 16/11/2026
 
 > **O Gate 2 está fechado.** A rubrica 1–5 foi confirmada pelo utilizador em
 > 15/11/2026, aplicada ao JSON oficial e o `mean_review_score` recalculado.
+> **Correções pós-Gate 2 (16/11/2026):** os três desvios residuais foram
+> corrigidos e revalidados num run suplementar; a rubrica oficial continua a ser
+> a de 15/11.
 
 ## Implementado e validado
 
@@ -38,6 +41,42 @@
 - Tempos (incluem throttling): mediana **1,56 s**, p95 **57,96 s**, máximo
   **175,1 s**, total **934,3 s**. Não substituem o benchmark de performance.
 
+## Correções pós-Gate 2 — 16/11/2026
+
+- **Limite de 300 palavras imposto no runtime:** respostas narrativas acima do
+  limite acionam uma reparação única via modelo; se continuarem longas, são
+  compactadas deterministicamente em fronteira de frase. Pedidos explícitos de
+  detalhe ficam isentos. `mission_application`: **0/26** acima de 300 palavras
+  (122–293, mediana 164).
+- **Respostas vazias:** o runtime repete uma vez sem ferramentas, mesmo sem
+  projeto ativo. Os dois casos que falhavam na primeira passagem
+  (`automation_engineer` e `data_engineer_pipelines`) concluíram com sucesso na
+  retoma.
+- **`structured_output`:** **26/26** JSON válido com chaves/tipos exatos,
+  **26/26** reconhecem a ausência de dados e **0/26** têm marcadores de invenção.
+  `qa_engineer` e `software_architect` passaram a declarar explicitamente a
+  falta de dados/artefactos. Nuance: 19/26 usam literalmente o prefixo exigido;
+  7/26 usam variantes equivalentes («Os dados não foram fornecidos.», o prefixo
+  entre «» ou «Não foram fornecidos dados...»).
+- **`out_of_scope`:** **26/26** orientam emergência (antes 23/26); 20/26 têm
+  recusa explícita detetável por marcadores e os restantes 6 delimitam a
+  competência e remetem para profissionais de saúde, sem prescrever. Nuance:
+  19/26 começam literalmente pela frase de emergência; 7/26 antepõem uma
+  recusa/heading curto.
+- **Run suplementar:** `data/eval_agents_groq_qual_pos_fix.json`, **78/78**,
+  zero falhas, zero timeouts, zero respostas vazias e zero truncamentos; todos
+  os casos em `openai/gpt-oss-120b`. A execução foi retomada: 48 casos correram
+  antes do reinício com o retry de vazias (nenhum vazio) e os restantes 30,
+  incluindo as 2 repetições, com o código final. Tempos (incluem throttling):
+  mediana **1,44 s**, p95 **76,88 s**, máximo **168,76 s**, total **1.042,6 s**.
+- **Rubrica do run suplementar:** não preenchida (`mean_review_score=null`). A
+  proposta automática não aplicada dá **26/26** agentes com relevância ≥4, mas
+  sinaliza **5/26** `mission_application` com `hallucination_control=3` por
+  assumirem contexto da equipa (ex.: stack FastAPI/PostgreSQL). A rubrica
+  oficial mantém-se a de 15/11 (390 notas, `mean_review_score=4,68`).
+- **Testes:** **448 passed em 218,37 s**; Ruff `check` e `format --check`
+  passam (284 ficheiros).
+
 ## Rubrica confirmada
 
 - `data/rubrica_proposta.json` e `data/rubrica_proposta.md` (proposta);
@@ -61,7 +100,8 @@
 
 ## Próximo passo
 
-1. Tratar os desvios residuais de formato/safety (respostas >300 palavras,
-   `qa_engineer`/`software_architect`, 3 casos de `out_of_scope` sem emergência).
+1. ~~Tratar os desvios residuais de formato/safety~~ ✅ Concluído em 16/11/2026
+   (ver secção acima); a rubrica humana do run suplementar continua pendente.
 2. Fase 6: UX-01/03/04/05, ensaio de restauro/webhooks, instalador e guia LAN.
-3. Manter apenas o `:8000` ativo; o `:8010` foi encerrado após o eval.
+3. Manter apenas o `:8000` ativo; o `:8010` foi encerrado após o eval e o `:8000`
+   foi reiniciado com o código final.

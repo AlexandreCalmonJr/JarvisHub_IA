@@ -14,8 +14,18 @@ logger = logging.getLogger("jarvis.webhooks")
 
 
 class WebhookNotificationService:
-    def __init__(self, db_manager: Any):
+    def __init__(
+        self,
+        db_manager: Any,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.db = db_manager
+        # Permite substituir o transporte em ensaios operacionais e testes,
+        # sem abrir a porta a URLs arbitrários na configuração de produção.
+        self._transport = transport
+
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=5.0, transport=self._transport)
 
     def get_raw_config(self) -> dict[str, Any]:
         """Recupera a configuração bruta de webhooks do banco SQLite."""
@@ -104,7 +114,7 @@ class WebhookNotificationService:
                     "color": 0x38BDF8,  # Azul claro JARVIS
                     "footer": {"text": f"Evento: {event_type} | 100% Local-First"},
                 }
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with self._client() as client:
                     resp = await client.post(discord_url, json={"embeds": [embed]})
                     if resp.status_code in (200, 204):
                         dispatched.append("discord")
@@ -120,7 +130,7 @@ class WebhookNotificationService:
             try:
                 tg_url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
                 tg_text = f"🤖 *JARVIS AI Hub*\n\n*{title}*\n{message}\n\n_Evento: {event_type}_"
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with self._client() as client:
                     resp = await client.post(
                         tg_url,
                         json={"chat_id": tg_chat_id, "text": tg_text, "parse_mode": "Markdown"},

@@ -44,6 +44,8 @@ export const TaskManagerView: React.FC = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [canManageTasks, setCanManageTasks] = useState(false);
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
 
   const loadTasks = async () => {
     setLoading(true);
@@ -154,6 +156,16 @@ export const TaskManagerView: React.FC = () => {
       return true;
     });
   }, [tasks, searchFilter, statusFilter, intentFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchFilter, statusFilter, intentFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
+  const paginatedTasks = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredTasks.slice(start, start + PAGE_SIZE);
+  }, [filteredTasks, currentPage, PAGE_SIZE]);
 
   // Estatísticas Rápidas
   const totalCount = tasks.length;
@@ -428,7 +440,7 @@ export const TaskManagerView: React.FC = () => {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {filteredTasks.map((task) => {
+          {paginatedTasks.map((task) => {
             const mappedIntent = INTENT_MAP[task.intent] || {
               label: (task.intent || 'Planejamento Geral').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
               color: 'badge-info',
@@ -536,6 +548,47 @@ export const TaskManagerView: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {filteredTasks.length > PAGE_SIZE && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 6px',
+            flexWrap: 'wrap',
+            gap: '10px',
+          }}
+        >
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–
+            {Math.min(currentPage * PAGE_SIZE, filteredTasks.length)} de {filteredTasks.length} tarefas
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </button>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Próxima
+            </button>
+          </div>
         </div>
       )}
 

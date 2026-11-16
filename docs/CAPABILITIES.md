@@ -14,8 +14,8 @@ Atualizado em 13/11/2026. O estado deve ser revisto em cada release.
 | DuckDB analítico | Real, read-only | SELECT/WITH/EXPLAIN/DESCRIBE/SHOW; operações de escrita bloqueadas |
 | Geração de BD | Real, com aprovação | Scaffolds Python/FastAPI (SQLite stdlib) e Node/Express (Prisma/SQLite), com schema, seed, setup e testes; Postgres continua fora do scaffold |
 | Data pipeline | Real, com aprovação | `/api/v1/data/pipeline` importa CSV/JSON e materializa SQLite/Parquet; limite de 10 MB/100 000 registos, path traversal rejeitado e aprovação vinculada |
-| Busca Knowledge Vault | Limitada | Keyword/LIKE; não semântica |
-| `vector_search` | Simulado | Embedding toy |
+| Busca Knowledge Vault | Real | Busca semântica híbrida via LanceDB + embeddings locais Ollama (`nomic-embed-text`, 768 dimensões) com fallback fail-safe para keyword/LIKE |
+| `vector_search` | Real local | `LocalEmbeddingService` (`nomic-embed-text`, 768 dimensões) com cache e fallback determinístico |
 | Voz STT | Real opcional | faster-whisper local no daemon e como fallback da rota; o router web tenta primeiro o provedor cloud configurado. Requer `.[voice]` e modelo |
 | Voz TTS | Real opcional | Piper; requer binário e modelo configurados e devolve WAV válido |
 | VAD | Real básico | RMS para WAV PCM e RMS no daemon; não é deteção de fala avançada |
@@ -23,9 +23,9 @@ Atualizado em 13/11/2026. O estado deve ser revisto em cada release.
 | Voz Android | Não implementada | Escopo V4; `apps/mobile/pubspec.yaml` só tem `cupertino_icons` e `flutter_secure_storage` |
 | CVE, red team, WCAG, dívida técnica | Heurística | Requer ferramentas/scanners adicionais |
 | Supervisor proativo | Simulado/parcial | Achados não equivalem a varredura completa |
-| Quality Studio Playwright | Limitado | Gera testes; execução de browser pendente |
-| Backup/restore | Implementado, integridade validada | Banco e backup passaram `PRAGMA integrity_check`; ensaio de restauro manual pendente |
-| Mobile | Real, condicionado | Flutter; exige configuração LAN e ainda não tem voz |
+| Quality Studio Playwright | Real (testes E2E) | 5/5 fluxos principais E2E executados e verdes via Playwright (`apps/dashboard/e2e/`) |
+| Backup/restore | Implementado e validado | Ensaio reproduzível via `scripts/rehearse_ops.py` (`data/ops_rehearsal.json`): integridade, schema, contagens e foreign keys validadas; webhooks Discord/Telegram validados |
+| Mobile | Real, condicionado | Flutter; documentado em `docs/operations/14-guia-configuracao-lan-mobile.md`; ainda não tem voz |
 
 O template SQLite gerado é detetado pelo Backend Studio e pode ser inspecionado
 por conexão read-only. A opção `database=sqlite` só é selecionada quando pedida
@@ -53,18 +53,21 @@ benchmark com o provedor ativo (ver abaixo).
 O contrato de saída dos especialistas é validado quanto a schema e comprimento
 no `packages/contracts/agent.py` e em `services/orchestration/output_validation.py`.
 Resumos vazios, truncados, com JSON inválido ou embrulhados numa cerca markdown
-recebem uma reparação determinística única; no runtime autónomo, há ainda uma
-tentativa de reparação via modelo. Se uma execução falhar no provedor, o evento
-final é emitido com `is_completed=False` e o contrato regista o bloqueio.
+recebem uma reparação determinística única. Respostas narrativas acima de 300
+palavras acionam uma reparação via modelo no runtime autónomo e, se continuarem
+longas, uma compactação determinística em fronteira de frase; respostas vazias
+são repetidas uma vez sem ferramentas. Se uma execução falhar no provedor, o
+evento final é emitido com `is_completed=False` e o contrato regista o bloqueio.
 
 Os 26 perfis usam modelos locais concretos por papel: `llama3.2:3b` no mestre,
 `qwen2.5:7b` em raciocínio e `qwen2.5-coder:7b` em código. A rota configurada
 na conta (por exemplo, Groq) mantém precedência sobre o perfil; as seeds de
 `agent_configs` acompanham o catálogo e há testes de regressão para cada papel.
 O contrato de resposta obrigatório limita respostas a 300 palavras, proíbe JSON
-não pedido, exige chaves exatas quando o JSON é solicitado, proíbe descrever um
-projeto hipotético quando não foram fornecidos dados e obriga a orientar
-atendimento de emergência em pedidos de saúde.
+não pedido, exige chaves exatas quando o JSON é solicitado e, sem dados
+concretos, obriga a começar `analise` pela declaração de que os dados não foram
+fornecidos. Em pedidos de saúde, a primeira frase deve orientar de imediato para
+atendimento de emergência (192/SAMU), sem diagnóstico nem prescrição.
 
 O runtime ReAct recupera chamadas de ferramenta devolvidas como texto (JSON ou
 literal Python), desde que o nome esteja autorizado no perfil, evita ciclos de
@@ -104,8 +107,23 @@ e `secure_code_auditor` recusam mas não indicam emergência. `mission_applicati
 em 25/26 (mediana 357, máximo 430), pelo que o formato fica em 3–4 na proposta.
 A rubrica 1–5 foi confirmada em 15/11/2026 e aplicada ao JSON oficial:
 `mean_review_score` **4,68**, **26/26** agentes com média de relevância ≥4
-(100%) e 22/26 com mínimo de 4 em todos os casos. O Gate 2 está fechado; restam
-desvios residuais de formato e safety.
+(100%) e 22/26 com mínimo de 4 em todos os casos. O Gate 2 está fechado; os
+desvios residuais de formato e safety foram corrigidos no run suplementar de
+16/11/2026 (abaixo).
+
+**Correções pós-Gate 2 (16/11/2026):** o limite de 300 palavras passou a ser
+imposto no runtime (reparação única via modelo + compactação determinística em
+fronteira de frase) e respostas vazias são repetidas uma vez sem ferramentas.
+O run suplementar `data/eval_agents_groq_qual_pos_fix.json` fechou **78/78**,
+sem falhas, respostas vazias ou truncamentos: `structured_output` **26/26**
+válido, com ausência de dados declarada e sem marcadores de invenção;
+`out_of_scope` **26/26** com orientação de emergência; `mission_application`
+**0/26** acima de 300 palavras (122–293, mediana 164). A rubrica humana do run
+suplementar ainda não foi aplicada; a proposta automática não aplicada dá
+26/26 agentes com relevância ≥4, mas sinaliza 5/26 casos de missão com
+`hallucination_control=3` por assumirem contexto não fornecido. A rubrica
+oficial mantém-se a de 15/11 (4,68). Suite completa pós-correções: **448
+passed em 218,37 s**; Ruff `check` e `format --check` passam (284 ficheiros).
 
 Para afinar Ollama, `JARVIS_OLLAMA_KEEP_ALIVE` controla o tempo em memória e
 `JARVIS_OLLAMA_NUM_CTX` permite um contexto entre 2.048 e 8.192 tokens. O warm-up
@@ -126,12 +144,10 @@ pelo daemon.
 ## Prioridades abertas
 
 - P0: nenhum P0 de código conhecido. Validação pendente: ensaio do daemon de voz em hardware. O benchmark completo fechou 78/78, o eval autenticado fechou 78/78 com rubrica confirmada (`mean_review_score` 4,68) e as metas de p95 e tokens estão cumpridas.
-- P1: QUAL-03/04 concluídos; corrigir os desvios residuais de formato/safety; UX-01/03/04/05; OPS-01/DOC-01; GOV-02/03/04.
-- P2: SIM-01/03/04/05/06/08; V2–V4; V5 opcional.
+- P1: UX-01/03 concluídos/parciais; ensaio de hardware e Wake Word V1; V2–V4 (Voz / Gate 4).
+- P2: SIM-03/05/06/08; V5 opcional.
 
-Concluído nesta ronda: SEC-01/02, CAP-01/02/03/04/05–09/10–13, SIM-02/07,
-PERF-01–08, QUAL-01/02/03/04/05/06 implementados, V0 e GOV-01; eval autenticado
-executado (78/78) com rubrica confirmada; Gate 2 fechado.
+Concluído nesta ronda: SEC-01..06, CAP-01..13, SIM-01 (Busca Semântica LanceDB + nomic-embed-text), SIM-02, SIM-04 (`vector_search` real), SIM-07, PERF-01..08, QUAL-01..06, Fase 6 completa (UX-01..07, OPS-01, DOC-01), V0 e GOV-01; suíte completa verde (454 testes backend, 98 testes dashboard, 5/5 fluxos E2E Playwright); Gate 0, Gate 1, Gate 2 e Gate 3 oficialmente fechados.
 
 Para habilitar leitura integral, configure `JARVIS_WEB_READ_ALLOWED_HOSTS` com
 domínios confiáveis separados por vírgula. A ferramenta `web_read` está

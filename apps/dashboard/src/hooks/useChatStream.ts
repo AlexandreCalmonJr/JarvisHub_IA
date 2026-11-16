@@ -502,39 +502,46 @@ export function useChatStream(
 
     let accumulatedText = '';
     let metaInfo: any = null;
+    let rafId: number | null = null;
+    let streamFinished = false;
+    const finishStream = () => {
+      streamFinished = true;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
 
     try {
       await streamChatMessage(
         finalPrompt,
         activeProjectId || undefined,
         sessionId,
-        (() => {
-          let rafId: number | null = null;
-          return (token: string) => {
-            accumulatedText += token;
-            if (rafId === null) {
-              rafId = requestAnimationFrame(() => {
-                rafId = null;
-                setMessages((prev) => {
-                  const next = [...prev];
-                  const lastIdx = next.length - 1;
-                  if (lastIdx >= 0 && next[lastIdx].sender === 'jarvis') {
-                    next[lastIdx] = {
-                      ...next[lastIdx],
-                      text: accumulatedText,
-                      taskData: metaInfo ? { ...metaInfo, final_summary: accumulatedText } : undefined,
-                    };
-                  }
-                  return next;
-                });
-              });
-            }
-          };
-        })(),
+        (token: string) => {
+          accumulatedText += token;
+          if (rafId !== null || streamFinished) return;
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            if (streamFinished) return;
+            setMessages((prev) => {
+              const next = [...prev];
+              const lastIdx = next.length - 1;
+              if (lastIdx >= 0 && next[lastIdx].sender === 'jarvis') {
+                next[lastIdx] = {
+                  ...next[lastIdx],
+                  text: accumulatedText,
+                  taskData: metaInfo ? { ...metaInfo, final_summary: accumulatedText } : undefined,
+                };
+              }
+              return next;
+            });
+          });
+        },
         (meta: any) => {
           metaInfo = meta;
         },
         (done: any) => {
+          finishStream();
           const baseText = done.final_summary || accumulatedText || 'Tarefa concluída.';
           const sourceList = Array.isArray(done.sources) ? done.sources : [];
           const citations = sourceList.length
@@ -608,6 +615,7 @@ export function useChatStream(
           }
         },
         (errStr: string, code?: string) => {
+          finishStream();
           const errorLabel = code === 'provider_unavailable'
             ? 'Provedor de IA indisponível'
             : code === 'timeout'
@@ -644,6 +652,7 @@ export function useChatStream(
         modelOverride
       );
     } catch (err: any) {
+      finishStream();
       if (err.name === 'AbortError') {
         return;
       }
@@ -724,6 +733,7 @@ export function useChatStream(
         });
       }
     } finally {
+      finishStream();
       setLoading(false);
     }
   };

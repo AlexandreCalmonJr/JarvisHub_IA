@@ -66,4 +66,12 @@ def test_response_contract_is_applied_to_every_specialist():
         assert "não renomeies nem acrescentes chaves" in prompt, role
         assert "sem observação real" in prompt, role
         assert "dados não foram fornecidos" in prompt, role
+        assert "Procure imediatamente atendimento de emergência" in prompt, role
         assert "192/SAMU" in prompt, role
+        assert "Conta as palavras antes de responder" in prompt, role
+
+
+def test_data_and_architecture_roles_reinforce_absence_of_artifacts():
+    """Os papéis que mais alucinavam exigem a declaração explícita de lacunas."""
+    for role in (AgentRole.QA_ENGINEER, AgentRole.SOFTWARE_ARCHITECT):
+        assert "dados não foram fornecidos" in AGENT_PROFILES[role].system_prompt, role

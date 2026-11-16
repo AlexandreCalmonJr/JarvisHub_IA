@@ -51,6 +51,37 @@ _FALLBACKS = {
 }
 _JSON_BLOCK_RE = re.compile(r"```json\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 _FENCED_BLOCK_RE = re.compile(r"^```([A-Za-z0-9_-]*)\s*(.*?)\s*```$", re.DOTALL)
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def count_words(text: str) -> int:
+    """Conta palavras da mesma forma que a avaliação de qualidade."""
+    return len(_WORD_RE.findall(text or ""))
+
+
+def _looks_structured_or_code(text: str) -> bool:
+    """JSON e blocos de código não estão sujeitos ao limite narrativo."""
+    stripped = text.lstrip()
+    if stripped.startswith(("{", "[")):
+        return True
+    return "```" in text
+
+
+def _compact_words(text: str, limit: int) -> str:
+    """Corta em fronteira de palavra/frase para garantir o limite narrativo.
+
+    Só é usado como último recurso depois de uma reparação pelo modelo que
+    continue acima do limite. Preserva o máximo de conteúdo possível.
+    """
+    matches = list(_WORD_RE.finditer(text))
+    if len(matches) <= limit:
+        return text
+    cutoff = matches[limit - 1].end()
+    window = text[:cutoff]
+    boundary = max(window.rfind(". "), window.rfind("! "), window.rfind("? "), window.rfind("\n"))
+    if boundary >= int(cutoff * 0.6):
+        window = window[: boundary + 1]
+    return window.rstrip(" \t,;:-") + " …"
 
 
 class OutputContractError(ValueError):
@@ -182,11 +213,19 @@ def _heal_json_in_summary(text: str, issues: list[str]) -> str:
     return text
 
 
-def validate_summary_text(text: str, *, finish_reason: str = "stop") -> tuple[str, list[str]]:
+def validate_summary_text(
+    text: str,
+    *,
+    finish_reason: str = "stop",
+    max_words: int | None = None,
+    enforce_max_words: bool = False,
+) -> tuple[str, list[str]]:
     """Valida comprimento e JSON do resumo, com uma reparação determinística.
 
     Devolve ``(texto_reparado, problemas)``. ``problemas`` vazio significa que
-    nenhuma alteração foi necessária.
+    nenhuma alteração foi necessária. ``max_words`` ativa o contrato narrativo;
+    ``enforce_max_words`` aplica a compactação determinística como último
+    recurso, depois da reparação pelo modelo.
     """
     issues: list[str] = []
     cleaned = (text or "").replace("\x00", "").strip()
@@ -204,6 +243,20 @@ def validate_summary_text(text: str, *, finish_reason: str = "stop") -> tuple[st
 
     cleaned = _strip_json_fence(cleaned, issues)
     cleaned = _heal_json_in_summary(cleaned, issues)
+
+    if max_words is not None and cleaned and not _looks_structured_or_code(cleaned):
+        words = count_words(cleaned)
+        if words > max_words:
+            if enforce_max_words:
+                cleaned = _compact_words(cleaned, max_words)
+                issues.append(
+                    f"summary: compactado de {words} para {count_words(cleaned)} palavras "
+                    f"(limite {max_words})."
+                )
+            else:
+                issues.append(
+                    f"summary: excede {max_words} palavras ({words}); requer compactação."
+                )
     return cleaned, issues
 
 

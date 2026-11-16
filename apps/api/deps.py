@@ -117,6 +117,11 @@ def resolve_frontend_dist() -> Path | None:
 
 
 def resolve_workspace_dir() -> Path:
+    override = os.environ.get("JARVIS_WORKSPACE_DIR")
+    if override:
+        w = Path(override).expanduser().resolve()
+        w.mkdir(parents=True, exist_ok=True)
+        return w
     if getattr(sys, "frozen", False):
         local_app_data = os.environ.get("LOCALAPPDATA")
         if local_app_data:
