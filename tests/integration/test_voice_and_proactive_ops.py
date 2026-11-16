@@ -1,6 +1,7 @@
 import io
 import struct
 import wave
+from pathlib import Path
 
 import pytest
 
@@ -88,3 +89,23 @@ def test_proactive_supervisor_generates_approval_and_enforces_budget():
     # Second check: must fail because budget of 1 inspection per day was reached
     with pytest.raises(ProactiveBudgetExceededError):
         supervisor.run_proactive_check(project_id="demo_flutter_app")
+
+
+def test_proactive_supervisor_real_project_scan(tmp_path: Path):
+    audit = AuditTrail()
+    approval_engine = ApprovalEngine(audit_trail=audit)
+    policy = ProactivePolicy(max_inspections_per_day=5)
+    supervisor = ProactiveSupervisor(
+        approval_engine=approval_engine,
+        policy=policy,
+        audit_trail=audit,
+    )
+
+    proj = tmp_path / "real_proj"
+    proj.mkdir()
+    (proj / "requirements.txt").write_text("requests==2.18.0\n", encoding="utf-8")
+
+    findings = supervisor.run_proactive_check(project_id="real_proj", project_root=proj)
+    assert len(findings) >= 1
+    assert any("requests" in f.title.lower() for f in findings)
+    assert any(f.approval_request_id is not None for f in findings)

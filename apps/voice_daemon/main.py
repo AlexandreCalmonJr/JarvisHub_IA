@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -100,7 +101,9 @@ class GlobalHotkeyListener:
         vk_j = 0x4A
 
         if not user32.RegisterHotKey(None, hotkey_id, mod_control | mod_shift, vk_j):
-            logger.warning("Não foi possível registrar o atalho global Ctrl+Shift+J (pode estar em uso).")
+            logger.warning(
+                "Não foi possível registrar o atalho global Ctrl+Shift+J (pode estar em uso)."
+            )
             return
 
         logger.info("Atalho global Ctrl+Shift+J registrado com sucesso.")
@@ -123,6 +126,8 @@ class VoiceDaemon:
         self.stop_event = threading.Event()
         self.muted = threading.Event()
         self.hotkey_wake_requested = threading.Event()
+        self.is_speaking = threading.Event()
+        self.barge_in_event = threading.Event()
         self.tray = None
         self.stt = LocalSTTAdapter(os.getenv("JARVIS_STT_MODEL", "base"))
         self.tts = LocalTTSAdapter()
@@ -206,14 +211,70 @@ class VoiceDaemon:
         if self.tray:
             self.tray.stop()
 
+    def interrupt_speech(self) -> None:
+        """Interrompe imediatamente a reprodução de fala atual (barge-in)."""
+        self.barge_in_event.set()
+        try:
+            import sounddevice as sd
+
+            sd.stop()
+        except Exception as exc:
+            logger.debug("Falha ao interromper reprodução de áudio: %s", exc)
+
     def _say(self, text: str) -> None:
+        """Sintetiza e reproduz o texto frase por frase (TTS por frase), permitindo barge-in ágil."""
+        clean_text = text.strip()
+        if not clean_text:
+            return
+
         import numpy as np
         import sounddevice as sd
 
-        result = self.tts.synthesize(text)
-        with wave.open(io.BytesIO(result.audio_bytes), "rb") as wav:
-            samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype=np.int16)
-            sd.play(samples, wav.getframerate(), blocking=True)
+        # Divide o texto em sentenças para menor latência e interrupção precisa
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean_text) if s.strip()]
+        if not sentences:
+            sentences = [clean_text]
+
+        self.barge_in_event.clear()
+        self.is_speaking.set()
+        try:
+            for sentence in sentences:
+                if (
+                    self.barge_in_event.is_set()
+                    or self.stop_event.is_set()
+                    or self.hotkey_wake_requested.is_set()
+                ):
+                    logger.info("Barge-in detectado; reprodução de frases interrompida.")
+                    break
+
+                result = self.tts.synthesize(sentence)
+                if not result.audio_bytes:
+                    continue
+
+                with wave.open(io.BytesIO(result.audio_bytes), "rb") as wav:
+                    framerate = wav.getframerate()
+                    frames = wav.readframes(wav.getnframes())
+                    samples = np.frombuffer(frames, dtype=np.int16)
+
+                if len(samples) == 0:
+                    continue
+
+                sd.play(samples, framerate)
+                duration = len(samples) / float(framerate)
+                deadline = time.monotonic() + duration
+                while time.monotonic() < deadline:
+                    if (
+                        self.barge_in_event.is_set()
+                        or self.stop_event.is_set()
+                        or self.hotkey_wake_requested.is_set()
+                    ):
+                        sd.stop()
+                        logger.info("Reprodução interrompida via barge-in.")
+                        return
+                    time.sleep(0.04)
+                sd.wait()
+        finally:
+            self.is_speaking.clear()
 
     @staticmethod
     def _wav(pcm) -> bytes:
@@ -278,6 +339,9 @@ class VoiceDaemon:
     def _on_hotkey_pressed(self) -> None:
         """Callback acionado pelo atalho global Ctrl+Shift+J."""
         logger.info("Ativação via atalho global Ctrl+Shift+J.")
+        if self.is_speaking.is_set():
+            logger.info("Interrompendo fala anterior via barge-in.")
+            self.interrupt_speech()
         self.hotkey_wake_requested.set()
         self.notify("Atalho global acionado. Ouvindo...", title="JARVIS")
 
@@ -288,12 +352,25 @@ class VoiceDaemon:
             self._say("Configure o token de voz para continuar.")
             logger.error("JARVIS_VOICE_TOKEN ausente; transcrição descartada.")
             return
+
+        session_file = DATA_DIR / "voice-session-id.txt"
+        session_id = (
+            session_file.read_text(encoding="utf-8").strip() if session_file.exists() else ""
+        )
+        if not session_id:
+            session_id = f"voice-{os.urandom(8).hex()}"
+            session_file.write_text(session_id, encoding="utf-8")
+
         try:
             headers = {"Authorization": f"Bearer {token}"}
             command_response = httpx.post(
                 f"{API_BASE}/api/v1/voice/command",
                 headers=headers,
-                json={"text": transcript, "device_id": "desktop-voice-daemon"},
+                json={
+                    "text": transcript,
+                    "device_id": "desktop-voice-daemon",
+                    "session_id": session_id,
+                },
                 timeout=15,
             )
             command_response.raise_for_status()
@@ -301,15 +378,6 @@ class VoiceDaemon:
             if command.get("intent") != "command.unsupported":
                 reply = command.get("reply", "Não consegui processar o pedido.")
             else:
-                session_file = DATA_DIR / "voice-session-id.txt"
-                session_id = (
-                    session_file.read_text(encoding="utf-8").strip()
-                    if session_file.exists()
-                    else ""
-                )
-                if not session_id:
-                    session_id = f"voice-{os.urandom(8).hex()}"
-                    session_file.write_text(session_id, encoding="utf-8")
                 response = httpx.post(
                     f"{API_BASE}/api/v1/chat",
                     headers=headers,
@@ -320,7 +388,9 @@ class VoiceDaemon:
                 result = response.json()
                 if result.get("approval_required"):
                     reply = "Preciso que aprove a ação no painel."
-                    self.notify("Ação requer aprovação no painel do JARVIS.", title="JARVIS Approval")
+                    self.notify(
+                        "Ação requer aprovação no painel do JARVIS.", title="JARVIS Approval"
+                    )
                 else:
                     reply = result.get("final_summary") or result.get("response") or "Concluído."
             self._say(str(reply)[:1200])
@@ -341,7 +411,11 @@ class VoiceDaemon:
         silent_chunks = 0
         followup_limit = int(6.0 * SAMPLE_RATE / CHUNK_SAMPLES)
         for _ in range(followup_limit):
-            if self.stop_event.is_set() or self.muted.is_set() or self.hotkey_wake_requested.is_set():
+            if (
+                self.stop_event.is_set()
+                or self.muted.is_set()
+                or self.hotkey_wake_requested.is_set()
+            ):
                 return
             chunk, overflowed = stream.read(CHUNK_SAMPLES)
             if overflowed or not chunk:

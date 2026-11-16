@@ -237,6 +237,17 @@ async def generate_playwright_test_endpoint(
     }
 
 
+@router.post("/api/v1/quality-studio/execute-playwright")
+async def execute_playwright_test_endpoint(
+    payload: GeneratePlaywrightPayload, principal: Principal = Depends(get_principal)
+):
+    _require_human(principal)
+    return await quality_studio_service.execute_playwright_test(
+        target_url=payload.target_url,
+        steps=payload.steps,
+    )
+
+
 @router.get("/api/v1/quality-studio/chaos-edge-cases")
 async def get_chaos_edge_cases_endpoint(principal: Principal = Depends(get_principal)):
     _require_human(principal)

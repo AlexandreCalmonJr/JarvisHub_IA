@@ -137,17 +137,22 @@ serializa inferências pesadas.
 
 O daemon de voz requer `.[voice]`, `JARVIS_VOICE_TOKEN`, `JARVIS_PIPER_EXECUTABLE`
 e `JARVIS_PIPER_MODEL`. O microfone fica no PC, a wake word é local e apenas o
-texto reconhecido segue para a API local autenticada. Logs em
-`data/logs/voice.log`; uma única instância é permitida. O áudio não é guardado
-pelo daemon.
+texto reconhecido segue para a API local autenticada. Suporta atalho global (`Ctrl+Shift+J`),
+inicialização com Windows (`HKCU Run`), notificações na bandeja, janela de follow-up (6s),
+TTS por frase com baixa latência e interrupção imediata via barge-in.
+O Intent Router em `/api/v1/voice/command` atende 10 comandos de assistente pessoal
+(horas, data, timers, lembretes, clima, saúde do sistema, cálculo seguro via AST, repetição
+de respostas anteriores, cancelamento e abertura de aplicativos/pastas), exigindo aprovação
+no painel para qualquer ação sensível. Logs em `data/logs/voice.log`; uma única instância
+é permitida. O áudio não é guardado pelo daemon.
 
 ## Prioridades abertas
 
-- P0: nenhum P0 de código conhecido. Validação pendente: ensaio do daemon de voz em hardware. O benchmark completo fechou 78/78, o eval autenticado fechou 78/78 com rubrica confirmada (`mean_review_score` 4,68) e as metas de p95 e tokens estão cumpridas.
-- P1: UX-01/03 concluídos/parciais; ensaio de hardware e Wake Word V1; V2–V4 (Voz / Gate 4).
-- P2: SIM-03/05/06/08; V5 opcional.
+- P0: nenhum P0 de código conhecido. Validação pendente: ensaio do daemon de voz em hardware físico com microfone real. O benchmark completo fechou 78/78, o eval autenticado fechou 78/78 com rubrica confirmada (`mean_review_score` 4,68) e as metas de p95 e tokens estão cumpridas.
+- P1: V4 (Android com foreground service) / V5 (iOS opcional) e ensaio em hardware real de microfone.
+- P2: SIM-08 (Execução em contentor/VM); V6 contínuo.
 
-Concluído nesta ronda: SEC-01..06, CAP-01..13, SIM-01 (Busca Semântica LanceDB + nomic-embed-text), SIM-02, SIM-04 (`vector_search` real), SIM-07, PERF-01..08, QUAL-01..06, Fase 6 completa (UX-01..07, OPS-01, DOC-01), V0 e GOV-01; suíte completa verde (454 testes backend, 98 testes dashboard, 5/5 fluxos E2E Playwright); Gate 0, Gate 1, Gate 2 e Gate 3 oficialmente fechados.
+Concluído nesta ronda: SEC-01..06, CAP-01..13, SIM-01 (Busca Semântica LanceDB + nomic-embed-text), SIM-02, SIM-03 (Auditoria real pip-audit/bandit), SIM-04 (`vector_search` real), SIM-05 (Supervisor proativo com inspeções reais de CVEs, segredos e SAST), SIM-06 (Quality Studio com execução real de Playwright em Chromium headless), SIM-07, PERF-01..08, QUAL-01..06, Fase 6 completa (UX-01..07, OPS-01, DOC-01), V0, V1 (Wake word + daemon + bandeja + autostart + atalho global), V2 (Conversa contínua, follow-up, TTS por frase, barge-in) e V3 (Intent router + 10 comandos de assistente pessoal determinísticos seguros) e GOV-01; suíte completa verde; Gate 0, Gate 1, Gate 2 e Gate 3 oficialmente fechados.
 
 Para habilitar leitura integral, configure `JARVIS_WEB_READ_ALLOWED_HOSTS` com
 domínios confiáveis separados por vírgula. A ferramenta `web_read` está

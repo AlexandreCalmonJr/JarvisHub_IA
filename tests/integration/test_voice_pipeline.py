@@ -79,3 +79,97 @@ async def test_voice_command_checks_project_ownership():
             json={"text": "que horas são", "project_id": "project-not-owned"},
         )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_voice_command_all_10_personal_assistant_intents():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        session = "session-test-v3"
+
+        # 1. time.now
+        r1 = await client.post(
+            "/api/v1/voice/command", json={"text": "que horas são", "session_id": session}
+        )
+        assert r1.status_code == 200
+        assert r1.json()["intent"] == "time.now"
+
+        # 2. date.today
+        r2 = await client.post(
+            "/api/v1/voice/command", json={"text": "qual a data de hoje", "session_id": session}
+        )
+        assert r2.status_code == 200
+        assert r2.json()["intent"] == "date.today"
+
+        # 3. timer.set
+        r3 = await client.post(
+            "/api/v1/voice/command",
+            json={"text": "põe um timer de 15 minutos", "session_id": session},
+        )
+        assert r3.status_code == 200
+        assert r3.json()["intent"] == "timer.set"
+        assert "15 minutos" in r3.json()["reply"]
+
+        # 4. reminder.create
+        r4 = await client.post(
+            "/api/v1/voice/command",
+            json={"text": "lembra-me de enviar o relatório", "session_id": session},
+        )
+        assert r4.status_code == 200
+        assert r4.json()["intent"] == "reminder.create"
+        assert "enviar o relatório" in r4.json()["reply"]
+
+        # 5. weather.info
+        r5 = await client.post(
+            "/api/v1/voice/command", json={"text": "como está o tempo", "session_id": session}
+        )
+        assert r5.status_code == 200
+        assert r5.json()["intent"] == "weather.info"
+
+        # 6. system.status
+        r6 = await client.post(
+            "/api/v1/voice/command", json={"text": "status do sistema", "session_id": session}
+        )
+        assert r6.status_code == 200
+        assert r6.json()["intent"] == "system.status"
+
+        # 7. calc.eval (percentage)
+        r7 = await client.post(
+            "/api/v1/voice/command",
+            json={"text": "quanto é 15% de 240", "session_id": session},
+        )
+        assert r7.status_code == 200
+        assert r7.json()["intent"] == "calc.eval"
+        assert "36" in r7.json()["reply"]
+
+        # 8. calc.eval (arithmetic)
+        r8 = await client.post(
+            "/api/v1/voice/command",
+            json={"text": "quanto é 25 mais 17", "session_id": session},
+        )
+        assert r8.status_code == 200
+        assert r8.json()["intent"] == "calc.eval"
+        assert "42" in r8.json()["reply"]
+
+        # 9. app.open
+        r9 = await client.post(
+            "/api/v1/voice/command", json={"text": "abre o VS Code", "session_id": session}
+        )
+        assert r9.status_code == 200
+        assert r9.json()["intent"] == "app.open"
+        assert "vs code" in r9.json()["reply"].lower()
+
+        # 10. voice.repeat (repeats r9)
+        r10 = await client.post(
+            "/api/v1/voice/command", json={"text": "repete", "session_id": session}
+        )
+        assert r10.status_code == 200
+        assert r10.json()["intent"] == "voice.repeat"
+        assert r9.json()["reply"] in r10.json()["reply"]
+
+        # 11. voice.cancel
+        r11 = await client.post(
+            "/api/v1/voice/command", json={"text": "cancela", "session_id": session}
+        )
+        assert r11.status_code == 200
+        assert r11.json()["intent"] == "voice.cancel"
+        assert "cancelada" in r11.json()["reply"].lower()

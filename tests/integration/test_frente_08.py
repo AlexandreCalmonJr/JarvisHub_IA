@@ -93,3 +93,17 @@ def test_quality_studio_chaos_edge_cases():
     assert "CARACTERES_ESPECIAIS_E_UNICODE" in categories
     assert "PAYLOAD_GIGANTE_E_OVERFLOW" in categories
     assert "SIMULACAO_INJECAO" in categories
+
+
+@pytest.mark.anyio
+async def test_quality_studio_execute_playwright():
+    service = QualityStudioService()
+    res = await service.execute_playwright_test(
+        target_url="http://127.0.0.1:8000/api",
+        steps=[{"action": "goto", "target": "http://127.0.0.1:8000/api"}],
+        timeout_seconds=10,
+    )
+    assert res["status"] == "success"
+    assert res["is_success"] is True
+    assert res["steps_executed"] == 1
+    assert res["screenshot_captured"] is True

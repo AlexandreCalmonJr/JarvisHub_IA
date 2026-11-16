@@ -123,3 +123,70 @@ def test_global_hotkey_listener_lifecycle():
     if listener.thread:
         listener.thread.join(timeout=2)
     assert not listener.thread.is_alive()
+
+
+def test_voice_daemon_sentence_tts_and_barge_in(monkeypatch):
+    from services.voice_runtime.types import SpeechSynthesisResult
+
+    daemon = VoiceDaemon()
+
+    synthesized_sentences = []
+
+    def mock_synthesize(sentence: str):
+        synthesized_sentences.append(sentence)
+        stream = io.BytesIO()
+        with wave.open(stream, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(SAMPLE_RATE)
+            wav.writeframes(b"\x00\x00" * 320)
+        return SpeechSynthesisResult(audio_bytes=stream.getvalue(), is_spoken=True)
+
+    monkeypatch.setattr(daemon.tts, "synthesize", mock_synthesize)
+
+    played = []
+    stopped = []
+
+    class MockSoundDevice:
+        @staticmethod
+        def play(samples, framerate):
+            played.append(len(samples))
+
+        @staticmethod
+        def wait():
+            pass
+
+        @staticmethod
+        def stop():
+            stopped.append(True)
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "sounddevice", MockSoundDevice)
+
+    # 1. Normal sentence-by-sentence TTS
+    daemon._say("Primeira frase. Segunda frase! Terceira frase?")
+    assert len(synthesized_sentences) == 3
+    assert synthesized_sentences == ["Primeira frase.", "Segunda frase!", "Terceira frase?"]
+    assert len(played) == 3
+
+    # 2. Barge-in interruption during playback
+    synthesized_sentences.clear()
+    played.clear()
+
+    def interrupting_play(samples, framerate):
+        played.append(len(samples))
+        daemon.interrupt_speech()
+
+    monkeypatch.setattr(MockSoundDevice, "play", staticmethod(interrupting_play))
+    daemon._say("Quarta frase. Quinta frase.")
+    assert len(synthesized_sentences) == 1
+    assert synthesized_sentences == ["Quarta frase."]
+    assert len(played) == 1
+    assert len(stopped) >= 1
+
+    # 3. Interrupt speech helper
+    daemon.barge_in_event.clear()
+    daemon.is_speaking.set()
+    daemon._on_hotkey_pressed()
+    assert daemon.barge_in_event.is_set()

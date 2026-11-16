@@ -193,6 +193,83 @@ class QualityStudioService:
         )
         return "\n".join(code_lines)
 
+    async def execute_playwright_test(
+        self,
+        target_url: str = "http://127.0.0.1:8000",
+        steps: list[dict[str, str]] | None = None,
+        timeout_seconds: int = 30,
+        capture_screenshot: bool = True,
+    ) -> dict[str, Any]:
+        """Executa um cenário real do Playwright em navegador headless e devolve o relatório de execução."""
+        from playwright.async_api import async_playwright
+
+        action_steps = steps or [
+            {"action": "goto", "target": target_url},
+            {"action": "assert_title", "target": "JARVIS"},
+        ]
+        logs: list[str] = []
+        started = time.perf_counter()
+        timeout_ms = max(5000, min(timeout_seconds * 1000, 60000))
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await browser.new_page()
+                page.set_default_timeout(timeout_ms)
+
+                for idx, step in enumerate(action_steps, 1):
+                    action = step.get("action", "goto")
+                    target = str(step.get("target", ""))
+                    logs.append(f"Passo {idx}: {action} -> {target}")
+
+                    if action == "goto":
+                        await page.goto(target, timeout=timeout_ms)
+                    elif action == "click":
+                        await page.locator(target).click(timeout=timeout_ms)
+                    elif action == "fill":
+                        value = str(step.get("value", ""))
+                        await page.locator(target).fill(value, timeout=timeout_ms)
+                    elif action == "assert_visible":
+                        is_visible = await page.locator(target).is_visible()
+                        if not is_visible:
+                            raise AssertionError(f"Elemento '{target}' não visível.")
+                    elif action == "assert_title":
+                        title = await page.title()
+                        if target.lower() not in title.lower():
+                            logs.append(f"Aviso: título '{title}' não contém '{target}'")
+
+                final_title = await page.title()
+                final_url = page.url
+                screenshot_bytes = None
+                if capture_screenshot:
+                    screenshot_bytes = await page.screenshot()
+
+                await browser.close()
+
+                duration_s = round(time.perf_counter() - started, 2)
+                return {
+                    "status": "success",
+                    "is_success": True,
+                    "target_url": final_url,
+                    "title": final_title,
+                    "steps_executed": len(action_steps),
+                    "duration_seconds": duration_s,
+                    "logs": logs,
+                    "screenshot_captured": screenshot_bytes is not None,
+                }
+        except Exception as exc:
+            duration_s = round(time.perf_counter() - started, 2)
+            logger.warning("Falha na execução Playwright: %s", exc)
+            return {
+                "status": "failure",
+                "is_success": False,
+                "error": str(exc),
+                "duration_seconds": duration_s,
+                "steps_executed": len(logs),
+                "logs": logs,
+                "screenshot_captured": False,
+            }
+
     def generate_chaos_edge_cases(
         self,
         endpoint_or_func: str = "process_data",

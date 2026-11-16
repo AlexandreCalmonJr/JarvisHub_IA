@@ -291,7 +291,11 @@ def _run_bandit_ast_scan(target_dir: Path, project_root: Path) -> list[dict[str,
                     rel_p = str(Path(fn).resolve().relative_to(project_root.resolve()))
                 except Exception:
                     rel_p = Path(fn).name
-                cwe_id = item.get("issue_cwe", {}).get("id") if isinstance(item.get("issue_cwe"), dict) else "N/A"
+                cwe_id = (
+                    item.get("issue_cwe", {}).get("id")
+                    if isinstance(item.get("issue_cwe"), dict)
+                    else "N/A"
+                )
                 ast_findings.append(
                     {
                         "file": rel_p,

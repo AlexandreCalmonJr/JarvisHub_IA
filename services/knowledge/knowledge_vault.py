@@ -22,6 +22,7 @@ def _vector_table_for_owner(owner_user_id: str | None) -> str:
     clean_id = (owner_user_id or "default").replace(":", "_").replace("-", "_")
     return f"knowledge_{clean_id}"
 
+
 SUPPORTED_EXTENSIONS = {
     ".md",
     ".txt",
