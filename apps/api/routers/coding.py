@@ -13,8 +13,8 @@ from fastapi.responses import StreamingResponse
 
 from apps.api.auth import Principal, get_principal
 from apps.api.deps import coding_broker, coding_runtime, coding_tools, db_manager, security_core
-from apps.api.schemas import CodingApprovalDecision, CodingRunRequest
-from services.coding_agent import AgentMode, AgentRunConfig
+from apps.api.schemas import CodingApprovalDecision, CodingRunRequest, CompactSessionRequest
+from services.coding_agent import AgentMode, AgentRunConfig, ContextCompactor
 from services.security_core import UnauthorizedApprovalError
 
 logger = logging.getLogger("jarvis.api.coding")
@@ -105,6 +105,30 @@ async def clear_coding_messages(session_id: str, principal: Principal = Depends(
 
     deleted = db_manager.clear_session_messages(session_id, owner_user_id=_private_owner(principal))
     return {"session_id": session_id, "deleted": deleted}
+
+
+@router.post("/api/v1/coding/sessions/{session_id}/compact")
+async def compact_coding_session(
+    session_id: str,
+    payload: CompactSessionRequest = CompactSessionRequest(),
+    principal: Principal = Depends(get_principal),
+):
+    """Compacta semanticamente o histórico da sessão (estilo Claude Code /compact)."""
+    from apps.api.deps import db_manager
+
+    compactor = ContextCompactor(keep_recent=payload.keep_recent)
+    stats = compactor.compact_session_db(
+        db_manager=db_manager,
+        session_id=session_id,
+        project_id=payload.project_id,
+        owner_user_id=_private_owner(principal),
+        keep_recent=payload.keep_recent,
+    )
+    return {
+        "session_id": session_id,
+        **stats.to_dict(),
+    }
+
 
 
 @router.post("/api/v1/coding/run/stream")

@@ -19,6 +19,7 @@ class SpawnTeammateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=64)
     role: str = Field(min_length=2, max_length=64)
     project_id: str | None = Field(default=None, max_length=128)
+    isolate_worktree: bool = Field(default=False, description="Criar Git Worktree isolado")
 
 
 class DispatchTaskRequest(BaseModel):
@@ -35,6 +36,7 @@ async def spawn_teammate(
         name=payload.name,
         role=payload.role,
         project_id=payload.project_id,
+        isolate_worktree=payload.isolate_worktree,
     )
     return teammate.to_dict()
 

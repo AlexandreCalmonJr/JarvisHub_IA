@@ -6,6 +6,7 @@ modelo com suporte a *tool calling*.
 
 from .broker import ApprovalBroker, ApprovalTicket
 from .chat import ChatAgentRuntime, ChatRunConfig
+from .compactor import CompactionStats, ContextCompactor
 from .context import build_project_context, detect_project_commands
 from .providers import (
     AnthropicChatProvider,
@@ -45,6 +46,8 @@ __all__ = [
     "ChatTurn",
     "CodingAgentRuntime",
     "CodingToolExecutor",
+    "CompactionStats",
+    "ContextCompactor",
     "GovernedChatProvider",
     "OllamaChatProvider",
     "OpenAICompatibleChatProvider",

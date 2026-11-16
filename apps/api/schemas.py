@@ -48,6 +48,14 @@ class CodingApprovalDecision(BaseModel):
     reason: str | None = None
 
 
+class CompactSessionRequest(BaseModel):
+    """Parâmetros para compactação semântica de sessão de contexto."""
+
+    keep_recent: int = Field(4, ge=2, le=20, description="Quantidade de turnos recentes preservados")
+    project_id: str | None = Field(None, description="ID do projeto associado à sessão")
+
+
+
 class UserProfilePayload(BaseModel):
     displayName: str = "Desenvolvedor"
     avatarIcon: str = "💻"
