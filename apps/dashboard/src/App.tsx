@@ -85,6 +85,9 @@ const LearningCenterView = lazy(() =>
 const AgentOfficeView = lazy(() =>
   import('./components/office/AgentOfficeView').then((m) => ({ default: m.AgentOfficeView }))
 );
+const SettingsView = lazy(() =>
+  import('./components/settings/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
 
 const ViewFallback: React.FC = () => (
   <div
@@ -128,7 +131,7 @@ const DashboardApp: React.FC = () => {
       models: 'models:read', coding: 'coding:read', agents: 'agents:read',
       knowledge: 'knowledge:read', tasks: 'tasks:read', backend_studio: 'studios:read',
       quality: 'studios:read', skills: 'skills:read', security: 'security:read',
-      executive_report: 'studios:read', learning: 'profile:read',
+      executive_report: 'studios:read', learning: 'profile:read', settings: 'profile:read',
     };
     return !required[tab] || hasPermission(required[tab]);
   };
@@ -310,9 +313,9 @@ const DashboardApp: React.FC = () => {
           activeTab={activeTab}
           onNavigate={navigate}
           pendingApprovalsCount={pendingApprovalsCount}
-          onOpenSettings={() => navigate('security')}
+          onOpenSettings={() => navigate('settings')}
           onOpenHelp={() => setGuidedTourOpen(true)}
-          onOpenProfile={() => setShowProfileModal(true)}
+          onOpenProfile={() => navigate('settings')}
         />
       )}
 
@@ -328,8 +331,8 @@ const DashboardApp: React.FC = () => {
           backgroundColor: 'var(--bg-primary)',
         }}
       >
-        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora do Chat) */}
-        {activeTab !== 'chat' && (
+        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora do Chat e Configurações) */}
+        {activeTab !== 'chat' && activeTab !== 'settings' && (
           <header
             style={{
             height: '46px',
@@ -636,9 +639,9 @@ const DashboardApp: React.FC = () => {
         <main
           style={{
             flex: 1,
-            overflowY: activeTab === 'chat' || activeTab === 'coding' ? 'hidden' : 'auto',
+            overflowY: activeTab === 'chat' || activeTab === 'coding' || activeTab === 'settings' ? 'hidden' : 'auto',
             minWidth: 0,
-            padding: activeTab === 'chat' ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
+            padding: activeTab === 'chat' || activeTab === 'settings' ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
             backgroundColor: 'var(--bg-primary)',
           }}
         >
@@ -693,6 +696,7 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'advisor' && <HardwareAdvisorView />}
             {activeTab === 'server_logs' && <ServerLogsView />}
             {activeTab === 'learning' && <LearningCenterView activeTab={learningContextTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} onOpenProfile={() => setShowProfileModal(true)} />}
+            {activeTab === 'settings' && <SettingsView onNavigate={navigate} />}
           </Suspense>
           )}
         </main>

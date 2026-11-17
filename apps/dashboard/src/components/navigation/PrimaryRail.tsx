@@ -325,14 +325,14 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
         {/* Configurações */}
         <button
           type="button"
-          onClick={onOpenSettings || (() => onNavigate('security'))}
-          className={`rail-nav-btn ${activeTab === 'security' ? 'is-active' : ''}`}
+          onClick={onOpenSettings || (() => onNavigate('settings'))}
+          className={`rail-nav-btn ${activeTab === 'settings' ? 'is-active' : ''}`}
           style={{
             width: '42px',
             height: '42px',
             borderRadius: '12px',
-            backgroundColor: activeTab === 'security' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-            color: activeTab === 'security' ? '#ffffff' : '#9ca3af',
+            backgroundColor: activeTab === 'settings' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            color: activeTab === 'settings' ? '#ffffff' : '#9ca3af',
             border: 'none',
             display: 'flex',
             alignItems: 'center',

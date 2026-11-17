@@ -128,6 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
 
   const settingsItems: SidebarNavItem[] = [
+    { id: 'settings', label: 'Configurações', permission: 'profile:read', icon: <Settings size={13} color="var(--accent-color)" /> },
     { id: 'models', label: 'Modelos & Cofre', permission: 'models:read', icon: <Key size={13} color="var(--accent-color)" /> },
     { id: 'skills', label: 'Habilidades (Skills)', permission: 'skills:read', icon: <Sparkles size={13} color="var(--accent-color)" /> },
     { id: 'security', label: 'Segurança', permission: 'security:read', icon: <ShieldAlert size={13} color="var(--danger-color)" /> },
