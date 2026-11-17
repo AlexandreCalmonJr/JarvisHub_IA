@@ -314,7 +314,7 @@ const DashboardApp: React.FC = () => {
           onNavigate={navigate}
           pendingApprovalsCount={pendingApprovalsCount}
           onOpenSettings={() => navigate('settings')}
-          onOpenHelp={() => setGuidedTourOpen(true)}
+          onOpenHelp={() => navigate('learning')}
           onOpenProfile={() => navigate('settings')}
         />
       )}
@@ -331,8 +331,8 @@ const DashboardApp: React.FC = () => {
           backgroundColor: 'var(--bg-primary)',
         }}
       >
-        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora do Chat, Configurações e Loja) */}
-        {activeTab !== 'chat' && activeTab !== 'settings' && activeTab !== 'skills' && (
+        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora do Chat, Configurações, Loja e Novidades & Ajuda) */}
+        {activeTab !== 'chat' && activeTab !== 'settings' && activeTab !== 'skills' && activeTab !== 'learning' && (
           <header
             style={{
             height: '46px',
@@ -639,9 +639,9 @@ const DashboardApp: React.FC = () => {
         <main
           style={{
             flex: 1,
-            overflowY: activeTab === 'chat' || activeTab === 'coding' || activeTab === 'settings' || activeTab === 'skills' ? 'hidden' : 'auto',
+            overflowY: activeTab === 'chat' || activeTab === 'coding' || activeTab === 'settings' || activeTab === 'learning' || activeTab === 'skills' ? 'hidden' : 'auto',
             minWidth: 0,
-            padding: activeTab === 'chat' || activeTab === 'settings' || activeTab === 'skills' ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
+            padding: activeTab === 'chat' || activeTab === 'settings' || activeTab === 'learning' || activeTab === 'skills' ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
             backgroundColor: 'var(--bg-primary)',
           }}
         >

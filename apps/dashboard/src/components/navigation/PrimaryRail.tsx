@@ -303,14 +303,14 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
         {/* Ajuda / Novidades */}
         <button
           type="button"
-          onClick={onOpenHelp}
-          className="rail-nav-btn"
+          onClick={onOpenHelp || (() => onNavigate('learning'))}
+          className={`rail-nav-btn ${activeTab === 'learning' ? 'is-active' : ''}`}
           style={{
             width: '42px',
             height: '42px',
             borderRadius: '12px',
-            backgroundColor: 'transparent',
-            color: '#9ca3af',
+            backgroundColor: activeTab === 'learning' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            color: activeTab === 'learning' ? '#ffffff' : '#9ca3af',
             border: 'none',
             display: 'flex',
             alignItems: 'center',
