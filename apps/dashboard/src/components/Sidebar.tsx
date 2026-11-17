@@ -730,9 +730,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
               </div>
               <span style={{ fontWeight: 500 }}>
-                {userProfile.displayName || 'Utilizador'}
+                {userProfile.displayName || 'Usuário'}
               </span>
-              <span style={{ fontSize: '0.70rem', color: 'var(--text-muted)' }}>· v3.0.0</span>
+              <span style={{ fontSize: '0.70rem', color: 'var(--text-muted)' }}>· v3.0.1</span>
             </button>
           ) : (
             <button

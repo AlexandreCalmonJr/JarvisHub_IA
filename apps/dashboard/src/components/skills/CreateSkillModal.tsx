@@ -191,10 +191,10 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  backgroundColor: '#070a12',
-                  border: '1px solid rgba(255,255,255,0.12)',
+                  backgroundColor: 'var(--bg-input)',
+                  border: '1px solid var(--border-color)',
                   borderRadius: '8px',
-                  color: '#fff',
+                  color: 'var(--text-primary)',
                   fontSize: '0.84rem',
                   fontFamily: 'monospace',
                 }}
@@ -214,7 +214,7 @@ export const CreateSkillModal: React.FC<CreateSkillModalProps> = ({
                   maxHeight: '140px',
                   overflowY: 'auto',
                   padding: '8px',
-                  backgroundColor: '#070a12',
+                  backgroundColor: 'var(--bg-input)',
                   borderRadius: '8px',
                   border: '1px solid var(--border-color)',
                 }}
@@ -278,10 +278,10 @@ license: MIT
               style={{
                 width: '100%',
                 padding: '10px 12px',
-                backgroundColor: '#070a12',
-                border: '1px solid rgba(255,255,255,0.12)',
+                backgroundColor: 'var(--bg-input)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '8px',
-                color: '#fff',
+                color: 'var(--text-primary)',
                 fontSize: '0.82rem',
                 fontFamily: 'monospace',
               }}

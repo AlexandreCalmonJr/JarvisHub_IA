@@ -336,7 +336,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          backgroundColor: 'rgba(13, 19, 34, 0.6)',
+          backgroundColor: 'var(--bg-tertiary)',
           gap: '10px',
         }}
       >
@@ -509,9 +509,9 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              backgroundColor: '#020617',
+              backgroundColor: 'var(--bg-input)',
               borderRadius: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: '1px solid var(--border-color)',
               overflow: 'hidden',
             }}
           >
@@ -547,7 +547,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
                 style={{
                   borderRadius: '10px',
                   border: '1px solid var(--border-color)',
-                  backgroundColor: '#070a12',
+                  backgroundColor: 'var(--bg-input)',
                   fontFamily: "'JetBrains Mono', monospace",
                   fontSize: '0.8rem',
                   overflowX: 'auto',
@@ -644,7 +644,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
                 style={{
                   borderRadius: '10px',
                   border: '1px solid var(--border-color)',
-                  backgroundColor: '#070a12',
+                  backgroundColor: 'var(--bg-input)',
                   fontFamily: "'JetBrains Mono', monospace",
                   fontSize: '0.82rem',
                   overflowY: 'auto',
@@ -695,7 +695,7 @@ export const ArtifactCanvas: React.FC<ArtifactCanvasProps> = ({ artifact, onClos
                   fontSize: '0.82rem',
                 }}
               >
-                <FileCode size={16} color="#818cf8" />
+                <FileCode size={16} color="var(--accent-color)" />
                 <span style={{ color: 'var(--text-primary)' }}>{file}</span>
               </div>
             ))}

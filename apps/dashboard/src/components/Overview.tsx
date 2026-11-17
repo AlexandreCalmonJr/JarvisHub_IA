@@ -1,5 +1,6 @@
 import React from 'react';
 import { SystemHealth, ApprovalRequestItem, getStatusLabel } from '../types';
+import { ModelUsageCharts } from './overview/ModelUsageCharts';
 
 interface OverviewProps {
   health: SystemHealth | null;
@@ -118,6 +119,8 @@ export const Overview: React.FC<OverviewProps> = ({
           <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.84rem', margin: 0 }}>Componentes indisponíveis até que o backend responda.</p>
         )}
       </section>
+
+      <ModelUsageCharts />
 
       <section className="glass-panel" style={{ padding: '22px', borderRadius: '14px' }}>
         <h2 className="claude-serif-title" style={{ fontSize: '1.12rem', fontWeight: 500, margin: 0 }}>Atenção operacional</h2>

@@ -2,7 +2,6 @@
   "name": "jarvis-ai-hub",
   "private": true,
   "version": "3.0.1",
-  "packageManager": "npm@10.8.2",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
@@ -18,6 +17,6 @@
     "test:e2e": "npm run test:e2e --workspace apps/dashboard",
     "test:e2e:headed": "npm run test:e2e:headed --workspace apps/dashboard",
     "test:e2e:report": "npm run test:e2e:report --workspace apps/dashboard",
-    "typecheck": "tsc --noEmit --project apps/dashboard/tsconfig.json"
+    "typecheck": "npm run typecheck --workspace apps/dashboard"
   }
 }

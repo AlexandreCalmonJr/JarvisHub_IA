@@ -33,8 +33,7 @@ import {
 } from '../../api';
 
 import { notify } from '../common/Toast';
-
-
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ProjectActionsModal } from './ProjectActionsModal';
 import { humanizeLabel } from '../../types';
 
@@ -119,9 +118,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   let TechIcon = Globe;
 
-  let iconColor = '#818cf8';
+  let iconColor = 'var(--accent-color)';
 
-  let iconBg = 'rgba(99, 102, 241, 0.15)';
+  let iconBg = 'var(--accent-soft)';
 
   if (pType === 'python' || fNames.some((f) => f.endsWith('.py') || f.includes('requirements.txt'))) {
 
@@ -578,7 +577,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               style={{ fontSize: '0.76rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="Vincular este projeto ao Chat do JARVIS para modificar ou auditar código"
             >
-              <MessageSquare size={14} color="#818cf8" />
+              <MessageSquare size={14} color="var(--accent-color)" />
               <span>Tratar no Chat</span>
             </button>
           )}
@@ -707,132 +706,23 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       )}
 
       {/* Modal Seguro de Confirmação de Exclusão */}
-
-      {showConfirmDelete && (
-
-        <div
-
-          style={{
-
-            position: 'fixed',
-
-            top: 0,
-
-            left: 0,
-
-            right: 0,
-
-            bottom: 0,
-
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
-
-            backdropFilter: 'blur(6px)',
-
-            display: 'flex',
-
-            alignItems: 'center',
-
-            justifyContent: 'center',
-
-            zIndex: 9999,
-
-            padding: '20px',
-
-          }}
-
-          onClick={() => setShowConfirmDelete(false)}
-
-        >
-
-          <div
-
-            style={{
-
-              maxWidth: '440px',
-
-              width: '100%',
-
-              backgroundColor: '#0f172a',
-
-              border: '1px solid rgba(248, 113, 113, 0.3)',
-
-              borderRadius: '14px',
-
-              padding: '24px',
-
-              display: 'flex',
-
-              flexDirection: 'column',
-
-              gap: '16px',
-
-              boxShadow: '0 20px 40px rgba(0,0,0,0.8)',
-
-            }}
-
-            onClick={(e) => e.stopPropagation()}
-
-          >
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-
-              <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: 'rgba(248, 113, 113, 0.15)', color: '#f87171' }}>
-
-                <Trash2 size={20} />
-
-              </div>
-
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f87171' }}>
-
-                Excluir Workspace Permanentemente?
-
-              </h3>
-
-            </div>
-
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-
-              Você está prestes a excluir todos os arquivos físicos do projeto <b>{project.name || project.id}</b> localizados em:
-
-              <br />
-
-              <code style={{ fontSize: '0.74rem', color: '#e2e8f0', wordBreak: 'break-all', display: 'block', marginTop: '6px' }}>
-
-                {fullPath}
-
-              </code>
-
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
-
-              <button onClick={() => setShowConfirmDelete(false)} className="btn btn-secondary" style={{ fontSize: '0.80rem' }}>
-
-                Cancelar
-
-              </button>
-
-              <button
-
-                onClick={confirmDeleteAction}
-
-                className="btn btn-danger"
-
-                style={{ fontSize: '0.80rem', padding: '6px 14px', backgroundColor: '#dc2626', color: '#fff' }}
-
-              >
-
-                Confirmar Exclusão
-
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+      <ConfirmDialog
+        isOpen={showConfirmDelete}
+        title="Excluir Workspace Permanentemente?"
+        tone="danger"
+        confirmLabel="Confirmar Exclusão"
+        isLoading={deleting}
+        onCancel={() => setShowConfirmDelete(false)}
+        onConfirm={confirmDeleteAction}
+        description={
+          <>
+            Você está prestes a excluir todos os arquivos físicos do projeto <b>{project.name || project.id}</b> localizados em:
+            <code style={{ fontSize: '0.74rem', color: 'var(--text-primary)', wordBreak: 'break-all', display: 'block', marginTop: '6px' }}>
+              {fullPath}
+            </code>
+          </>
+        }
+      />
 
     </div>
 

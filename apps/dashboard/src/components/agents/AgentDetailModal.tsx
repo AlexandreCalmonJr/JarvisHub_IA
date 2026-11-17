@@ -528,7 +528,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
             {/* Ferramentas Autorizadas */}
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>
-                <Wrench size={15} color="#818cf8" />
+                <Wrench size={15} color="var(--accent-color)" />
                 Matriz de Ferramentas Autorizadas (Sandbox ToolGateway):
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
@@ -544,24 +544,24 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                         gap: '8px',
                         padding: '8px 10px',
                         borderRadius: '6px',
-                        backgroundColor: isChecked ? 'rgba(99, 102, 241, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-                        border: `1px solid ${isChecked ? 'rgba(99, 102, 241, 0.35)' : 'var(--border-color)'}`,
+                        backgroundColor: isChecked ? 'var(--accent-soft)' : 'rgba(255, 255, 255, 0.02)',
+                        border: `1px solid ${isChecked ? 'var(--border-accent)' : 'var(--border-color)'}`,
                         cursor: 'pointer',
                         fontSize: '0.8rem',
-                        color: isChecked ? '#c7d2fe' : 'var(--text-secondary)',
+                        color: isChecked ? 'var(--text-primary)' : 'var(--text-secondary)',
                       }}
                     >
                       <input
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => toggleTool(t)}
-                        style={{ accentColor: '#6366f1', marginTop: '2px' }}
+                        style={{ accentColor: 'var(--accent-color)', marginTop: '2px' }}
                       />
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ fontWeight: 600, color: isChecked ? '#ffffff' : 'var(--text-primary)' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                           {getToolLabel(t)}
                         </span>
-                        <span style={{ fontSize: '0.70rem', fontFamily: 'monospace', color: isChecked ? '#a5b4fc' : 'var(--text-muted)' }}>
+                        <span style={{ fontSize: '0.70rem', fontFamily: 'monospace', color: isChecked ? 'var(--accent-color)' : 'var(--text-muted)' }}>
                           {t}
                         </span>
                       </div>
@@ -707,8 +707,8 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                             fontSize: '0.72rem',
                             padding: '2px 6px',
                             borderRadius: '4px',
-                            backgroundColor: 'rgba(99, 102, 241, 0.15)',
-                            color: '#818cf8',
+                            backgroundColor: 'var(--accent-soft)',
+                            color: 'var(--accent-color)',
                             fontFamily: 'monospace',
                             fontWeight: 600,
                           }}

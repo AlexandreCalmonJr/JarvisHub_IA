@@ -28,6 +28,7 @@ import {
 import { fetchWorkspaceProjects } from '../services/api';
 import { notify } from './common/Toast';
 import { DiffViewer } from './common/DiffViewer';
+import { ConfirmDialog } from './common/ConfirmDialog';
 import { getAccountStorageKey } from '../services/accountScope';
 import { API_BASE } from '../services/api/client';
 import { getOperationLabel, getProjectTypeLabel, getRiskLabel, getToolLabel } from '../types';
@@ -118,6 +119,8 @@ export const CodingAgentView: React.FC = () => {
   const [canDecideApproval, setCanDecideApproval] = useState(false);
   const [canReloadMcp, setCanReloadMcp] = useState(false);
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -341,7 +344,7 @@ export const CodingAgentView: React.FC = () => {
       );
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        append({ kind: 'info', text: 'Execução interrompida pelo utilizador.' });
+        append({ kind: 'info', text: 'Execução interrompida pelo usuário.' });
       } else {
         append({ kind: 'error', text: err.message || 'Falha ao executar o agente.' });
         setError(err.message || 'Falha ao executar o agente.');
@@ -398,14 +401,23 @@ export const CodingAgentView: React.FC = () => {
     notify('Nova sessão do Coding Agent criada.', 'success');
   };
 
-  const handleClearHistory = async () => {
-    if (!canClearHistory || !window.confirm('Apagar o histórico desta sessão da sua conta?')) return;
+  const handleClearHistory = () => {
+    if (!canClearHistory) return;
+    setConfirmClearOpen(true);
+  };
+
+  const confirmClearHistory = async () => {
+    if (!canClearHistory) return;
+    setClearingHistory(true);
     try {
       await clearCodingMessages(sessionId);
       setEntries([]);
+      setConfirmClearOpen(false);
       notify('Histórico da sessão apagado.', 'success');
     } catch (err: any) {
       notify(err.message || 'Falha ao limpar histórico.', 'error');
+    } finally {
+      setClearingHistory(false);
     }
   };
 
@@ -615,7 +627,7 @@ export const CodingAgentView: React.FC = () => {
             title="Recarregar servidores MCP e redescobrir ferramentas"
             style={{ ...styles.ghostButton, opacity: mcpBusy ? 0.6 : 1 }}
           >
-            <RefreshCw size={14} color="#818cf8" className={mcpBusy ? 'spin' : undefined} />
+            <RefreshCw size={14} color="var(--accent-color)" className={mcpBusy ? 'spin' : undefined} />
             {mcpBusy ? 'Recarregando...' : 'Recarregar MCP'}
           </button>}
         </div>
@@ -657,11 +669,11 @@ export const CodingAgentView: React.FC = () => {
       <div style={styles.timeline}>
         {entries.length === 0 && !running && (
           <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '36px 16px' }}>
-            <FolderGit2 size={34} color="#334155" style={{ margin: '0 auto 10px' }} />
+            <FolderGit2 size={34} color="var(--text-muted)" style={{ margin: '0 auto 10px' }} />
             <p style={{ fontSize: '0.9rem' }}>
               Selecione um projeto e descreva a tarefa. Exemplos:
             </p>
-            <p style={{ fontSize: '0.8rem', marginTop: '6px', color: '#94a3b8' }}>
+            <p style={{ fontSize: '0.8rem', marginTop: '6px', color: 'var(--text-muted)' }}>
               “Explique a arquitetura deste projeto” • “Corrija o bug no endpoint de login” •
               “Rode os testes e corrija as falhas”
             </p>
@@ -670,7 +682,7 @@ export const CodingAgentView: React.FC = () => {
         {entries.map(renderEntry)}
         {running && !pendingApproval && (
           <div style={styles.infoCard}>
-            <Bot size={14} color="#818cf8" />
+            <Bot size={14} color="var(--accent-color)" />
             <div>Agente em execução...</div>
           </div>
         )}
@@ -750,7 +762,18 @@ export const CodingAgentView: React.FC = () => {
             <Play size={18} />
           </button>
         )}
-      </div> : <div className="glass-panel" style={{ padding: '16px', color: 'var(--text-secondary)' }}>{roleLoaded ? 'O seu perfil tem acesso de consulta ao Coding Agent, mas não pode iniciar execuções.' : 'A verificar permissões do Coding Agent…'}</div>}
+      </div> : <div className="glass-panel" style={{ padding: '16px', color: 'var(--text-secondary)' }}>{roleLoaded ? 'O seu perfil tem acesso de consulta ao Coding Agent, mas não pode iniciar execuções.' : 'Verificando permissões do Coding Agent…'}</div>}
+
+      <ConfirmDialog
+        isOpen={confirmClearOpen}
+        title="Apagar histórico da sessão"
+        description="Apagar o histórico desta sessão da sua conta?"
+        confirmLabel="Apagar histórico"
+        tone="danger"
+        isLoading={clearingHistory}
+        onConfirm={confirmClearHistory}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
     </div>
   );
 };

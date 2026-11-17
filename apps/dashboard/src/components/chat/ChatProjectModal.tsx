@@ -107,14 +107,14 @@ export const ChatProjectModal: React.FC<ChatProjectModalProps> = ({
                         justifyContent: 'space-between',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                        border: `1px solid ${isSelected ? 'rgba(99, 102, 241, 0.5)' : 'rgba(255, 255, 255, 0.08)'}`,
+                        backgroundColor: isSelected ? 'var(--accent-soft)' : 'rgba(255, 255, 255, 0.04)',
+                        border: `1px solid ${isSelected ? 'var(--border-accent)' : 'var(--border-color)'}`,
                         cursor: 'pointer',
                         transition: 'background-color 0.15s ease',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <FolderGit2 size={16} color={isSelected ? '#818cf8' : 'var(--text-secondary)'} />
+                        <FolderGit2 size={16} color={isSelected ? 'var(--accent-color)' : 'var(--text-secondary)'} />
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#fff' }}>

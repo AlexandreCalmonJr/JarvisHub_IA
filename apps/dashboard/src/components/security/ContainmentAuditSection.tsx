@@ -10,6 +10,7 @@ import {
 import { triggerKillSwitch, fetchAuditLogs } from '../../api';
 import { API_BASE } from '../../services/api/client';
 import { getOperationLabel, getSeverityLabel, getStatusLabel } from '../../types';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 
 interface ContainmentAuditSectionProps {
   onRefresh: () => void;
@@ -21,6 +22,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
   const [killLoading, setKillLoading] = useState(false);
   const [canKill, setCanKill] = useState(false);
   const [taskIdInput, setTaskIdInput] = useState('');
+  const [pendingKillAction, setPendingKillAction] = useState<{ mode: 'global' } | { mode: 'task'; taskId: string } | null>(null);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Trilha de Auditoria ao Vivo
@@ -67,36 +69,29 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
     void loadAuditLogs(1);
   }, [severityFilter]);
 
-  const handleGlobalKill = async () => {
+  const handleGlobalKill = () => {
     if (!canKill) return;
-    if (
-      !window.confirm(
-        'ATENÇÃO: Deseja suspender imediatamente todas as operações e ferramentas do JARVIS HUB?'
-      )
-    ) {
-      return;
-    }
-    setKillLoading(true);
-    try {
-      await triggerKillSwitch('global');
-      setMessage({ type: 'success', text: 'Kill Switch Global acionado. As operações foram bloqueadas pelo mecanismo de contenção.' });
-      onRefresh();
-      loadAuditLogs();
-    } catch (err: any) {
-      setMessage({ type: 'error', text: `Erro: ${err.message}` });
-    } finally {
-      setKillLoading(false);
-    }
+    setPendingKillAction({ mode: 'global' });
   };
 
-  const handleCancelTask = async () => {
+  const handleCancelTask = () => {
     if (!canKill || !taskIdInput.trim()) return;
-    if (!window.confirm(`Cancelar a tarefa '${taskIdInput.trim()}'? Esta ação não pode ser desfeita.`)) return;
+    setPendingKillAction({ mode: 'task', taskId: taskIdInput.trim() });
+  };
+
+  const confirmKillAction = async () => {
+    if (!canKill || !pendingKillAction) return;
     setKillLoading(true);
     try {
-      await triggerKillSwitch('task', taskIdInput.trim());
-      setMessage({ type: 'success', text: `Tarefa '${taskIdInput.trim()}' cancelada com sucesso.` });
-      setTaskIdInput('');
+      if (pendingKillAction.mode === 'global') {
+        await triggerKillSwitch('global');
+        setMessage({ type: 'success', text: 'Kill Switch Global acionado. As operações foram bloqueadas pelo mecanismo de contenção.' });
+      } else {
+        await triggerKillSwitch('task', pendingKillAction.taskId);
+        setMessage({ type: 'success', text: `Tarefa '${pendingKillAction.taskId}' cancelada com sucesso.` });
+        setTaskIdInput('');
+      }
+      setPendingKillAction(null);
       onRefresh();
       loadAuditLogs();
     } catch (err: any) {
@@ -161,8 +156,15 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
           <button
             onClick={handleGlobalKill}
             disabled={killLoading}
-            className="btn btn-danger"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            className="btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'var(--danger-color)',
+              color: '#fff',
+              border: '1px solid rgba(239, 68, 68, 0.45)',
+            }}
           >
             <AlertOctagon size={16} />
             {killLoading ? 'Acionando...' : 'Suspender Todo o Sistema (Global)'}
@@ -223,7 +225,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FileText size={18} color="var(--primary-color)" />
+            <FileText size={18} color="var(--accent-color)" />
             <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Trilha de Auditoria ao Vivo</h3>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -313,7 +315,7 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
                     ) : (
                       <Info
                         size={16}
-                        color="var(--primary-color)"
+                        color="var(--accent-color)"
                         style={{ flexShrink: 0 }}
                       />
                     )}
@@ -443,6 +445,23 @@ export const ContainmentAuditSection: React.FC<ContainmentAuditSectionProps> = (
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingKillAction)}
+        title={pendingKillAction?.mode === 'global' ? 'Acionar Kill Switch Global' : 'Cancelar tarefa'}
+        description={
+          pendingKillAction?.mode === 'global'
+            ? 'ATENÇÃO: Deseja suspender imediatamente todas as operações e ferramentas do JARVIS HUB?'
+            : pendingKillAction?.mode === 'task'
+              ? `Cancelar a tarefa '${pendingKillAction.taskId}'? Esta ação não pode ser desfeita.`
+              : null
+        }
+        confirmLabel={pendingKillAction?.mode === 'global' ? 'Suspender sistema' : 'Cancelar tarefa'}
+        tone="danger"
+        isLoading={killLoading}
+        onConfirm={confirmKillAction}
+        onCancel={() => setPendingKillAction(null)}
+      />
     </div>
   );
 };

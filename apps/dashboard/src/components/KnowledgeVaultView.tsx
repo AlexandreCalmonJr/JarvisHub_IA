@@ -12,6 +12,7 @@ import {
   deleteKnowledgeDocument,
 } from '../api';
 import { notify } from './common/Toast';
+import { ConfirmDialog } from './common/ConfirmDialog';
 import { API_BASE } from '../services/api/client';
 import { KnowledgeSearchBar } from './knowledge/KnowledgeSearchBar';
 import { DocumentListGrid } from './knowledge/DocumentListGrid';
@@ -39,6 +40,8 @@ export const KnowledgeVaultView: React.FC = () => {
   const [textContent, setTextContent] = useState('');
   const [textCategory, setTextCategory] = useState('anotacoes');
   const [textIndexing, setTextIndexing] = useState(false);
+  const [pendingDeleteDoc, setPendingDeleteDoc] = useState<string | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState(false);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -105,7 +108,7 @@ export const KnowledgeVaultView: React.FC = () => {
     if (!file) return;
 
     if (file.size > 25 * 1024 * 1024) {
-      notify('O ficheiro excede o limite de 25 MB.', 'error');
+      notify('O arquivo excede o limite de 25 MB.', 'error');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -163,21 +166,28 @@ export const KnowledgeVaultView: React.FC = () => {
     }
   };
 
-  const handleDelete = async (docName: string) => {
+  const handleDelete = (docName: string) => {
     if (!canManageKnowledge) return;
-    if (!window.confirm(`Tem certeza que deseja remover '${docName}' da Base de Conhecimento?`)) {
-      return;
-    }
+    setPendingDeleteDoc(docName);
+  };
+
+  const confirmDeleteDoc = async () => {
+    if (!canManageKnowledge || !pendingDeleteDoc) return;
+    const docName = pendingDeleteDoc;
+    setDeletingDoc(true);
     try {
       const result = await deleteKnowledgeDocument(docName);
       if (result?.status !== 'deleted') {
         throw new Error('O documento não foi encontrado na sua conta.');
       }
       notify(`Documento '${docName}' removido com sucesso`, 'success');
+      setPendingDeleteDoc(null);
       await loadDocuments();
       if (searchQuery) handleSearch();
     } catch (err: any) {
       notify(`Erro ao excluir documento: ${err.message}`, 'error');
+    } finally {
+      setDeletingDoc(false);
     }
   };
 
@@ -185,7 +195,7 @@ export const KnowledgeVaultView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1280px', margin: '0 auto' }}>
-      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões de gestão do Knowledge Vault…</div>}
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Verificando permissões de gerenciamento do Knowledge Vault…</div>}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -226,7 +236,7 @@ export const KnowledgeVaultView: React.FC = () => {
               borderRadius: '8px',
             }}
           >
-            <span>{uploadingFile ? 'A indexar…' : 'Upload de Arquivo'}</span>
+          <span>{uploadingFile ? 'Indexando…' : 'Upload de Arquivo'}</span>
           </button>}
 
           {canManageKnowledge && <button
@@ -304,6 +314,23 @@ export const KnowledgeVaultView: React.FC = () => {
         onSubmit={handleTextSubmit}
         indexing={textIndexing}
       />}
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDeleteDoc)}
+        title="Remover documento"
+        description={
+          pendingDeleteDoc ? (
+            <>
+              Tem certeza que deseja remover <strong>{pendingDeleteDoc}</strong> da Base de Conhecimento?
+            </>
+          ) : null
+        }
+        confirmLabel="Remover"
+        tone="danger"
+        isLoading={deletingDoc}
+        onConfirm={confirmDeleteDoc}
+        onCancel={() => setPendingDeleteDoc(null)}
+      />
     </div>
   );
 };

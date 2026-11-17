@@ -11,6 +11,7 @@ import {
 import { fetchChatSessions, deleteChatSession, fetchChatSessionTasks } from '../../api';
 import { ChatSessionItem, ChatMessage } from '../../types';
 import { getAccountStorageKey } from '../../services/accountScope';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export interface LocalSessionMeta {
   id: string;
@@ -93,6 +94,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   const [sessions, setSessions] = useState<LocalSessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
   // Carrega e sincroniza sessões do backend + local
@@ -156,16 +158,21 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
     }
   }, [isOpen]);
 
-  const handleDelete = async (e: React.MouseEvent, sid: string) => {
+  const handleDelete = (e: React.MouseEvent, sid: string) => {
     e.stopPropagation();
-    if (!window.confirm('Excluir esta conversa do histórico?')) return;
+    setPendingDeleteId(sid);
+  };
 
+  const confirmDeleteSession = async () => {
+    if (!pendingDeleteId) return;
+    const sid = pendingDeleteId;
     setDeletingId(sid);
     try {
       await deleteChatSession(sid);
       removeSessionLocally(sid);
       setSessions((prev) => prev.filter((s) => s.id !== sid));
       setHistoryError(null);
+      setPendingDeleteId(null);
       if (sid === currentSessionId) {
         onNewChat();
       }
@@ -283,8 +290,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
           width: '360px',
           maxWidth: '85vw',
           height: '100%',
-          backgroundColor: '#070a12',
-          borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+          backgroundColor: 'var(--bg-secondary)',
+          borderRight: '1px solid var(--border-color)',
           boxShadow: '10px 0 35px rgba(0, 0, 0, 0.6)',
           display: 'flex',
           flexDirection: 'column',
@@ -295,16 +302,16 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         <div
           style={{
             padding: '16px 18px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            borderBottom: '1px solid var(--border-color)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: 'rgba(15, 23, 42, 0.8)',
+            backgroundColor: 'var(--bg-tertiary)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Clock size={18} color="#818cf8" />
-            <h3 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+            <Clock size={18} color="var(--accent-color)" />
+            <h3 style={{ fontSize: '0.96rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
               Histórico de Conversas
             </h3>
           </div>
@@ -336,7 +343,6 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
               borderRadius: '10px',
               fontWeight: 600,
               fontSize: '0.86rem',
-              boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
             }}
           >
             <Plus size={16} />
@@ -451,9 +457,9 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                           padding: '10px 12px',
                           borderRadius: '8px',
                           cursor: 'pointer',
-                          backgroundColor: isActive ? 'rgba(99, 102, 241, 0.16)' : 'transparent',
+                          backgroundColor: isActive ? 'var(--accent-soft)' : 'transparent',
                           border: isActive
-                            ? '1px solid rgba(99, 102, 241, 0.35)'
+                            ? '1px solid var(--border-accent)'
                             : '1px solid transparent',
                           transition: 'all 0.15s ease',
                           gap: '8px',
@@ -468,7 +474,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
                           <MessageSquare
                             size={16}
-                            color={isActive ? '#818cf8' : 'var(--text-muted)'}
+                            color={isActive ? 'var(--accent-color)' : 'var(--text-muted)'}
                             style={{ flexShrink: 0 }}
                           />
                           <div style={{ minWidth: 0, flex: 1 }}>
@@ -476,7 +482,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
                               style={{
                                 fontSize: '0.84rem',
                                 fontWeight: isActive ? 600 : 500,
-                                color: isActive ? '#f8fafc' : 'var(--text-secondary)',
+                                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -548,8 +554,8 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
         <div
           style={{
             padding: '12px 18px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            borderTop: '1px solid var(--border-color)',
+            backgroundColor: 'var(--bg-tertiary)',
             fontSize: '0.72rem',
             color: 'var(--text-muted)',
             display: 'flex',
@@ -558,12 +564,23 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Database size={13} color="#818cf8" />
+            <Database size={13} color="var(--accent-color)" />
             <span>Persistência Local SQLite</span>
           </div>
           <span>{sessions.length} conversas</span>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDeleteId)}
+        title="Excluir conversa"
+        description="Excluir esta conversa do histórico?"
+        confirmLabel="Excluir"
+        tone="danger"
+        isLoading={Boolean(deletingId)}
+        onConfirm={confirmDeleteSession}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 };

@@ -55,7 +55,7 @@ const PROMPT_CHIPS = [
     icon: Globe,
     label: '🌐 Criar Website (HTML/CSS)',
     text: 'cria um site simples de cafeteria para mim com index.html e style.css',
-    color: '#818cf8',
+    color: 'var(--accent-color)',
   },
   {
     icon: Smartphone,
@@ -121,8 +121,8 @@ export const QuickPrompts: React.FC<QuickPromptsProps> = ({ onSelect, disabled }
           }}
           title="Clique para expandir as sugestões rápidas de projetos"
         >
-          <ChevronRight size={13} color="#818cf8" />
-          <Sparkles size={12} color="#818cf8" />
+          <ChevronRight size={13} color="var(--accent-color)" />
+          <Sparkles size={12} color="var(--accent-color)" />
           <span>Ações Rápidas (10 modelos de projetos)</span>
         </button>
       </div>
@@ -159,8 +159,8 @@ export const QuickPrompts: React.FC<QuickPromptsProps> = ({ onSelect, disabled }
         }}
         title="Ocultar barra de ações rápidas"
       >
-        <ChevronDown size={14} color="#818cf8" />
-        <Sparkles size={12} color="#818cf8" />
+        <ChevronDown size={14} color="var(--accent-color)" />
+        <Sparkles size={12} color="var(--accent-color)" />
         <span>Ações Rápidas:</span>
       </button>
 
@@ -190,9 +190,9 @@ export const QuickPrompts: React.FC<QuickPromptsProps> = ({ onSelect, disabled }
             }}
             onMouseEnter={(e) => {
               if (!disabled) {
-                e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.12)';
-                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
-                e.currentTarget.style.color = '#fff';
+                e.currentTarget.style.backgroundColor = 'var(--accent-soft)';
+                e.currentTarget.style.borderColor = 'var(--border-accent)';
+                e.currentTarget.style.color = 'var(--text-primary)';
               }
             }}
             onMouseLeave={(e) => {

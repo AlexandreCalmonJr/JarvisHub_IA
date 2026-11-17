@@ -13,6 +13,7 @@ import {
   setPerformanceMode,
 } from '../api';
 import { notify } from './common/Toast';
+import { ConfirmDialog } from './common/ConfirmDialog';
 import { HardwareSpecsCards } from './hardware/HardwareSpecsCards';
 import { OllamaPerformancePanel } from './hardware/OllamaPerformancePanel';
 import { InstalledModelsEvaluation } from './hardware/InstalledModelsEvaluation';
@@ -26,6 +27,7 @@ export const HardwareAdvisorView: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [applying, setApplying] = useState<boolean>(false);
+  const [confirmApplyOpen, setConfirmApplyOpen] = useState<boolean>(false);
   const [applySuccess, setApplySuccess] = useState<string | null>(null);
 
   // Estados de Desempenho e Threads do Ollama
@@ -102,14 +104,20 @@ export const HardwareAdvisorView: React.FC = () => {
     };
   }, []);
 
-  const handleApplyOptimal = async () => {
-    if (!isAdmin || !window.confirm('Aplicar as recomendações ao perfil global dos agentes? Esta operação altera a configuração de modelos de todo o servidor.')) return;
+  const handleApplyOptimal = () => {
+    if (!isAdmin) return;
+    setConfirmApplyOpen(true);
+  };
+
+  const confirmApplyOptimal = async () => {
+    if (!isAdmin) return;
     setApplying(true);
     setApplySuccess(null);
     setActionError(null);
     try {
       const res = await applyHardwareOptimizations();
       setApplySuccess(res.message || 'O servidor confirmou a aplicação das recomendações.');
+      setConfirmApplyOpen(false);
       await loadProfile();
     } catch (e: any) {
       setActionError(e?.message || 'Falha ao aplicar otimizações.');
@@ -120,7 +128,7 @@ export const HardwareAdvisorView: React.FC = () => {
   };
 
   if (!roleLoaded) {
-    return <div role="status" className="glass-panel" style={{ padding: '24px', color: 'var(--text-secondary)' }}>A verificar permissões do diagnóstico de hardware…</div>;
+    return <div role="status" className="glass-panel" style={{ padding: '24px', color: 'var(--text-secondary)' }}>Verificando permissões do diagnóstico de hardware…</div>;
   }
 
   if (!isAdmin) {
@@ -288,6 +296,17 @@ export const HardwareAdvisorView: React.FC = () => {
 
       {/* Modelos Instalados & Aceleração Híbrida */}
       <InstalledModelsEvaluation modelsEval={modelsEval} cloudOptions={cloudOptions} />
+
+      <ConfirmDialog
+        isOpen={confirmApplyOpen}
+        title="Aplicar otimização recomendada"
+        description="Aplicar as recomendações ao perfil global dos agentes? Esta operação altera a configuração de modelos de todo o servidor."
+        confirmLabel="Aplicar recomendações"
+        tone="warning"
+        isLoading={applying}
+        onConfirm={confirmApplyOptimal}
+        onCancel={() => setConfirmApplyOpen(false)}
+      />
     </div>
   );
 };

@@ -136,15 +136,15 @@ export const InstalledModelsEvaluation: React.FC<InstalledModelsEvaluationProps>
               style={{
                 padding: '16px 18px',
                 borderRadius: '12px',
-                backgroundColor: 'rgba(99, 102, 241, 0.05)',
-                border: '1px solid rgba(99, 102, 241, 0.2)',
+                backgroundColor: 'var(--accent-soft)',
+                border: '1px solid var(--border-accent)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.90rem', fontWeight: 700, color: '#818cf8' }}>
+                <span style={{ fontSize: '0.90rem', fontWeight: 700, color: 'var(--accent-color)' }}>
                   {opt.provider}
                 </span>
                 <span className="badge badge-success" style={{ fontSize: '0.68rem' }}>
@@ -152,7 +152,7 @@ export const InstalledModelsEvaluation: React.FC<InstalledModelsEvaluationProps>
                 </span>
               </div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Modelo: <code style={{ color: '#e2e8f0' }}>{opt.model}</code>
+                Modelo: <code style={{ color: 'var(--text-primary)' }}>{opt.model}</code>
               </div>
               <div style={{ fontSize: '0.80rem', color: '#38bdf8', fontWeight: 600 }}>
                 ⚡ Velocidade: {opt.speed} ({opt.latency})

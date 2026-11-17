@@ -59,10 +59,10 @@ export const FolderIndexModal: React.FC<FolderIndexModalProps> = ({
             style={{
               width: '100%',
               padding: '9px 12px',
-              backgroundColor: '#070a12',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              backgroundColor: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               borderRadius: '8px',
-              color: '#fff',
+              color: 'var(--text-primary)',
               fontSize: '0.86rem',
             }}
           />
@@ -125,10 +125,10 @@ export const TextSnippetModal: React.FC<TextSnippetModalProps> = ({
             style={{
               width: '100%',
               padding: '9px 12px',
-              backgroundColor: '#070a12',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              backgroundColor: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               borderRadius: '8px',
-              color: '#fff',
+              color: 'var(--text-primary)',
               fontSize: '0.86rem',
             }}
             required
@@ -147,10 +147,10 @@ export const TextSnippetModal: React.FC<TextSnippetModalProps> = ({
             style={{
               width: '100%',
               padding: '9px 12px',
-              backgroundColor: '#070a12',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              backgroundColor: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               borderRadius: '8px',
-              color: '#fff',
+              color: 'var(--text-primary)',
               fontSize: '0.86rem',
             }}
           />
@@ -168,10 +168,10 @@ export const TextSnippetModal: React.FC<TextSnippetModalProps> = ({
             style={{
               width: '100%',
               padding: '10px 12px',
-              backgroundColor: '#070a12',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              backgroundColor: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               borderRadius: '8px',
-              color: '#fff',
+              color: 'var(--text-primary)',
               fontSize: '0.84rem',
             }}
             required

@@ -97,6 +97,42 @@ export interface ModelQualitySummary {
   sample_sufficient: boolean;
 }
 
+export interface InferenceTelemetrySummary {
+  total_inferences: number;
+  successful: number;
+  failed: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  average_latency_ms: number;
+}
+
+export interface InferenceTelemetryDetail extends InferenceTelemetryRecord {
+  duration_ms: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost_usd: number;
+  created_at: string;
+}
+
+export interface ModelPerformanceSummary {
+  model_name: string;
+  provider: string;
+  agent_role?: string | null;
+  total_inferences: number;
+  successful: number;
+  failed: number;
+  success_rate: number;
+  average_latency_ms: number;
+  average_tokens: number;
+  total_cost_usd: number;
+}
+
+export interface OverviewTelemetryResponse {
+  summary: InferenceTelemetrySummary;
+  records: InferenceTelemetryDetail[];
+  model_performance: ModelPerformanceSummary[];
+}
+
 export async function fetchModelQualitySummary(): Promise<ModelQualitySummary[]> {
   const res = await fetch(`${API_BASE}/system/inference-telemetry?limit=1`);
   if (!res.ok) {
@@ -106,3 +142,27 @@ export async function fetchModelQualitySummary(): Promise<ModelQualitySummary[]>
   const data = await res.json();
   return Array.isArray(data.model_quality) ? data.model_quality : [];
 }
+
+export async function fetchOverviewTelemetry(limit: number = 100): Promise<OverviewTelemetryResponse> {
+  const res = await fetch(`${API_BASE}/system/inference-telemetry?limit=${limit}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Falha ao carregar telemetria de modelos e tokens.' }));
+    throw new Error(err.detail || 'Falha ao carregar telemetria de modelos e tokens.');
+  }
+  const data = await res.json();
+  return {
+    summary: data.summary || {
+      total_inferences: 0,
+      successful: 0,
+      failed: 0,
+      total_tokens: 0,
+      total_cost_usd: 0,
+      average_latency_ms: 0,
+    },
+    records: Array.isArray(data.records) ? data.records : [],
+    model_performance: Array.isArray(data.model_performance) ? data.model_performance : [],
+  };
+}
+

@@ -28,12 +28,12 @@ export const InferenceHistoryTable: React.FC<InferenceHistoryTableProps> = ({
         onClick={onToggleTable}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Layers size={16} color="#818cf8" />
+          <Layers size={16} color="var(--accent-color)" />
           <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>
             Últimas Chamadas a Modelos LLM ({recentInferences.length})
           </span>
         </div>
-        <span style={{ fontSize: '0.75rem', color: '#818cf8' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--accent-color)' }}>
           {showTable ? 'Ocultar' : 'Exibir Detalhes'}
         </span>
       </div>

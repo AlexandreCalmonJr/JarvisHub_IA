@@ -172,7 +172,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '20px' }}>
-      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>A verificar permissões do Escritório Virtual…</div>}
+      {!roleLoaded && <div role="status" className="glass-panel" style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Verificando permissões do Escritório Virtual…</div>}
       {/* Topo: Cabeçalho Clean & Filtros Rápidos */}
       <div
         style={{
@@ -190,7 +190,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
             Escritório Virtual de Agentes ({agents.length})
           </h1>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            Visualização animada do catálogo registado; os movimentos são ilustrativos e não representam atividade em tempo real. {canManageAgents ? 'Clique numa mesa para configurar o agente.' : 'Clique numa mesa para consultar os detalhes.'}
+            Visualização animada do catálogo registrado; os movimentos são ilustrativos e não representam atividade em tempo real. {canManageAgents ? 'Clique em uma mesa para configurar o agente.' : 'Clique em uma mesa para consultar os detalhes.'}
           </p>
         </div>
 
@@ -268,8 +268,8 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                 fontSize: '0.72rem',
                 padding: '4px 8px',
                 borderRadius: '6px',
-                backgroundColor: officeMode === 'both' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-                color: officeMode === 'both' ? '#818cf8' : 'var(--text-muted)',
+                backgroundColor: officeMode === 'both' ? 'var(--accent-soft-hover)' : 'transparent',
+                color: officeMode === 'both' ? 'var(--accent-color)' : 'var(--text-muted)',
               }}
               title="Exibir Andar 2.5D com Avatares e Grade de Mesas"
             >
@@ -306,8 +306,8 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
       </div>
 
       {roleLoaded && loadError && agents.length === 0 && <div role="alert" className="glass-panel" style={{ padding: '16px', color: 'var(--danger-color)' }}>{loadError}</div>}
-      {loading && agents.length === 0 && <div role="status" className="glass-panel" style={{ padding: '16px', color: 'var(--text-secondary)' }}>A carregar agentes registados…</div>}
-      {!loading && !loadError && agents.length === 0 && <div className="glass-panel" style={{ padding: '20px', color: 'var(--text-secondary)' }}>O catálogo da API não devolveu agentes configurados para esta instância.</div>}
+      {loading && agents.length === 0 && <div role="status" className="glass-panel" style={{ padding: '16px', color: 'var(--text-secondary)' }}>Carregando agentes registrados…</div>}
+      {!loading && !loadError && agents.length === 0 && <div className="glass-panel" style={{ padding: '20px', color: 'var(--text-secondary)' }}>O catálogo da API não retornou agentes configurados para esta instância.</div>}
       {agents.length > 0 && <>
       {/* 1. Andar 2.5D Animado com Avatares Andando pelo Escritório */}
       {(officeMode === 'canvas' || officeMode === 'both') && (
@@ -336,7 +336,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
               key={dept.id}
               style={{
                 borderRadius: '12px',
-                backgroundColor: 'rgba(15, 23, 42, 0.55)',
+                backgroundColor: 'var(--bg-secondary)',
                 border: `1px solid ${dept.border}`,
                 padding: '16px',
                 display: 'flex',
@@ -383,8 +383,8 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                       onClick={() => handleOpenDrawer(agent)}
                       style={{
                         borderRadius: '10px',
-                        backgroundColor: 'rgba(30, 41, 59, 0.7)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        backgroundColor: 'var(--bg-tertiary)',
+                        border: '1px solid var(--border-color)',
                         padding: '12px 10px',
                         cursor: 'pointer',
                         width: '100%',
@@ -421,7 +421,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                           borderRadius: '50%',
                           backgroundColor: 'var(--text-muted)',
                         }}
-                        title="Atividade em tempo real não monitorizada"
+                        title="Atividade em tempo real não monitorada"
                       />
 
                       {/* Estação de Trabalho / Avatar do Especialista */}
@@ -450,7 +450,7 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                             width: '14px',
                             height: '14px',
                             borderRadius: '3px',
-                            backgroundColor: '#0f172a',
+                            backgroundColor: 'var(--bg-secondary)',
                             border: `1px solid ${dept.color}`,
                             display: 'flex',
                             alignItems: 'center',
@@ -616,9 +616,9 @@ export const AgentOfficeView: React.FC<AgentOfficeViewProps> = ({ onSelectForCha
                     fontSize: '0.72rem',
                     padding: '3px 8px',
                     borderRadius: '6px',
-                    backgroundColor: selectedAgent.isReadOnly ? 'rgba(100, 116, 139, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                    color: selectedAgent.isReadOnly ? '#94a3b8' : '#34d399',
-                    border: `1px solid ${selectedAgent.isReadOnly ? 'rgba(100, 116, 139, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                    backgroundColor: selectedAgent.isReadOnly ? 'rgba(156, 154, 146, 0.14)' : 'rgba(16, 185, 129, 0.15)',
+                    color: selectedAgent.isReadOnly ? 'var(--text-secondary)' : '#34d399',
+                    border: `1px solid ${selectedAgent.isReadOnly ? 'rgba(156, 154, 146, 0.28)' : 'rgba(16, 185, 129, 0.3)'}`,
                   }}
                 >
                   {selectedAgent.isReadOnly ? '📖 Somente Leitura' : '✍️ Escrita & Leitura Liberada'}

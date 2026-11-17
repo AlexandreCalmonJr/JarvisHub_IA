@@ -301,14 +301,14 @@ export const ProjectActionsModal: React.FC<ProjectActionsModalProps> = ({
                   textAlign: 'left',
                   borderRadius: '8px',
                   border: '1px solid var(--border-color)',
-                  backgroundColor: 'rgba(99, 102, 241, 0.05)',
+                  backgroundColor: 'var(--accent-soft)',
                 }}
               >
-                <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', flexShrink: 0 }}>
+                <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: 'var(--accent-soft-hover)', color: 'var(--accent-color)', flexShrink: 0 }}>
                   <MessageSquare size={18} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#818cf8' }}>
+                  <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--accent-color)' }}>
                     Discutir no Chat
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>

@@ -6,6 +6,8 @@
   --bg-secondary: #181716;
   --bg-tertiary: #262523;
   --bg-surface: #2b2a27;
+  --bg-elevated: rgba(38, 37, 35, 0.92);
+  --bg-input: #141312;
   --bg-hover: rgba(255, 255, 255, 0.05);
 
   --border-color: rgba(255, 255, 255, 0.08);
@@ -19,6 +21,8 @@
   /* Terracota / Coral clássico do Claude */
   --accent-color: #d97757;
   --accent-hover: #c86a4b;
+  --accent-soft: rgba(217, 119, 87, 0.12);
+  --accent-soft-hover: rgba(217, 119, 87, 0.22);
   --accent-glow: rgba(217, 119, 87, 0.25);
 
   --danger-color: #ef4444;
@@ -26,9 +30,9 @@
   --warning-color: #f59e0b;
   --purple-accent: #a855f7;
 
-  /* Fontes Modernas: Samsung One / Plus Jakarta Sans / Inter */
-  --font-serif: 'Samsung One', 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-sans: 'Samsung One', 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Tipografia carregada via Google Fonts */
+  --font-serif: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   --radius-sm: 6px;
@@ -390,3 +394,74 @@ code, pre {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Primitivos de Layout e UI Compartilhados */
+.jarvis-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 18px;
+}
+
+.jarvis-page-header-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-accent);
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.jarvis-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.jarvis-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 36px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border-hover);
+}
+
+.jarvis-input,
+.jarvis-select,
+.jarvis-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.jarvis-input:focus,
+.jarvis-select:focus,
+.jarvis-textarea:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+

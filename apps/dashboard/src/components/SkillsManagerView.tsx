@@ -11,6 +11,7 @@ import { SkillCard } from './skills/SkillCard';
 import { SkillAgentModal } from './skills/SkillAgentModal';
 import { CreateSkillModal } from './skills/CreateSkillModal';
 import { notify } from './common/Toast';
+import { ConfirmDialog } from './common/ConfirmDialog';
 import { API_BASE } from '../services/api/client';
 
 export const SkillsManagerView: React.FC = () => {
@@ -29,6 +30,8 @@ export const SkillsManagerView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingSkill, setEditingSkill] = useState<SkillInfo | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [pendingDeleteSkill, setPendingDeleteSkill] = useState<{ id: string; name: string } | null>(null);
+  const [deletingSkill, setDeletingSkill] = useState(false);
 
   // Estado do Modo Ponytail (Senior YAGNI)
   const [ponytailLevel, setPonytailLevel] = useState<string>('senior');
@@ -62,18 +65,25 @@ export const SkillsManagerView: React.FC = () => {
     setLoading(false);
   };
 
-  const handleDeleteSkill = async (skillId: string, skillName: string) => {
+  const handleDeleteSkill = (skillId: string, skillName: string) => {
     if (!canManageSkills) return;
-    if (!window.confirm(`Tem certeza que deseja excluir a habilidade "${skillName}"?`)) {
-      return;
-    }
+    setPendingDeleteSkill({ id: skillId, name: skillName });
+  };
+
+  const confirmDeleteSkill = async () => {
+    if (!canManageSkills || !pendingDeleteSkill) return;
+    const { id: skillId, name: skillName } = pendingDeleteSkill;
+    setDeletingSkill(true);
     try {
       const result = await deleteUserSkill(skillId);
       if (result?.status !== 'deleted') throw new Error('A habilidade não foi encontrada na sua conta.');
       notify(`Habilidade "${skillName}" excluída com sucesso!`, 'success');
+      setPendingDeleteSkill(null);
       await loadData();
     } catch (err: any) {
       notify(`Erro ao excluir habilidade: ${err.message}`, 'error');
+    } finally {
+      setDeletingSkill(false);
     }
   };
 
@@ -531,6 +541,23 @@ export const SkillsManagerView: React.FC = () => {
           onSkillCreated={loadData}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDeleteSkill)}
+        title="Excluir habilidade"
+        description={
+          pendingDeleteSkill ? (
+            <>
+              Tem certeza que deseja excluir a habilidade <strong>{pendingDeleteSkill.name}</strong>? Esta ação não pode ser desfeita.
+            </>
+          ) : null
+        }
+        confirmLabel="Excluir"
+        tone="danger"
+        isLoading={deletingSkill}
+        onConfirm={confirmDeleteSkill}
+        onCancel={() => setPendingDeleteSkill(null)}
+      />
     </div>
   );
 };

@@ -381,7 +381,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                     <select
                       value={cloudProvider}
                       onChange={(event) => handleProviderChange(event.target.value as CloudProvider)}
-                      style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                      style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                     >
                       <option value="gemini">Google Gemini</option>
                       <option value="openai">OpenAI</option>
@@ -400,7 +400,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                       value={cloudApiKey}
                       onChange={(event) => setCloudApiKey(event.target.value)}
                       placeholder="A chave é enviada uma única vez e guardada cifrada"
-                      style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                      style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                     />
                   </label>
 
@@ -411,7 +411,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                         value={cloudModel}
                         onChange={(event) => setCloudModel(event.target.value)}
                         placeholder="ex.: gemini-2.5-flash"
-                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                       />
                     </label>
                     <label style={{ display: 'grid', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -420,7 +420,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                         value={cloudBaseUrl}
                         onChange={(event) => setCloudBaseUrl(event.target.value)}
                         placeholder="https://api.provedor.com/v1"
-                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#070a12', color: '#f8fafc' }}
+                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                       />
                     </label>
                   </div>
@@ -444,7 +444,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <Cpu size={20} color="#34d399" />
-                    <span style={{ fontSize: '0.94rem', fontWeight: 600, color: '#f8fafc' }}>
+                    <span style={{ fontSize: '0.94rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                       Modelos Locais Recomendados para o JARVIS
                     </span>
                   </div>
@@ -455,13 +455,13 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
 
                   <div
                     style={{
-                      backgroundColor: '#070a12',
+                      backgroundColor: 'var(--bg-input)',
                       padding: '10px 14px',
                       borderRadius: '8px',
                       fontFamily: "'JetBrains Mono', monospace",
                       fontSize: '0.78rem',
-                      color: '#93c5fd',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      color: 'var(--accent-color)',
+                      border: '1px solid var(--border-color)',
                     }}
                   >
                     ollama run llama3.2:3b
@@ -537,7 +537,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
                   <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'block' }}>
                     Especialistas Ativos:
                   </span>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#818cf8' }}>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--accent-color)' }}>
                     Agentes disponíveis no servidor
                   </span>
                 </div>
@@ -551,8 +551,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({ isOpen, onCl
         <div
           style={{
             padding: '16px 26px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-            backgroundColor: 'rgba(15, 23, 42, 0.8)',
+            borderTop: '1px solid var(--border-color)',
+            backgroundColor: 'var(--bg-tertiary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',

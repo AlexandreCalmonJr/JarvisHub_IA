@@ -4,6 +4,7 @@ import { fetchServerLogs, clearServerLogs, fetchModelMetrics } from '../api';
 import { ModelMetricsCards } from './logs/ModelMetricsCards';
 import { InferenceHistoryTable } from './logs/InferenceHistoryTable';
 import { TerminalLogConsole } from './logs/TerminalLogConsole';
+import { ConfirmDialog } from './common/ConfirmDialog';
 
 interface LogEntry {
   id: number;
@@ -38,6 +39,8 @@ export const ServerLogsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,14 +128,23 @@ export const ServerLogsView: React.FC = () => {
     };
   }, [isAdmin, isStreaming]);
 
-  const handleClear = async () => {
-    if (!isAdmin || !window.confirm('Limpar o buffer global de logs do servidor?')) return;
+  const handleClear = () => {
+    if (!isAdmin) return;
+    setConfirmClearOpen(true);
+  };
+
+  const confirmClear = async () => {
+    if (!isAdmin) return;
+    setClearingLogs(true);
     try {
       await clearServerLogs();
       setLogs([]);
       setLogsError(null);
+      setConfirmClearOpen(false);
     } catch (e: any) {
       setLogsError(e.message || 'Não foi possível limpar os logs.');
+    } finally {
+      setClearingLogs(false);
     }
   };
 
@@ -230,6 +242,17 @@ export const ServerLogsView: React.FC = () => {
         setAutoScroll={setAutoScroll}
       />
       </>}
+
+      <ConfirmDialog
+        isOpen={confirmClearOpen}
+        title="Limpar logs do servidor"
+        description="Deseja limpar o buffer global de logs do servidor?"
+        confirmLabel="Limpar buffer"
+        tone="danger"
+        isLoading={clearingLogs}
+        onConfirm={confirmClear}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
     </div>
   );
 };

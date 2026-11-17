@@ -52,9 +52,9 @@ export const ToastContainer: React.FC = () => {
       }}
     >
       {toasts.map((t) => {
-        let bg = 'rgba(15, 23, 42, 0.95)';
-        let border = 'rgba(99, 102, 241, 0.3)';
-        let color = '#818cf8';
+        const bg = 'var(--bg-elevated)';
+        let border = 'var(--border-accent)';
+        let color = 'var(--accent-color)';
         let Icon = Info;
 
         if (t.type === 'success') {
@@ -85,7 +85,7 @@ export const ToastContainer: React.FC = () => {
               alignItems: 'center',
               gap: '12px',
               fontSize: '0.84rem',
-              color: '#f8fafc',
+              color: 'var(--text-primary)',
               animation: 'fadeIn 0.2s ease-out',
             }}
           >

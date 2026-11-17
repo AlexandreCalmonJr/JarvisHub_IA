@@ -234,15 +234,15 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
       onClose={onClose}
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Sparkles size={18} color="#818cf8" />
+          <Sparkles size={18} color="var(--accent-color)" />
           <span>Console do Especialista: {getAgentLabel(agent.role)}</span>
           <span
             style={{
               fontSize: '0.72rem',
               padding: '2px 8px',
               borderRadius: '6px',
-              backgroundColor: 'rgba(99, 102, 241, 0.15)',
-              color: '#818cf8',
+              backgroundColor: 'var(--accent-soft)',
+              color: 'var(--accent-color)',
               fontFamily: 'monospace',
             }}
           >
@@ -302,7 +302,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
             alignItems: 'center',
             padding: '8px 12px',
             borderRadius: '8px',
-            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backgroundColor: 'var(--bg-tertiary)',
             border: '1px solid var(--border-color)',
             flexWrap: 'wrap',
             gap: '8px',
@@ -321,7 +321,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                   borderRadius: '5px',
                   border: 'none',
                   cursor: 'pointer',
-                  backgroundColor: mode === 'plan' ? '#6366f1' : 'transparent',
+                  backgroundColor: mode === 'plan' ? 'var(--accent-color)' : 'transparent',
                   color: mode === 'plan' ? '#fff' : 'var(--text-secondary)',
                   fontWeight: mode === 'plan' ? 600 : 400,
                 }}
@@ -338,7 +338,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                   borderRadius: '5px',
                   border: 'none',
                   cursor: 'pointer',
-                  backgroundColor: mode === 'ask' ? '#6366f1' : 'transparent',
+                  backgroundColor: mode === 'ask' ? 'var(--accent-color)' : 'transparent',
                   color: mode === 'ask' ? '#fff' : 'var(--text-secondary)',
                   fontWeight: mode === 'ask' ? 600 : 400,
                 }}
@@ -355,7 +355,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                   borderRadius: '5px',
                   border: 'none',
                   cursor: 'pointer',
-                  backgroundColor: mode === 'auto' ? '#6366f1' : 'transparent',
+                  backgroundColor: mode === 'auto' ? 'var(--accent-color)' : 'transparent',
                   color: mode === 'auto' ? '#fff' : 'var(--text-secondary)',
                   fontWeight: mode === 'auto' ? 600 : 400,
                 }}
@@ -368,7 +368,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
 
           {/* Seletor de Projeto */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FolderGit2 size={14} color="#818cf8" />
+            <FolderGit2 size={14} color="var(--accent-color)" />
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Workspace:</span>
             <select
               value={selectedProject}
@@ -401,7 +401,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
             overflowY: 'auto',
             padding: '16px',
             borderRadius: '10px',
-            backgroundColor: 'rgba(7, 10, 18, 0.75)',
+            backgroundColor: 'var(--bg-input)',
             border: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: 'column',
@@ -421,7 +421,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                 textAlign: 'center',
               }}
             >
-              <Bot size={40} color="#818cf8" style={{ opacity: 0.85 }} />
+              <Bot size={40} color="var(--accent-color)" style={{ opacity: 0.85 }} />
               <strong style={{ fontSize: '1.05rem', color: 'var(--text-primary)' }}>
                 {agent.name} está pronto para operar
               </strong>
@@ -469,8 +469,8 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                         borderRadius: '10px',
                         fontSize: '0.88rem',
                         lineHeight: '1.5',
-                        backgroundColor: 'rgba(99, 102, 241, 0.25)',
-                        border: '1px solid rgba(99, 102, 241, 0.45)',
+                        backgroundColor: 'var(--accent-soft)',
+                        border: '1px solid var(--border-accent)',
                         color: 'var(--text-primary)',
                         whiteSpace: 'pre-wrap',
                       }}
@@ -493,12 +493,12 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                         borderRadius: '6px',
                         fontSize: '0.74rem',
                         fontFamily: 'monospace',
-                        backgroundColor: item.toolSuccess === false ? 'rgba(239, 68, 68, 0.15)' : 'rgba(30, 41, 59, 0.7)',
-                        border: `1px solid ${item.toolSuccess === false ? 'rgba(239, 68, 68, 0.4)' : 'rgba(100, 116, 139, 0.25)'}`,
-                        color: item.toolSuccess === false ? '#f87171' : '#94a3b8',
+                        backgroundColor: item.toolSuccess === false ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-surface)',
+                        border: `1px solid ${item.toolSuccess === false ? 'rgba(239, 68, 68, 0.4)' : 'var(--border-color)'}`,
+                        color: item.toolSuccess === false ? '#f87171' : 'var(--text-secondary)',
                       }}
                     >
-                      <Wrench size={12} color={item.toolSuccess === false ? '#ef4444' : '#818cf8'} />
+                      <Wrench size={12} color={item.toolSuccess === false ? 'var(--danger-color)' : 'var(--accent-color)'} />
                       <strong title={item.toolName}>{getToolLabel(item.toolName)}</strong>
                       {item.toolSuccess !== undefined && (
                         <span>{item.toolSuccess ? '✓ Sucesso' : '✗ Falha'}</span>
@@ -513,7 +513,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                           borderRadius: '6px',
                           backgroundColor: 'rgba(0, 0, 0, 0.4)',
                           border: '1px solid var(--border-color)',
-                          color: '#cbd5e1',
+                          color: 'var(--text-primary)',
                           maxHeight: '160px',
                           overflowY: 'auto',
                           whiteSpace: 'pre-wrap',
@@ -536,19 +536,19 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                       alignSelf: 'flex-start',
                       padding: '14px 18px',
                       borderRadius: '10px',
-                      backgroundColor: 'rgba(15, 23, 42, 0.85)',
-                      border: '1px solid rgba(99, 102, 241, 0.35)',
+                      backgroundColor: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-accent)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '8px',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#818cf8', fontWeight: 600, fontSize: '0.84rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-color)', fontWeight: 600, fontSize: '0.84rem' }}>
                         <CheckCircle2 size={16} color="#34d399" />
                         <span>Parecer Executivo Formal ({getAgentLabel(c.agent_role)})</span>
                       </div>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                         {getModelLabel(c.resource_usage?.model_name || agent.preferred_model)} • {Math.round(c.resource_usage?.duration_ms || 0)}ms
                       </span>
                     </div>
@@ -583,8 +583,8 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
               return (
                 <div key={item.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                    <Bot size={12} color="#818cf8" />
-                    <span style={{ color: '#818cf8', fontWeight: 600 }}>{agent.name}</span>
+                    <Bot size={12} color="var(--accent-color)" />
+                    <span style={{ color: 'var(--accent-color)', fontWeight: 600 }}>{agent.name}</span>
                     {item.modelUsed && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontFamily: 'monospace' }}>
                         <Cpu size={10} />
@@ -616,8 +616,8 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
           {currentAssistantText && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                <Bot size={12} color="#818cf8" />
-                <span style={{ color: '#818cf8', fontWeight: 600 }}>{agent.name}</span>
+                <Bot size={12} color="var(--accent-color)" />
+                <span style={{ color: 'var(--accent-color)', fontWeight: 600 }}>{agent.name}</span>
                 <span style={{ fontSize: '0.70rem', color: '#34d399' }}>(digitando ao vivo...)</span>
               </div>
               <div
@@ -628,7 +628,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
                   fontSize: '0.88rem',
                   lineHeight: '1.5',
                   backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  border: '1px solid var(--border-accent)',
                   color: 'var(--text-primary)',
                 }}
               >
@@ -639,7 +639,7 @@ export const AgentPlayground: React.FC<AgentPlaygroundProps> = ({
 
           {/* Status de execução e ferramentas */}
           {running && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#818cf8', fontSize: '0.82rem', padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-color)', fontSize: '0.82rem', padding: '4px 0' }}>
               <RefreshCw size={14} className="spin" />
               <span>{currentToolStatus || `${agent.name} está raciocinando...`}</span>
             </div>

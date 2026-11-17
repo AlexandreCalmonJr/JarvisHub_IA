@@ -11,6 +11,7 @@ import { fetchUserProfileApi, saveUserProfileApi, createSystemBackup } from '../
 import { getAccountStorageKey } from '../../services/accountScope';
 import { API_BASE } from '../../services/api/client';
 import { notify } from './Toast';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export interface UserProfileData {
   displayName: string;
@@ -81,6 +82,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [canEditProfile, setCanEditProfile] = useState(false);
   const [experienceMode, setExperienceMode] = useState<'essential' | 'technical' | 'advanced'>(() => {
@@ -186,27 +188,30 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Tem certeza de que deseja apagar todo o histórico de conversas locais? Esta ação não pode ser desfeita.')) {
-      try {
-        const accountSuffix = getAccountStorageKey('__scope_probe__').slice('__scope_probe__'.length);
-        const fixedKeys = new Set([
-          getAccountStorageKey('jarvis_chat_messages_v1'),
-          getAccountStorageKey('jarvis_chat_session_id_v1'),
-          getAccountStorageKey('jarvis_sessions_catalog_v1'),
-        ]);
-        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-          const key = localStorage.key(index);
-          if (key && (fixedKeys.has(key) || (key.startsWith('jarvis_session_messages_') && key.endsWith(accountSuffix)))) {
-            localStorage.removeItem(key);
-          }
+    setConfirmClearOpen(true);
+  };
+
+  const confirmClearHistory = () => {
+    try {
+      const accountSuffix = getAccountStorageKey('__scope_probe__').slice('__scope_probe__'.length);
+      const fixedKeys = new Set([
+        getAccountStorageKey('jarvis_chat_messages_v1'),
+        getAccountStorageKey('jarvis_chat_session_id_v1'),
+        getAccountStorageKey('jarvis_sessions_catalog_v1'),
+      ]);
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index);
+        if (key && (fixedKeys.has(key) || (key.startsWith('jarvis_session_messages_') && key.endsWith(accountSuffix)))) {
+          localStorage.removeItem(key);
         }
-      } catch {
-        notify('O navegador não permitiu limpar o armazenamento local.', 'error');
-        return;
       }
-      notify('Histórico local desta conta limpo com sucesso.', 'info');
-      setTimeout(() => window.location.reload(), 600);
+    } catch {
+      notify('O navegador não permitiu limpar o armazenamento local.', 'error');
+      return;
     }
+    setConfirmClearOpen(false);
+    notify('Histórico local desta conta limpo com sucesso.', 'info');
+    setTimeout(() => window.location.reload(), 600);
   };
 
   const handleExportData = () => {
@@ -522,9 +527,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               lineHeight: 1.5,
             }}
           >
-            <strong style={{ color: 'var(--text-primary)' }}>Gestão de credenciais no Gestor de Modelos</strong>
+            <strong style={{ color: 'var(--text-primary)' }}>Gerenciamento de credenciais no Gestor de Modelos</strong>
             <p style={{ margin: '8px 0 0' }}>
-              As credenciais de providers devem ser geridas no módulo Gestor de Modelos, na área Cofre de Chaves, quando disponível para o seu perfil de acesso. Não coloque tokens ou palavras-passe nas instruções personalizadas.
+              As credenciais de providers devem ser gerenciadas no módulo Gestor de Modelos, na área Cofre de Chaves, quando disponível para o seu perfil de acesso. Não coloque tokens ou senhas nas instruções personalizadas.
             </p>
           </div>
         </section>
@@ -592,7 +597,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
               Privacidade e políticas de dados:
             </div>
-            A proteção de dados depende das políticas e integrações efetivamente ativas. Consulte Segurança e o Gestor de Modelos para verificar os controlos disponíveis nesta instalação.
+            A proteção de dados depende das políticas e integrações efetivamente ativas. Consulte Segurança e o Gestor de Modelos para verificar os controles disponíveis nesta instalação.
           </div>
         </div>
       )}
@@ -685,8 +690,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <button
               type="button"
               onClick={handleClearHistory}
-              className="btn btn-danger"
-              style={{ fontSize: '0.80rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              className="btn"
+              style={{
+                fontSize: '0.80rem',
+                padding: '7px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'var(--danger-color)',
+                color: '#fff',
+              }}
             >
               <Trash2 size={14} />
               <span>Limpar Dados</span>
@@ -694,6 +707,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmClearOpen}
+        title="Limpar histórico local"
+        description="Tem certeza de que deseja apagar todo o histórico de conversas locais? Esta ação não pode ser desfeita."
+        confirmLabel="Apagar histórico"
+        tone="danger"
+        onConfirm={confirmClearHistory}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
     </Modal>
   );
 };

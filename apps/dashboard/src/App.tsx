@@ -607,7 +607,7 @@ const DashboardApp: React.FC = () => {
               {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
             </button>
 
-            {/* Controlo de ecrã inteiro disponível no navegador */}
+            {/* Controle de tela cheia disponível no navegador */}
             <div
               style={{
                 display: 'flex',
@@ -652,7 +652,7 @@ const DashboardApp: React.FC = () => {
             <section role="alert" style={{ minHeight: '55vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
               <ShieldAlert size={30} color="var(--accent-color)" />
               <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>Acesso não disponível</h2>
-              <p style={{ maxWidth: '440px', margin: 0, fontSize: '0.86rem' }}>O seu perfil não possui a permissão necessária para abrir este módulo. Se precisar de acesso, contacte o administrador da plataforma.</p>
+              <p style={{ maxWidth: '440px', margin: 0, fontSize: '0.86rem' }}>O seu perfil não possui a permissão necessária para abrir este módulo. Se precisar de acesso, contate o administrador da plataforma.</p>
               <button type="button" className="btn btn-primary" onClick={() => navigate(hasPermission('system:read') ? 'overview' : 'chat')}>Voltar</button>
             </section>
           ) : activeTab === 'not_found' ? (

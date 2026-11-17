@@ -97,11 +97,11 @@ export const ProjectMemoryModal: React.FC<ProjectMemoryModalProps> = ({
             display: 'flex',
             flexDirection: 'column',
             gap: '12px',
-            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backgroundColor: 'var(--bg-secondary)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={16} color="#818cf8" />
+            <Sparkles size={16} color="var(--accent-color)" />
             <h4 style={{ fontSize: '0.9rem', fontWeight: 600 }}>Registrar Nova Regra / Decisão</h4>
           </div>
 

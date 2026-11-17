@@ -208,7 +208,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
       hologramRot += 0.02;
 
       // 1. Limpa o fundo do escritório
-      ctx.fillStyle = '#080d1a';
+      ctx.fillStyle = '#141312';
       ctx.fillRect(0, 0, width, height);
 
       // Grid sutil no piso
@@ -231,7 +231,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
       // 2. Desenha os Departamentos (Carpetes e Zonas)
       const DEPT_ZONES = [
         { name: '👑 Comando Central', x: 90, y: 50, w: 270, h: 140, color: 'rgba(234, 179, 8, 0.05)', border: 'rgba(234, 179, 8, 0.2)' },
-        { name: '💻 Engenharia de Software', x: 600, y: 50, w: 270, h: 140, color: 'rgba(99, 102, 241, 0.05)', border: 'rgba(99, 102, 241, 0.2)' },
+        { name: '💻 Engenharia de Software', x: 600, y: 50, w: 270, h: 140, color: 'rgba(217, 119, 87, 0.06)', border: 'rgba(217, 119, 87, 0.25)' },
         { name: '🎨 Design & UX', x: 90, y: 200, w: 170, h: 110, color: 'rgba(236, 72, 153, 0.05)', border: 'rgba(236, 72, 153, 0.2)' },
         { name: '🚀 DevOps & Infra', x: 700, y: 200, w: 170, h: 130, color: 'rgba(249, 115, 22, 0.05)', border: 'rgba(249, 115, 22, 0.2)' },
         { name: '📊 Dados & BI', x: 90, y: 340, w: 230, h: 140, color: 'rgba(6, 182, 212, 0.05)', border: 'rgba(6, 182, 212, 0.2)' },
@@ -247,8 +247,8 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-        ctx.font = '10px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(243, 242, 238, 0.42)';
+        ctx.font = '10px "Plus Jakarta Sans", sans-serif';
         ctx.fillText(z.name, z.x + 12, z.y + 18);
       });
 
@@ -260,7 +260,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#fbbf24';
-      ctx.font = '12px Inter, sans-serif';
+      ctx.font = '12px "Plus Jakarta Sans", sans-serif';
       ctx.fillText('☕ Coffee Bar', COFFEE_POINT.x - 32, COFFEE_POINT.y + 30);
 
       // 4. Mesa Redonda Central de Consenso
@@ -271,7 +271,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
       // Carpete circular da sala de reunião
       const carpetGrad = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, 105);
       carpetGrad.addColorStop(0, 'rgba(234, 179, 8, 0.15)');
-      carpetGrad.addColorStop(1, 'rgba(15, 23, 42, 0.6)');
+      carpetGrad.addColorStop(1, 'rgba(24, 23, 22, 0.65)');
       ctx.fillStyle = carpetGrad;
       ctx.beginPath();
       ctx.arc(centerX, centerY, 105, 0, Math.PI * 2);
@@ -281,7 +281,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
       ctx.stroke();
 
       // Tampo da Mesa Redonda de Madeira Nobre / Vidro Escuro
-      ctx.fillStyle = '#1e293b';
+      ctx.fillStyle = '#2b2a27';
       ctx.beginPath();
       ctx.arc(centerX, centerY, tableRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -306,7 +306,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
       ctx.restore();
 
       ctx.fillStyle = '#fef08a';
-      ctx.font = 'bold 10px Inter, sans-serif';
+      ctx.font = 'bold 10px "Plus Jakarta Sans", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('MESA REDONDA', centerX, centerY + 32);
 
@@ -314,7 +314,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
       Object.entries(DESK_SLOTS).forEach(([, slots]) => {
         slots.forEach((s) => {
           // Tampo da mesa individual
-          ctx.fillStyle = 'rgba(30, 41, 59, 0.85)';
+          ctx.fillStyle = 'rgba(38, 37, 35, 0.9)';
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
           ctx.lineWidth = 1;
           ctx.beginPath();
@@ -323,8 +323,8 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
           ctx.stroke();
 
           // Monitor miniatura sobre a mesa
-          ctx.fillStyle = '#0f172a';
-          ctx.strokeStyle = '#38bdf8';
+          ctx.fillStyle = '#181716';
+          ctx.strokeStyle = '#d97757';
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.rect(s.x - 8, s.y - 10, 16, 5);
@@ -418,7 +418,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
         const bodyBob = av.state === 'walking' ? Math.abs(Math.sin(av.walkCycle)) * 2 : 0;
 
         // Pernas
-        ctx.fillStyle = '#1e293b';
+        ctx.fillStyle = '#2b2a27';
         ctx.fillRect(-5, 0 - bodyBob + legBob, 3, 7);
         ctx.fillRect(2, 0 - bodyBob - legBob, 3, 7);
 
@@ -438,14 +438,14 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
         ctx.fill();
 
         // Cabelo / Boné
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = '#141312';
         ctx.beginPath();
         ctx.arc(0, -17 - bodyBob, 6, Math.PI, Math.PI * 2);
         ctx.fill();
 
         // Olhinhos direcionados
         const eyeOffset = av.facing === 'left' ? -2 : 2;
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = '#141312';
         ctx.beginPath();
         ctx.arc(eyeOffset, -15 - bodyBob, 1, 0, Math.PI * 2);
         ctx.fill();
@@ -453,14 +453,14 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
         // Balão de Diálogo / Pensamento (Speech Bubble)
         if (av.speechBubble || isHovered) {
           const txt = av.speechBubble || av.name;
-          ctx.font = 'bold 9px Inter, sans-serif';
+          ctx.font = 'bold 9px "Plus Jakarta Sans", sans-serif';
           const txtWidth = ctx.measureText(txt).width;
           const bubbleW = txtWidth + 12;
           const bubbleH = 18;
           const bubbleY = -34 - bodyBob;
 
           // Caixa do balão
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          ctx.fillStyle = 'rgba(24, 23, 22, 0.94)';
           ctx.strokeStyle = av.color;
           ctx.lineWidth = 1;
           ctx.beginPath();
@@ -469,7 +469,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
           ctx.stroke();
 
           // Rabinho do balão apontando para o avatar
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          ctx.fillStyle = 'rgba(24, 23, 22, 0.94)';
           ctx.beginPath();
           ctx.moveTo(-3, bubbleY);
           ctx.lineTo(0, bubbleY + 4);
@@ -477,7 +477,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
           ctx.fill();
 
           // Texto dentro do balão
-          ctx.fillStyle = '#f8fafc';
+          ctx.fillStyle = '#f3f2ee';
           ctx.textAlign = 'center';
           ctx.fillText(txt, 0, bubbleY - 5);
         }
@@ -538,7 +538,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
     <div
       style={{
         borderRadius: '16px',
-        backgroundColor: '#050914',
+        backgroundColor: 'var(--bg-input)',
         border: '1px solid var(--border-color)',
         overflow: 'hidden',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
@@ -560,7 +560,7 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#f8fafc' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
             Planta Baixa Viva dos 26 Especialistas
           </span>
           <span
@@ -641,12 +641,12 @@ export const AgentOfficeCanvas: React.FC<AgentOfficeCanvasProps> = ({
               position: 'absolute',
               bottom: '12px',
               left: '16px',
-              backgroundColor: 'rgba(15, 23, 42, 0.92)',
+              backgroundColor: 'var(--bg-elevated)',
               border: `1px solid ${hoveredAvatar.color}`,
               padding: '6px 12px',
               borderRadius: '8px',
               fontSize: '0.76rem',
-              color: '#fff',
+              color: 'var(--text-primary)',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',

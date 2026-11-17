@@ -32,7 +32,7 @@ test('profile API does not send API credentials to the general profile endpoint'
 
 test('credential entry remains unavailable until the private credential vault exists', () => {
   assert.match(modal, /Cofre de Chaves/);
-  assert.match(modal, /Não coloque tokens ou palavras-passe/);
+  assert.match(modal, /Não coloque tokens ou (?:senhas|palavras-passe)/);
   assert.doesNotMatch(modal, /value=\{profile\.huggingfaceToken/);
   assert.doesNotMatch(modal, /value=\{profile\.groqApiKey/);
   assert.doesNotMatch(modal, /value=\{profile\.geminiApiKey/);
