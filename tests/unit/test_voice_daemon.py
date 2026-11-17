@@ -190,3 +190,67 @@ def test_voice_daemon_sentence_tts_and_barge_in(monkeypatch):
     daemon.is_speaking.set()
     daemon._on_hotkey_pressed()
     assert daemon.barge_in_event.is_set()
+
+
+def test_voice_daemon_mute_hotkey_toggle():
+    daemon = VoiceDaemon()
+    assert not daemon.muted.is_set()
+
+    class MockTray:
+        def __init__(self):
+            self.last_msg = None
+
+        def notify(self, msg, title=""):
+            self.last_msg = msg
+
+    daemon.tray = MockTray()
+    daemon._on_mute_hotkey()
+    assert daemon.muted.is_set()
+    assert daemon.tray.last_msg == "Microfone mutado."
+
+    daemon._on_mute_hotkey()
+    assert not daemon.muted.is_set()
+    assert daemon.tray.last_msg == "Microfone ativado."
+
+
+def test_voice_daemon_handles_kill_switch(monkeypatch):
+    daemon = VoiceDaemon()
+    spoken = []
+
+    def mock_say(text):
+        spoken.append(text)
+
+    monkeypatch.setattr(daemon, "_say", mock_say)
+    monkeypatch.setenv("JARVIS_VOICE_TOKEN", "test-token")
+
+    class MockTray:
+        def __init__(self):
+            self.last_msg = None
+
+        def notify(self, msg, title=""):
+            self.last_msg = msg
+
+    daemon.tray = MockTray()
+
+    class MockResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "reply": "JARVIS está em modo de parada de emergência.",
+                "intent": "system.killed",
+                "approval_required": False,
+            }
+
+    import httpx
+
+    def mock_post(*args, **kwargs):
+        return MockResponse()
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    daemon._dispatch_command("que horas são", None)
+    assert spoken == ["JARVIS está em modo de parada de emergência."]
+    assert daemon.tray.last_msg == "JARVIS está em modo de parada de emergência."
+

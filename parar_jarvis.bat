@@ -14,6 +14,9 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000" ^| findstr "LISTENING
     taskkill /F /PID %%a >nul 2>&1
 )
 
+echo Encerrando daemon de voz em segundo plano (se ativo)...
+wmic process where "commandline like '%%apps.voice_daemon.main%%'" call terminate >nul 2>&1
+
 echo.
-echo [OK] Servidor JARVIS finalizado com sucesso.
+echo [OK] Servidor e assistente de voz JARVIS finalizados com sucesso.
 timeout /t 3 >nul

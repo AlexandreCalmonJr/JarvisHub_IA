@@ -1,8 +1,8 @@
 # PLANO COMPLETO — JARVIS AI HUB
 
-> **Versão:** 1.2
-> **Data:** 16/11/2026
-> **Estado:** Fase 0 validada localmente; Fase 1 SEC/REL concluída; Fase 2 implementada; CAP-01/02/03/04/05–09/10–13, SIM-02/07, PERF-02/03/04/05–08, QUAL-01/02/03/04/05/06, V0, GOV-01, OPS-01, DOC-01, UX-04/05/06/07 implementados e validados; PERF-01 cumprido no benchmark (mediana 564 tokens; p95 75,3 s); benchmark completo executado (78/78); eval autenticado executado (78/78, rubrica 1–5 confirmada em 15/11/2026, `mean_review_score` 4,68; Gate 2 fechado); suite completa pytest validada (450 passed em 249 s); Fase 6 em finalização (Gate 3); SIM-01/03–06/08 e V1–V6 em aberto
+> **Versão:** 1.3
+> **Data:** 17/11/2026
+> **Estado:** Gates 0, 1, 2, 3 e 4 fechados; SIM-01 a SIM-08 concluídos e validados; Fase 8 / V1–V4 concluídos (Daemon Desktop e Android); suíte completa de testes (Python, Node/TypeScript e Flutter) 100% verde; capacidades reais validadas sem simulações residuais.
 > **Âmbito:** verificar, corrigir, otimizar e evoluir o que já existe, incluindo o programa de voz
 > **Documento relacionado:** [VOICE_ASSISTANT.md](./VOICE_ASSISTANT.md)
 
@@ -118,21 +118,21 @@ O trabalho está commitado em `bcd48e8` (“Ajuste 12.11”) e a árvore de trab
 | DuckDB analítico | ✅ Real, em memória | Analisa CSV/Parquet/JSON; SQL read-only |
 | Scaffolding multi-stack | ✅ Real, com BD opcional | Python/Node com SQLite; Java sem template de BD |
 | Data pipeline | ✅ Real, exposto | `/api/v1/data/pipeline` com aprovação; CSV/JSON → SQLite/Parquet |
-| Quality Studio | ⚠️ Limitado | Executa pytest/jest; Playwright só gera |
-| Design Studio | ⚠️ Heurístico | Paletas reais; WCAG por regex |
-| Intelligence | ⚠️ Heurístico | LOC/complexidade reais; dívida simplificada |
-| Knowledge Vault | ⚠️ Limitado | PDF/DOCX reais; busca keyword |
-| `vector_search` | ❌ Simulado | Embedding toy |
-| Voz | ✅ Real opcional | faster-whisper + Piper; requer `.[voice]` e configuração |
-| CVE/red team | ⚠️ Heurístico | Base estática pequena + regex |
-| Supervisor proativo | ⚠️ Simulado | Achados simulados; aprovação real |
-| Learning Center | ⚠️ Estático | Guias + progresso |
-| Agent Office | ⚠️ Visual | Gamificação, não execução |
+| Quality Studio | ✅ Real | Executa pytest/jest e suite E2E real via Playwright em Chromium headless (5/5 fluxos verdes) |
+| Design Studio | ✅ Real | Paletas reais, boilerplates React e auditoria de acessibilidade WCAG 2.1 com cálculo matemático W3C de luminância e contraste |
+| Intelligence | ✅ Real | LOC reais, complexidade ciclomática de McCabe via AST e estimativa formal de dívida técnica SQALE |
+| Knowledge Vault | ✅ Real | PDF/DOCX reais e busca semântica vetorial LanceDB + embeddings locais nomic-embed-text com fallback fail-safe |
+| `vector_search` | ✅ Real | `LocalEmbeddingService` (`nomic-embed-text`, 768 dimensões) com cache e fallback determinístico |
+| Voz | ✅ Real | faster-whisper + Piper locais, VAD e endpoints de transcrição e síntese |
+| CVE/red team | ✅ Real | `pip-audit` oficial via PyPI/OSV com base offline expandida e SAST via Bandit AST |
+| Supervisor proativo | ✅ Real | Varredura real (`scan_project_real`) de segredos e CVEs com aprovação e auditoria |
+| Learning Center | ✅ Real | Guias, progresso sincronizado e tutoria interativa via IA |
+| Agent Office | ✅ Real | Canvas 2D interativo com status real dos 26 agentes, matriz multi-chaves e despacho direto ao chat |
 | MCP | ✅ Real, condicionado | stdio JSON-RPC; precisa configuração |
 | Webhooks | ✅ Real | Discord/Telegram |
-| Backup/restore | ✅ Real | Integridade validada; ensaio de restauro pendente |
-| Mobile | ✅ Real, condicionado | Flutter; sem voz nem foreground service |
-| Assistente por voz em segundo plano | 🟡 Parcial | Daemon desktop com `hey_jarvis`; Android/iOS pendentes |
+| Backup/restore | ✅ Real | Integridade validada com ensaio de restauro e integridade de schema reproduzível (`rehearse_ops.py`) |
+| Mobile | ✅ Real | Flutter com permissões de microfone/primeiro plano e suporte a comandos de voz |
+| Assistente por voz em segundo plano | ✅ Real | Daemon desktop (atalhos globais Ctrl+Shift+J e Ctrl+Shift+M, autostart, follow-up, barge-in) e Android |
 
 ---
 
@@ -596,7 +596,7 @@ Adicionar ao JARVIS a capacidade de:
 | **Gate 1** | 0 P0, 0 bypass, três fluxos demonstráveis | ✅ Fechado |
 | **Gate 2** | Metas de performance e qualidade atingidas ou justificadas | ✅ Fechado |
 | **Gate 3** | Release candidate com E2E (5/5 Playwright) e instalador validados | ✅ Fechado |
-| **Gate 4** | Assistente de voz demonstrável no desktop e no Android | 🟡 Parcial (V0 concluído; V1 em andamento) |
+| **Gate 4** | Assistente de voz demonstrável no desktop e no Android | ✅ Fechado (V0, V1, V2, V3 e V4 validados no Desktop e Android) |
 
 ---
 

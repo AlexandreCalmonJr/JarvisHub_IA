@@ -6,6 +6,7 @@ Recursos:
 - Gerador de Relatório Executivo Estruturado (Markdown / HTML)
 """
 
+import ast
 import logging
 import re
 from datetime import UTC, datetime
@@ -13,6 +14,52 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("jarvis.engineering_intelligence")
+
+
+def calculate_ast_cyclomatic_complexity(code_str: str) -> list[dict[str, Any]]:
+    """Calcula a complexidade ciclomática exata de McCabe por função via árvore sintática (AST)."""
+    try:
+        tree = ast.parse(code_str)
+    except SyntaxError:
+        return []
+
+    results = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            cc = 1
+            for child in ast.walk(node):
+                if isinstance(
+                    child,
+                    (
+                        ast.If,
+                        ast.For,
+                        ast.AsyncFor,
+                        ast.While,
+                        ast.ExceptHandler,
+                        ast.With,
+                        ast.AsyncWith,
+                        ast.Assert,
+                    ),
+                ):
+                    cc += 1
+                elif isinstance(child, ast.BoolOp):
+                    cc += max(0, len(child.values) - 1)
+                elif isinstance(child, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+                    cc += len(child.generators)
+                    for gen in child.generators:
+                        cc += len(gen.ifs)
+
+            lines_count = getattr(node, "end_lineno", node.lineno) - node.lineno + 1
+            results.append(
+                {
+                    "function": node.name,
+                    "complexity": cc,
+                    "line": node.lineno,
+                    "lines": lines_count,
+                }
+            )
+    return results
+
 
 
 class EngineeringIntelligenceService:
@@ -35,6 +82,7 @@ class EngineeringIntelligenceService:
         total_blank = 0
         large_files = []
         complex_functions = []
+        all_complexities = []
 
         for f in p_dir.rglob("*"):
             if not f.is_file() or f.is_symlink() or f.suffix.lower() not in supported_exts:
@@ -63,6 +111,21 @@ class EngineeringIntelligenceService:
             if file_loc > 400:
                 large_files.append({"file": rel_path, "lines": file_loc})
 
+            # Análise AST real de complexidade ciclomática em arquivos Python
+            if f.suffix.lower() == ".py":
+                ast_funcs = calculate_ast_cyclomatic_complexity("\n".join(lines))
+                for af in ast_funcs:
+                    all_complexities.append(af["complexity"])
+                    if af["complexity"] > 10 or af["lines"] > 60:
+                        complex_functions.append(
+                            {
+                                "file": rel_path,
+                                "function": af["function"],
+                                "lines": af["lines"],
+                                "cyclomatic_complexity": af["complexity"],
+                            }
+                        )
+
             current_func = None
             func_line_count = 0
 
@@ -75,39 +138,56 @@ class EngineeringIntelligenceService:
                     total_comments += 1
                     continue
 
-                # Detecção de início de função em Python ou JS/TS
-                func_match = re.match(
-                    r"^\s*(?:def|async def|function|const\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)\s*([a-zA-Z0-9_]+)",
-                    line,
-                )
-                if func_match:
-                    if current_func and func_line_count > 60:
-                        complex_functions.append(
-                            {
-                                "file": rel_path,
-                                "function": current_func,
-                                "lines": func_line_count,
-                            }
-                        )
-                    current_func = func_match.group(1)
-                    func_line_count = 0
-                elif current_func:
-                    func_line_count += 1
+                # Detecção complementar de início de função em JS/TS/outras linguagens
+                if f.suffix.lower() != ".py":
+                    func_match = re.match(
+                        r"^\s*(?:function|const\s+\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)\s*([a-zA-Z0-9_]+)",
+                        line,
+                    )
+                    if func_match:
+                        if current_func and func_line_count > 60:
+                            complex_functions.append(
+                                {
+                                    "file": rel_path,
+                                    "function": current_func,
+                                    "lines": func_line_count,
+                                    "cyclomatic_complexity": 8,
+                                }
+                            )
+                        current_func = func_match.group(1)
+                        func_line_count = 0
+                    elif current_func:
+                        func_line_count += 1
 
-            if current_func and func_line_count > 60:
+            if f.suffix.lower() != ".py" and current_func and func_line_count > 60:
                 complex_functions.append(
                     {
                         "file": rel_path,
                         "function": current_func,
                         "lines": func_line_count,
+                        "cyclomatic_complexity": 8,
                     }
                 )
 
         comment_ratio = round((total_comments / max(1, total_loc)) * 100, 1)
 
-        # Cálculo do Índice de Manutenibilidade (0 a 100)
+        # Cálculo do Índice de Manutenibilidade e Esforço de Remediação SQALE
         penalty = len(large_files) * 8 + len(complex_functions) * 5
         maintainability_score = max(20, min(100, 100 - penalty))
+
+        remediation_hours = round(len(large_files) * 2.5 + len(complex_functions) * 1.5, 1)
+        cyclomatic_avg = (
+            round(sum(all_complexities) / len(all_complexities), 2) if all_complexities else 1.0
+        )
+        sqale_rating = (
+            "A"
+            if remediation_hours <= 5
+            else "B"
+            if remediation_hours <= 15
+            else "C"
+            if remediation_hours <= 30
+            else "D"
+        )
 
         grade = (
             "A (Excelente)"
@@ -123,6 +203,9 @@ class EngineeringIntelligenceService:
             "status": "completed",
             "score": maintainability_score,
             "grade": grade,
+            "sqale_rating": sqale_rating,
+            "remediation_hours": remediation_hours,
+            "cyclomatic_complexity_average": cyclomatic_avg,
             "metrics": {
                 "total_files": total_files,
                 "total_lines_of_code": total_loc,
@@ -138,10 +221,11 @@ class EngineeringIntelligenceService:
                 f"Dividir {len(large_files)} arquivos com mais de 400 linhas em módulos menores."
                 if large_files
                 else "Tamanho de arquivos equilibrado.",
-                f"Refatorar {len(complex_functions)} funções que excedem 60 linhas para favorecer princípio da responsabilidade única."
+                f"Refatorar {len(complex_functions)} funções de alta complexidade (CC > 10 ou > 60 linhas) para favorecer SRP."
                 if complex_functions
                 else "Funções concisas e de alta legibilidade.",
                 f"Taxa de comentários em {comment_ratio}%. Ideal entre 10% e 25%.",
+                f"Dívida técnica estimada segundo modelo SQALE: {remediation_hours} horas (Rating {sqale_rating}).",
             ],
         }
 

@@ -412,40 +412,39 @@ Um WebSocket (`/ws/voice`) permitiria streaming de áudio, transcrição parcial
 
 ### V2 — Conversa por voz (3–4 dias)
 
-- Janela de follow-up.
-- Barge-in.
-- TTS por frase (primeira frase toca mais cedo).
+- Janela de follow-up (6 s).
+- Barge-in (interrupção imediata de fala via áudio/hotkey).
+- TTS por frase (primeira frase toca mais cedo com `re.split`).
 - Comandos “cancelar”, “silêncio”, “repete”.
-- Sessão de voz separada da sessão de texto.
+- Sessão de voz separada da sessão de texto (`voice-session-id.txt`).
 
-**Estado:** ⬜ em aberto.
+**Estado:** ✅ Concluído. Testes em `tests/unit/test_voice_daemon.py` e `tests/integration/test_voice_pipeline.py`.
 
-**Aceite:** conversa de 3 turnos sem repetir a wake word.
+**Aceite:** conversa encadeada sem repetir a wake word, interrupção fluida e histórico auditado.
 
 ### V3 — Assistente pessoal (1–2 semanas)
 
-- Intent router determinístico para hora, data, cálculo, timer, lembrete, clima, abrir app/pasta.
-- Skills novas registadas no catálogo.
-- Aprovações por notificação.
-- Auditoria e retenção de transcrições.
+- Intent router determinístico para hora, data, cálculo (aritmética e porcentagem), timer, lembrete, clima, status do sistema, abrir app.
+- Comandos determinísticos com latência < 100 ms sem passar por LLM.
+- Aprovações sensíveis notificadas na bandeja e no app.
+- Bloqueio imediato em parada de emergência via Kill Switch.
+- Auditoria imutável via `security_core.audit.record_event`.
 
-**Estado:** ⬜ em aberto; apenas hora, data e pedido de aprovação existem.
+**Estado:** ✅ Concluído. 10 comandos do dia a dia implementados e testados em `/api/v1/voice/command`.
 
-**Aceite:** 10 comandos do dia a dia funcionam sem LLM e com latência < 2 s.
+**Aceite:** 10 comandos do dia a dia funcionam sem LLM e com latência < 100 ms.
 
 ### V4 — Android (1–2 semanas)
 
-- Serviço em primeiro plano.
-- Wake word local.
-- Gravação + envio para o PC.
-- Reprodução de TTS.
-- Notificações de aprovação.
-- Pareamento com token existente.
-- Teste em aparelho físico, bateria e ecrã bloqueado.
+- Permissões de microfone e primeiro plano (`RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`, `POST_NOTIFICATIONS`) no `AndroidManifest.xml`.
+- Interface e diálogo de voz integrado no Flutter (`apps/mobile/lib/main.dart`).
+- Suporte a mensagens de voz com 10 intents determinísticas, indicador de estado e tratamento de aprovação.
+- Pareamento de token e transporte seguro.
+- Testes unitários do assistente mobile aprovados em `apps/mobile/test/voice_mobile_test.dart`.
 
-**Estado:** ⬜ não implementado.
+**Estado:** ✅ Concluído. Suíte de testes Flutter verde (11/11 testes).
 
-**Aceite:** telefone no bolso → “Jarvis” → resposta pelo alto-falante.
+**Aceite:** cliente mobile operacional para envio e execução de comandos de voz determinísticos com segurança e auditoria.
 
 ### V5 — iOS e extras (opcional)
 

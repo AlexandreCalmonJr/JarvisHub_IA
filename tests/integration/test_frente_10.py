@@ -58,6 +58,9 @@ def test_engineering_intelligence_tech_debt(sample_code_project):
     assert any("process_huge_batch" in cf["function"] for cf in debt["complex_functions"])
     assert debt["score"] <= 100
     assert debt["grade"].startswith(("A", "B", "C"))
+    assert debt["remediation_hours"] >= 0
+    assert debt["cyclomatic_complexity_average"] >= 1.0
+    assert debt["sqale_rating"] in ("A", "B", "C", "D")
     assert len(debt["recommendations"]) >= 1
 
 

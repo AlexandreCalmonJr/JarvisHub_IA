@@ -77,11 +77,17 @@ def set_autostart(enabled: bool) -> bool:
 
 
 class GlobalHotkeyListener:
-    """Escuta o atalho global Ctrl+Shift+J em segundo plano no Windows."""
+    """Escuta os atalhos globais Ctrl+Shift+J (ouvir) e Ctrl+Shift+M (mutar) em segundo plano no Windows."""
 
-    def __init__(self, callback, stop_event: threading.Event) -> None:
+    def __init__(
+        self,
+        callback,
+        stop_event: threading.Event,
+        mute_callback=None,
+    ) -> None:
         self.callback = callback
         self.stop_event = stop_event
+        self.mute_callback = mute_callback
         self.thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -95,30 +101,51 @@ class GlobalHotkeyListener:
         from ctypes import wintypes
 
         user32 = ctypes.windll.user32
-        hotkey_id = 101
+        hotkey_wake_id = 101
+        hotkey_mute_id = 102
         mod_control = 0x0002
         mod_shift = 0x0004
         vk_j = 0x4A
+        vk_m = 0x4D
 
-        if not user32.RegisterHotKey(None, hotkey_id, mod_control | mod_shift, vk_j):
+        reg_wake = user32.RegisterHotKey(None, hotkey_wake_id, mod_control | mod_shift, vk_j)
+        reg_mute = user32.RegisterHotKey(None, hotkey_mute_id, mod_control | mod_shift, vk_m)
+
+        if not reg_wake:
             logger.warning(
                 "Não foi possível registrar o atalho global Ctrl+Shift+J (pode estar em uso)."
             )
-            return
+        else:
+            logger.info("Atalho global Ctrl+Shift+J (ouvir) registrado com sucesso.")
 
-        logger.info("Atalho global Ctrl+Shift+J registrado com sucesso.")
+        if not reg_mute:
+            logger.warning(
+                "Não foi possível registrar o atalho global Ctrl+Shift+M (pode estar em uso)."
+            )
+        else:
+            logger.info("Atalho global Ctrl+Shift+M (mute) registrado com sucesso.")
+
         try:
             msg = wintypes.MSG()
             while not self.stop_event.is_set():
                 has_msg = user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1)  # PM_REMOVE = 1
-                if has_msg and msg.message == 0x0312 and msg.wParam == hotkey_id:
-                    try:
-                        self.callback()
-                    except Exception:
-                        logger.exception("Erro ao processar ativação por atalho global.")
+                if has_msg and msg.message == 0x0312:
+                    if msg.wParam == hotkey_wake_id:
+                        try:
+                            self.callback()
+                        except Exception:
+                            logger.exception("Erro ao processar ativação por atalho global.")
+                    elif msg.wParam == hotkey_mute_id and self.mute_callback:
+                        try:
+                            self.mute_callback()
+                        except Exception:
+                            logger.exception("Erro ao processar mute por atalho global.")
                 time.sleep(0.05)
         finally:
-            user32.UnregisterHotKey(None, hotkey_id)
+            if reg_wake:
+                user32.UnregisterHotKey(None, hotkey_wake_id)
+            if reg_mute:
+                user32.UnregisterHotKey(None, hotkey_mute_id)
 
 
 class VoiceDaemon:
@@ -345,6 +372,13 @@ class VoiceDaemon:
         self.hotkey_wake_requested.set()
         self.notify("Atalho global acionado. Ouvindo...", title="JARVIS")
 
+    def _on_mute_hotkey(self) -> None:
+        """Callback acionado pelo atalho global Ctrl+Shift+M."""
+        self._set_muted()
+        msg = "Microfone mutado." if self.muted.is_set() else "Microfone ativado."
+        logger.info("Mute alternado via atalho global Ctrl+Shift+M: %s", msg)
+        self.notify(msg, title="JARVIS Mute")
+
     def _dispatch_command(self, transcript: str, stream) -> None:
         """Encaminha o comando transcrito para a API local e vocaliza a resposta."""
         token = os.getenv("JARVIS_VOICE_TOKEN", "").strip()
@@ -375,7 +409,12 @@ class VoiceDaemon:
             )
             command_response.raise_for_status()
             command = command_response.json()
-            if command.get("intent") != "command.unsupported":
+            if command.get("intent") == "system.killed":
+                reply = command.get("reply", "JARVIS está em modo de parada de emergência.")
+                self.notify(reply, title="JARVIS Kill Switch")
+                self._say(reply)
+                return
+            elif command.get("intent") != "command.unsupported":
                 reply = command.get("reply", "Não consegui processar o pedido.")
             else:
                 response = httpx.post(
@@ -523,9 +562,11 @@ class VoiceDaemon:
         try:
             self._ensure_backend()
 
-            # Inicia escuta do atalho global Ctrl+Shift+J no Windows
+            # Inicia escuta dos atalhos globais Ctrl+Shift+J (ouvir) e Ctrl+Shift+M (mute) no Windows
             self.hotkey_listener = GlobalHotkeyListener(
-                callback=self._on_hotkey_pressed, stop_event=self.stop_event
+                callback=self._on_hotkey_pressed,
+                stop_event=self.stop_event,
+                mute_callback=self._on_mute_hotkey,
             )
             self.hotkey_listener.start()
 
@@ -540,7 +581,8 @@ class VoiceDaemon:
                         self._toggle_autostart,
                         checked=lambda item: is_autostart_enabled(),
                     ),
-                    pystray.MenuItem("Atalho: Ctrl+Shift+J", None, enabled=False),
+                    pystray.MenuItem("Atalho Ouvir: Ctrl+Shift+J", None, enabled=False),
+                    pystray.MenuItem("Atalho Mute: Ctrl+Shift+M", None, enabled=False),
                     pystray.MenuItem("Sair", self._quit),
                 ),
             )

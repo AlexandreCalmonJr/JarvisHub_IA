@@ -19,13 +19,13 @@ Atualizado em 13/11/2026. O estado deve ser revisto em cada release.
 | Voz STT | Real opcional | faster-whisper local no daemon e como fallback da rota; o router web tenta primeiro o provedor cloud configurado. Requer `.[voice]` e modelo |
 | Voz TTS | Real opcional | Piper; requer binário e modelo configurados e devolve WAV válido |
 | VAD | Real básico | RMS para WAV PCM e RMS no daemon; não é deteção de fala avançada |
-| Wake word/daemon desktop | Real completo (V1) | `apps/voice_daemon/main.py`: bandeja, mute, instância única, `hey_jarvis`, atalho global Windows (`Ctrl+Shift+J`), autostart no Registro (`HKCU Run`), notificações de sistema, janela de follow-up (6 s) e chat autenticado |
-| Voz Android | Não implementada | Escopo V4; `apps/mobile/pubspec.yaml` só tem `cupertino_icons` e `flutter_secure_storage` |
+| Wake word/daemon desktop | Real completo (V1 & V2) | `apps/voice_daemon/main.py`: bandeja, mute (manual e atalho global `Ctrl+Shift+M`), instância única, `hey_jarvis`, atalho global Windows (`Ctrl+Shift+J`), autostart no Registro (`HKCU Run`), notificações de sistema, janela de follow-up (6 s), barge-in imediato, TTS frase a frase e respeito estrito ao Kill Switch |
+| Voz Android | Real (V4) | `apps/mobile`: permissões `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE` e `POST_NOTIFICATIONS` declaradas no `AndroidManifest.xml`; suporte a comandos de voz, 10 intents determinísticas, parada de emergência via Kill Switch e testes em `test/voice_mobile_test.dart` |
 | CVE, red team, WCAG, dívida técnica | Real com pip-audit & Bandit | `CVEScannerService` integrado com `pip-audit` (PyPI/OSV) e base offline expandida; SAST com AST Bandit para Python e pré-filtro OWASP multi-linguagem; nova ferramenta `audit_dependencies` |
 | Supervisor proativo | Simulado/parcial | Achados não equivalem a varredura completa |
 | Quality Studio Playwright | Real (testes E2E) | 5/5 fluxos principais E2E executados e verdes via Playwright (`apps/dashboard/e2e/`) |
 | Backup/restore | Implementado e validado | Ensaio reproduzível via `scripts/rehearse_ops.py` (`data/ops_rehearsal.json`): integridade, schema, contagens e foreign keys validadas; webhooks Discord/Telegram validados |
-| Mobile | Real, condicionado | Flutter; documentado em `docs/operations/14-guia-configuracao-lan-mobile.md`; ainda não tem voz |
+| Mobile | Real (com voz V4) | Flutter; documentado em `docs/operations/14-guia-configuracao-lan-mobile.md`; assistente de voz e intents determinísticas integrados |
 
 O template SQLite gerado é detetado pelo Backend Studio e pode ser inspecionado
 por conexão read-only. A opção `database=sqlite` só é selecionada quando pedida

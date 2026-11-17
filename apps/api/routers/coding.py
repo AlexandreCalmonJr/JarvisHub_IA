@@ -110,19 +110,20 @@ async def clear_coding_messages(session_id: str, principal: Principal = Depends(
 @router.post("/api/v1/coding/sessions/{session_id}/compact")
 async def compact_coding_session(
     session_id: str,
-    payload: CompactSessionRequest = CompactSessionRequest(),
+    payload: CompactSessionRequest | None = None,
     principal: Principal = Depends(get_principal),
 ):
     """Compacta semanticamente o histórico da sessão (estilo Claude Code /compact)."""
     from apps.api.deps import db_manager
 
-    compactor = ContextCompactor(keep_recent=payload.keep_recent)
+    req = payload or CompactSessionRequest()
+    compactor = ContextCompactor(keep_recent=req.keep_recent)
     stats = compactor.compact_session_db(
         db_manager=db_manager,
         session_id=session_id,
-        project_id=payload.project_id,
+        project_id=req.project_id,
         owner_user_id=_private_owner(principal),
-        keep_recent=payload.keep_recent,
+        keep_recent=req.keep_recent,
     )
     return {
         "session_id": session_id,

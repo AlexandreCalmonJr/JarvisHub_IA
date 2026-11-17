@@ -173,3 +173,22 @@ async def test_voice_command_all_10_personal_assistant_intents():
         assert r11.status_code == 200
         assert r11.json()["intent"] == "voice.cancel"
         assert "cancelada" in r11.json()["reply"].lower()
+
+
+@pytest.mark.asyncio
+async def test_voice_command_blocks_when_kill_switch_active():
+    from apps.api.deps import security_core
+
+    try:
+        security_core.kill_switch.trigger_global_kill("Teste de segurança de voz")
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/voice/command", json={"text": "que horas são", "session_id": "test-kill"}
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["intent"] == "system.killed"
+            assert "parada de emergência" in data["reply"]
+    finally:
+        security_core.kill_switch.reset_global_kill(authorized_by="admin-test")
+

@@ -160,6 +160,28 @@ async def voice_command(
         payload.project_id, owner_user_id=owner_user_id
     ):
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    # Verificação estrita de Kill Switch (Fase 8 / Gate 4)
+    if hasattr(security_core, "kill_switch") and (
+        security_core.kill_switch.is_global_killed()
+        or security_core.kill_switch.is_tool_blocked("voice_command")
+    ):
+        reply = "JARVIS está em modo de parada de emergência. Comandos de voz suspensos."
+        security_core.audit.record_event(
+            operation="VOICE_COMMAND_BLOCKED",
+            status="DENIED",
+            user_id=owner_user_id,
+            tool_name="voice_command",
+            parameters={"device_id": payload.device_id, "text": payload.text.strip()},
+            reason="Kill switch global ou bloqueio de ferramenta de voz ativo.",
+        )
+        return {
+            "reply": reply,
+            "intent": "system.killed",
+            "approval_required": False,
+            "audio_url": None,
+        }
+
     text = payload.text.strip()
     normalized = text.casefold()
 

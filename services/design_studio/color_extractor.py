@@ -31,6 +31,29 @@ def _rgb_to_hex(r: int, g: int, b: int) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def calculate_relative_luminance(rgb: tuple[int, int, int]) -> float:
+    """Calcula a luminância relativa conforme a especificação oficial W3C WCAG 2.1."""
+
+    def _channel_lin(val: int) -> float:
+        c = val / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r_lin = _channel_lin(rgb[0])
+    g_lin = _channel_lin(rgb[1])
+    b_lin = _channel_lin(rgb[2])
+    return 0.2126 * r_lin + 0.7152 * g_lin + 0.0722 * b_lin
+
+
+def calculate_contrast_ratio(color1: tuple[int, int, int], color2: tuple[int, int, int]) -> float:
+    """Calcula a razão de contraste (CR) entre duas cores conforme a fórmula W3C: (L1 + 0.05) / (L2 + 0.05)."""
+    l1 = calculate_relative_luminance(color1)
+    l2 = calculate_relative_luminance(color2)
+    lighter = max(l1, l2)
+    darker = min(l1, l2)
+    return round((lighter + 0.05) / (darker + 0.05), 2)
+
+
+
 def _blend_color(
     color_rgb: tuple[int, int, int], target_rgb: tuple[int, int, int], factor: float
 ) -> str:
@@ -159,6 +182,37 @@ class DesignStudioService:
                     }
                 )
 
+            # 5. Cálculo Matemático de Contraste W3C (WCAG 1.4.3 Contrast Minimum)
+            style_match = re.search(r'style\s*=\s*["\']([^"\']+)["\']', line, re.IGNORECASE)
+            if style_match:
+                style_str = style_match.group(1)
+                color_m = re.search(
+                    r"(?:^|;)\s*color\s*:\s*(#[0-9a-fA-F]{3,6})\b", style_str, re.IGNORECASE
+                )
+                bg_m = re.search(
+                    r"(?:^|;)\s*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})\b",
+                    style_str,
+                    re.IGNORECASE,
+                )
+                if color_m and bg_m:
+                    try:
+                        fg_rgb = _hex_to_rgb(color_m.group(1))
+                        bg_rgb = _hex_to_rgb(bg_m.group(1))
+                        ratio = calculate_contrast_ratio(fg_rgb, bg_rgb)
+                        if ratio < 4.5:
+                            findings.append(
+                                {
+                                    "line": idx,
+                                    "rule": "WCAG_1.4.3_CONTRAST_MINIMUM",
+                                    "severity": "HIGH" if ratio < 3.0 else "MEDIUM",
+                                    "description": f"Razão de contraste insuficiente ({ratio:.2f}:1) entre texto ({color_m.group(1)}) e fundo ({bg_m.group(1)}). O WCAG 2.1 Nível AA exige no mínimo 4.5:1 para texto normal.",
+                                    "snippet": line.strip()[:100],
+                                    "remediation": f"Aumente o contraste ajustando a luminosidade das cores para atingir uma razão >= 4.5:1 (atualmente {ratio:.2f}:1).",
+                                }
+                            )
+                    except ValueError:
+                        pass
+
         severity_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
         for f in findings:
             sev = f["severity"]
@@ -180,6 +234,21 @@ class DesignStudioService:
             "total_issues": len(findings),
             "severity_counts": severity_counts,
             "findings": findings,
+        }
+
+    def audit_color_contrast(self, foreground_hex: str, background_hex: str) -> dict[str, Any]:
+        """Calcula a conformidade matemática de contraste WCAG 2.1 entre duas cores hexadecimais."""
+        fg_rgb = _hex_to_rgb(foreground_hex)
+        bg_rgb = _hex_to_rgb(background_hex)
+        ratio = calculate_contrast_ratio(fg_rgb, bg_rgb)
+        return {
+            "ratio": ratio,
+            "passes_aa_normal": ratio >= 4.5,
+            "passes_aa_large": ratio >= 3.0,
+            "passes_aaa_normal": ratio >= 7.0,
+            "passes_aaa_large": ratio >= 4.5,
+            "foreground": foreground_hex,
+            "background": background_hex,
         }
 
     def generate_component_boilerplate(

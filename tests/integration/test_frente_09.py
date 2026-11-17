@@ -64,6 +64,27 @@ def test_design_studio_wcag_accessibility_audit_accessible():
     assert audit["score"] == 100
 
 
+def test_design_studio_wcag_contrast_audit():
+    service = DesignStudioService()
+
+    # Preto (#000000) sobre Branco (#FFFFFF) tem contraste máximo ~21:1
+    res_high = service.audit_color_contrast("#000000", "#ffffff")
+    assert res_high["ratio"] >= 20.0
+    assert res_high["passes_aa_normal"] is True
+    assert res_high["passes_aaa_normal"] is True
+
+    # Cinza claro (#888888) sobre Cinza escuro (#777777) tem contraste baixíssimo < 2:1
+    res_low = service.audit_color_contrast("#888888", "#777777")
+    assert res_low["ratio"] < 2.0
+    assert res_low["passes_aa_normal"] is False
+    assert res_low["passes_aa_large"] is False
+
+    # Markup com estilo inline de baixo contraste deve ser detectado
+    bad_contrast_markup = '<div style="color: #888888; background-color: #777777;">Texto ilegível</div>'
+    audit = service.audit_wcag_accessibility(bad_contrast_markup)
+    assert any(f["rule"] == "WCAG_1.4.3_CONTRAST_MINIMUM" for f in audit["findings"])
+
+
 def test_design_studio_component_boilerplates():
     service = DesignStudioService()
 
