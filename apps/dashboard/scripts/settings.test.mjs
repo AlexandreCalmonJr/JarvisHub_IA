@@ -63,3 +63,36 @@ test('Settings route is registered in router, app shell and rail', () => {
   assert.ok(app.includes('SettingsView'), 'App shell must import SettingsView');
   assert.ok(primaryRail.includes("activeTab === 'settings'"), 'PrimaryRail must reflect active settings state');
 });
+
+test('OpenBot Server Settings tab implements complete host, database, and runtime administration', () => {
+  // Access and Users
+  assert.ok(settingsView.includes('Gestão de Acessos & Usuários'), 'Access management card must exist');
+  assert.ok(settingsView.includes('jarvis:open-access-management'), 'Must trigger open access management event');
+  assert.ok(settingsView.includes('Expiração de Sessão & Tokens JWT'), 'JWT expiration control must exist');
+
+  // Network and Host
+  assert.ok(settingsView.includes('Endereço de Bind da Instância'), 'Bind address control must exist');
+  assert.ok(settingsView.includes('Porta da API FastAPI'), 'FastAPI port control must exist');
+  assert.ok(settingsView.includes('/ws/events'), 'WebSocket endpoint must be declared');
+
+  // Database and Storage
+  assert.ok(settingsView.includes('data/jarvis.db'), 'SQLite database path must be declared');
+  assert.ok(settingsView.includes('WAL Mode Ativo'), 'WAL mode badge must exist');
+  assert.ok(settingsView.includes('Otimizar (VACUUM)'), 'Database vacuum action must exist');
+  assert.ok(settingsView.includes('/api/v1/system/backup'), 'Real backup endpoint must be integrated');
+
+  // Local AI runtime (Ollama)
+  assert.ok(settingsView.includes('Endpoint do Servidor Ollama'), 'Ollama endpoint must exist');
+  assert.ok(settingsView.includes('Janela de Contexto Padrão'), 'Context window control must exist');
+
+  // Server logs and diagnostics
+  assert.ok(settingsView.includes('Nível de Detalhe dos Logs'), 'Log verbosity selector must exist');
+  assert.ok(settingsView.includes('Exportar Diagnóstico'), 'Export diagnostics action must exist');
+
+  // Other tabs have real interactive options
+  assert.ok(settingsView.includes('Tema do Sistema'), 'Appearance theme selector must exist');
+  assert.ok(settingsView.includes('Conclusão de Tarefas Longas'), 'Task completion notification toggle must exist');
+  assert.ok(settingsView.includes('Plano da Instância: Community Edition'), 'Billing community status must exist');
+  assert.ok(settingsView.includes('Restringir Leitura aos Workspaces'), 'Computer workspace restriction toggle must exist');
+  assert.ok(settingsView.includes('Canal de Atualização'), 'Update channel selector must exist');
+});
