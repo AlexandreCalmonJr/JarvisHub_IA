@@ -12,12 +12,14 @@ import {
   Sparkles,
   ChevronRight,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import { fetchSkills, toggleSkill, fetchAgents, fetchPonytailStatus, savePonytailLevel, deleteUserSkill } from '../api';
 import { SkillInfo, AgentInfo } from '../types';
 import { SkillCard } from './skills/SkillCard';
 import { SkillAgentModal } from './skills/SkillAgentModal';
 import { CreateSkillModal } from './skills/CreateSkillModal';
+import { SkillDetailsModal } from './skills/SkillDetailsModal';
 import { notify } from './common/Toast';
 import { ConfirmDialog } from './common/ConfirmDialog';
 import { API_BASE } from '../services/api/client';
@@ -53,6 +55,8 @@ export const SkillsManagerView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingSkill, setEditingSkill] = useState<SkillInfo | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createModalTab, setCreateModalTab] = useState<'create' | 'import'>('create');
+  const [viewingSkillDetails, setViewingSkillDetails] = useState<SkillInfo | null>(null);
   const [pendingDeleteSkill, setPendingDeleteSkill] = useState<{ id: string; name: string } | null>(null);
   const [deletingSkill, setDeletingSkill] = useState(false);
 
@@ -1379,37 +1383,117 @@ export const SkillsManagerView: React.FC = () => {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
-                <h1
-                  style={{
-                    fontSize: '1.85rem',
-                    fontWeight: 600,
-                    margin: 0,
-                    color: '#f5f5f5',
-                  }}
-                >
-                  Gestor de Skills e Catálogo ECC
-                </h1>
-                <p style={{ fontSize: '0.84rem', color: '#888888', margin: '4px 0 0 0' }}>
-                  Habilidades técnicas ativas ({activeCount}/{skills.length}), versionadas e injetadas apenas nos agentes associados e autorizados.
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <BookOpen size={18} color="#38bdf8" />
+                  </div>
+                  <div>
+                    <h1
+                      style={{
+                        fontSize: '1.85rem',
+                        fontWeight: 600,
+                        margin: 0,
+                        color: '#f5f5f5',
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      Habilidades dos Agentes & Catálogo ECC
+                    </h1>
+                  </div>
+                </div>
+                <p style={{ fontSize: '0.84rem', color: '#a1a1aa', margin: '6px 0 0 0' }}>
+                  Capacidades técnicas modulares, ferramentas MCP injetadas e diretrizes especializadas distribuídas entre os 26 agentes de IA.
                 </p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                {/* Stats Pills */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '6px 14px',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    marginRight: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981' }} />
+                    <span style={{ fontSize: '0.78rem', color: '#e4e4e7', fontWeight: 600 }}>
+                      {activeCount}/{skills.length} Ativas
+                    </span>
+                  </div>
+                  <div style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+                  <span style={{ fontSize: '0.78rem', color: '#a1a1aa' }}>
+                    {ALL_26_AGENTS.length} Especialistas
+                  </span>
+                </div>
+
                 {canManageSkills && (
-                  <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="btn btn-primary"
-                    style={{
-                      fontSize: '0.82rem',
-                      padding: '7px 14px',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    <span>Nova Habilidade ECC</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateModalTab('create');
+                        setShowCreateModal(true);
+                      }}
+                      className="btn btn-primary"
+                      style={{
+                        fontSize: '0.82rem',
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>Nova Habilidade</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateModalTab('import');
+                        setShowCreateModal(true);
+                      }}
+                      className="btn btn-secondary"
+                      style={{
+                        fontSize: '0.82rem',
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Upload size={14} />
+                      <span>Importar ECC</span>
+                    </button>
+                  </>
                 )}
 
-                <button onClick={() => loadData()} className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '7px 12px', borderRadius: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => loadData()}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.82rem', padding: '8px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <RefreshCw size={13} className={loading ? 'spin' : ''} />
                   <span>{loading ? 'Atualizando...' : 'Atualizar'}</span>
                 </button>
               </div>
@@ -1702,6 +1786,7 @@ export const SkillsManagerView: React.FC = () => {
                     skill={skill}
                     onToggle={handleToggle}
                     onEditAgents={(s) => setEditingSkill(s)}
+                    onViewInstructions={(s) => setViewingSkillDetails(s)}
                     onDelete={canManageSkills ? handleDeleteSkill : undefined}
                     canManageSkills={canManageSkills}
                     isAdmin={isAdmin}
@@ -2005,6 +2090,17 @@ export const SkillsManagerView: React.FC = () => {
         </div>
       )}
 
+      {/* Modal de Detalhes e Diretrizes da Skill */}
+      {viewingSkillDetails && (
+        <SkillDetailsModal
+          isOpen={true}
+          onClose={() => setViewingSkillDetails(null)}
+          skill={viewingSkillDetails}
+          onEditAgents={(s) => setEditingSkill(s)}
+          canManageSkills={canManageSkills}
+        />
+      )}
+
       {/* Modal de Vinculação de Agentes da Skill */}
       {canManageSkills && editingSkill && (
         <SkillAgentModal
@@ -2023,6 +2119,7 @@ export const SkillsManagerView: React.FC = () => {
           onClose={() => setShowCreateModal(false)}
           agents={agents}
           onSkillCreated={loadData}
+          initialTab={createModalTab}
         />
       )}
 
