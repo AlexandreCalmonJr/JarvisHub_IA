@@ -1,197 +1,248 @@
-# PLANO MESTRE DE EVOLUÇÃO INTEGRADA — JARVIS AI HUB (REVISÃO EXAUSTIVA)
-> **Versão:** 3.2.0-PRO · **Data:** Novembro de 2026 · **Status:** Plano Definitivo e Blindado  
-> **Escopo Completo:** Da Paridade com Claude Code/Devin ao Redesign Minimalista, Persistência Dual-Engine, Modelos Locais Pesados (Kimi-K3), Memória Noturna, Voz de Alta Fidelidade e Acesso Zero-Atrito.
+# PLANO MESTRE DE EVOLUÇÃO INTEGRADA — JARVIS AI HUB (VERSÃO OPENBOT UNIFIED)
+> **Versão:** 4.0.0-PRO · **Data:** Novembro de 2026 · **Status:** Plano de Design & Arquitetura Unificada  
+> **Escopo:** Adoção Total do Design System do OpenBot, Integração de Todas as 8 Telas Principais, Dynamic Island, Dock de Agentes Flutuante à Direita, Persistência Dual-Engine e Paridade de Código.
 
 ---
 
-## 1. Visão Geral & Mapa Arquitetural
+## 1. Visão Geral da Arquitetura Visual do OpenBot
 
-Este plano consolida **100% dos tópicos abordados nas conversas**, integrando tanto os requisitos de engenharia de software quanto a infraestrutura de modelos locais, interface minimalista e ergonomia de uso.
+A análise minuciosa das **14 imagens capturadas do OpenBot** revela um dos designs mais refinados, funcionais e minimalistas do mercado de IA. A interface substitui barras de menu pesadas por uma **grade ergonômica de 4 zonas**:
 
-```mermaid
-flowchart TD
-    subgraph Experiencia ["1. Experiência, UI & Voz de Alta Fidelidade"]
-        UI["Design Minimalista (4 Modos + Split Canvas)"]
-        HUD["Dynamic Island de Voz (Web + Windows Overlay)"]
-        TTS["Motor Neural Offline Kokoro / Piper (Voz Ultra-Realista)"]
-        CMD["Command Palette Global (Ctrl + K)"]
-    end
-
-    subgraph Acesso ["2. Acesso, Autenticação & Mobile"]
-        AUTOLOGIN["Auto-Login Desktop & Windows Hello (WebAuthn)"]
-        QRPAIR["Pareamento Instantâneo via QR Code"]
-        MDNS["Auto-Discovery mDNS (Zero Configuração de IP)"]
-        REMOTE["Acesso 4G/5G (Tailscale / Cloudflare Tunnel) + PWA"]
-    end
-
-    subgraph Backend ["3. Resiliência de Persistência & Backend"]
-        DUALDB["Dual-Engine DB (SQLite WAL + PostgreSQL 16 Opcional)"]
-        ASYNCQUEUE["Async Write Buffer (Zero Locks no SQLite)"]
-        SEMANTIC["Cache Semântico Vetorial de Inferência (LanceDB)"]
-        EVENTBUS["Barramento Interno de Eventos (Pub/Sub asyncio)"]
-        DREAM["Ciclo Noturno de Memória (Consolidação & Reflexão)"]
-    end
-
-    subgraph CodingEngine ["4. Paridade de Agentes de Código (Claude Code / Devin)"]
-        CLI["JARVIS CLI de Terminal (jarvis code / jarvis repl)"]
-        REPOMAP["Repo Map com Tree-sitter & AST Ranking"]
-        TESTLOOP["Loop Autônomo Fechado (Test-Fix-Verify Loop)"]
-        SUBAGENTS["Subagentes Paralelos Efêmeros (Pesquisador / Revisor)"]
-        SANDBOX["Isolamento de Processos (Windows Job Objects / WSL)"]
-    end
-
-    subgraph ModelRuntime ["5. Runtime de Modelos Locais & VRAM (Kimi-K3 / GGUF)"]
-        RESUME["Download Resiliente com Resume em Partes"]
-        VRAM["Gestão Inteligente de VRAM (Auto-Offload após Ociosidade)"]
-        QUANT["Execução GGUF / AWQ / ExLlamaV2 via Ollama & llama.cpp"]
-    end
-
-    Experiencia <--> Acesso
-    Acesso <--> Backend
-    Backend <--> CodingEngine
-    CodingEngine <--> ModelRuntime
+```
++---------------------------------------------------------------------------------------------------------+
+|                                    [ Dynamic Island: 🟣 👋 ]                                            |
++----+-----------------------+-------------------------------------------------------------------+--------+
+| R  | GAVETA DE CONTEXTO    | ÁREA DE TRABALHO PRINCIPAL                                        | DOCK   |
+| A  | (Sub-menu retrátil    |                                                                   | DE     |
+| I  | dependente da página) | [💬 Calmon Dev +]               [💻 ollama/qwen2.5-coder:7b v]    | AGENTES|
+| L  |                       | ----------------------------------------------------------------- | (Direi-|
+|    | Pesquisar...          |                                                                   |  ta)   |
+| 💬 |                       | 2 etapas >                                                        |        |
+| 🔀 | QA Tester             | [x] Perguntas canceladas                                          |  (🟣)  |
+| ✓: | Copy Editor           |                                                                   |  (🔵)  |
+| 📈 | Bug Fixer             |                      Você: Como está o computador?                |  (🟠)  |
+| 🗄️ | Security              |                                                                   |  (🟢)  |
+| ⋯  | Design                | JARVIS:                                                           |   +    |
+|    |                       | Vou verificar o estado do computador: CPU, memória e temperatura. |        |
+| 🏬 |                       | 12 etapas > [Desdobramento de tools]                              |        |
+| ❓  |                       |                                                                   |        |
+| ⚙️ |                       | ----------------------------------------------------------------- |        |
+| 👤 |                       | [ + ] [ Mensagem para JARVIS...                ] [🎙️] [🔊]        |        |
++----+-----------------------+-------------------------------------------------------------------+--------+
 ```
 
 ---
 
-## 2. O Que Foi Adicionado na Revisão Fina (Gaps Identificados e Fechados)
+## 2. As 4 Zonas de Layout do OpenBot Aplicadas ao JARVIS
 
-Após a revisão cruzada detalhada de todas as interações, foram adicionados 6 pilares essenciais que complementam a proposta inicial:
-
-1. **Gestão de Modelos Locais Pesados e Downloads Parciais (`kimi-k3-partial` / GGUF):**
-   - Suporte a modelos de grande porte (Kimi-K3, DeepSeek-R1, Qwen 2.5 Coder) particionados em disco, com download resiliente (chunked resume) e offload automático de VRAM após X minutos de inatividade para não congelar o computador.
-2. **Cache Semântico Vetorial de Inferência (LanceDB):**
-   - Em vez de comparar hashes de texto exatos, o backend compara similaridade de cosseno ($>0.95$). Reduz custo de tokens em até 40% e dá resposta em 5ms para perguntas parecidas.
-3. **Consolidação Noturna de Memória (*Memory Sleep / Dream Cycle*):**
-   - Worker em background que sintetiza os aprendizados do dia em momentos de ociosidade, mantendo a memória de longo prazo limpa, sem redundâncias e hiper-relevante.
-4. **Subagentes Paralelos Efêmeros (Padrão Devin / OpenBot):**
-   - O agente principal de código pode delegar tarefas a subagentes leves em segundo plano (ex: um subagente lê a documentação externa enquanto outro roda os testes), sem estourar o contexto da conversa principal.
-5. **Motor de Voz Neural Offline de Alta Fidelidade (Kokoro TTS / Piper):**
-   - Substituição de vozes sintéticas antigas por redes neurais leves (Kokoro 82M), gerando fala humana ultra-realista offline com latência inferior a 150ms.
-6. **Autenticação Biométrica no Navegador (WebAuthn / Windows Hello Passkeys):**
-   - Acesso com digital ou PIN no navegador sem precisar digitar senhas ou colar tokens.
+### Zona 1: Trilho Esquerdo Fixo (Ultra-Slim Rail - 64px)
+Um trilho escuro ultra-compacto (`#111113`) que concentra os acessos rápidos sem poluir a visão:
+* **Topo:** Ícone da aplicação (Bot Lilás com olhos).
+* **Meio (Ícones Fixos e Pinos Personalizáveis):**
+  1. `💬` **Chat / Conversas**
+  2. `🔀` **Fluxos de Trabalho** (Canvas de Nós)
+  3. `✓:` **Tarefas** (Hub de Delegação)
+  4. `📈` **Uso & Custos** (Telemetria de Tokens e Hardware)
+  5. `🗄️` **Biblioteca** (Todos os Arquivos e Projetos)
+  6. `⋯` **Menu de Mais Apps:** Popup estilo OpenBot com `Rotinas`, `Agenda`, `Provedores` e ícone de pino (`📌`) para o usuário escolher o que fica no trilho!
+* **Base:**
+  * `🏬` **Loja** (Marketplace de Apps, Agentes e Skills)
+  * `❓` **Ajuda & Novidades** (Changelog de releases, Guias, Discord, Feedback)
+  * `⚙️` **Configurações** (Voz, Provedores, Dynamic Island, Celular)
+  * `👤` **Perfil / Seletor de Servidor** (Dropdown de servidores e instâncias)
 
 ---
 
-## 3. Roteiro de Implementação Estruturado em 5 Fases
+### Zona 2: Gaveta de Contexto Retrátil (Sidebar de Sub-Navegação - 240px)
+Essa barra lateral adapta seu conteúdo dinamicamente conforme a página ativa no trilho:
+* **No Chat:** Busca de conversas, grupos de agentes (`Sem seção`, etc.) e lista de chats com data e status.
+* **Na Biblioteca:** `Todos os arquivos`, `Recentes`, `Fora de pastas`, e pasta de `Agentes`.
+* **Na Loja:** `Apps`, `Agentes`, `Habilidades` e lista de `Seus apps conectados` (Telegram, WhatsApp, GitHub, etc.).
+* **Nas Configurações:** Abas categorizadas: `Geral`, `Aparência`, `Notificações`, `Voz`, `Conta` (Perfil, Cobrança, Conectar celular) e `Este computador` (Dynamic Island, Dock de agentes).
+
+---
+
+### Zona 3: Dynamic Island Superior & Top Bar
+* **Dynamic Island Flutuante:** Pílula preta com cantos arredondados no topo central da tela:
+  * Exibe o avatar do agente ativo com animações expressivas (aceno `👋`, escuta ativa, sono/idle).
+  * Ondas senoidais reativas ao microfone durante conversas de voz.
+* **Barra de Abas Superior:** Permite abrir múltiplas conversas ou fluxos em abas (`[Calmon Dev] [+]`).
+* **Seletor de Modelo Integrado:** No canto superior direito da conversa, dropdown rápido: `[💻 ollama/qwen2.5-coder:7b v]` com atalhos de ferramentas.
+
+---
+
+### Zona 4: Dock de Agentes Flutuante à Direita (Agent Dock - 56px)
+Um dos elementos visuais mais marcantes do OpenBot:
+* Uma barra flutuante na extremidade direita com **avatares 3D coloridos em estilo squircle**:
+  * 🟣 **QA Tester** (Rosa / Lilás)
+  * 🔵 **Copy Editor** (Azul elétrico)
+  * 🟠 **Bug Fixer** (Laranja energético)
+  * 🟢 **Security / Designer** (Verde esmeralda)
+  * `+` **Adicionar Agente**
+* **Funcionalidade:** Clicar num avatar troca imediatamente a conversa para aquele especialista ou convoca o agente para participar do chat atual!
+
+---
+
+## 3. Catálogo Completo das 8 Telas Extraídas do OpenBot para o JARVIS
+
+Com base nas 14 capturas de tela enviadas, mapeamos a implementação idêntica de cada tela dentro do JARVIS AI HUB:
+
+---
+
+### Tela 1: Chat Multimodal com Desdobramento de Etapas (Image 2)
+```
++---------------------------------------------------------------------------------+
+| [💬 Calmon Dev] [+]                               [💻 ollama/qwen2.5-coder:7b v]|
+|                                                                                 |
+| 2 etapas >                                                                      |
+| [x] Perguntas canceladas                                                        |
+|                                                                                 |
+|                                   [ Como está o computador? ] (Bolha Coral)     |
+|                                                                                 |
+| Vou verificar o estado do computador: CPU, memória, disco e temperatura.       |
+| CPU load veio vazio, vou medir o uso real de CPU e processos.                   |
+|                                                                                 |
+| 12 etapas >                                                                     |
+|   ├── [✓] Coletando métricas via psutil (CPU: 31%, RAM: 33%)                   |
+|   ├── [✓] Verificando disco C:\ (250GB livres)                                  |
+|   └── [✓] Inspecionando temperatura dos núcleos                                |
+|                                                                                 |
+| [ + ] [ Mensagem para Calmon Dev                               ] [🎙️] [🔊]      |
++---------------------------------------------------------------------------------+
+```
+* **Elementos-chave:**
+  * Pílulas colapsáveis `2 etapas >` e `12 etapas >` que guardam o raciocínio e as tool calls sem poluir a leitura.
+  * Mensagens do usuário em formato pílula arredondada em tom coral (`#e05244`).
+  * Barra inferior limpa com botão `+` (anexar arquivo/imagem), input de texto, ícone de microfone e botão de reprodução de voz.
+
+---
+
+### Tela 2: Hub de Tarefas & Delegação em Paralelo (Image 4)
+* **Cabeçalho Inspirador:**  
+  * *"Delegue o trabalho. **Volte para uma resposta.**"*  
+  * *"Seus agentes trabalham em tarefas em paralelo. Cada resposta espera você aqui."*
+* **Barra Central de Delegação:**
+  * Dropdown: `[🔵 Telegram Orchestrator v]` + Campo: *"O que você quer que seja feito?"* + Botões: `[🎙️]` `[⬆️ Enviar]`.
+* **Painel de Tarefas Agrupadas:**
+  1. **Precisa de você (1):** Tarefas aguardando aprovação humana com badge `Respondida` (azul).
+  2. **Trabalhando (1):** Tarefas ativas com spinner animado: *"Encontre artigos recentes sobre recuperação..."* com badge roxa `Pesquisando no arxiv.org`.
+  3. **Em espera (1):** Tarefas agendadas ou em standby com badge cinza `Em espera`.
+
+---
+
+### Tela 3: Editor de Fluxos de Trabalho em Grafo / Nós (Image 3)
+* **Cabeçalho:** `Fluxos de trabalho sem título v`
+* **Canvas Infinito:** Fundo preto com grade de pontos sutis (*dot grid*).
+* **Nó Inicial:** Cartão com ícone de raio: *"Comece com um gatilho"* $\to$ Botão `+ Adicionar gatilho`.
+* **Barra de Ferramentas Flutuante Inferior:**
+  * Controles de zoom: `[ - 100% + ]`, tela cheia `[ ⛶ ]`, minimapa `[ 🗺️ ]`.
+  * Ferramentas: Ponteiro (Select), Mão (Pan), Lápis (Draw), Post-it (Sticky Note), Cartão (Node), Texto (`T`), Busca (`🔍`), e botão central `+ Adicionar nó`.
+
+---
+
+### Tela 4: Dashboard de Uso, Custos & Hardware (Image 5)
+* **Barra de Status do Hardware no Topo:**
+  * `⚙️ 31% CPU` · `💻 33% RAM` · Dropdowns de filtro: `Todos os agentes v` · `Custo v` · `30 dias v` · Botão de atualização.
+* **Métrica Principal:** `US$ 0,00` (*2 sessões · Estimativa de API · USD*).
+* **Gráfico Temporal:** Linha temporal de custo diário com curva suave de 30 dias.
+* **Detalhamento de Provedor:** Item expansível `• 💻 OpenCode CLI (12,42 mil tokens)`.
+* **Grid de Totais de Tokens:**
+  * *Tokens sem leitura de cache:* `12,42 mil`
+  * *Tokens processados com leituras de cache:* `12,42 mil`
+  * *Entrada em cache:* `0`
+  * *Entrada sem cache:* `11,92 mil`
+  * *Saída:* `499 tokens`
+
+---
+
+### Tela 5: Biblioteca de Arquivos & Projetos (Images 1 e 6)
+* **Cabeçalho:** `Todos os arquivos` + busca `"Pesquisar na biblioteca"` + botões de criar pasta, visualização em grade `[::]` e lista `[≡]`.
+* **Categorias:** `Todos os arquivos`, `Recentes`, `Fora de pastas`, e pasta de `Agentes (Todos os 11 agentes)`.
+* **Área Central:** Espaço limpo indicando: *"Nenhum arquivo ainda. Os arquivos que você anexa e que os agentes criam aparecem aqui."*
+
+---
+
+### Tela 6: Loja de Apps, Integrações e Habilidades (Image 8)
+* **Sub-Menu Esquerdo:** `Apps`, `Agentes`, `Habilidades` e seção de `Seus apps conectados`.
+* **Categorias de Ferramentas:**
+  * **Produtividade:** Slack, Discord, Telegram (`✓ Conectado`), WhatsApp (`✓ Conectado`), 1Password, Bitwarden.
+  * **Documentos:** Coda, Craft, Dropbox, Evernote.
+* **Botão:** `+ Adicionar personalizado` para registrar qualquer API ou webhook do usuário.
+
+---
+
+### Tela 7: Configurações de Voz Completas (Images 10 e 11)
+* **Seção Ditado (STT):**
+  * Modelo: `Parakeet TDT 0.6B v3` (Rápido, detecção automática de 25 idiomas).
+  * Idioma: `Automático`.
+  * **Pausa antes de enviar (VAD Slider):** `1,5 s` (*"Em uma conversa por voz, o assistente envia suas palavras quando você para de falar por esse tempo."*).
+* **Seção Respostas Faladas (TTS):**
+  * Modelo: `Supertonic 3` ou `Kokoro TTS` (Lê respostas em voz alta em 31 idiomas).
+  * Toggle: `Ler respostas em voz alta` (On/Off).
+  * Seletor de voz: `Voz feminina 1` / `Voz masculina 1` com botão `▷ Ouvir`.
+  * Controle de velocidade: `1x`, `1.25x`, `1.5x`.
+
+---
+
+### Tela 8: Configurações de Provedores de IA (Image 14)
+* **Provedor Padrão:** Dropdown `[OpenCode v]`.
+* **Provedores Conectados:**
+  * `OpenCode` *(Disponível neste computador)*.
+* **Outros Provedores (Catálogo com Status):**
+  * `ChatGPT` *(Não baixado / Configurar API Key)*
+  * `Claude` *(Não baixado / Configurar API Key)*
+  * `Grok` *(Não baixado / Configurar API Key)*
+  * `Gemini` *(Não baixado / Configurar API Key)*
+  * `Cursor` *(Não baixado / Configurar API Key)*
+
+---
+
+## 4. O Sistema de Navegação Pop-up & Menus (Images 7, 9, 12, 13)
+
+1. **Pop-up de Fixar Atalhos no Trilho (Image 7):**
+   * Ao clicar no botão de três pontos (`⋯`) no trilho esquerdo, um pop-up elegante permite fixar ou desafixar itens com um clique no alfinete `📌` (`Rotinas`, `Fluxos de trabalho`, `Tarefas`, `Agenda`, `Uso`, `Biblioteca`, `Provedores`).
+2. **Menu de Ajuda & Novidades (Image 9):**
+   * Clicando em `❓` no rodapé: feed de atualizações recentes com datas, `🎁 Registro de alterações completo`, links para Guias, Discord e Relatar Problema.
+3. **Seletor de Servidores & Instâncias (Image 12):**
+   * No rodapé do trilho: indicador `✓ 🟠 OpenBot / JARVIS Local`, com opções `+ Adicionar servidor`, `Configurações do servidor` e `Exibição`.
+4. **Dynamic Island com Feedback Animado (Image 13):**
+   * Quando o sistema está ativo, um entalhe preto curvo desce suavemente do topo da tela com o avatar do robô lilás e uma mão acenando `👋` para dar as boas-vindas.
+
+---
+
+## 5. Roteiro de Implementação do Layout OpenBot no JARVIS
 
 ```mermaid
 gantt
-    title Cronograma de Implementação Estratégica (Revisão Blindada)
+    title Cronograma de Implementação do Layout OpenBot
     dateFormat  YYYY-MM-DD
-    section Fase 1
-    Acesso Zero-Atrito, Dynamic Island & Voz Kokoro  :active, f1, 2026-11-18, 5d
-    section Fase 2
-    UI Minimalista (4 Modos), Split Canvas & Ctrl+K  :f2, after f1, 6d
-    section Fase 3
-    Async Buffer, Dual-Engine DB & Cache Semântico   :f3, after f2, 6d
-    section Fase 4
-    JARVIS CLI, Repo Map, Test-Fix Loop & Subagentes :f4, after f3, 7d
-    section Fase 5
-    mDNS, QR Code, PWA & Gestão de Modelos Kimi-K3   :f5, after f4, 6d
+    section Fase 1: Shell & Docks
+    Trilho Esquerdo 64px, Agent Dock & Dynamic Island :active, b1, 2026-11-18, 5d
+    section Fase 2: Chat & Tarefas
+    Chat com Abas + Steps & Hub de Tarefas           :b2, after b1, 6d
+    section Fase 3: Canvas & Métricas
+    Workflow Node Canvas & Dashboard de Uso/Hardware  :b3, after b2, 6d
+    section Fase 4: Biblioteca & Loja
+    Biblioteca de Arquivos & Marketplace de Apps     :b4, after b3, 5d
+    section Fase 5: Configurações
+    Páginas de Config de Voz, Provedores & Servidor  :b5, after b4, 5d
 ```
 
----
-
-## Detalhamento das 5 Fases
-
-### FASE 1: Acesso Zero-Atrito & Feedback Visual de Voz
-* **1.1 Auto-Login Transparente no Desktop:**
-  * O launcher nativo (`apps/desktop/main_window.py`) injeta credencial de loopback validada pelo processo local.
-  * O backend valida a origem local e gera o cookie seguro sem exibir a tela de token.
-* **1.2 Dynamic Island / Voice HUD Flutuante:**
-  * Pílula flutuante (*frosted glass*) com Web Audio API renderizando 5 barras de espectrograma sonoro reativo.
-  * *Live Transcript Bubble* exibindo as palavras em tempo real.
-  * *Windows Overlay Nativo* (`TopMost`, transparente) ativado via `Ctrl + Shift + J` sobre qualquer jogo, IDE ou navegador minimizado.
-* **1.3 Motor Neural de Voz Offline (Kokoro TTS):**
-  * Integração de modelo neural de voz ultraleve (82M parâmetros) rodando localmente com síntese instantânea e expressividade natural.
-  * Chimes sonoros sutis de ativação/desativação.
-* **1.4 Biometria no Navegador (WebAuthn / Windows Hello):**
-  * Suporte a login por digital/PIN no navegador Chrome/Edge via Passkeys.
+### Entregáveis Técnicos no Código:
+1. **`apps/dashboard/src/components/navigation/PrimaryRail.tsx`:** Trilho de 64px com ícones ativos, estados de hover e menu de pinagem `📌`.
+2. **`apps/dashboard/src/components/navigation/AgentDock.tsx`:** Dock vertical direito com bolhas 3D de agentes e botão `+`.
+3. **`apps/dashboard/src/components/navigation/DynamicIsland.tsx`:** Notch superior flutuante conectado ao WebSocket de voz e status.
+4. **`apps/dashboard/src/components/chat/OpenChatView.tsx`:** Chat com abas, pílulas colapsáveis `X etapas >` e seletor de modelo no header.
+5. **`apps/dashboard/src/components/tasks/TasksHubView.tsx`:** Interface de delegação de tarefas (Precisa de você, Trabalhando, Em espera).
+6. **`apps/dashboard/src/components/workflows/WorkflowCanvasView.tsx`:** Editor de grafo com dot grid e dock flutuante de ferramentas.
+7. **`apps/dashboard/src/components/usage/UsageAnalyticsView.tsx`:** Métricas de CPU/RAM, gráfico de custo e grid de tokens.
+8. **`apps/dashboard/src/components/store/AppStoreView.tsx`:** Catálogo de integrações (Slack, WhatsApp, Telegram, etc.).
+9. **`apps/dashboard/src/components/settings/VoiceSettingsView.tsx`:** Configurações de Parakeet VAD e Supertonic/Kokoro TTS.
 
 ---
 
-### FASE 2: Arquitetura Minimalista de UI/UX (Linear / Raycast Style)
-* **2.1 Reorganização da Sidebar em 4 Modos:**
-  * `Studio` (`Ctrl+1`): Chat e Coding integrados.
-  * `Workspace` (`Ctrl+2`): Arquivos, projetos e tarefas.
-  * `Fleet` (`Ctrl+3`): Subagentes, modelos locais e Knowledge Vault.
-  * `System` (`Ctrl+4`): Segurança, auditoria e hardware.
-* **2.2 Layout "Split Canvas" (Chat + Artefato Vivo):**
-  * Tela dividida: Chat à esquerda (45%) e Canvas retrátil à direita (55%) com preview ao vivo de HTML/React, visualizador de código e diffs de arquivos.
-* **2.3 Command Palette Global (`Ctrl + K`):**
-  * Busca e execução rápida estilo Raycast flutuando no centro da tela.
-* **2.4 Thought Disclosure Elegante:**
-  * Raciocínio colapsável (`Pensando por 2.4s v`) e pílulas inline de execução de ferramentas.
+## 6. Próximo Passo
 
----
+O plano está **100% atualizado, incorporando a estética e todas as telas do OpenBot**.
 
-### FASE 3: Persistência Dual-Engine, Backend Assíncrono & Memória Inteligente
-* **3.1 Async Write Buffer no SQLite (Zero Locks):**
-  * Fila de escrita `AsyncWriteQueue` em memória via `asyncio.Queue`. Worker descarrega métricas, logs e telemetria em lotes a cada 1 segundo, eliminando 100% dos erros de *database locked*.
-* **3.2 Persistência Dual-Engine (Pluggable PostgreSQL 16):**
-  * SQLite WAL como padrão zero-config para desktop.
-  * Suporte a `DATABASE_URL=postgresql+asyncpg://...` no `.env` para rodar em servidores corporativos com `pgvector`.
-* **3.3 Cache Semântico Vetorial (LanceDB):**
-  * Busca por cosseno em embeddings de perguntas anteriores. Se a pergunta for $>95\%$ similar, a resposta é entregue em 5ms sem consumir tokens de LLM.
-* **3.4 Barramento Interno de Eventos (`EventBus`) & Checkpoints:**
-  * Desacoplamento de WebSockets, telemetria e agentes via pub/sub interno.
-  * Checkpoints persistentes que permitem pausar e retomar tarefas de código longas após reinício do PC.
-* **3.5 Consolidação Noturna de Memória (*Memory Sleep Cycle*):**
-  * Worker em momentos de ociosidade que resume conversas, destila fatos importantes e limpa o banco.
-
----
-
-### FASE 4: Paridade com Ferramentas de Código (Claude Code / Aider / Devin)
-* **4.1 JARVIS CLI Interativa de Terminal (`jarvis code` / `jarvis repl`):**
-  * CLI com Python Rich/Textual para programar direto no terminal do VS Code sem abrir navegador.
-  * Comandos de barra: `/add`, `/diff`, `/undo`, `/test`, `/commit`.
-* **4.2 Repo Map com Tree-sitter & AST Ranking:**
-  * Mapa sintático do repositório em AST com algoritmo estilo PageRank, cabendo em ~1.000 tokens e dando visão completa da arquitetura do projeto ao modelo.
-* **4.3 Loop Autônomo Fechado (*Test-Fix-Verify Loop*):**
-  * Ciclo contínuo: edita $\to$ roda suite de testes (`pytest`/`npm test`) $\to$ analisa traceback $\to$ corrige $\to$ reexecuta até passar.
-  * Rollback transacional (`/undo`) com Git automático se o código quebrar a build.
-* **4.4 Subagentes Paralelos Efêmeros:**
-  * Subagente de pesquisa lê documentação externa e subagente de auditoria valida segurança sem poluir o histórico principal.
-* **4.5 Sandboxing com Windows Job Objects:**
-  * Limites de memória RAM (ex: máx. 1.5 GB) e CPU para processos de ferramentas, evitando travamento do sistema.
-
----
-
-### FASE 5: Mobile Zero-Atrito, Túnel Seguro & Modelos Pesados
-* **5.1 Descoberta Automática de Servidor na Rede Local (mDNS / Zeroconf):**
-  * Servidor anuncia `_jarvis-hub._tcp.local.:8000`. App Flutter localiza o PC no Wi-Fi sem o usuário digitar IPs.
-* **5.2 Pareamento Instantâneo via QR Code:**
-  * Escaneie o QR Code no dashboard com a câmera do celular para conectar e autenticar em 1 segundo.
-* **5.3 Acesso Remoto Fora de Casa (Túnel 4G/5G) & PWA:**
-  * Suporte a túnel seguro (Tailscale ou Cloudflare Zero-Trust) sem abrir portas no roteador.
-  * Progressive Web App (PWA) instalável instantaneamente no iPhone (iOS) e Android sem precisar de APK.
-  * Notificações push no celular quando os agentes concluem builds ou pedem aprovações.
-* **5.4 Runtime de Modelos Locais Pesados & VRAM Manager (`kimi-k3-partial`):**
-  * Suporte a diretórios de modelos locais particionados (`/workspace/models/kimi-k3-partial`).
-  * Download resiliente com suporte a pausa/retomada (*chunked resume*).
-  * Descarregamento dinâmico de VRAM após tempo de ociosidade configurável, liberando a placa de vídeo.
-
----
-
-## 4. Matriz Comparativa Definitiva: JARVIS vs Concorrentes
-
-| Recurso | JARVIS AI HUB (Pós-Plano) | Claude Code | Aider | Cursor | Devin / OpenBot |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **CLI Interativa no Terminal** | ✅ (`jarvis repl`) | ✅ | ✅ | ❌ | ❌ |
-| **Repo Map (Tree-sitter)** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Loop Autônomo de Teste/Correção** | ✅ | ✅ | ✅ | ⚠️ | ✅ |
-| **Voz Nativa com HUD & Atalhos Globais** | ✅ (`Ctrl+Shift+J`) | ❌ | ❌ | ❌ | ❌ |
-| **App Mobile Nativo (Wi-Fi + 4G)** | ✅ (Flutter + PWA) | ❌ | ❌ | ❌ | ❌ |
-| **Privacidade / Modelos 100% Locais (Ollama/GGUF)** | ✅ | ❌ | ⚠️ | ⚠️ | ❌ |
-| **Persistência Dual-Engine (SQLite + Postgres)** | ✅ | ❌ | ❌ | ❌ | ⚠️ |
-| **Cache Semântico Vetorial** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Split Canvas (Chat + Código Vivo)** | ✅ | ❌ | ❌ | ✅ | ✅ |
-| **Zero-Config de IP (mDNS + QR Code)** | ✅ | ❌ | ❌ | ❌ | ❌ |
-
----
-
-## 5. Próximo Passo
-
-O plano está **100% alinhado, exaustivo e blindado**.  
-Podemos iniciar a execução imediatamente pela **Fase 1 (Auto-login Desktop + Voice HUD Flutuante + WebAuthn)**?
+Podemos iniciar a implementação da **Fase 1 do Novo Layout** (*Trilho Esquerdo de 64px + Agent Dock na Direita + Dynamic Island*)?
