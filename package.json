@@ -17,6 +17,7 @@
     "test:dashboard": "npm run test:dashboard --workspace apps/dashboard",
     "test:e2e": "npm run test:e2e --workspace apps/dashboard",
     "test:e2e:headed": "npm run test:e2e:headed --workspace apps/dashboard",
-    "test:e2e:report": "npm run test:e2e:report --workspace apps/dashboard"
+    "test:e2e:report": "npm run test:e2e:report --workspace apps/dashboard",
+    "typecheck": "tsc --noEmit --project apps/dashboard/tsconfig.json"
   }
 }
