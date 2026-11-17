@@ -137,5 +137,72 @@ void main() {
       expect(credsAfterClear['token'], '');
     });
   });
+
+  group('QR Code Pairing & Network Discovery Tests', () {
+    test('QrPairingPayload decodifica JSON completo com sucesso', () {
+      const jsonPayload = '{"hub":"jarvis-hub","v":"3.0.1","url":"http://192.168.1.81:8000","token":"jrv_m_valid_token_abc","device_name":"Pixel 8"}';
+      final parsed = QrPairingPayload.parse(jsonPayload);
+      expect(parsed, isNotNull);
+      expect(parsed!.serverUrl, 'http://192.168.1.81:8000');
+      expect(parsed.deviceToken, 'jrv_m_valid_token_abc');
+      expect(parsed.deviceName, 'Pixel 8');
+      expect(parsed.version, '3.0.1');
+    });
+
+    test('QrPairingPayload decodifica URI jarvis://pair com query params', () {
+      const uriPayload = 'jarvis://pair?url=http%3A%2F%2F192.168.1.81%3A8000&token=jrv_m_uri_token_xyz';
+      final parsed = QrPairingPayload.parse(uriPayload);
+      expect(parsed, isNotNull);
+      expect(parsed!.serverUrl, 'http://192.168.1.81:8000');
+      expect(parsed.deviceToken, 'jrv_m_uri_token_xyz');
+    });
+
+    test('QrPairingPayload decodifica formato simples delimitado por barra vertical', () {
+      const pipePayload = 'http://192.168.1.81:8000|jrv_m_pipe_token_123';
+      final parsed = QrPairingPayload.parse(pipePayload);
+      expect(parsed, isNotNull);
+      expect(parsed!.serverUrl, 'http://192.168.1.81:8000');
+      expect(parsed.deviceToken, 'jrv_m_pipe_token_123');
+    });
+
+    test('QrPairingPayload rejeita strings vazias ou inválidas', () {
+      expect(QrPairingPayload.parse(''), isNull);
+      expect(QrPairingPayload.parse('   '), isNull);
+      expect(QrPairingPayload.parse('just_some_random_text'), isNull);
+      expect(QrPairingPayload.parse('{"invalid":"no_token_or_url"}'), isNull);
+    });
+
+    test('AppConfig.detectEnvironmentFromUrl infere o ambiente correto por IP e protocolo', () {
+      expect(AppConfig.detectEnvironmentFromUrl('http://10.0.2.2:8000'), NetworkEnvironment.emulator);
+      expect(AppConfig.detectEnvironmentFromUrl('http://127.0.0.1:8000'), NetworkEnvironment.localDev);
+      expect(AppConfig.detectEnvironmentFromUrl('http://localhost:8000'), NetworkEnvironment.localDev);
+      expect(AppConfig.detectEnvironmentFromUrl('http://192.168.1.81:8000'), NetworkEnvironment.physicalLan);
+      expect(AppConfig.detectEnvironmentFromUrl('http://10.5.0.12:8000'), NetworkEnvironment.physicalLan);
+      expect(AppConfig.detectEnvironmentFromUrl('https://myhub.tailnet.ts.net'), NetworkEnvironment.tailscale);
+      expect(AppConfig.detectEnvironmentFromUrl('https://api.jarvis-hub.com'), NetworkEnvironment.production);
+    });
+
+    test('Timeouts de rede do JarvisApiClient foram reduzidos para resposta rápida (sem espera de 15s)', () {
+      expect(JarvisApiClient.connectionTimeout.inSeconds, lessThanOrEqualTo(3));
+      expect(JarvisApiClient.responseTimeout.inSeconds, lessThanOrEqualTo(4));
+    });
+
+    test('DiscoveredServer serializa e deserializa propriedades de diagnóstico', () {
+      const server = DiscoveredServer(
+        service: 'jarvis-hub',
+        version: '3.0.1',
+        serverUrl: 'http://192.168.1.81:8000',
+        localIp: '192.168.1.81',
+        apiPort: 8000,
+        latencyMs: 14,
+        discoverySource: 'udp_beacon',
+      );
+      final json = server.toJson();
+      expect(json['service'], 'jarvis-hub');
+      expect(json['serverUrl'], 'http://192.168.1.81:8000');
+      expect(json['latencyMs'], 14);
+      expect(json['discoverySource'], 'udp_beacon');
+    });
+  });
 }
 

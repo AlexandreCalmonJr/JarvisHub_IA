@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
@@ -154,6 +155,20 @@ class AppConfig {
     }
     return null;
   }
+
+  static NetworkEnvironment detectEnvironmentFromUrl(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return NetworkEnvironment.localDev;
+    final host = uri.host.toLowerCase();
+    if (host == '10.0.2.2') return NetworkEnvironment.emulator;
+    if (host == '127.0.0.1' || host == 'localhost') return NetworkEnvironment.localDev;
+    if (host.contains('tailnet') || host.endsWith('.ts.net')) return NetworkEnvironment.tailscale;
+    if (host.startsWith('192.168.') || host.startsWith('10.') || host.startsWith('172.')) {
+      return NetworkEnvironment.physicalLan;
+    }
+    if (uri.scheme == 'https') return NetworkEnvironment.production;
+    return NetworkEnvironment.physicalLan;
+  }
 }
 
 // ==========================================
@@ -253,6 +268,221 @@ class SecureTokenStore {
   }
 }
 // ==========================================
+// DESCOBERTA DE REDE & PAREAMENTO QR CODE
+// ==========================================
+
+class DiscoveredServer {
+  final String service;
+  final String version;
+  final String serverUrl;
+  final String localIp;
+  final int apiPort;
+  final int latencyMs;
+  final String discoverySource;
+
+  const DiscoveredServer({
+    required this.service,
+    required this.version,
+    required this.serverUrl,
+    required this.localIp,
+    required this.apiPort,
+    required this.latencyMs,
+    required this.discoverySource,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'service': service,
+        'version': version,
+        'serverUrl': serverUrl,
+        'localIp': localIp,
+        'apiPort': apiPort,
+        'latencyMs': latencyMs,
+        'discoverySource': discoverySource,
+      };
+}
+
+class QrPairingPayload {
+  final String serverUrl;
+  final String deviceToken;
+  final String? deviceName;
+  final String? version;
+
+  const QrPairingPayload({
+    required this.serverUrl,
+    required this.deviceToken,
+    this.deviceName,
+    this.version,
+  });
+
+  static QrPairingPayload? parse(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+
+    // 1. JSON payload
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        final url = decoded['url']?.toString() ?? decoded['server_url']?.toString() ?? '';
+        final token = decoded['token']?.toString() ?? decoded['device_token']?.toString() ?? '';
+        if (url.isNotEmpty && token.isNotEmpty) {
+          return QrPairingPayload(
+            serverUrl: url,
+            deviceToken: token,
+            deviceName: decoded['device_name']?.toString(),
+            version: decoded['v']?.toString() ?? decoded['version']?.toString(),
+          );
+        }
+      }
+    } catch (_) {}
+
+    // 2. URI Scheme: jarvis://pair?url=...&token=...
+    try {
+      final uri = Uri.parse(trimmed);
+      if (uri.scheme == 'jarvis' || uri.queryParameters.containsKey('token')) {
+        final url = uri.queryParameters['url'] ?? '';
+        final token = uri.queryParameters['token'] ?? '';
+        if (url.isNotEmpty && token.isNotEmpty) {
+          return QrPairingPayload(
+            serverUrl: url,
+            deviceToken: token,
+          );
+        }
+      }
+    } catch (_) {}
+
+    // 3. Pipe-separated: URL|TOKEN
+    if (trimmed.contains('|')) {
+      final parts = trimmed.split('|');
+      if (parts.length >= 2 && parts[0].startsWith('http') && parts[1].isNotEmpty) {
+        return QrPairingPayload(
+          serverUrl: parts[0].trim(),
+          deviceToken: parts[1].trim(),
+        );
+      }
+    }
+
+    return null;
+  }
+}
+
+class NetworkDiscoveryService {
+  static const int udpBeaconPort = 8001;
+
+  /// Descobre instâncias do JARVIS Hub na rede via UDP Broadcast e HTTP rápido
+  static Future<List<DiscoveredServer>> discoverServers({
+    Duration timeout = const Duration(milliseconds: 2500),
+  }) async {
+    final Map<String, DiscoveredServer> servers = {};
+    final sw = Stopwatch()..start();
+
+    // 1. UDP Broadcast Discovery
+    try {
+      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket.broadcastEnabled = true;
+
+      final probeMsg = utf8.encode('DISCOVER_JARVIS_HUB');
+      socket.send(probeMsg, InternetAddress('255.255.255.255'), udpBeaconPort);
+
+      final completer = Completer<void>();
+      late StreamSubscription sub;
+      sub = socket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final dg = socket.receive();
+          if (dg != null) {
+            try {
+              final raw = utf8.decode(dg.data).trim();
+              String jsonStr = raw;
+              if (raw.startsWith('JARVIS_HUB_BEACON:')) {
+                jsonStr = raw.substring('JARVIS_HUB_BEACON:'.length);
+              }
+              final map = jsonDecode(jsonStr);
+              if (map is Map<String, dynamic> && map['service'] == 'jarvis-hub') {
+                final port = (map['api_port'] as num?)?.toInt() ?? 8000;
+                final url = map['server_url']?.toString() ?? 'http://${dg.address.address}:$port';
+                servers[url] = DiscoveredServer(
+                  service: map['service']?.toString() ?? 'jarvis-hub',
+                  version: map['version']?.toString() ?? '3.0.1',
+                  serverUrl: url,
+                  localIp: map['local_ip']?.toString() ?? dg.address.address,
+                  apiPort: port,
+                  latencyMs: sw.elapsedMilliseconds,
+                  discoverySource: 'udp_beacon',
+                );
+              }
+            } catch (_) {}
+          }
+        }
+      });
+
+      // Aguarda até 1.2s para coletar beacons UDP
+      Future.delayed(const Duration(milliseconds: 1200)).then((_) {
+        try {
+          sub.cancel();
+          socket.close();
+        } catch (_) {}
+        if (!completer.isCompleted) completer.complete();
+      });
+
+      await completer.future;
+    } catch (_) {}
+
+    // 2. HTTP scan de fallback
+    final candidates = <String>{
+      'http://10.0.2.2:8000',
+      'http://127.0.0.1:8000',
+      'http://localhost:8000',
+      if (AppConfig.baseUrl.isNotEmpty) AppConfig.baseUrl,
+    };
+
+    // Tenta encontrar IPs de rede da máquina local e testar
+    try {
+      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          final parts = addr.address.split('.');
+          if (parts.length == 4) {
+            final subnetBase = '${parts[0]}.${parts[1]}.${parts[2]}';
+            candidates.add('http://$subnetBase.1:8000');
+            candidates.add('http://${addr.address}:8000');
+          }
+        }
+      }
+    } catch (_) {}
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(milliseconds: 900);
+
+    for (final base in candidates) {
+      if (servers.containsKey(base)) continue;
+      try {
+        final uri = Uri.parse('$base/api/v1/system/discovery');
+        final req = await client.getUrl(uri).timeout(const Duration(milliseconds: 900));
+        final res = await req.close().timeout(const Duration(milliseconds: 900));
+        if (res.statusCode == 200) {
+          final body = await res.transform(utf8.decoder).join().timeout(const Duration(milliseconds: 900));
+          final map = jsonDecode(body);
+          if (map is Map<String, dynamic> && map['service'] == 'jarvis-hub') {
+            final effectiveUrl = map['server_url']?.toString() ?? base;
+            servers[effectiveUrl] = DiscoveredServer(
+              service: map['service']?.toString() ?? 'jarvis-hub',
+              version: map['version']?.toString() ?? '3.0.1',
+              serverUrl: effectiveUrl,
+              localIp: map['local_ip']?.toString() ?? uri.host,
+              apiPort: (map['api_port'] as num?)?.toInt() ?? uri.port,
+              latencyMs: sw.elapsedMilliseconds,
+              discoverySource: 'http_scan',
+            );
+          }
+        }
+      } catch (_) {}
+    }
+    client.close();
+
+    return servers.values.toList();
+  }
+}
+
+// ==========================================
 // RESPOSTA E CLIENTE HTTP AUTENTICADO
 // ==========================================
 
@@ -273,8 +503,8 @@ class JarvisApiResponse {
 }
 
 class JarvisApiClient {
-  static const Duration connectionTimeout = Duration(seconds: 7);
-  static const Duration responseTimeout = Duration(seconds: 15);
+  static const Duration connectionTimeout = Duration(seconds: 3);
+  static const Duration responseTimeout = Duration(seconds: 4);
 
   static Future<JarvisApiResponse> request({
     required String method,
@@ -388,7 +618,7 @@ class JarvisApiClient {
         statusCode: 0,
         body: '',
         isSuccess: false,
-        errorMessage: 'Tempo limite esgotado (timeout). O servidor $effectiveBase demorou mais de 15s para responder.',
+        errorMessage: 'Tempo limite esgotado (timeout). O servidor $effectiveBase demorou mais de 4s para responder.',
       );
     } on HandshakeException catch (e) {
       return JarvisApiResponse(
@@ -593,6 +823,115 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  void _showQrScannerDialog(BuildContext context, {required Function(QrPairingPayload) onPayload}) {
+    final textController = TextEditingController();
+    String? errorText;
+
+    showDialog(
+      context: context,
+      builder: (qrCtx) => StatefulBuilder(
+        builder: (qrCtx, setQrState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            title: const Row(
+              children: [
+                Icon(Icons.qr_code_scanner, color: Color(0xFF38BDF8)),
+                SizedBox(width: 8),
+                Text('Parear via QR Code', style: TextStyle(fontSize: 16)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'No Dashboard web, abra Configurações > "Conectar celular" para ver o QR Code gerado.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.content_paste, size: 16),
+                      label: const Text('Colar da Área de Transferência'),
+                      onPressed: () async {
+                        final clip = await Clipboard.getData(Clipboard.kTextPlain);
+                        final str = clip?.text;
+                        if (str != null && str.isNotEmpty) {
+                          textController.text = str;
+                          final parsed = QrPairingPayload.parse(str);
+                          if (parsed != null) {
+                            onPayload(parsed);
+                            if (qrCtx.mounted) Navigator.pop(qrCtx);
+                          } else {
+                            setQrState(() {
+                              errorText = 'O texto colado não é um QR Code válido do JARVIS Hub.';
+                            });
+                          }
+                        } else {
+                          setQrState(() {
+                            errorText = 'A área de transferência está vazia.';
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Ou cole o conteúdo do QR Code / JSON manualmente:',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: textController,
+                    maxLines: 3,
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                    decoration: const InputDecoration(
+                      hintText: '{"hub":"jarvis-hub","url":"...","token":"..."}',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 8),
+                    Text(errorText!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 11)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(qrCtx),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                onPressed: () {
+                  final text = textController.text.trim();
+                  final parsed = QrPairingPayload.parse(text);
+                  if (parsed != null) {
+                    onPayload(parsed);
+                    Navigator.pop(qrCtx);
+                  } else {
+                    setQrState(() {
+                      errorText = 'Formato inválido. Use o JSON ou link gerado pelo QR Code.';
+                    });
+                  }
+                },
+                child: const Text('Aplicar Pareamento', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   void _openSettings(BuildContext context) {
     final urlController = TextEditingController(text: AppConfig.baseUrl);
     final tokenController = TextEditingController(text: AppConfig.deviceToken);
@@ -600,11 +939,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     String? testResultMsg;
     bool isTesting = false;
     bool? testSuccess;
+    bool isDiscovering = false;
+    List<DiscoveredServer> discoveredServers = [];
+    String? clipboardPreview;
+    bool checkedClipboard = false;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
+          if (!checkedClipboard) {
+            checkedClipboard = true;
+            Clipboard.getData(Clipboard.kTextPlain).then((clip) {
+              final text = clip?.text;
+              if (text != null && text.isNotEmpty) {
+                final parsed = QrPairingPayload.parse(text);
+                if (parsed != null && ctx.mounted) {
+                  setDialogState(() {
+                    clipboardPreview = text;
+                  });
+                }
+              }
+            }).catchError((_) {});
+          }
+
           return AlertDialog(
             backgroundColor: const Color(0xFF1E293B),
             title: const Text('Configuração de Rede & Conexão'),
@@ -613,6 +971,184 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Ações de Pareamento Rápido: Descoberta LAN e QR Code
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                icon: isDiscovering
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.radar, size: 16),
+                                label: Text(
+                                  isDiscovering ? 'Buscando...' : 'Buscar na Rede',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0284C7),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                                ),
+                                onPressed: isDiscovering
+                                    ? null
+                                    : () async {
+                                        setDialogState(() {
+                                          isDiscovering = true;
+                                          testResultMsg = null;
+                                        });
+                                        final list = await NetworkDiscoveryService.discoverServers();
+                                        setDialogState(() {
+                                          isDiscovering = false;
+                                          discoveredServers = list;
+                                          if (list.isEmpty) {
+                                            testResultMsg = 'Nenhum servidor JARVIS Hub encontrado automaticamente via Wi-Fi/LAN.';
+                                            testSuccess = false;
+                                          } else {
+                                            testResultMsg = '${list.length} servidor(es) encontrado(s) na rede local!';
+                                            testSuccess = true;
+                                          }
+                                        });
+                                      },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.qr_code_scanner, size: 16),
+                                label: const Text('Parear QR Code', style: TextStyle(fontSize: 11)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF8B5CF6),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                                ),
+                                onPressed: () {
+                                  _showQrScannerDialog(
+                                    context,
+                                    onPayload: (payload) {
+                                      setDialogState(() {
+                                        urlController.text = payload.serverUrl;
+                                        tokenController.text = payload.deviceToken;
+                                        selectedEnv = AppConfig.detectEnvironmentFromUrl(payload.serverUrl);
+                                        testResultMsg = 'QR Code aplicado com sucesso!';
+                                        testSuccess = true;
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (clipboardPreview != null) ...[
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: () {
+                              final parsed = QrPairingPayload.parse(clipboardPreview!);
+                              if (parsed != null) {
+                                setDialogState(() {
+                                  urlController.text = parsed.serverUrl;
+                                  tokenController.text = parsed.deviceToken;
+                                  selectedEnv = AppConfig.detectEnvironmentFromUrl(parsed.serverUrl);
+                                  clipboardPreview = null;
+                                  testResultMsg = 'Pareamento da área de transferência aplicado!';
+                                  testSuccess = true;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.assignment_turned_in, color: Color(0xFF34D399), size: 16),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'QR Code detectado na área de transferência! Toque para aplicar.',
+                                      style: TextStyle(color: Color(0xFF34D399), fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (discoveredServers.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Servidores Detectados na LAN:',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8)),
+                          ),
+                          const SizedBox(height: 6),
+                          ...discoveredServers.map((srv) => Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E293B),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.white12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.dns, size: 18, color: Color(0xFF34D399)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${srv.service.toUpperCase()} v${srv.version}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white),
+                                          ),
+                                          Text(
+                                            srv.serverUrl,
+                                            style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF38BDF8),
+                                        foregroundColor: Colors.black,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      ),
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          urlController.text = srv.serverUrl;
+                                          selectedEnv = AppConfig.detectEnvironmentFromUrl(srv.serverUrl);
+                                          testResultMsg = 'Servidor selecionado: ${srv.serverUrl} (${srv.latencyMs} ms)';
+                                          testSuccess = true;
+                                        });
+                                      },
+                                      child: const Text('Usar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              )),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   const Text(
                     'Ambiente de Conexão:',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),

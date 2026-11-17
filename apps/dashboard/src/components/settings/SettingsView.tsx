@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import {
   Settings,
   Palette,
@@ -21,6 +22,10 @@ import {
   CheckCircle2,
   Lock,
   Download,
+  QrCode,
+  Copy,
+  Check,
+  Wifi,
 } from 'lucide-react';
 import { getUserProfile, saveUserProfile, UserProfileData } from '../common/UserProfileModal';
 import { notify } from '../common/Toast';
@@ -96,6 +101,70 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [updateChannel, setUpdateChannel] = useState<'stable' | 'beta' | 'dev'>('stable');
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+
+  // Mobile / Descoberta de Rede & QR Code
+  const [mobileDiscovery, setMobileDiscovery] = useState<{
+    server_url: string;
+    local_ip: string;
+    api_port: number;
+    udp_beacon_port: number;
+    status: string;
+  } | null>(null);
+  const [mobilePairDeviceName, setMobilePairDeviceName] = useState('Meu Celular Android');
+  const [mobilePairToken, setMobilePairToken] = useState('');
+  const [mobilePairQr, setMobilePairQr] = useState('');
+  const [mobilePairLoading, setMobilePairLoading] = useState(false);
+  const [mobilePairCopied, setMobilePairCopied] = useState(false);
+
+  useEffect(() => {
+    if (activeSubTab === 'mobile') {
+      fetch('/api/v1/system/discovery')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.server_url) {
+            setMobileDiscovery(data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeSubTab]);
+
+  const handleGenerateMobilePair = async () => {
+    setMobilePairLoading(true);
+    try {
+      const response = await fetch('/api/v1/mobile/pair', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ device_name: mobilePairDeviceName.trim() || 'Android Device' }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || 'Não foi possível gerar o pareamento.');
+      }
+      if (data.device_token) {
+        setMobilePairToken(data.device_token);
+        const qrPayload = data.pairing_payload || JSON.stringify({
+          hub: 'jarvis-hub',
+          v: '3.0.1',
+          url: data.server_url || mobileDiscovery?.server_url || window.location.origin,
+          token: data.device_token,
+          device_name: mobilePairDeviceName.trim(),
+        });
+        const qrUrl = await QRCode.toDataURL(qrPayload, {
+          width: 240,
+          margin: 2,
+          color: { dark: '#000000', light: '#ffffff' },
+        });
+        setMobilePairQr(qrUrl);
+        notify('QR Code de pareamento gerado!', 'success');
+      }
+    } catch (err: any) {
+      notify(err.message || 'Falha ao emparelhar dispositivo', 'error');
+    } finally {
+      setMobilePairLoading(false);
+    }
+  };
 
   // Carrega configurações persistidas do localStorage
   useEffect(() => {
@@ -817,16 +886,121 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* ABA: CONECTAR CELULAR (Conexão Mobile Android)                            */}
         {/* ========================================================================= */}
         {activeSubTab === 'mobile' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
               <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
-                Conectar Celular
+                Conectar Celular & Dispositivos Móveis
               </h1>
               <p style={{ fontSize: '0.82rem', color: '#888888', marginTop: '4px' }}>
-                Vincule seu smartphone Android para interagir por voz e receber respostas do JARVIS em qualquer lugar.
+                Conecte seu smartphone Android via QR Code instantâneo ou por descoberta automática na rede local (LAN).
               </p>
             </div>
 
+            {/* Status da Rede Local & Descoberta Automática */}
+            <div
+              style={{
+                padding: '20px',
+                borderRadius: '14px',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '10px',
+                      backgroundColor: 'rgba(52, 211, 153, 0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Wifi size={22} color="#34d399" />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3 style={{ fontSize: '0.96rem', fontWeight: 600, color: '#ffffff', margin: 0 }}>
+                        Servidor JARVIS Hub na Rede Local
+                      </h3>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          backgroundColor: 'rgba(52, 211, 153, 0.2)',
+                          color: '#34d399',
+                          fontWeight: 600,
+                        }}
+                      >
+                        ONLINE
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: '#888888', margin: '2px 0 0 0' }}>
+                      Beacon UDP ativo na porta {mobileDiscovery?.udp_beacon_port || 8001} · Descoberta por broadcast sem fio
+                    </p>
+                  </div>
+                </div>
+
+                {mobileDiscovery?.server_url && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(mobileDiscovery.server_url);
+                      notify('URL do servidor copiada!', 'success');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#e5e5e5',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Copy size={14} />
+                    <span>Copiar URL: {mobileDiscovery.server_url}</span>
+                  </button>
+                )}
+              </div>
+
+              <div
+                style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  fontSize: '0.8rem',
+                  color: '#cccccc',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <span style={{ color: '#888888', display: 'block', fontSize: '0.74rem' }}>IP NA REDE LOCAL (LAN)</span>
+                  <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{mobileDiscovery?.local_ip || '192.168.1.81'}</span>
+                </div>
+                <div>
+                  <span style={{ color: '#888888', display: 'block', fontSize: '0.74rem' }}>PORTA DA API REST & WS</span>
+                  <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{mobileDiscovery?.api_port || 8000}</span>
+                </div>
+                <div>
+                  <span style={{ color: '#888888', display: 'block', fontSize: '0.74rem' }}>DESCOBERTA UDP (BROADCAST)</span>
+                  <span style={{ fontWeight: 600, color: '#34d399' }}>Porta {mobileDiscovery?.udp_beacon_port || 8001} (Ativo)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Pareamento Instantâneo via QR Code */}
             <div
               style={{
                 padding: '24px',
@@ -835,7 +1009,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 border: '1px solid rgba(255, 255, 255, 0.08)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '16px',
+                gap: '18px',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -850,32 +1024,191 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     justifyContent: 'center',
                   }}
                 >
-                  <Smartphone size={24} color="#38bdf8" />
+                  <QrCode size={24} color="#38bdf8" />
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#ffffff', margin: 0 }}>
-                    App JARVIS Android
+                    Pareamento por QR Code Instantâneo
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: '#888888', margin: '2px 0 0 0' }}>
-                    Sincronização bidirecional por WebSocket seguro e reconhecimento de voz.
+                    Conecte o aplicativo do celular sem precisar digitar IP nem tokens longos manualmente.
                   </p>
                 </div>
               </div>
 
-              <div style={{ fontSize: '0.82rem', color: '#cccccc', lineHeight: 1.6 }}>
-                1. Instale o APK do JARVIS Hub no seu smartphone.<br />
-                2. Clique no botão abaixo para gerar um token de autenticação pessoal.<br />
-                3. No app Android, informe o IP do seu computador na rede Wi-Fi e cole o token.
-              </div>
+              {!mobilePairQr ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.82rem', color: '#f5f5f5', fontWeight: 500, display: 'block', marginBottom: '6px' }}>
+                      Identificação do Smartphone
+                    </label>
+                    <input
+                      type="text"
+                      value={mobilePairDeviceName}
+                      onChange={(e) => setMobilePairDeviceName(e.target.value)}
+                      placeholder="Ex: Samsung Galaxy S24, Pixel 8..."
+                      style={{
+                        width: '100%',
+                        maxWidth: '400px',
+                        backgroundColor: '#1b1b1b',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '8px',
+                        padding: '9px 14px',
+                        color: '#f5f5f5',
+                        fontSize: '0.84rem',
+                      }}
+                    />
+                  </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      type="button"
+                      disabled={mobilePairLoading}
+                      onClick={handleGenerateMobilePair}
+                      className="btn btn-primary"
+                      style={{
+                        fontSize: '0.84rem',
+                        padding: '10px 22px',
+                        backgroundColor: '#38bdf8',
+                        color: '#000000',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <QrCode size={16} />
+                      {mobilePairLoading ? 'Gerando Pareamento...' : 'Gerar QR Code de Pareamento'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '18px',
+                    padding: '16px',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '12px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <p style={{ fontSize: '0.86rem', color: '#e5e5e5', maxWidth: '480px', margin: 0 }}>
+                    Aponte o app JARVIS Mobile para a tela ou use a opção <strong>"Parear via QR Code"</strong> no celular para sincronizar instantaneamente.
+                  </p>
+
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      padding: '14px',
+                      borderRadius: '16px',
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
+                      display: 'inline-block',
+                    }}
+                  >
+                    <img
+                      src={mobilePairQr}
+                      alt="QR Code de Pareamento JARVIS"
+                      style={{ width: '220px', height: '220px', display: 'block' }}
+                    />
+                  </div>
+
+                  <div style={{ width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '0.78rem', color: '#aaaaaa' }}>Token de Pareamento Gerado (Cópia Manual):</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        readOnly
+                        value={mobilePairToken}
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#161616',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          color: '#38bdf8',
+                          fontSize: '0.8rem',
+                          fontFamily: 'monospace',
+                        }}
+                        onFocus={(e) => e.currentTarget.select()}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(mobilePairToken);
+                          setMobilePairCopied(true);
+                          notify('Token copiado para a área de transferência!', 'success');
+                          setTimeout(() => setMobilePairCopied(false), 2000);
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#ffffff',
+                          fontSize: '0.8rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {mobilePairCopied ? <Check size={14} color="#34d399" /> : <Copy size={14} />}
+                        {mobilePairCopied ? 'Copiado!' : 'Copiar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobilePairQr('');
+                      setMobilePairToken('');
+                    }}
+                    style={{
+                      fontSize: '0.8rem',
+                      color: '#888888',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      marginTop: '4px',
+                    }}
+                  >
+                    Gerar outro QR Code
+                  </button>
+                </div>
+              )}
+
+              <div
+                style={{
+                  borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                  paddingTop: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ fontSize: '0.78rem', color: '#888888' }}>
+                  Precisa gerenciar dispositivos conectados à sua conta ou revogar tokens?
+                </div>
                 <button
                   type="button"
                   onClick={() => window.dispatchEvent(new CustomEvent('jarvis:open-android-pairing'))}
-                  className="btn btn-primary"
-                  style={{ fontSize: '0.84rem', padding: '8px 18px', backgroundColor: '#38bdf8', color: '#000000', fontWeight: 600 }}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#e5e5e5',
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                  }}
                 >
-                  Conectar Novo Dispositivo Android
+                  Abrir Modal Rápido de Dispositivo
                 </button>
               </div>
             </div>

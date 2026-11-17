@@ -1,4 +1,5 @@
 import difflib
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -213,12 +214,26 @@ async def pair_mobile_device(
             created_by=principal.display_id,
             owner_user_id=principal.subject_id,
         )
+        from apps.api.services.network_discovery import get_local_ip
+
+        lan_ip = get_local_ip()
+        server_url = f"http://{lan_ip}:8000"
+        pairing_payload = json.dumps({
+            "hub": "jarvis-hub",
+            "v": "3.0.1",
+            "url": server_url,
+            "token": reg.device_token,
+            "device_id": reg.device_id,
+            "device_name": reg.device_name,
+        })
         return {
             "status": "paired",
             "device_id": reg.device_id,
             "device_name": reg.device_name,
             "device_token": reg.device_token,
             "scopes": reg.scopes,
+            "server_url": server_url,
+            "pairing_payload": pairing_payload,
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

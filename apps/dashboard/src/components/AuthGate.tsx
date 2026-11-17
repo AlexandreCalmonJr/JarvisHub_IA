@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { clearActiveAccountScope, setActiveAccountScope } from '../services/accountScope';
 import { getUserRoleLabel } from '../types';
 
@@ -35,6 +36,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const [deviceToken, setDeviceToken] = useState('');
   const [deviceBusy, setDeviceBusy] = useState(false);
   const [deviceError, setDeviceError] = useState('');
+  const [qrDataUrl, setQrDataUrl] = useState('');
 
   const verifySession = async () => {
     try {
@@ -190,6 +192,17 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
       if (!response.ok) throw new Error(payload.detail || 'Não foi possível emparelhar o dispositivo.');
       if (!payload.device_token) throw new Error('O servidor não devolveu o token do dispositivo.');
       setDeviceToken(payload.device_token);
+      try {
+        const qrContent = payload.pairing_payload || JSON.stringify({
+          hub: 'jarvis-hub',
+          v: '3.0.1',
+          url: payload.server_url || window.location.origin,
+          token: payload.device_token,
+          device_name: deviceName.trim(),
+        });
+        const url = await QRCode.toDataURL(qrContent, { width: 200, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+        setQrDataUrl(url);
+      } catch {}
     } catch (cause) {
       setDeviceError(cause instanceof Error ? cause.message : 'Falha ao emparelhar o dispositivo.');
     } finally {
@@ -200,6 +213,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const closeDevicePairing = () => {
     setDeviceOpen(false);
     setDeviceToken('');
+    setQrDataUrl('');
     setDeviceError('');
   };
 
@@ -297,11 +311,18 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
                 </form>
               </>
             ) : (
-              <div style={{ display: 'grid', gap: 12 }}>
+              <div style={{ display: 'grid', gap: 12, textAlign: 'center' }}>
                 <p style={styles.mutedSmall}>
-                  Token criado para esta conta. Copie-o agora e cole no app Android, em Configuração de Rede & Conexão. Por segurança, o token não será guardado no navegador nem apresentado novamente.
+                  Aponte a câmera do aplicativo mobile para escanear o QR Code abaixo ou copie o token. O pareamento é instantâneo.
                 </p>
-                <input aria-label="Token do dispositivo" readOnly value={deviceToken} style={{ ...styles.input, fontFamily: 'monospace' }} onFocus={(e) => e.currentTarget.select()} />
+                {qrDataUrl && (
+                  <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+                    <div style={{ background: '#ffffff', padding: '12px', borderRadius: '12px', display: 'inline-block', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}>
+                      <img src={qrDataUrl} alt="QR Code de Pareamento" style={{ width: 180, height: 180, display: 'block' }} />
+                    </div>
+                  </div>
+                )}
+                <input aria-label="Token do dispositivo" readOnly value={deviceToken} style={{ ...styles.input, fontFamily: 'monospace', textAlign: 'center' }} onFocus={(e) => e.currentTarget.select()} />
                 <button type="button" style={styles.button} onClick={() => void navigator.clipboard.writeText(deviceToken)}>
                   Copiar token
                 </button>

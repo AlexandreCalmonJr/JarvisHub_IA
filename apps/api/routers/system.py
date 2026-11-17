@@ -32,6 +32,7 @@ from apps.api.schemas import (
     UserProfilePayload,
     WebhookConfigPayload,
 )
+from apps.api.services.network_discovery import get_discovery_info
 
 logger = logging.getLogger("jarvis.api.system")
 router = APIRouter(tags=["system"])
@@ -45,6 +46,13 @@ async def root():
         "mode": "local-first",
         "status": "operational",
     }
+
+
+@router.get("/api/v1/system/discovery")
+@router.get("/api/v1/discovery")
+async def network_discovery_endpoint():
+    """Descoberta pública de instâncias do JARVIS Hub na rede local."""
+    return get_discovery_info()
 
 
 @router.get("/health")

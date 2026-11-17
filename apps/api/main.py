@@ -100,9 +100,14 @@ async def _warm_up_ollama() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     warmup_task = asyncio.create_task(_warm_up_ollama()) if _ollama_warmup_enabled() else None
+    from apps.api.services.network_discovery import start_discovery_beacon
+
+    discovery_transport = await start_discovery_beacon()
     try:
         yield
     finally:
+        if discovery_transport:
+            discovery_transport.close()
         if warmup_task and not warmup_task.done():
             warmup_task.cancel()
             with suppress(asyncio.CancelledError):
