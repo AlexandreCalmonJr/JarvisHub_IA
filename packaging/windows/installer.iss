@@ -2,7 +2,7 @@
 ; Gera o executável final: dist_installer\JarvisHub-Setup-v3.0.0.exe
 
 #define MyAppName "JARVIS AI Hub"
-#define MyAppVersion "3.0.0"
+#define MyAppVersion "3.0.1"
 #define MyAppPublisher "JARVIS Team"
 #define MyAppURL "https://github.com/jarvis-hub"
 #define MyAppExeName "JarvisHub.exe"
@@ -19,7 +19,7 @@ DefaultDirName={autopf}\JarvisAIHub
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\..\dist_installer
-OutputBaseFilename=JarvisHub-Setup-v3.0.0
+OutputBaseFilename=JarvisHub-Setup-v3.0.1
 SetupIconFile=..\jarvis.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

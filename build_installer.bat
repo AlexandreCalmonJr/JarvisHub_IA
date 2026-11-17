@@ -47,7 +47,7 @@ if %errorlevel% neq 0 (
 echo.
 echo =====================================================================
 echo  [SUCESSO] Instalador gerado com êxito!
-echo  Arquivo disponível em: dist_installer\JarvisHub-Setup-v3.0.0.exe
+echo  Arquivo disponível em: dist_installer\JarvisHub-Setup-v3.0.1.exe
 echo =====================================================================
 echo.
 pause
