@@ -2,6 +2,14 @@
     <!-- Permissões essenciais de rede para conexões com o backend JARVIS HUB -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+
+    <!-- Permissões de câmera para leitura de QR Code de pareamento instantâneo -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
 
     <!-- Permissões de áudio e serviço em primeiro plano para Assistente de Voz (Fase 8 / V4) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
@@ -13,6 +21,7 @@
         android:label="jarvis_mobile"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 void main() {
   runApp(const JarvisMobileApp());
@@ -667,6 +668,210 @@ class JarvisApiClient {
 }
 
 // ==========================================
+// TELA DO SCANNER DE CÂMERA PARA QR CODE
+// ==========================================
+
+class QrCameraScannerScreen extends StatefulWidget {
+  const QrCameraScannerScreen({super.key});
+
+  @override
+  State<QrCameraScannerScreen> createState() => _QrCameraScannerScreenState();
+}
+
+class _QrCameraScannerScreenState extends State<QrCameraScannerScreen> {
+  late final MobileScannerController _scannerController;
+  bool _hasScanned = false;
+  bool _torchOn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  void _handleManualEntry() {
+    final textController = TextEditingController();
+    String? manualError;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setManualState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Colar QR Code', style: TextStyle(fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Cole o texto ou JSON do QR Code abaixo:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: textController,
+                maxLines: 3,
+                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '{"hub":"jarvis-hub",...}'),
+              ),
+              if (manualError != null) ...[
+                const SizedBox(height: 6),
+                Text(manualError!, style: const TextStyle(color: Colors.red, fontSize: 11)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+              onPressed: () {
+                final parsed = QrPairingPayload.parse(textController.text);
+                if (parsed != null) {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context, parsed);
+                } else {
+                  setManualState(() => manualError = 'QR Code inválido.');
+                }
+              },
+              child: const Text('Aplicar', style: TextStyle(color: Colors.black)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: const Text('Escanear QR Code'),
+        actions: [
+          IconButton(
+            icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off, color: _torchOn ? Colors.amber : Colors.white),
+            tooltip: 'Lanterna',
+            onPressed: () async {
+              await _scannerController.toggleTorch();
+              setState(() => _torchOn = !_torchOn);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.flip_camera_android),
+            tooltip: 'Alternar Câmera',
+            onPressed: () => _scannerController.switchCamera(),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: _scannerController,
+            errorBuilder: (context, error) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.camera_alt_outlined, size: 56, color: Colors.grey),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Acesso à câmera não disponível ou permissão recusada.\n(${error.errorCode.name})',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 18),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                        icon: const Icon(Icons.content_paste, size: 16, color: Colors.black),
+                        label: const Text('Colar QR Code da Área de Transferência', style: TextStyle(color: Colors.black)),
+                        onPressed: () async {
+                          final clip = await Clipboard.getData(Clipboard.kTextPlain);
+                          final text = clip?.text;
+                          if (text != null) {
+                            final parsed = QrPairingPayload.parse(text);
+                            if (parsed != null && context.mounted) {
+                              Navigator.pop(context, parsed);
+                              return;
+                            }
+                          }
+                          _handleManualEntry();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            onDetect: (capture) {
+              if (_hasScanned) return;
+              for (final barcode in capture.barcodes) {
+                final raw = barcode.rawValue;
+                if (raw != null && raw.isNotEmpty) {
+                  final payload = QrPairingPayload.parse(raw);
+                  if (payload != null) {
+                    _hasScanned = true;
+                    HapticFeedback.mediumImpact();
+                    Navigator.pop(context, payload);
+                    break;
+                  }
+                }
+              }
+            },
+          ),
+          Center(
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFF38BDF8), width: 3),
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.transparent,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 40,
+            left: 20,
+            right: 20,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Aponte a câmera para o QR Code na tela do computador',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF38BDF8)),
+                  icon: const Icon(Icons.edit_note, size: 18),
+                  label: const Text('Problemas com a câmera? Colar código manualmente'),
+                  onPressed: _handleManualEntry,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
 // TELA PRINCIPAL COM NAVEGAÇÃO E BANNER DE SEGURANÇA
 // ==========================================
 class MainNavigationScreen extends StatefulWidget {
@@ -823,115 +1028,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  void _showQrScannerDialog(BuildContext context, {required Function(QrPairingPayload) onPayload}) {
-    final textController = TextEditingController();
-    String? errorText;
-
-    showDialog(
-      context: context,
-      builder: (qrCtx) => StatefulBuilder(
-        builder: (qrCtx, setQrState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
-            title: const Row(
-              children: [
-                Icon(Icons.qr_code_scanner, color: Color(0xFF38BDF8)),
-                SizedBox(width: 8),
-                Text('Parear via QR Code', style: TextStyle(fontSize: 16)),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'No Dashboard web, abra Configurações > "Conectar celular" para ver o QR Code gerado.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.content_paste, size: 16),
-                      label: const Text('Colar da Área de Transferência'),
-                      onPressed: () async {
-                        final clip = await Clipboard.getData(Clipboard.kTextPlain);
-                        final str = clip?.text;
-                        if (str != null && str.isNotEmpty) {
-                          textController.text = str;
-                          final parsed = QrPairingPayload.parse(str);
-                          if (parsed != null) {
-                            onPayload(parsed);
-                            if (qrCtx.mounted) Navigator.pop(qrCtx);
-                          } else {
-                            setQrState(() {
-                              errorText = 'O texto colado não é um QR Code válido do JARVIS Hub.';
-                            });
-                          }
-                        } else {
-                          setQrState(() {
-                            errorText = 'A área de transferência está vazia.';
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Ou cole o conteúdo do QR Code / JSON manualmente:',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: textController,
-                    maxLines: 3,
-                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                    decoration: const InputDecoration(
-                      hintText: '{"hub":"jarvis-hub","url":"...","token":"..."}',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                  if (errorText != null) ...[
-                    const SizedBox(height: 8),
-                    Text(errorText!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 11)),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(qrCtx),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
-                onPressed: () {
-                  final text = textController.text.trim();
-                  final parsed = QrPairingPayload.parse(text);
-                  if (parsed != null) {
-                    onPayload(parsed);
-                    Navigator.pop(qrCtx);
-                  } else {
-                    setQrState(() {
-                      errorText = 'Formato inválido. Use o JSON ou link gerado pelo QR Code.';
-                    });
-                  }
-                },
-                child: const Text('Aplicar Pareamento', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   void _openSettings(BuildContext context) {
     final urlController = TextEditingController(text: AppConfig.baseUrl);
     final tokenController = TextEditingController(text: AppConfig.deviceToken);
@@ -1027,26 +1123,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: ElevatedButton.icon(
-                                icon: const Icon(Icons.qr_code_scanner, size: 16),
-                                label: const Text('Parear QR Code', style: TextStyle(fontSize: 11)),
+                                icon: const Icon(Icons.camera_alt, size: 16),
+                                label: const Text('Escanear Câmera', style: TextStyle(fontSize: 11)),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF8B5CF6),
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                                 ),
-                                onPressed: () {
-                                  _showQrScannerDialog(
+                                onPressed: () async {
+                                  final payload = await Navigator.push<QrPairingPayload>(
                                     context,
-                                    onPayload: (payload) {
-                                      setDialogState(() {
-                                        urlController.text = payload.serverUrl;
-                                        tokenController.text = payload.deviceToken;
-                                        selectedEnv = AppConfig.detectEnvironmentFromUrl(payload.serverUrl);
-                                        testResultMsg = 'QR Code aplicado com sucesso!';
-                                        testSuccess = true;
-                                      });
-                                    },
+                                    MaterialPageRoute(builder: (ctx) => const QrCameraScannerScreen()),
                                   );
+                                  if (payload != null) {
+                                    setDialogState(() {
+                                      urlController.text = payload.serverUrl;
+                                      tokenController.text = payload.deviceToken;
+                                      selectedEnv = AppConfig.detectEnvironmentFromUrl(payload.serverUrl);
+                                      testResultMsg = 'QR Code escaneado com sucesso pela câmera!';
+                                      testSuccess = true;
+                                    });
+                                  }
                                 },
                               ),
                             ),
