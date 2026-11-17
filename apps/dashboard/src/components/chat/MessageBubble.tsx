@@ -307,44 +307,45 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
 
         {/* Message Bubble Card */}
         <div
+          className={!isJarvis ? 'openbot-coral-bubble' : ''}
           style={{
-            backgroundColor: isJarvis ? 'transparent' : 'var(--bg-tertiary)',
-            color: 'var(--text-primary)',
-            padding: isJarvis ? '4px 0 10px 0' : '10px 16px',
-            borderRadius: isJarvis ? '0' : '18px 18px 4px 18px',
-            border: isJarvis ? 'none' : '1px solid var(--border-color)',
-            boxShadow: isJarvis ? 'none' : '0 4px 14px rgba(0, 0, 0, 0.25)',
+            backgroundColor: isJarvis ? 'transparent' : '#e05244',
+            color: '#ffffff',
+            padding: isJarvis ? '4px 0 10px 0' : '10px 18px',
+            borderRadius: isJarvis ? '0' : '20px 20px 4px 20px',
+            border: isJarvis ? 'none' : 'none',
+            boxShadow: isJarvis ? 'none' : '0 4px 16px rgba(224, 82, 68, 0.25)',
             width: isJarvis ? '100%' : 'fit-content',
             maxWidth: '100%',
           }}
         >
-          {/* Painel de Raciocínio & Especialistas (Manus / Claude Style) */}
+          {/* Painel de Raciocínio & Especialistas (OpenBot Style "X etapas >") */}
           {isJarvis && task && (task.classified_intent || (task.plan_steps && task.plan_steps.length > 0)) && (
             <div
               style={{
                 marginBottom: '12px',
-                paddingBottom: '10px',
-                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '8px',
               }}
             >
               <button
                 type="button"
                 onClick={() => setShowReasoning(!showReasoning)}
-                className="btn btn-ghost"
+                className="openbot-step-pill"
                 style={{
-                  padding: '3px 8px',
-                  fontSize: '0.72rem',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  color: 'var(--text-secondary)',
+                  padding: '4px 10px',
+                  borderRadius: '9999px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  fontSize: '0.78rem',
+                  color: '#a3a3a3',
+                  cursor: 'pointer',
                 }}
               >
                 <span>
-                  {showReasoning ? 'Ocultar Raciocínio' : 'Ver Raciocínio'}
+                  {(task.plan_steps && task.plan_steps.length > 0 ? task.plan_steps.length : 2)} etapas
                 </span>
                 {showReasoning ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               </button>
@@ -353,10 +354,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message
                 <div
                   style={{
                     marginTop: '8px',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border-color)',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '6px',

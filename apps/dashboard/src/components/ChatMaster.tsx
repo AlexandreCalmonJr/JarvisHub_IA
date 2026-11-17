@@ -3,10 +3,11 @@ import { fetchWorkspaceProjects } from '../api';
 import { useChatStream } from '../hooks/useChatStream';
 import { ArtifactCanvas, CanvasArtifact } from './chat/ArtifactCanvas';
 import { MessageBubble } from './chat/MessageBubble';
-import { ChatHeader } from './chat/ChatHeader';
 import { ChatInput } from './chat/ChatInput';
 import { ChatProjectModal } from './chat/ChatProjectModal';
 import { getSessionMessagesLocally } from './chat/ChatHistoryDrawer';
+import { OpenBotConversationRail } from './chat/OpenBotConversationRail';
+import { OpenBotChatHeader, ChatTabItem } from './chat/OpenBotChatHeader';
 
 interface ChatMasterProps {
   attachedProjectId?: string | null;
@@ -31,6 +32,10 @@ export const ChatMaster: React.FC<ChatMasterProps> = ({
   const [activeProjectId, setActiveProjectId] = useState<string | null>(propProjectId || null);
   const [availableProjects, setAvailableProjects] = useState<any[]>([]);
   const [greetingIndex, setGreetingIndex] = useState(0);
+  const [isRailOpen, setIsRailOpen] = useState(true);
+  const [selectedModel, setSelectedModel] = useState('ollama/qwen2.5-coder:7b');
+  const [tabs, setTabs] = useState<ChatTabItem[]>([{ id: 'default', title: 'Calmon Dev' }]);
+  const [activeTabId, setActiveTabId] = useState('default');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -107,13 +112,39 @@ export const ChatMaster: React.FC<ChatMasterProps> = ({
     }
   };
 
+  const handleSelectSession = (sid: string) => {
+    setSessionId(sid);
+    const loaded = getSessionMessagesLocally(sid);
+    if (loaded && loaded.length > 0) {
+      setMessages(loaded);
+    } else {
+      setMessages([]);
+    }
+    setActiveArtifact(null);
+
+    const existingTab = tabs.find((t) => t.id === sid);
+    if (!existingTab) {
+      const name = sid.startsWith('agent-') ? sid.replace('agent-', '').toUpperCase() : 'Chat ' + sid.substring(0, 6);
+      setTabs((prev) => [...prev, { id: sid, title: name }]);
+    }
+    setActiveTabId(sid);
+  };
+
+  const handleOpenNewChatTab = () => {
+    const newId = 'session_' + Date.now();
+    handleNewChat();
+    setActiveArtifact(null);
+    setTabs((prev) => [...prev, { id: newId, title: 'Novo Chat' }]);
+    setActiveTabId(newId);
+  };
+
   const handleFormSubmit = (overrideText?: string, modelOverride?: string) => {
     const textToSend = overrideText || input;
     if (!textToSend.trim() || loading) return;
     if (!overrideText) {
       setInput('');
     }
-    submitStream(textToSend, modelOverride);
+    submitStream(textToSend, modelOverride || selectedModel);
   };
 
   const hasUserMessages = messages.some((m) => m.sender === 'user');
@@ -128,6 +159,14 @@ export const ChatMaster: React.FC<ChatMasterProps> = ({
         backgroundColor: 'var(--bg-primary)',
       }}
     >
+      {/* Sub-rail Esquerdo de Conversas (OpenBot Channel / Agent Rail) */}
+      <OpenBotConversationRail
+        activeSessionId={sessionId}
+        onSelectSession={handleSelectSession}
+        onNewChat={handleOpenNewChatTab}
+        isCollapsed={!isRailOpen}
+      />
+
       {/* Coluna Principal do Chat */}
       <div
         style={{
@@ -140,6 +179,36 @@ export const ChatMaster: React.FC<ChatMasterProps> = ({
           borderRight: activeArtifact ? '1px solid var(--border-color)' : 'none',
         }}
       >
+        {/* Header do Chat no Padrão OpenBot com Abas e Seletor de Modelo */}
+        <OpenBotChatHeader
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={(tid) => {
+            setActiveTabId(tid);
+            handleSelectSession(tid);
+          }}
+          onCloseTab={(tid) => {
+            if (tabs.length <= 1) return;
+            const remaining = tabs.filter((t) => t.id !== tid);
+            setTabs(remaining);
+            if (activeTabId === tid) {
+              const next = remaining[remaining.length - 1];
+              setActiveTabId(next.id);
+              handleSelectSession(next.id);
+            }
+          }}
+          onNewTab={handleOpenNewChatTab}
+          onToggleRail={() => setIsRailOpen((prev) => !prev)}
+          isRailOpen={isRailOpen}
+          selectedModel={selectedModel}
+          onSelectModel={(m) => setSelectedModel(m)}
+          activeProjectId={activeProjectId}
+          activeProjectName={activeProject?.name}
+          onDetachProject={handleDetachProject}
+          onOpenProjectModal={() => setShowProjectModal(true)}
+          onExportChat={handleExportChat}
+        />
+
         {/* Caso não haja mensagens de usuário, exibe a tela central de boas-vindas do Claude (Hero Greeting) */}
         {!hasUserMessages ? (
           <div
@@ -199,21 +268,6 @@ export const ChatMaster: React.FC<ChatMasterProps> = ({
         ) : (
           /* Quando há mensagens na conversa */
           <>
-            <ChatHeader
-              messagesCount={messages.length}
-              activeProjectId={activeProjectId}
-              activeProjectName={activeProject?.name}
-              onDetachProject={handleDetachProject}
-              onOpenProjectModal={() => setShowProjectModal(true)}
-              onExportChat={handleExportChat}
-              activeArtifact={activeArtifact}
-              onToggleCanvas={() => setActiveArtifact(null)}
-              onNewChat={() => {
-                handleNewChat();
-                setActiveArtifact(null);
-              }}
-            />
-
             {/* Área de Mensagens com auto-scroll */}
             <div
               style={{

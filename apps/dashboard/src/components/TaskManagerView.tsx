@@ -10,6 +10,11 @@ import {
   Copy,
   Layers,
   Sparkles,
+  Mic,
+  ArrowUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { fetchTasks, deleteTask, purgeTasks } from '../api';
 import { notify } from './common/Toast';
@@ -46,6 +51,29 @@ export const TaskManagerView: React.FC = () => {
   const [roleLoaded, setRoleLoaded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 15;
+  const [viewMode, setViewMode] = useState<'hub' | 'table'>('hub');
+  const [selectedAgent, setSelectedAgent] = useState('Telegram Orchestrator');
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const [delegationPrompt, setDelegationPrompt] = useState('');
+  const [delegating, setDelegating] = useState(false);
+
+  const handleDelegateTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!delegationPrompt.trim() || delegating) return;
+    setDelegating(true);
+    notify(`Tarefa delegada para ${selectedAgent}! Processando em paralelo...`, 'info');
+    const newTask = {
+      id: 'task_' + Date.now(),
+      prompt: delegationPrompt,
+      intent: 'multi_agent_consensus',
+      is_completed: false,
+      created_at: new Date().toISOString(),
+      agent: selectedAgent,
+    };
+    setTasks((prev) => [newTask, ...prev]);
+    setDelegationPrompt('');
+    setDelegating(false);
+  };
 
   const loadTasks = async () => {
     setLoading(true);
@@ -199,23 +227,69 @@ export const TaskManagerView: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Top Header */}
+      {/* Top Header com Estilo OpenBot */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h2 className="claude-serif-title" style={{ fontSize: '1.6rem', fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>
-            Gerenciador de Tarefas
-          </h2>
-          <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
-            Histórico de tarefas da sua conta, com filtros por intenção, projeto e sessão.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+            <button type="button" onClick={() => window.history.back()} className="btn btn-ghost" style={{ padding: '4px 6px' }} title="Voltar">
+              <ChevronLeft size={16} />
+            </button>
+            <button type="button" onClick={() => window.history.forward()} className="btn btn-ghost" style={{ padding: '4px 6px' }} title="Avançar">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <div>
+            <h2 className="claude-serif-title" style={{ fontSize: '1.4rem', fontWeight: 600, margin: 0, color: '#f5f5f5' }}>
+              Tarefas
+            </h2>
+            <p style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Histórico de tarefas da sua conta, com filtros por intenção, projeto e sessão.
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Seletor de Modo: Hub OpenBot vs Tabela Completa */}
+          <div style={{ display: 'flex', backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: '2px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('hub')}
+              style={{
+                fontSize: '0.76rem',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: viewMode === 'hub' ? '#262626' : 'transparent',
+                color: viewMode === 'hub' ? '#38bdf8' : '#888888',
+                fontWeight: viewMode === 'hub' ? 600 : 400,
+                cursor: 'pointer',
+              }}
+            >
+              Hub de Delegação
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{
+                fontSize: '0.76rem',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: viewMode === 'table' ? '#262626' : 'transparent',
+                color: viewMode === 'table' ? '#ffffff' : '#888888',
+                fontWeight: viewMode === 'table' ? 600 : 400,
+                cursor: 'pointer',
+              }}
+            >
+              Auditoria & Tabela
+            </button>
+          </div>
+
           {canManageTasks && totalCount > 0 && (
             <button
               onClick={() => setShowPurgeModal(true)}
               className="btn btn-secondary"
-              style={{ fontSize: '0.78rem', padding: '7px 12px' }}
+              style={{ fontSize: '0.78rem', padding: '6px 12px' }}
               title="Limpar tarefas com mais de 30 dias de retenção"
             >
               <span>Expurgar Antigas</span>
@@ -225,7 +299,7 @@ export const TaskManagerView: React.FC = () => {
           <button
             onClick={loadTasks}
             className="btn btn-secondary"
-            style={{ fontSize: '0.78rem', padding: '7px 12px' }}
+            style={{ fontSize: '0.78rem', padding: '6px 12px' }}
             disabled={loading}
           >
             <span>{loading ? 'Atualizando...' : 'Atualizar'}</span>
@@ -238,6 +312,203 @@ export const TaskManagerView: React.FC = () => {
       {loadError && (
         <div role="alert" className="glass-card" style={{ padding: '12px 16px', border: '1px solid rgba(248, 113, 113, 0.35)', borderRadius: '10px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
           Não foi possível carregar as tarefas: {loadError}
+        </div>
+      )}
+
+      {/* Seção OpenBot: Hub de Delegação em Paralelo */}
+      {viewMode === 'hub' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', maxWidth: '820px', margin: '0 auto', width: '100%' }}>
+          {/* Hero Inspirador OpenBot */}
+          <div style={{ textAlign: 'center', marginTop: '12px' }}>
+            <h1 style={{ fontSize: '2.1rem', fontWeight: 600, color: '#f5f5f5', margin: 0, letterSpacing: '-0.02em' }}>
+              Delegue o trabalho.
+            </h1>
+            <h1 className="openbot-tasks-gradient" style={{ fontSize: '2.1rem', fontWeight: 700, margin: '2px 0 10px 0', letterSpacing: '-0.02em' }}>
+              Volte para uma resposta.
+            </h1>
+            <p style={{ fontSize: '0.88rem', color: '#888888', margin: 0 }}>
+              Seus agentes trabalham em tarefas em paralelo. Cada resposta espera você aqui.
+            </p>
+          </div>
+
+          {/* Barra Central de Delegação Rápida */}
+          <form onSubmit={handleDelegateTask} className="openbot-delegation-capsule">
+            {/* Dropdown de Agentes */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
+                className="btn btn-ghost"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.78rem',
+                  color: '#d4d4d4',
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  padding: '5px 12px',
+                  borderRadius: '999px',
+                }}
+              >
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#38bdf8' }} />
+                <span style={{ fontWeight: 500 }}>{selectedAgent}</span>
+                <ChevronDown size={12} color="#737373" />
+              </button>
+
+              {agentDropdownOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '36px',
+                    left: 0,
+                    width: '200px',
+                    backgroundColor: '#1e1e1e',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '10px',
+                    padding: '4px',
+                    zIndex: 100,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  }}
+                >
+                  {['Telegram Orchestrator', 'QA Tester', 'Copy Editor', 'Bug Fixer', 'Security Auditor', 'Coding Agent'].map((ag) => (
+                    <button
+                      key={ag}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAgent(ag);
+                        setAgentDropdownOpen(false);
+                      }}
+                      className="btn btn-ghost"
+                      style={{
+                        width: '100%',
+                        justifyContent: 'flex-start',
+                        padding: '6px 10px',
+                        fontSize: '0.78rem',
+                        color: selectedAgent === ag ? '#38bdf8' : '#d4d4d4',
+                      }}
+                    >
+                      {ag}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Input de Delegação */}
+            <input
+              type="text"
+              value={delegationPrompt}
+              onChange={(e) => setDelegationPrompt(e.target.value)}
+              placeholder="O que você quer que seja feito?"
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#f5f5f5',
+                fontSize: '0.88rem',
+              }}
+            />
+
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ padding: '6px', color: '#a3a3a3' }}
+              title="Gravação de voz"
+            >
+              <Mic size={16} />
+            </button>
+
+            <button
+              type="submit"
+              disabled={delegating || !delegationPrompt.trim()}
+              className="btn btn-primary"
+              style={{
+                padding: '6px 10px',
+                borderRadius: '50%',
+                backgroundColor: '#38bdf8',
+                color: '#000000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Enviar delegação"
+            >
+              <ArrowUp size={14} />
+            </button>
+          </form>
+
+          {/* Painel de Categorias Paralelas (Precisa de você, Trabalhando, Em espera) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* 1. Precisa de você */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#737373', fontWeight: 600 }}>
+                Precisa de você {tasks.filter(t => !t.is_completed && t.intent === 'audit').length || 1}
+              </div>
+              <div className="openbot-task-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  <CheckCircle2 size={15} color="#3b82f6" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.84rem', color: '#d4d4d4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Resuma os processos seletivos abertos para a vaga de líder ...
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '12px', backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontWeight: 500 }}>
+                    Respondida
+                  </span>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '5px', backgroundColor: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#ffffff' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Trabalhando */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#737373', fontWeight: 600 }}>
+                Trabalhando {tasks.filter(t => !t.is_completed).length || 1}
+              </div>
+              <div className="openbot-task-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  <RefreshCw size={14} className="spin" color="#c084fc" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.84rem', color: '#d4d4d4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Encontre artigos recentes sobre recuperação e...
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '12px', backgroundColor: 'rgba(192, 132, 252, 0.15)', color: '#c084fc', fontWeight: 500 }}>
+                    Pesquisando no arxiv.org
+                  </span>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '5px', backgroundColor: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#ffffff' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Em espera */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '0.78rem', color: '#737373', fontWeight: 600 }}>
+                Em espera {tasks.filter(t => t.is_completed).length || 1}
+              </div>
+              <div className="openbot-task-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  <Clock size={14} color="#737373" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.84rem', color: '#a3a3a3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Prepare as notas da ligação com a Northwind Traders
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '12px', backgroundColor: 'rgba(255, 255, 255, 0.08)', color: '#888888', fontWeight: 500 }}>
+                    Em espera
+                  </span>
+                  <div style={{ width: '18px', height: '18px', borderRadius: '5px', backgroundColor: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#ffffff' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

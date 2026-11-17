@@ -547,4 +547,176 @@ code, pre {
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
 
+/* ==========================================================================
+   OpenBot Fase 2: Chat & Tasks Hub Styles
+   ========================================================================== */
+
+/* Sub-rail / Gaveta de Conversas do Chat */
+.openbot-conv-rail {
+  width: 240px;
+  background-color: #121212;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex-shrink: 0;
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.openbot-conv-rail.is-collapsed {
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  border-right: none;
+}
+
+.openbot-session-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+  user-select: none;
+  position: relative;
+}
+
+.openbot-session-card:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.openbot-session-card.is-active {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Bolha Coral do Usuário (OpenBot Style) */
+.openbot-coral-bubble {
+  background-color: #e05244 !important;
+  color: #ffffff !important;
+  border-radius: 20px 20px 4px 20px !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(224, 82, 68, 0.25) !important;
+  padding: 10px 18px !important;
+  font-weight: 400;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+/* Pílula de Etapas Colapsável (X etapas >) */
+.openbot-step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.78rem;
+  color: #a3a3a3;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.openbot-step-pill:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #f5f5f5;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Abas Superiores do Chat */
+.openbot-tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.80rem;
+  font-weight: 500;
+  color: #d4d4d4;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.openbot-tab-pill:hover {
+  background-color: rgba(255, 255, 255, 0.09);
+  color: #ffffff;
+}
+
+.openbot-tab-pill.is-active {
+  background-color: #242220;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* Seletor de Modelo Integrado */
+.openbot-model-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: #a3a3a3;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.openbot-model-pill:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #f5f5f5;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Hub de Tarefas: Hero e Gradiente */
+.openbot-tasks-gradient {
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Barra Central de Delegação de Tarefas */
+.openbot-delegation-capsule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 28px;
+  background-color: #171717;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.openbot-delegation-capsule:focus-within {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(56, 189, 248, 0.25);
+}
+
+/* Cartão de Tarefa em Linha OpenBot */
+.openbot-task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background-color 0.15s ease;
+}
+
+.openbot-task-row:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+
 
