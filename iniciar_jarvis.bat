@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 chcp 65001 >nul
-title JARVIS AI HUB — Inicializador Automático
+title JARVIS AI HUB — Inicializador de Rede
 color 0B
 
 echo =====================================================================
@@ -21,19 +21,25 @@ echo [2/3] Verificando build da interface web...
 if not exist "apps\dashboard\dist\index.html" (
     echo [AVISO] Build da interface não encontrado em apps/dashboard/dist.
     echo Tentando compilar via npm...
-    npm run build --prefix apps/dashboard
+    call npm run build --prefix apps/dashboard
 )
 
-echo [3/3] Iniciando JARVIS AI Hub em http://127.0.0.1:8000 ...
+:: Obtém o IP da rede local via Python
+for /f "delims=" %%I in ('.venv\Scripts\python.exe -c "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(('8.8.8.8', 80)); print(s.getsockname()[0]); s.close()" 2^>nul') do set "LOCAL_IP=%%I"
+if "%LOCAL_IP%"=="" set "LOCAL_IP=192.168.1.81"
+
 echo.
+echo [3/3] Iniciando JARVIS AI Hub no IP do computador: http://%LOCAL_IP%:8000 ...
 echo =====================================================================
-echo  O painel web será aberto automaticamente no seu navegador padrão.
-echo  Para fechar o JARVIS, encerre esta janela ou execute 'parar_jarvis.bat'.
+echo  URL no computador: http://%LOCAL_IP%:8000 (ou http://127.0.0.1:8000)
+echo  URL no celular:    http://%LOCAL_IP%:8000
+echo  Beacon UDP ativo:  Porta 8001 (Descoberta Automática de Dispositivos)
+echo  Para encerrar:     Feche esta janela ou execute 'parar_jarvis.bat'
 echo =====================================================================
 echo.
 
-:: Aguarda 2 segundos e abre o navegador padrão
-start "" http://127.0.0.1:8000
+:: Abre o navegador padrão no IP local do computador
+start "" "http://%LOCAL_IP%:8000"
 
-:: Inicia o servidor FastAPI local estritamente em 127.0.0.1 (Zero Inbound Externo)
-.venv\Scripts\python.exe -m uvicorn apps.api.main:app --host 127.0.0.1 --port 8000
+:: Inicia o servidor FastAPI vinculado a todas as interfaces de rede (0.0.0.0)
+.venv\Scripts\python.exe -m uvicorn apps.api.main:app --host 0.0.0.0 --port 8000

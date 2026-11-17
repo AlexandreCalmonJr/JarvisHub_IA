@@ -135,10 +135,19 @@ DEFAULT_ALLOWED_ORIGINS = [
 
 def _resolve_allowed_origins() -> list[str]:
     raw = os.environ.get("JARVIS_ALLOWED_ORIGINS", "").strip()
-    if not raw:
-        return DEFAULT_ALLOWED_ORIGINS
-    origins = [item.strip() for item in raw.split(",") if item.strip()]
-    return origins or DEFAULT_ALLOWED_ORIGINS
+    origins = [item.strip() for item in raw.split(",") if item.strip()] if raw else list(DEFAULT_ALLOWED_ORIGINS)
+    try:
+        from apps.api.services.network_discovery import get_local_ip
+        local_ip = get_local_ip()
+        if local_ip:
+            origins.extend([
+                f"http://{local_ip}:8000",
+                f"http://{local_ip}:5173",
+                f"http://{local_ip}:3000",
+            ])
+    except Exception:
+        pass
+    return list(dict.fromkeys(origins))
 
 
 # Autenticação central: tudo em /api exige credencial, exceto a allowlist pública.
@@ -147,6 +156,7 @@ app.add_middleware(AuthMiddleware, service=auth_service)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_resolve_allowed_origins(),
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Device-Token", "X-CSRF-Token"],

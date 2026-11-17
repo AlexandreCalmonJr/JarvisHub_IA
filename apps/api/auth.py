@@ -40,6 +40,8 @@ BOOTSTRAP_TTL_SECONDS = 60
 PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api"),
     ("GET", "/api/v1/system/health"),
+    ("GET", "/api/v1/system/discovery"),
+    ("GET", "/api/v1/discovery"),
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/password-login"),
     ("POST", "/api/v1/auth/bootstrap/exchange"),

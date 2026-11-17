@@ -14,8 +14,8 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000" ^| findstr "LISTENING
     taskkill /F /PID %%a >nul 2>&1
 )
 
-echo Encerrando daemon de voz em segundo plano (se ativo)...
-wmic process where "commandline like '%%apps.voice_daemon.main%%'" call terminate >nul 2>&1
+echo Encerrando processos Python do JARVIS...
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*uvicorn*apps.api.main*' -or $_.CommandLine -like '*apps.voice_daemon*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 echo.
 echo [OK] Servidor e assistente de voz JARVIS finalizados com sucesso.
