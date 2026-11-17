@@ -1,6 +1,9 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AuthGate } from './components/AuthGate';
 import { Sidebar } from './components/Sidebar';
+import { PrimaryRail } from './components/navigation/PrimaryRail';
+import { AgentDock } from './components/navigation/AgentDock';
+import { DynamicIsland } from './components/navigation/DynamicIsland';
 import { SystemHealth, ApprovalRequestItem } from './types';
 import { fetchHealth, fetchApprovals } from './api';
 import {
@@ -290,11 +293,29 @@ const DashboardApp: React.FC = () => {
         overflow: 'hidden',
         backgroundColor: 'var(--bg-primary)',
         fontFamily: 'var(--font-sans)',
+        position: 'relative',
       }}
       onClick={() => {
         if (desktopMenuOpen) setDesktopMenuOpen(false);
       }}
     >
+      {/* Dynamic Island no topo central (OpenBot Style) */}
+      <DynamicIsland
+        activeAgentName="JARVIS AI Hub"
+        systemStatus={{ cpu: 31, memory: 33 }}
+        onOpenVoice={() => navigate('chat')}
+      />
+
+      {/* Trilho Lateral Esquerdo 64px Fixo (OpenBot Style) */}
+      <PrimaryRail
+        activeTab={activeTab}
+        onNavigate={navigate}
+        pendingApprovalsCount={pendingApprovalsCount}
+        onOpenSettings={() => navigate('security')}
+        onOpenHelp={() => setGuidedTourOpen(true)}
+        onOpenProfile={() => setShowProfileModal(true)}
+      />
+
       <Sidebar
         permissions={authPermissions}
         role={authRole || undefined}
@@ -754,6 +775,15 @@ const DashboardApp: React.FC = () => {
 
       {/* Aprovação humana integrada para operações do Workspace */}
       <ApprovalPromptHost />
+
+      {/* Dock Flutuante de Agentes na Direita (OpenBot Style) */}
+      <AgentDock
+        onSelectAgent={(agentId) => {
+          setTargetChatSessionId('agent_' + agentId);
+          navigate('chat');
+        }}
+        onAddAgent={() => navigate('skills')}
+      />
 
       {/* Notificações Toast Globais */}
       <ToastContainer />
