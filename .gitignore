@@ -70,7 +70,7 @@ Thumbs.db
 desktop.ini
 
 # Project specific local data & models
-data/
+/data/
 backups/
 *.db
 *.sqlite3

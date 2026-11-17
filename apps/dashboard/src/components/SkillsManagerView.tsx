@@ -22,6 +22,7 @@ import { notify } from './common/Toast';
 import { ConfirmDialog } from './common/ConfirmDialog';
 import { API_BASE } from '../services/api/client';
 import { getAccountStorageKey } from '../services/accountScope';
+import { ALL_26_AGENTS } from '../data/agentsCatalog';
 
 export interface StoreAppItem {
   id: string;
@@ -73,6 +74,37 @@ export const SkillsManagerView: React.FC = () => {
   const [showCustomAppModal, setShowCustomAppModal] = useState(false);
   const [appTokenInput, setAppTokenInput] = useState('');
   const [connectingApp, setConnectingApp] = useState(false);
+
+  // Estado do Catálogo dos 26 Agentes IA
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentCategoryFilter, setAgentCategoryFilter] = useState<'all' | 'orchestration' | 'development' | 'data' | 'devops' | 'security'>('all');
+  const [pinnedDockAgents, setPinnedDockAgents] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(getAccountStorageKey('jarvis_pinned_dock_agents'));
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return ['qa_tester', 'copy_editor', 'bug_fixer', 'security_specialist'];
+  });
+
+  const togglePinDockAgent = (agentId: string, agentName: string) => {
+    let next: string[];
+    if (pinnedDockAgents.includes(agentId)) {
+      next = pinnedDockAgents.filter((id) => id !== agentId);
+      notify(`Agente "${agentName}" desafixado do Dock.`, 'info');
+    } else {
+      if (pinnedDockAgents.length >= 8) {
+        notify('O Dock suporta até 8 agentes simultâneos. Desafixe um antes.', 'warning');
+        return;
+      }
+      next = [...pinnedDockAgents, agentId];
+      notify(`Agente "${agentName}" fixado no Dock!`, 'success');
+    }
+    setPinnedDockAgents(next);
+    try {
+      localStorage.setItem(getAccountStorageKey('jarvis_pinned_dock_agents'), JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('jarvis:dock-updated'));
+    } catch {}
+  };
 
   // Catálogo completo de Apps da Loja (OpenBot Store)
   const STORE_APPS: StoreAppItem[] = [
@@ -499,6 +531,16 @@ export const SkillsManagerView: React.FC = () => {
   const documentsApps = appsFiltered.filter((a) => a.category === 'documents');
   const devApps = appsFiltered.filter((a) => a.category === 'development');
   const aiApps = appsFiltered.filter((a) => a.category === 'ai');
+
+  // Filtragem dos 26 agentes especialistas
+  const filteredCatalogAgents = useMemo(() => {
+    return ALL_26_AGENTS.filter((ag) => {
+      const q = agentSearch.toLowerCase().trim();
+      const matchesSearch = !q || ag.name.toLowerCase().includes(q) || ag.mission.toLowerCase().includes(q) || ag.categoryLabel.toLowerCase().includes(q);
+      const matchesCat = agentCategoryFilter === 'all' || ag.category === agentCategoryFilter;
+      return matchesSearch && matchesCat;
+    });
+  }, [agentSearch, agentCategoryFilter]);
 
   return (
     <div
@@ -1108,93 +1150,221 @@ export const SkillsManagerView: React.FC = () => {
         )}
 
         {/* ======================================================================= */}
-        {/* VIEW 2: AGENTES (Catálogo dos Especialistas)                            */}
+        {/* VIEW 2: AGENTES (Catálogo Completo dos 26 Agentes IA)                   */}
         {/* ======================================================================= */}
         {activeStoreTab === 'agents' && (
-          <div style={{ maxWidth: '1040px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ maxWidth: '1080px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
-              <h1 style={{ fontSize: '1.85rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
-                Agentes Especialistas
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h1 style={{ fontSize: '1.85rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
+                  Catálogo de Agentes IA
+                </h1>
+                <span
+                  style={{
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    color: '#38bdf8',
+                    padding: '3px 10px',
+                    borderRadius: '999px',
+                    fontSize: '0.80rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  26 Especialistas
+                </span>
+              </div>
               <p style={{ fontSize: '0.84rem', color: '#888888', marginTop: '4px' }}>
-                Especialistas autônomos com personalidades 3D calibradas para arquitetura, qualidade, segurança e código.
+                26 agentes autônomos com papéis formais, contratos padronizados e personalidades 3D prontos para o seu Dock e fluxos colaborativos.
               </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-              {[
-                { name: 'QA Tester', role: 'Engenheiro de Testes', color: '#ec4899', desc: 'Criação de testes Playwright, pytest, cobertura e TDD.' },
-                { name: 'Copy Editor', role: 'Redação & UX Writing', color: '#3b82f6', desc: 'Revisão textual, documentação técnica e clareza de interface.' },
-                { name: 'Bug Fixer', role: 'Correção de Erros', color: '#f97316', desc: 'Diagnóstico de logs, depuração de stack traces e patches cirúrgicos.' },
-                { name: 'Security Auditor', role: 'DevSecOps & OWASP', color: '#10b981', desc: 'Auditoria de vulnerabilidades, validação de tokens e SAST.' },
-                { name: 'Design Center', role: 'UI/UX & Design System', color: '#6366f1', desc: 'Cores, acessibilidade WCAG, contraste e design tokens modernos.' },
-                { name: 'Prototype Architect', role: 'Arquitetura de Solução', color: '#f59e0b', desc: 'Estruturação de microsserviços, diagramas e padrões limpos.' },
-                { name: 'Launch Commander', role: 'Deploy & Produção', color: '#d946ef', desc: 'Automação de CI/CD, verificação de ambiente e release checklist.' },
-                { name: 'Change Manager', role: 'Migração & Refatoração', color: '#06b6d4', desc: 'Controle de breaking changes e atualizações incrementais.' },
-                { name: 'Calmon Dev', role: 'Engenheiro Principal Fullstack', color: '#ef4444', desc: 'Liderança técnica, integração global e tomada de decisão.' },
-              ].map((agent, idx) => (
-                <div
-                  key={idx}
+            {/* Barra de Busca e Filtros de Categoria */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '8px',
+                  padding: '7px 14px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  maxWidth: '480px',
+                }}
+              >
+                <Search size={15} color="#888888" />
+                <input
+                  type="text"
+                  value={agentSearch}
+                  onChange={(e) => setAgentSearch(e.target.value)}
+                  placeholder="Buscar agente por nome, especialidade ou missão..."
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '14px',
-                    border: '1px solid rgba(255, 255, 255, 0.07)',
-                    padding: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    color: '#ededed',
+                    fontSize: '0.82rem',
+                    width: '100%',
                   }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '10px',
-                        backgroundColor: agent.color,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: `0 3px 12px ${agent.color}40`,
-                      }}
-                    >
-                      <div style={{ display: 'flex', gap: '3px' }}>
-                        <span style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#000000' }} />
-                        <span style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#000000' }} />
+                />
+              </div>
+
+              {/* Pílulas de Categoria */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {[
+                  { id: 'all', label: 'Todos (26)' },
+                  { id: 'orchestration', label: 'Orquestração (5)' },
+                  { id: 'development', label: 'Engenharia & QA (6)' },
+                  { id: 'data', label: 'Dados & BI (4)' },
+                  { id: 'devops', label: 'DevOps & Infra (2)' },
+                  { id: 'security', label: 'Cibersegurança (9)' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setAgentCategoryFilter(cat.id as any)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: agentCategoryFilter === cat.id ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255, 255, 255, 0.04)',
+                      color: agentCategoryFilter === cat.id ? '#38bdf8' : '#a1a1aa',
+                      fontSize: '0.78rem',
+                      fontWeight: agentCategoryFilter === cat.id ? 600 : 400,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Grid dos 26 Agentes */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+              {filteredCatalogAgents.map((agent) => {
+                const isPinned = pinnedDockAgents.includes(agent.id) || pinnedDockAgents.includes(agent.role);
+                return (
+                  <div
+                    key={agent.id}
+                    style={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                      borderRadius: '14px',
+                      border: '1px solid rgba(255, 255, 255, 0.07)',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                      transition: 'background-color 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: agent.shape === 'diamond' ? '12px' : agent.shape === 'round' ? '50%' : '14px',
+                            backgroundColor: agent.color,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: `0 3px 12px ${agent.color}40`,
+                            flexShrink: 0,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '3px',
+                              alignItems: 'center',
+                              transform: agent.expression === 'grumpy' ? 'rotate(-6deg)' : 'none',
+                            }}
+                          >
+                            <span style={{ width: '3.5px', height: '3.5px', borderRadius: '50%', backgroundColor: '#000000' }} />
+                            <span style={{ width: '3.5px', height: '3.5px', borderRadius: '50%', backgroundColor: '#000000' }} />
+                          </div>
+                        </div>
+
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {agent.name}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {agent.categoryLabel}
+                          </div>
+                        </div>
                       </div>
+
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                          color: '#a1a1aa',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {agent.category.toUpperCase()}
+                      </span>
                     </div>
 
-                    <div>
-                      <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#ffffff' }}>{agent.name}</div>
-                      <div style={{ fontSize: '0.76rem', color: '#888888' }}>{agent.role}</div>
+                    <p style={{ fontSize: '0.80rem', color: '#a1a1aa', margin: 0, lineHeight: 1.5, flex: 1 }}>
+                      {agent.mission}
+                    </p>
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => togglePinDockAgent(agent.id, agent.name)}
+                        style={{
+                          flex: 1,
+                          backgroundColor: isPinned ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                          border: isPinned ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          color: isPinned ? '#38bdf8' : '#ffffff',
+                          fontSize: '0.78rem',
+                          fontWeight: 500,
+                          padding: '7px 10px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {isPinned ? <Check size={13} strokeWidth={2.5} /> : <Plus size={13} />}
+                        <span>{isPinned ? 'Fixado no Dock' : 'Fixar no Dock'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.dispatchEvent(
+                            new CustomEvent('jarvis:open-agent-chat', {
+                              detail: { agentId: agent.id, agentName: agent.name },
+                            })
+                          );
+                          notify(`Sessão com ${agent.name} iniciada!`, 'info');
+                        }}
+                        style={{
+                          backgroundColor: 'transparent',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          color: '#e4e4e7',
+                          fontSize: '0.78rem',
+                          padding: '7px 12px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Conversar
+                      </button>
                     </div>
                   </div>
-
-                  <p style={{ fontSize: '0.80rem', color: '#a1a1aa', margin: 0, lineHeight: 1.5, flex: 1 }}>
-                    {agent.desc}
-                  </p>
-
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={() => notify(`Agente "${agent.name}" adicionado ao seu Dock!`, 'success')}
-                      style={{
-                        flex: 1,
-                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        borderRadius: '8px',
-                        color: '#ffffff',
-                        fontSize: '0.78rem',
-                        fontWeight: 500,
-                        padding: '6px 10px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Fixar no Dock
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

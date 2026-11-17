@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
+import { ALL_26_AGENTS } from '../../data/agentsCatalog';
+import { getAccountStorageKey } from '../../services/accountScope';
 
 export interface DockAgent {
   id: string;
@@ -29,6 +31,61 @@ export const AgentDock: React.FC<AgentDockProps> = ({
   onAddAgent,
 }) => {
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
+  const [dockAgents, setDockAgents] = useState<DockAgent[]>(() => {
+    try {
+      const raw = localStorage.getItem(getAccountStorageKey('jarvis_pinned_dock_agents'));
+      if (raw) {
+        const ids: string[] = JSON.parse(raw);
+        const mapped: DockAgent[] = ids.map((id) => {
+          const found26 = ALL_26_AGENTS.find((a) => a.id === id || a.role === id);
+          if (found26) {
+            return {
+              id: found26.id,
+              name: found26.name,
+              role: found26.categoryLabel,
+              color: found26.color,
+              shape: found26.shape,
+              expression: found26.expression,
+            };
+          }
+          const foundDef = DEFAULT_AGENTS.find((a) => a.id === id);
+          return foundDef || { id, name: id, role: 'Especialista', color: '#38bdf8' };
+        });
+        if (mapped.length > 0) return mapped;
+      }
+    } catch {}
+    return DEFAULT_AGENTS;
+  });
+
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const raw = localStorage.getItem(getAccountStorageKey('jarvis_pinned_dock_agents'));
+        if (raw) {
+          const ids: string[] = JSON.parse(raw);
+          const mapped: DockAgent[] = ids.map((id) => {
+            const found26 = ALL_26_AGENTS.find((a) => a.id === id || a.role === id);
+            if (found26) {
+              return {
+                id: found26.id,
+                name: found26.name,
+                role: found26.categoryLabel,
+                color: found26.color,
+                shape: found26.shape,
+                expression: found26.expression,
+              };
+            }
+            const foundDef = DEFAULT_AGENTS.find((a) => a.id === id);
+            return foundDef || { id, name: id, role: 'Especialista', color: '#38bdf8' };
+          });
+          if (mapped.length > 0) setDockAgents(mapped);
+        }
+      } catch {}
+    };
+
+    window.addEventListener('jarvis:dock-updated', handleSync);
+    return () => window.removeEventListener('jarvis:dock-updated', handleSync);
+  }, []);
 
   return (
     <aside
@@ -52,7 +109,7 @@ export const AgentDock: React.FC<AgentDockProps> = ({
         backdropFilter: 'blur(16px)',
       }}
     >
-      {DEFAULT_AGENTS.map((agent) => {
+      {dockAgents.map((agent) => {
         const isActive = activeAgentId === agent.id;
         const isHovered = hoveredAgentId === agent.id;
 
