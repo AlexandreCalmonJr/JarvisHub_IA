@@ -1,6 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AuthGate } from './components/AuthGate';
-import { Sidebar } from './components/Sidebar';
 import { PrimaryRail } from './components/navigation/PrimaryRail';
 import { AgentDock } from './components/navigation/AgentDock';
 import { DynamicIsland } from './components/navigation/DynamicIsland';
@@ -136,7 +135,6 @@ const DashboardApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>(() =>
     tabFromLocation(window.location.pathname, window.location.search)
   );
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -307,40 +305,18 @@ const DashboardApp: React.FC = () => {
       />
 
       {/* Trilho Lateral Esquerdo 64px Fixo (OpenBot Style) */}
-      <PrimaryRail
-        activeTab={activeTab}
-        onNavigate={navigate}
-        pendingApprovalsCount={pendingApprovalsCount}
-        onOpenSettings={() => navigate('security')}
-        onOpenHelp={() => setGuidedTourOpen(true)}
-        onOpenProfile={() => setShowProfileModal(true)}
-      />
+      {!isSidebarCollapsed && (
+        <PrimaryRail
+          activeTab={activeTab}
+          onNavigate={navigate}
+          pendingApprovalsCount={pendingApprovalsCount}
+          onOpenSettings={() => navigate('security')}
+          onOpenHelp={() => setGuidedTourOpen(true)}
+          onOpenProfile={() => setShowProfileModal(true)}
+        />
+      )}
 
-      <Sidebar
-        permissions={authPermissions}
-        role={authRole || undefined}
-        principalKind={authKind || undefined}
-        permissionsLoaded={authLoaded}
-        activeTab={activeTab}
-        setActiveTab={navigate}
-        pendingApprovalsCount={pendingApprovalsCount}
-        mobileOpen={mobileOpen}
-        setMobileOpen={setMobileOpen}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={handleToggleSidebar}
-        onOpenCommandPalette={() => setShowCommandPalette(true)}
-        onOpenProfile={() => setShowProfileModal(true)}
-        onSelectSession={(sid) => {
-          setTargetChatSessionId(sid);
-          navigate('chat');
-        }}
-        onNewChat={() => {
-          setTargetChatSessionId('new_' + Date.now());
-          navigate('chat');
-        }}
-      />
-
-      {/* Área Central / Conteúdo Principal */}
+      {/* Área Central / Conteúdo Principal (Spacious & Clean OpenBot Style) */}
       <div
         style={{
           flex: 1,
@@ -375,11 +351,6 @@ const DashboardApp: React.FC = () => {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (window.matchMedia('(max-width: 900px)').matches) {
-                    setMobileOpen((prev) => !prev);
-                    setDesktopMenuOpen(false);
-                    return;
-                  }
                   setDesktopMenuOpen((prev) => !prev);
                 }}
                 className="btn btn-ghost"
