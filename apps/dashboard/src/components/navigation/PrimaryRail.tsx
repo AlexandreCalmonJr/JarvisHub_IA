@@ -15,6 +15,9 @@ import {
   Sparkles,
   Check,
   Server,
+  Smartphone,
+  Users,
+  LogOut,
 } from 'lucide-react';
 
 export interface NavRailItem {
@@ -407,6 +410,44 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
               </div>
               <div
                 onClick={() => {
+                  window.dispatchEvent(new CustomEvent('jarvis:open-android-pairing'));
+                  setServerMenuOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  color: '#d4d4d8',
+                  cursor: 'pointer',
+                }}
+              >
+                <Smartphone size={15} color="#38bdf8" />
+                <span>Conectar app Android</span>
+              </div>
+              <div
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('jarvis:open-access-management'));
+                  setServerMenuOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  color: '#d4d4d8',
+                  cursor: 'pointer',
+                }}
+              >
+                <Users size={15} color="#c084fc" />
+                <span>Gerir acessos da equipe</span>
+              </div>
+              <div
+                onClick={() => {
                   if (onOpenProfile) onOpenProfile();
                   setServerMenuOpen(false);
                 }}
@@ -422,7 +463,28 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
                 }}
               >
                 <Server size={15} color="#a1a1aa" />
-                <span>Configurações do servidor</span>
+                <span>Perfil e configurações</span>
+              </div>
+              <div
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('jarvis:logout'));
+                  setServerMenuOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  color: '#f87171',
+                  cursor: 'pointer',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  marginTop: '4px',
+                }}
+              >
+                <LogOut size={15} color="#f87171" />
+                <span>Sair da conta</span>
               </div>
             </div>
           )}

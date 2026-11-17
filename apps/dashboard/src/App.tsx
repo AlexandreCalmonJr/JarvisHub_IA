@@ -328,9 +328,10 @@ const DashboardApp: React.FC = () => {
           backgroundColor: 'var(--bg-primary)',
         }}
       >
-        {/* Top Navbar Global Desktop (Claude Topbar Style) */}
-        <header
-          style={{
+        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora do Chat) */}
+        {activeTab !== 'chat' && (
+          <header
+            style={{
             height: '46px',
             padding: '0 16px',
             borderBottom: '1px solid var(--border-color)',
@@ -629,6 +630,7 @@ const DashboardApp: React.FC = () => {
             </div>
           </div>
         </header>
+      )}
 
         {/* Viewport Principal das Telas */}
         <main

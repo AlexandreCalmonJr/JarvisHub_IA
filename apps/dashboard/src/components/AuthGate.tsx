@@ -60,6 +60,28 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 
   useEffect(() => { void verifySession(); }, []);
 
+  useEffect(() => {
+    const handleOpenAndroid = () => {
+      setDeviceOpen(true);
+      setDeviceToken('');
+      setDeviceError('');
+    };
+    const handleOpenAccess = () => {
+      setAccessOpen(true);
+    };
+    const handleLogout = () => {
+      void logout();
+    };
+    window.addEventListener('jarvis:open-android-pairing', handleOpenAndroid);
+    window.addEventListener('jarvis:open-access-management', handleOpenAccess);
+    window.addEventListener('jarvis:logout', handleLogout);
+    return () => {
+      window.removeEventListener('jarvis:open-android-pairing', handleOpenAndroid);
+      window.removeEventListener('jarvis:open-access-management', handleOpenAccess);
+      window.removeEventListener('jarvis:logout', handleLogout);
+    };
+  }, []);
+
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true);
@@ -250,17 +272,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   return (
     <>
       {children}
-      <div style={styles.sessionPill}>
-        <span style={styles.sessionDot} />
-        <span>{session?.user_id || session?.subject_id || 'Sessão ativa'} · {getUserRoleLabel(session?.role)}</span>
-        {(session?.role === 'admin' || session?.role === 'developer') && (
-          <button type="button" onClick={() => { setDeviceOpen(true); setDeviceToken(''); setDeviceError(''); }} style={styles.pillButton}>
-            Conectar Android
-          </button>
-        )}
-        {session?.role === 'admin' && <button type="button" onClick={() => setAccessOpen(true)} style={styles.pillButton}>Gerir acessos</button>}
-        <button type="button" onClick={logout} style={styles.logout}>Sair</button>
-      </div>
       {deviceOpen && (session?.role === 'admin' || session?.role === 'developer') && (
         <div style={styles.overlay} role="presentation" onClick={closeDevicePairing}>
           <section style={styles.accessPanel} role="dialog" aria-modal="true" aria-labelledby="device-title" onClick={(e) => e.stopPropagation()}>

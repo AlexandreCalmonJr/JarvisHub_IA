@@ -76,7 +76,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onOpenSetupWizard,
   onProfileUpdated,
 }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'instructions' | 'keys' | 'engine' | 'data'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'instructions' | 'keys' | 'engine' | 'data' | 'devices'>('profile');
   const [profile, setProfile] = useState<UserProfileData>(getUserProfile);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -291,6 +291,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           style={{ fontSize: '0.80rem', padding: '6px 12px' }}
         >
           <span>Backup & Dados</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('devices')}
+          className={`btn ${activeTab === 'devices' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ fontSize: '0.80rem', padding: '6px 12px' }}
+        >
+          <span>Dispositivos Móveis</span>
         </button>
       </div>
 
@@ -703,6 +712,86 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             >
               <Trash2 size={14} />
               <span>Limpar Dados</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Aba de Dispositivos Móveis & Conexão Android */}
+      {activeTab === 'devices' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div>
+            <h4 style={{ fontSize: '1rem', fontWeight: 600, color: '#f5f5f5', margin: '0 0 4px 0' }}>
+              Conexão com App Mobile / Android
+            </h4>
+            <p style={{ fontSize: '0.82rem', color: '#888888', margin: 0 }}>
+              Conecte seu smartphone Android ao JARVIS Hub para enviar comandos de voz e receber notificações sincronizadas.
+            </p>
+          </div>
+
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div>
+              <strong style={{ fontSize: '0.90rem', color: '#ffffff', display: 'block' }}>Emparelhar Celular Android</strong>
+              <span style={{ fontSize: '0.78rem', color: '#888888' }}>
+                Gera um token exclusivo para a sua conta, seguro contra acesso a dados de outros usuários.
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('jarvis:open-android-pairing'));
+                onClose();
+              }}
+              className="btn btn-primary"
+              style={{ fontSize: '0.80rem', padding: '7px 14px', backgroundColor: '#38bdf8', color: '#000000', fontWeight: 600 }}
+            >
+              Conectar Android
+            </button>
+          </div>
+
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div>
+              <strong style={{ fontSize: '0.90rem', color: '#ffffff', display: 'block' }}>Gestão de Acessos & Usuários</strong>
+              <span style={{ fontSize: '0.78rem', color: '#888888' }}>
+                Gerencie contas, tokens de administrador e permissões de acesso ao servidor.
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('jarvis:open-access-management'));
+                onClose();
+              }}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.80rem', padding: '7px 14px' }}
+            >
+              Gerir Acessos
             </button>
           </div>
         </div>

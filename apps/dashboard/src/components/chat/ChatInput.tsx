@@ -90,9 +90,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           });
         }
 
-        // Adiciona modelos locais instalados no Ollama
+        // Adiciona modelos locais instalados no Ollama (filtrando modelos de embedding que não são LLMs de chat)
         if (Array.isArray(data.models)) {
           for (const m of data.models) {
+            const nameLower = (m.name || '').toLowerCase();
+            if (nameLower.includes('embed') || nameLower.includes('nomic') || nameLower.includes('bge-') || nameLower.includes('minilm')) {
+              continue;
+            }
             const role = m.role || 'Local';
             const shortRole = role.split(',')[0].trim();
             list.push({
@@ -107,7 +111,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
         setModelOptions(list);
         const savedModelId = localStorage.getItem(getAccountStorageKey('jarvis_selected_model'));
-        const found = list.find((item) => item.id === savedModelId);
+        let found = list.find((item) => item.id === savedModelId);
+        if (found && (found.id.toLowerCase().includes('embed') || found.id.toLowerCase().includes('nomic'))) {
+          found = undefined;
+          localStorage.removeItem(getAccountStorageKey('jarvis_selected_model'));
+        }
+        if (!found && list.length > 0) {
+          found = list.find((item) => item.id.toLowerCase().includes('qwen') || item.id.toLowerCase().includes('llama')) || list[0];
+        }
         setSelectedModel(found || null);
       })
       .catch((err) => {

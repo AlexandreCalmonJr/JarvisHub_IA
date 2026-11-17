@@ -120,7 +120,7 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
         <div style={{ width: '1px', height: '18px', backgroundColor: 'rgba(255, 255, 255, 0.08)', margin: '0 4px' }} />
 
         {/* Abas de Conversas Abertas (Estilo OpenBot Tabs) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', maxWidth: '400px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', maxWidth: 'calc(50vw - 180px)' }}>
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
             return (
@@ -180,7 +180,7 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
       </div>
 
       {/* Lado Direito: Seletor de Modelo, Anexar Projeto e Ações */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, paddingRight: '64px' }}>
         {/* Anexo de Projeto (se houver) */}
         {activeProjectId ? (
           <div
@@ -246,7 +246,7 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
                 borderRadius: '10px',
                 boxShadow: '0 12px 36px rgba(0, 0, 0, 0.7)',
                 padding: '6px',
-                zIndex: 1000,
+                zIndex: 10000,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '2px',
