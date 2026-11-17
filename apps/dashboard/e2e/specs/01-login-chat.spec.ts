@@ -43,7 +43,7 @@ test.describe('Fluxo 1 — autenticação e chat', () => {
     await input.fill('Olá JARVIS, teste E2E.');
     await input.press('Enter');
 
-    await expect(page.getByText('Olá JARVIS, teste E2E.')).toBeVisible();
+    await expect(page.getByText('Olá JARVIS, teste E2E.').first()).toBeVisible();
     await expect(page.getByText('Resposta E2E recebida.').first()).toBeVisible();
     await expect(page.getByText(/provedor offline/i)).toHaveCount(0);
   });
