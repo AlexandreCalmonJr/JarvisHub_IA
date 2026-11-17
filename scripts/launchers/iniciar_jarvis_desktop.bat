@@ -1,5 +1,5 @@
 @echo off
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 chcp 65001 >nul
 title JARVIS AI HUB — Janela Nativa
 color 0B
