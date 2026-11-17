@@ -18,6 +18,14 @@ import {
   Smartphone,
   Users,
   LogOut,
+  Building2,
+  Code2,
+  Bot,
+  Database,
+  ShieldCheck,
+  CheckSquare,
+  Palette,
+  Terminal,
 } from 'lucide-react';
 
 export interface NavRailItem {
@@ -55,9 +63,18 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
     tasks: true,          // Tarefas
     executive_report: true, // Uso / Métricas
     workspace: true,      // Biblioteca / Arquivos
+    office: false,        // Escritório Virtual
+    coding: false,        // Coding Agent
+    agents: false,        // Especialistas
+    approvals: false,     // Central de Aprovações
+    knowledge: false,     // Base de Conhecimento
     models: false,        // Provedores
     skills: false,        // Habilidades
+    security: false,      // Segurança
+    quality: false,       // Qualidade QA
+    design: false,        // Design Studio
     advisor: false,       // Hardware
+    server_logs: false,   // Logs do Servidor
   });
 
   const togglePin = (id: string, e: React.MouseEvent) => {
@@ -74,9 +91,18 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
   ];
 
   const overflowItems = [
-    { id: 'models', label: 'Provedores', icon: Cpu },
+    { id: 'office', label: 'Escritório Virtual', icon: Building2 },
+    { id: 'coding', label: 'Coding Agent', icon: Code2 },
+    { id: 'agents', label: 'Centro de Agentes', icon: Bot },
+    { id: 'approvals', label: 'Central de Aprovações', icon: CheckSquare, badge: pendingApprovalsCount },
+    { id: 'knowledge', label: 'Base de Conhecimento', icon: Database },
+    { id: 'models', label: 'Provedores & Chaves', icon: Cpu },
     { id: 'skills', label: 'Rotinas & Habilidades', icon: Layers },
+    { id: 'security', label: 'Segurança & Auditoria', icon: ShieldCheck },
+    { id: 'quality', label: 'Qualidade & QA', icon: CheckSquare },
+    { id: 'design', label: 'Design Studio', icon: Palette },
     { id: 'advisor', label: 'Hardware Advisor', icon: Sparkles },
+    { id: 'server_logs', label: 'Logs do Servidor', icon: Terminal },
   ];
 
   return (
@@ -209,7 +235,9 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
                 position: 'absolute',
                 left: '56px',
                 top: '0',
-                width: '210px',
+                width: '220px',
+                maxHeight: '440px',
+                overflowY: 'auto',
                 backgroundColor: '#18181b',
                 borderRadius: '16px',
                 border: '1px solid rgba(255, 255, 255, 0.1)',

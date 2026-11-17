@@ -306,6 +306,32 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         onClose();
       },
     },
+    {
+      id: 'nav-learning',
+      category: 'Navegação',
+      title: 'Novidades & Ajuda',
+      subtitle: 'Changelog da v3.0.1, guias dos 26 especialistas, FAQs e tutoriais',
+      icon: Sparkles,
+      iconColor: '#f97316',
+      badge: 'Ajuda',
+      action: () => {
+        onNavigate('learning');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-settings',
+      category: 'Navegação',
+      title: 'Configurações do Sistema',
+      subtitle: 'Aparência, servidor FastAPI, SQLite WAL, atalhos e pareamento mobile',
+      icon: Settings,
+      iconColor: '#9ca3af',
+      badge: 'Ajustes',
+      action: () => {
+        onNavigate('settings');
+        onClose();
+      },
+    },
 
     // 2. Ações Rápidas
     {
@@ -386,7 +412,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     'nav-models': 'models:read', 'nav-coding': 'coding:read', 'nav-agents': 'agents:read',
     'nav-vault': 'knowledge:read', 'nav-tasks': 'tasks:read', 'nav-backend-studio': 'studios:read',
     'nav-quality': 'studios:read', 'nav-skills': 'skills:read', 'nav-security': 'security:read',
-    'nav-executive': 'studios:read', 'act-explorer': 'workspace:write', 'act-debate': 'chat:use',
+    'nav-executive': 'studios:read', 'nav-learning': 'profile:read', 'nav-settings': 'profile:read',
+    'act-explorer': 'workspace:write', 'act-debate': 'chat:use',
     'act-settings': 'profile:read',
   };
   const adminOnlyCommands = new Set(['nav-advisor', 'nav-logs', 'pt-senior', 'pt-ultra', 'pt-off']);
