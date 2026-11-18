@@ -51,8 +51,9 @@ class SqliteAuthRateLimitRepository:
     def allow_attempt(self, *, key: str, limit: int, window_seconds: int) -> bool:
         now = time.time()
         cutoff = now - window_seconds
-        conn = self._connect()
+        conn = None
         try:
+            conn = self._connect()
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "DELETE FROM auth_attempts WHERE attempted_at < ?",
@@ -75,8 +76,10 @@ class SqliteAuthRateLimitRepository:
             conn.commit()
             return True
         except sqlite3.Error:
-            conn.rollback()
+            if conn is not None:
+                conn.rollback()
             logger.exception("Rate limiter persistente indisponível; tentativa bloqueada.")
             return False
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
