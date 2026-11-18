@@ -27,7 +27,7 @@ class Project(Base):
 class ProjectMemory(Base):
     __tablename__ = "project_memory"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
     project_id: Mapped[str] = mapped_column(
         Text, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
