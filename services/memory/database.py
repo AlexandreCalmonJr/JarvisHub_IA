@@ -878,12 +878,9 @@ class DatabaseManager:
     ) -> list[dict[str, Any]]:
         query = (
             "SELECT id, project_id, category, key, content, sources_json, updated_at "
-            "FROM project_memory WHERE project_id = ?"
+            "FROM project_memory WHERE project_id = ? AND owner_user_id IS ?"
         )
-        params: list[Any] = [project_id]
-        if owner_user_id is not None:
-            query += " AND owner_user_id = ?"
-            params.append(owner_user_id)
+        params: list[Any] = [project_id, owner_user_id]
         query += " ORDER BY updated_at DESC"
         with self._get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
