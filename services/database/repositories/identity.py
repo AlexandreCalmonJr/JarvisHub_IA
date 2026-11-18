@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from services.database.models.identity import HumanUser
