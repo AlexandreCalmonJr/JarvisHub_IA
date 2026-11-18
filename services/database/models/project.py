@@ -29,14 +29,14 @@ class ProjectMemory(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(
-        String(255), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+        Text, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     category: Mapped[str] = mapped_column(Text, nullable=False)
-    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    key: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     sources_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    owner_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_user_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("project_id", "category", "key", name="uq_project_memory_project_category_key"),
