@@ -237,3 +237,18 @@ A branch já contém uma primeira implementação da arquitetura, sem ativar Pos
 - Testes de contrato iniciais com isolamento de proprietário e compatibilidade da configuração global legada.
 
 Ainda não há engine PostgreSQL, repositórios PostgreSQL, Alembic nem corte de runtime. A próxima fatia deve validar a suíte de contratos e extrair os demais módulos antes de ampliar o modelo relacional.
+
+
+## 12. Segunda fatia implementada
+
+Foram adicionados os contratos e adapters SQLite de identidade, rate limit e telemetria:
+
+- `IdentityRepository` / `SqliteIdentityRepository`; `UserCredentialStore` conserva a API de autenticação e a política PBKDF2.
+- `AuthRateLimitRepository` / `SqliteAuthRateLimitRepository`; `AuthService.check_rate_limit` conserva assinatura e fail-closed.
+- `TelemetryRepository` / `SqliteTelemetryRepository`; o import histórico `SqliteTelemetryStore` continua disponível como alias.
+- Modelos SQLAlchemy para identidade, tentativas de autenticação e telemetria.
+- Testes de contrato de identidade e rate limit, além dos testes de telemetria existentes.
+
+### Limites da fatia
+
+O backend ativo continua SQLite. Ainda não foi criado o adapter PostgreSQL para estes contratos, não há conversão de esquema/dados, e os modelos SQLAlchemy ainda não são aplicados por Alembic. A compatibilidade será confirmada pela execução dos gates Python completos, incluindo os testes de autenticação e telemetria.
