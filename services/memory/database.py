@@ -1152,6 +1152,40 @@ class DatabaseManager:
         owner_hash = hashlib.sha256(owner_user_id.encode("utf-8")).hexdigest()[:20]
         return f"account:{owner_hash}:{key}"
 
+    def get_setting(self, key: str, owner_user_id: str | None = None) -> Any | None:
+        """Read a JSON setting through the public persistence API."""
+        setting_key = self._account_setting_key(key, owner_user_id)
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT value_json FROM user_settings WHERE key = ?", (setting_key,)
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row["value_json"])
+        except (TypeError, ValueError):
+            logger.warning("Configuração '%s' contém JSON inválido.", key)
+            return None
+
+    def set_setting(
+        self, key: str, value: Any, owner_user_id: str | None = None
+    ) -> None:
+        """Persist a JSON setting through the public persistence API."""
+        setting_key = self._account_setting_key(key, owner_user_id)
+        now = datetime.now(UTC).isoformat()
+        value_json = json.dumps(value)
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_settings (key, value_json, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    updated_at = excluded.updated_at
+                """,
+                (setting_key, value_json, now),
+            )
+
     def get_user_profile(self, owner_user_id: str | None = None) -> dict[str, Any]:
         """Recupera perfil privado da conta, sem recorrer a valores globais legados."""
         setting_key = self._account_setting_key("developer_profile", owner_user_id)
