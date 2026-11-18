@@ -16,7 +16,7 @@ from services.memory.database import DatabaseManager
 
 
 @pytest.fixture
- def sqlite_database_factory(tmp_path) -> Callable[[], DatabaseManager]:
+def sqlite_database_factory(tmp_path) -> Callable[[], DatabaseManager]:
     def factory() -> DatabaseManager:
         return DatabaseManager(db_path=str(tmp_path / "contract.db"))
 
