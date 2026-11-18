@@ -1277,6 +1277,21 @@ class DatabaseManager:
 
         return str(backup_file.resolve())
 
+    @staticmethod
+    def restore_database_backup(
+        snapshot_file: Path | str, target_db_path: Path | str
+    ) -> "DatabaseManager":
+        """Restaura um snapshot SQLite usando a API nativa, dentro da camada de persistência."""
+        snapshot_path = Path(snapshot_file)
+        target_path = Path(target_db_path)
+        if not snapshot_path.exists():
+            raise FileNotFoundError(f"Arquivo de snapshot '{snapshot_path}' não encontrado.")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(snapshot_path)) as src_conn:
+            with sqlite3.connect(str(target_path)) as dest_conn:
+                src_conn.backup(dest_conn)
+        return DatabaseManager(db_path=str(target_path))
+
     # --- Métodos de Configuração do Modo Ponytail ---
 
     def get_ponytail_level(self) -> str:
