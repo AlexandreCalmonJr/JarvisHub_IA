@@ -1,4 +1,3 @@
-import sqlite3
 from pathlib import Path
 
 from .database import DatabaseManager
@@ -22,17 +21,4 @@ class DatabaseBackupManager:
 
     @staticmethod
     def restore_database(snapshot_file: Path, target_db_path: Path) -> DatabaseManager:
-        if not snapshot_file.exists():
-            raise FileNotFoundError(f"Arquivo de snapshot '{snapshot_file}' não encontrado.")
-
-        target_db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        src_conn = sqlite3.connect(str(snapshot_file))
-        dest_conn = sqlite3.connect(str(target_db_path))
-        try:
-            src_conn.backup(dest_conn)
-        finally:
-            dest_conn.close()
-            src_conn.close()
-
-        return DatabaseManager(db_path=str(target_db_path))
+        return DatabaseManager.restore_database_backup(snapshot_file, target_db_path)
