@@ -174,7 +174,7 @@ Regras:
 
 Sequência segura:
 1. Criar contratos de teste sobre o comportamento atual de `DatabaseManager`.
-2. Extrair primeiro os acessos SQL diretos de `project_memory.py` e `webhook_service.py` para métodos/ports, mantendo SQLite.
+2. [Em andamento] Extrair os acessos SQL diretos de `project_memory.py`, `webhook_service.py` e `backup_restore.py` para repositórios/métodos públicos, mantendo SQLite. A primeira extração de memória, settings e backup já foi registrada; resta ampliar o padrão para os demais domínios.
 3. Extrair telemetria, credenciais e rate limiter para interfaces próprias; manter os stores SQLite como implementação inicial.
 4. Introduzir modelos SQLAlchemy e Alembic sem ativar PostgreSQL no runtime.
 5. Implementar repositórios PostgreSQL por domínio.
@@ -224,3 +224,16 @@ Adicionar as dependências em commit separado, com lock/ambiente de teste e veri
 ## 10. O que ainda não foi feito
 
 Nenhum modelo SQLAlchemy foi criado, nenhuma dependência foi adicionada, nenhuma migração Alembic foi gerada e o runtime continua usando SQLite. Este documento fixa a direção proposta, sujeita à revisão dos contratos e ao fechamento do mapa de chamadas.
+
+
+## 11. Primeira fatia implementada
+
+A branch já contém uma primeira implementação da arquitetura, sem ativar PostgreSQL:
+- Contratos `ProjectMemoryRepository` e `SettingsRepository`.
+- Adapters SQLite que usam somente a API pública do `DatabaseManager`.
+- Modelos SQLAlchemy iniciais para `Project`, `ProjectMemory` e `UserSetting`.
+- `LayeredMemoryManager` e `WebhookNotificationService` migrados para os contratos de repositório.
+- Backup SQLite delegado ao método público do `DatabaseManager`.
+- Testes de contrato iniciais com isolamento de proprietário e compatibilidade da configuração global legada.
+
+Ainda não há engine PostgreSQL, repositórios PostgreSQL, Alembic nem corte de runtime. A próxima fatia deve validar a suíte de contratos e extrair os demais módulos antes de ampliar o modelo relacional.
