@@ -71,12 +71,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [modelOptions, setModelOptions] = useState<RealChatModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<RealChatModel | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Fecha menus ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (plusMenuRef.current && !plusMenuRef.current.contains(target)) {
+        setShowPlusMenu(false);
+      }
+      if (modelMenuRef.current && !modelMenuRef.current.contains(target)) {
+        setShowModelMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (availableModels && availableModels.length > 0) {
