@@ -49,3 +49,24 @@ def test_identity_repository_allows_disabling_admin_when_another_is_active(ident
     assert identity_store.set_active("root", False) is True
     assert identity_store.get_user("root")["is_active"] == 0
     assert identity_store.get_user("backup")["is_active"] == 1
+
+
+def test_sqlalchemy_identity_adapter_contract(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from services.database.models.base import Base
+    from services.database.models.identity import HumanUser
+    from services.database.repositories.identity import SqlAlchemyIdentityRepository
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'identity-sqlalchemy.db'}")
+    Base.metadata.create_all(engine, tables=[HumanUser.__table__])
+    session_factory = sessionmaker(engine, expire_on_commit=False)
+    repository = SqlAlchemyIdentityRepository(session_factory)
+    store = UserCredentialStore(tmp_path / "unused.sqlite3", repository=repository)
+
+    store.create_user("SqlAdmin", "SQL Admin", "secure-password-123", "admin")
+    assert store.authenticate("sqladmin", "secure-password-123")["role"] == "admin"
+    with pytest.raises(ValueError, match="último administrador"):
+        store.set_active("SQLADMIN", False)
+    engine.dispose()
