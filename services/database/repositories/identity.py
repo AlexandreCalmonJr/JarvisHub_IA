@@ -7,13 +7,20 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, Any
 
 
 class IdentityRepository(Protocol):
-    def create_user(self, *, username: str, display_name: str, password_hash: str, role: str, created_at: str) -> None: ...
+    def create_user(
+        self,
+        *,
+        username: str,
+        display_name: str,
+        password_hash: str,
+        role: str,
+        created_at: str,
+    ) -> None: ...
     def get_auth_record(self, username: str) -> dict[str, Any] | None: ...
     def get_user(self, username: str) -> dict[str, Any] | None: ...
     def list_users(self) -> list[dict[str, Any]]: ...
@@ -92,7 +99,15 @@ class SqliteIdentityRepository:
                     conn.rollback()
                     raise
 
-    def create_user(self, *, username: str, display_name: str, password_hash: str, role: str, created_at: str) -> None:
+    def create_user(
+        self,
+        *,
+        username: str,
+        display_name: str,
+        password_hash: str,
+        role: str,
+        created_at: str,
+    ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
