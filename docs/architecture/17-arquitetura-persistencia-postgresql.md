@@ -252,3 +252,16 @@ Foram adicionados os contratos e adapters SQLite de identidade, rate limit e tel
 ### Limites da fatia
 
 O backend ativo continua SQLite. Ainda não foi criado o adapter PostgreSQL para estes contratos, não há conversão de esquema/dados, e os modelos SQLAlchemy ainda não são aplicados por Alembic. A compatibilidade será confirmada pela execução dos gates Python completos, incluindo os testes de autenticação e telemetria.
+
+
+## 13. Primeiro adapter SQLAlchemy
+
+Foi acrescentado `SqlAlchemyIdentityRepository`, que implementa o contrato de identidade usando uma `session_factory` injetada. A implementação:
+
+- normaliza o identificador de utilizador em `username_normalized` para preservar unicidade sem distinção de maiúsculas/minúsculas;
+- preserva os hashes PBKDF2 existentes, pois o hashing continua na fachada `UserCredentialStore`;
+- traduz colisões de username para o erro de domínio já utilizado pela API;
+- bloqueia as linhas dos administradores ativos durante a verificação do último administrador, protegendo contra desativações concorrentes;
+- foi coberta por teste de contrato usando SQLAlchemy sobre SQLite, sem ligar o runtime ao novo adapter.
+
+Este adapter ainda não foi validado contra uma instância PostgreSQL real e não é selecionado pelo arranque. A próxima etapa é aplicar o mesmo padrão ao rate limit e telemetria, depois criar testes de integração com PostgreSQL e Alembic antes de qualquer troca de backend.
