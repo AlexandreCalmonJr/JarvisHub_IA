@@ -125,14 +125,14 @@ class SqliteIdentityRepository:
             )
 
     def get_auth_record(self, username: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM human_users WHERE username = ? COLLATE NOCASE", (username,)
             ).fetchone()
         return dict(row) if row else None
 
     def get_user(self, username: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 """
                 SELECT username, display_name, role, is_active, created_at, updated_at
@@ -143,7 +143,7 @@ class SqliteIdentityRepository:
         return dict(row) if row else None
 
     def list_users(self) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT username, display_name, role, is_active, created_at, updated_at
@@ -153,7 +153,7 @@ class SqliteIdentityRepository:
         return [dict(row) for row in rows]
 
     def set_password(self, username: str, password_hash: str, updated_at: str) -> bool:
-        with self._connect() as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 """
                 UPDATE human_users SET password_hash = ?, updated_at = ?
