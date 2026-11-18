@@ -6,8 +6,8 @@ module owns only account-row persistence and its transactional invariants.
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, Any
 
@@ -114,7 +114,7 @@ class SqliteIdentityRepository:
         role: str,
         created_at: str,
     ) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO human_users
