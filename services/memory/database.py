@@ -1287,9 +1287,13 @@ class DatabaseManager:
         if not snapshot_path.exists():
             raise FileNotFoundError(f"Arquivo de snapshot '{snapshot_path}' não encontrado.")
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(str(snapshot_path)) as src_conn:
-            with sqlite3.connect(str(target_path)) as dest_conn:
-                src_conn.backup(dest_conn)
+        src_conn = sqlite3.connect(str(snapshot_path))
+        dest_conn = sqlite3.connect(str(target_path))
+        try:
+            src_conn.backup(dest_conn)
+        finally:
+            dest_conn.close()
+            src_conn.close()
         return DatabaseManager(db_path=str(target_path))
 
     # --- Métodos de Configuração do Modo Ponytail ---
