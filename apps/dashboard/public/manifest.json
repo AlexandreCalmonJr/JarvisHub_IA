@@ -1,0 +1,26 @@
+{
+  "name": "JARVIS AI HUB 3.0.1",
+  "short_name": "JARVIS",
+  "description": "Plataforma local-first de agentes, engenharia de código e governança.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#181716",
+  "theme_color": "#1f1e1d",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
