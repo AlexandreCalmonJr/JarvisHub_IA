@@ -39,6 +39,8 @@ class ProjectMemory(Base):
     owner_user_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("project_id", "category", "key", name="uq_project_memory_project_category_key"),
+        UniqueConstraint(
+            "project_id", "category", "key", name="uq_project_memory_project_category_key"
+        ),
         Index("ix_project_memory_owner_project", "owner_user_id", "project_id"),
     )
