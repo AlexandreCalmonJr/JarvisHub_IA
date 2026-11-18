@@ -1260,12 +1260,17 @@ class DatabaseManager:
                 (prompt_hash, f"[redacted:{prompt_hash[:16]}]", model_name, response, now),
             )
 
-    def create_database_backup(self, backup_dir: Path | str = "backups") -> str:
+    def create_database_backup(
+        self,
+        backup_dir: Path | str = "backups",
+        filename_prefix: str = "jarvis_backup",
+        extension: str = ".db",
+    ) -> str:
         """Cria uma cópia física segura de backup do banco de dados SQLite."""
         b_dir = Path(backup_dir)
         b_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = b_dir / f"jarvis_backup_{timestamp}.db"
+        backup_file = b_dir / f"{filename_prefix}_{timestamp}{extension}"
 
         with self._get_connection() as src_conn, sqlite3.connect(str(backup_file)) as dst_conn:
             src_conn.backup(dst_conn)
