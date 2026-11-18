@@ -1,11 +1,20 @@
-"""Persistence abstraction package for gradual database migration."""
+"""Persistence contracts and adapters for gradual backend migration."""
 
-from .repositories.project_memory import ProjectMemoryRepository, SqliteProjectMemoryRepository
-from .repositories.settings import SettingsRepository, SqliteSettingsRepository
+from .auth_rate_limit import AuthRateLimitRepository, SqliteAuthRateLimitRepository
+from .identity import IdentityRepository, SqliteIdentityRepository
+from .project_memory import ProjectMemoryRepository, SqliteProjectMemoryRepository
+from .settings import SettingsRepository, SqliteSettingsRepository
+from .telemetry import SqliteTelemetryRepository, TelemetryRepository
 
 __all__ = [
+    "AuthRateLimitRepository",
+    "IdentityRepository",
     "ProjectMemoryRepository",
     "SettingsRepository",
+    "SqliteAuthRateLimitRepository",
+    "SqliteIdentityRepository",
     "SqliteProjectMemoryRepository",
     "SqliteSettingsRepository",
+    "SqliteTelemetryRepository",
+    "TelemetryRepository",
 ]
