@@ -37,7 +37,7 @@ Em `apps/api/auth.py`:
 - O rate limiter abre `auth/rate_limits.sqlite3` diretamente com `sqlite3.connect`.
 - O rate limiter executa `BEGIN IMMEDIATE`, limpeza por janela temporal, contagem e inserção de tentativas. A operação é deliberadamente fail-closed: erro no armazenamento bloqueia novas tentativas.
 
-Em `services/security_core/auth_store.py`, `UserCredentialStore` executa SQL SQLite diretamente e contém migração de esquema de `human_users`. A migração de credenciais merece plano próprio, testes de hash/verificação de senha, integridade de unicidade e recuperação.
+Em `services/security_core/auth_store.py`, `UserCredentialStore` executa SQL SQLite diretamente e contém migração de esquema de `human_users`. O esquema usa `username TEXT PRIMARY KEY COLLATE NOCASE`, papéis limitados a `admin/developer/auditor`, e hashes PBKDF2-HMAC-SHA256 (310.000 iterações no código atual). A migração de credenciais merece plano próprio, testes de hash/verificação de senha, normalização/unicidade sem distinção de maiúsculas, integridade dos papéis e recuperação. Não armazenar nem exportar senhas em texto claro.
 
 ## 3. Inventário de tabelas do banco principal
 
