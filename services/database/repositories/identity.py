@@ -6,6 +6,7 @@ module owns only account-row persistence and its transactional invariants.
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol, Any
