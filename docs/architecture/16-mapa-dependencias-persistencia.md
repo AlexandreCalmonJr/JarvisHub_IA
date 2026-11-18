@@ -20,9 +20,9 @@ Knowledge/Hardware/Workspace ──┘           │
                                            ├── project_memory.py (SQL direto)
                                            └── webhook_service.py (SQL direto)
 
-ModelManager ──> SqliteTelemetryStore ──> sqlite3 ──> data/telemetry.db
-AuthService ──> UserCredentialStore ────> sqlite3 ──> auth/users.sqlite3
-AuthService ──> rate limiter SQL direto ─> sqlite3 ──> auth/rate_limits.sqlite3
+ModelManager ──> TelemetryRepository ──> SqliteTelemetryRepository ──> data/telemetry.db
+AuthService ──> IdentityRepository ────> SqliteIdentityRepository ─────> auth/users.sqlite3
+AuthService ──> AuthRateLimitRepository ─> SqliteAuthRateLimitRepository -> auth/rate_limits.sqlite3
 ```
 
 ## 2. Matriz método → consumidores
@@ -176,3 +176,16 @@ Na sequência do mapa, a primeira extração foi aplicada sem trocar o backend S
 - Criada a suíte inicial de contratos em `tests/contract/test_persistence_contract.py`, preparada para receber futuramente o adapter PostgreSQL.
 
 O adapter PostgreSQL ainda não existe e os testes ainda precisam ser executados em CI/local. O runtime continua em SQLite. O restore de snapshots continua explicitamente SQLite neste estágio.
+
+
+## 9. Segunda fatia de implementação
+
+A segunda fatia extraiu mais três domínios mantendo as APIs públicas atuais:
+
+- **Identidade:** `UserCredentialStore` permanece como fachada e mantém PBKDF2-HMAC-SHA256 (310.000 iterações), enquanto `IdentityRepository` / `SqliteIdentityRepository` assumem o SQL. A desativação do último administrador ativo é protegida por transação `BEGIN IMMEDIATE`.
+- **Rate limit de autenticação:** `AuthService.check_rate_limit()` permanece com a mesma assinatura e delega a `AuthRateLimitRepository`. O adapter mantém a operação atómica e falha fechada quando o armazenamento não pode ser consultado.
+- **Telemetria:** a implementação SQLite foi movida para `services/database/repositories/telemetry.py`; `services/observability/telemetry_store.py` é agora uma fachada de importação que preserva o nome `SqliteTelemetryStore`.
+- **Modelos SQLAlchemy:** adicionados `HumanUser`, `AuthAttempt`, `InferenceTelemetry`, `ModelSelectionDecision` e `InferenceQualityFeedback`, além dos modelos de projeto/memória/configurações da primeira fatia.
+- **Testes:** contratos para identidade e rate limit; os testes de telemetria existentes continuam a validar isolamento, agregações, feedback e migração de esquema SQLite legado.
+
+Nenhum adapter PostgreSQL foi ligado à aplicação nesta fatia. Os contratos e modelos são a base para o adapter futuro; a conversão de timestamps, normalização de username e criação de migrações Alembic ainda precisam de implementação e testes próprios.
