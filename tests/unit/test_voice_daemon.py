@@ -253,4 +253,3 @@ def test_voice_daemon_handles_kill_switch(monkeypatch):
     daemon._dispatch_command("que horas são", None)
     assert spoken == ["JARVIS está em modo de parada de emergência."]
     assert daemon.tray.last_msg == "JARVIS está em modo de parada de emergência."
-

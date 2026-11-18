@@ -180,10 +180,13 @@ class SelfCorrectionEngine:
         )
 
         if corrections:
+            # Aviso factual: foram aplicadas correções heurísticas de texto,
+            # não uma compilação/validação por um compilador.
             badge = (
-                "\n\n> ⚡ **Self-Correction Ativo**: "
+                "\n\n> ⚡ **Aviso de auto-correção heurística**: "
                 + " • ".join(corrections)
-                + " (compilador interno do JARVIS validou a integridade sintática)."
+                + " — as correções acima foram aplicadas por regras de texto. "
+                "O bloco não foi compilado nem executado; valide-o antes de usar."
             )
             updated_text += badge
 

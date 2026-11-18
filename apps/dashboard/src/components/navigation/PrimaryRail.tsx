@@ -59,10 +59,12 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
   // Itens configuráveis do trilho (com suporte a pin estilo OpenBot)
   const [pinnedItems, setPinnedItems] = useState<Record<string, boolean>>({
     chat: true,
-    backend_studio: true, // Fluxos de trabalho
-    tasks: true,          // Tarefas
-    executive_report: true, // Uso / Métricas
+    workflows: true,      // Fluxos de trabalho (Canvas de Nós)
+    tasks: true,          // Tarefas (Hub de Delegação)
+    usage: true,          // Uso & Custos (OpenBot Telemetria)
     workspace: true,      // Biblioteca / Arquivos
+    backend_studio: false,// Backend Studio & Mocks
+    executive_report: false, // Relatório Executivo ROI
     office: false,        // Escritório Virtual
     coding: false,        // Coding Agent
     agents: false,        // Especialistas
@@ -84,13 +86,15 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
 
   const navItems = [
     { id: 'chat', label: 'Conversas', icon: MessageSquare },
-    { id: 'backend_studio', label: 'Fluxos de trabalho', icon: Workflow },
+    { id: 'workflows', label: 'Fluxos de trabalho', icon: Workflow },
     { id: 'tasks', label: 'Tarefas', icon: ListTodo, badge: pendingApprovalsCount },
-    { id: 'executive_report', label: 'Uso & Custos', icon: TrendingUp },
+    { id: 'usage', label: 'Uso & Custos', icon: TrendingUp },
     { id: 'workspace', label: 'Biblioteca', icon: Library },
   ];
 
   const overflowItems = [
+    { id: 'backend_studio', label: 'Backend Studio & Mocks', icon: Workflow },
+    { id: 'executive_report', label: 'Relatório Executivo ROI', icon: TrendingUp },
     { id: 'office', label: 'Escritório Virtual', icon: Building2 },
     { id: 'coding', label: 'Coding Agent', icon: Code2 },
     { id: 'agents', label: 'Centro de Agentes', icon: Bot },
@@ -309,14 +313,14 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
         {/* Loja / Marketplace */}
         <button
           type="button"
-          onClick={() => onNavigate('skills')}
-          className={`rail-nav-btn ${activeTab === 'skills' ? 'is-active' : ''}`}
+          onClick={() => onNavigate('store')}
+          className={`rail-nav-btn ${activeTab === 'store' ? 'is-active' : ''}`}
           style={{
             width: '42px',
             height: '42px',
             borderRadius: '12px',
-            backgroundColor: activeTab === 'skills' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-            color: activeTab === 'skills' ? '#ffffff' : '#9ca3af',
+            backgroundColor: activeTab === 'store' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            color: activeTab === 'store' ? '#ffffff' : '#9ca3af',
             border: 'none',
             display: 'flex',
             alignItems: 'center',

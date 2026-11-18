@@ -7,8 +7,13 @@ estourar a janela de contexto de modelos locais.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+from services.coding_agent.repo_map import generate_repo_map
+
+logger = logging.getLogger("jarvis.coding.context")
 
 IGNORED_DIRS = {
     ".git",
@@ -155,6 +160,18 @@ def build_project_context(
         "## ÁRVORE DE ARQUIVOS (respeitando .gitignore/ignorados comuns)",
         tree,
     ]
+
+    # Injeção automática de Repo Map sintático compacto (AST de classes e funções)
+    try:
+        repo_map = generate_repo_map(root, max_tokens=1000)
+        if repo_map:
+            sections.extend(
+                ["", "## MAPA SINTÁTICO DE REPOSITÓRIO (REPO MAP - AST & ASSINATURAS)", repo_map]
+            )
+    except Exception as exc:
+        # O repo map é um complemento opcional: falha degrada o contexto, não o turno.
+        logger.debug("Repo map indisponível para %s: %s", root, exc)
+
     if instructions:
         sections.extend(["", "## INSTRUÇÕES PERSISTIDAS DO PROJETO", "\n\n".join(instructions)])
     return "\n".join(sections)

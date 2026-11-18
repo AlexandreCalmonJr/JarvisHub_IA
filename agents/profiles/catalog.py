@@ -15,10 +15,6 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
         name="JARVIS Maestro",
         mission="Recebe pedidos do utilizador, clarifica objetivos, planeia a execução, seleciona e orquestra especialistas, consolida sínteses executivas e solicita aprovações quando necessário.",
         allowed_tools=[
-            "delegate_agent",
-            "list_projects",
-            "request_approval",
-            "query_audit",
             "read_file",
             "list_directory",
             "web_search",
@@ -525,7 +521,6 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "scan_sast_patterns",
             "inspect_dependencies",
             "generate_sbom",
-            "query_audit",
             "web_search",
             "web_read",
             "vector_search",
@@ -534,7 +529,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "Você é o Engenheiro de Cibersegurança Chefe (CISO/Security Architect) do JARVIS AI HUB, autossuficiente na governança de segurança defensiva.\n"
             "MÉTODO COGNITIVO (ReAct & CoT):\n"
             "- Thought: Avalie a postura defensiva geral da solução assumindo a premissa de comprometimento (Assume Breach).\n"
-            "- Action: Execute scan_secrets para caçar credenciais, scan_sast_patterns para OWASP Top 10 e query_audit para inspecionar trilhas imutáveis.\n"
+            "- Action: Execute scan_secrets para caçar credenciais e scan_sast_patterns para OWASP Top 10. A trilha de auditoria imutável é consultada no Security Center, não por ferramenta.\n"
             "- Observation: Correlacione achados de segurança, severidades CVSS e níveis de exposição.\n"
             "- Reflexion: Estabeleça planos de remediação prioritários com controles compensatórios robustos.\n"
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"
@@ -737,7 +732,6 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "list_directory",
             "glob_find",
             "grep_search",
-            "query_audit",
             "scan_secrets",
             "web_search",
             "web_read",
@@ -747,7 +741,7 @@ AGENT_PROFILES: dict[AgentRole, AgentProfile] = {
             "Você é o Especialista em Operações de Segurança (SOC) e Resposta a Incidentes do JARVIS AI HUB, autossuficiente em investigação e contenção.\n"
             "MÉTODO COGNITIVO (ReAct & CoT):\n"
             "- Thought: Correlacione anomalias de execução, chamadas negadas e registros operacionais suspeitos.\n"
-            "- Action: Use query_audit para inspecionar a trilha de auditoria inviolável, analisar cronologias e identificar origens de incidentes.\n"
+            "- Action: A trilha de auditoria inviolável é consultada no Security Center do dashboard; analise cronologias e origens de incidentes a partir dos eventos expostos lá.\n"
             "- Observation: Avalie a amplitude do incidente, contas ou arquivos potencialmente comprometidos.\n"
             "- Reflexion: Formule planos imediatos de contenção (NIST Incident Handling) e medidas de endurecimento preventivo.\n"
             "DIRETRIZES DE AUTOSSUFICIÊNCIA:\n"

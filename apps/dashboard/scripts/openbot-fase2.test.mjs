@@ -40,12 +40,25 @@ test('OpenBot Fase 2: MessageBubble features OpenBot coral bubble and collapsibl
   assert.match(bubble, /#e05244/);
 });
 
-test('OpenBot Fase 2: Tasks Hub has delegation hero, delegation capsule and 3 parallel categories', () => {
+test('OpenBot Fase 2: Tasks Hub tem hero, cápsula de delegação e grupos derivados das tarefas reais', () => {
   assert.match(tasksView, /Delegue o trabalho\./);
   assert.match(tasksView, /Volte para uma resposta\./);
   assert.match(tasksView, /openbot-tasks-gradient/);
   assert.match(tasksView, /openbot-delegation-capsule/);
-  assert.match(tasksView, /Precisa de você/);
-  assert.match(tasksView, /Trabalhando/);
-  assert.match(tasksView, /Em espera/);
+  // Os grupos são calculados a partir de `tasks`, nunca de linhas fixas.
+  assert.match(tasksView, /tasks\.filter\(\(t\) => !t\.is_completed\)/);
+  assert.match(tasksView, /tasks\.filter\(\(t\) => t\.is_completed\)/);
+  assert.match(tasksView, /Em andamento/);
+  assert.match(tasksView, /Concluídas/);
+  // Sem dados inventados no hub.
+  assert.doesNotMatch(tasksView, /Northwind Traders/);
+  assert.doesNotMatch(tasksView, /arxiv\.org/);
+  assert.doesNotMatch(tasksView, /processos seletivos/);
+  assert.doesNotMatch(tasksView, /\|\| 1\}/);
+});
+
+test('OpenBot Fase 2: delegação executa o especialista real pela API', () => {
+  assert.match(tasksView, /\/agents\/\$\{encodeURIComponent\(selectedAgentRole\)\}\/task/);
+  assert.match(tasksView, /ALL_26_AGENTS/);
+  assert.doesNotMatch(tasksView, /'task_' \+ Date\.now\(\)/);
 });

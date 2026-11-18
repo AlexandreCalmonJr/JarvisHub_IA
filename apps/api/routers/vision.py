@@ -55,9 +55,13 @@ async def analyze_vision_frame(
         task_type=payload.task_type,
     )
 
+    # A resposta é sempre 200 (o contrato é o campo `success`), mas a auditoria
+    # não pode registar como concluída uma análise que não foi executada.
+    analysis_ok = bool(result.get("success"))
+
     security_core.audit.record_event(
         operation="VISION_INSPECTION",
-        status="COMPLETED",
+        status="COMPLETED" if analysis_ok else "FAILED",
         user_id=principal.subject_id,
         project_id=None,
         tool_name="vision.analyze",
@@ -67,8 +71,13 @@ async def analyze_vision_frame(
             "task_type": payload.task_type,
             "mime_type": result.get("metadata", {}).get("mime_type"),
             "size_bytes": result.get("metadata", {}).get("size_bytes"),
+            "vision_available": analysis_ok,
         },
-        reason="Análise multimodal de imagem / frame de câmera do OpenBot.",
+        reason=(
+            "Análise multimodal de imagem / frame de câmera do OpenBot."
+            if analysis_ok
+            else f"Visão indisponível: {result.get('reason', 'sem modelo multimodal')}."
+        ),
     )
 
     return result

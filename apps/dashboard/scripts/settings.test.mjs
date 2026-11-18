@@ -78,7 +78,8 @@ test('OpenBot Server Settings tab implements complete host, database, and runtim
   // Database and Storage
   assert.ok(settingsView.includes('data/jarvis.db'), 'SQLite database path must be declared');
   assert.ok(settingsView.includes('WAL Mode Ativo'), 'WAL mode badge must exist');
-  assert.ok(settingsView.includes('Otimizar (VACUUM)'), 'Database vacuum action must exist');
+  // Não existe endpoint de manutenção SQLite: a UI não deve simular um VACUUM.
+  assert.ok(!settingsView.includes('Otimizar (VACUUM)'), 'No simulated database action');
   assert.ok(settingsView.includes('/api/v1/system/backup'), 'Real backup endpoint must be integrated');
 
   // Local AI runtime (Ollama)
@@ -93,6 +94,9 @@ test('OpenBot Server Settings tab implements complete host, database, and runtim
   assert.ok(settingsView.includes('Tema do Sistema'), 'Appearance theme selector must exist');
   assert.ok(settingsView.includes('Conclusão de Tarefas Longas'), 'Task completion notification toggle must exist');
   assert.ok(settingsView.includes('Plano da Instância: Community Edition'), 'Billing community status must exist');
-  assert.ok(settingsView.includes('Restringir Leitura aos Workspaces'), 'Computer workspace restriction toggle must exist');
+  assert.ok(settingsView.includes('Leitura Restrita ao Workspace'), 'Enforced workspace policy must be described');
+  assert.ok(settingsView.includes('Aplicado pelo backend'), 'Security policy must be marked as backend-enforced');
+  assert.ok(!settingsView.includes('Bloquear Arquivos Ocultos Sensíveis'), 'No unenforced hidden-file toggle');
   assert.ok(settingsView.includes('Canal de Atualização'), 'Update channel selector must exist');
+  assert.ok(settingsView.includes('Configuração apenas de leitura'), 'Runtime configuration must be labelled read-only');
 });

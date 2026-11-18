@@ -5,6 +5,7 @@ import { AgentDock } from './components/navigation/AgentDock';
 import { DynamicIsland } from './components/navigation/DynamicIsland';
 import { SystemHealth, ApprovalRequestItem } from './types';
 import { fetchHealth, fetchApprovals } from './api';
+import { fetchResources, SystemResourceUsage } from './services/api/system';
 import {
   Menu,
   ShieldAlert,
@@ -26,6 +27,7 @@ import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
 import { CommandPalette } from './components/common/CommandPalette';
 import { pathForTab, tabFromLocation } from './router';
 import { API_BASE } from './services/api/client';
+import { getAccountStorageKey } from './services/accountScope';
 
 // Code splitting: cada tela é carregada sob demanda
 const Overview = lazy(() =>
@@ -88,6 +90,20 @@ const AgentOfficeView = lazy(() =>
 const SettingsView = lazy(() =>
   import('./components/settings/SettingsView').then((m) => ({ default: m.SettingsView }))
 );
+const WorkflowCanvasView = lazy(() =>
+  import('./components/workflows/WorkflowCanvasView').then((m) => ({ default: m.WorkflowCanvasView }))
+);
+const UsageAnalyticsView = lazy(() =>
+  import('./components/usage/UsageAnalyticsView').then((m) => ({ default: m.UsageAnalyticsView }))
+);
+
+/**
+ * Telas que ocupam toda a área útil: sem cabeçalho secundário, sem padding
+ * externo e com scroll interno próprio. Centralizado para evitar que a lista
+ * (repetida em três expressões) derive entre si.
+ */
+const FULLSCREEN_TABS = new Set(['chat', 'workflows', 'settings', 'learning', 'skills', 'store']);
+const NO_HEADER_TABS = new Set(FULLSCREEN_TABS);
 
 const ViewFallback: React.FC = () => (
   <div
@@ -132,6 +148,7 @@ const DashboardApp: React.FC = () => {
       knowledge: 'knowledge:read', tasks: 'tasks:read', backend_studio: 'studios:read',
       quality: 'studios:read', skills: 'skills:read', security: 'security:read',
       executive_report: 'studios:read', learning: 'profile:read', settings: 'profile:read',
+      workflows: 'studios:read', usage: 'system:read', store: 'skills:read',
     };
     return !required[tab] || hasPermission(required[tab]);
   };
@@ -158,6 +175,41 @@ const DashboardApp: React.FC = () => {
   const [approvalsLoading, setApprovalsLoading] = useState(true);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [approvalsError, setApprovalsError] = useState<string | null>(null);
+  const [systemResources, setSystemResources] = useState<SystemResourceUsage | null>(null);
+  const [showDynamicIsland, setShowDynamicIsland] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(getAccountStorageKey('jarvis_pref_dynamic_island'));
+      return v !== null ? v !== 'false' : true;
+    } catch {
+      return true;
+    }
+  });
+  const [showAgentDock, setShowAgentDock] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(getAccountStorageKey('jarvis_pref_agent_dock'));
+      return v !== null ? v !== 'false' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    const syncPreferences = () => {
+      try {
+        const islandVal = localStorage.getItem(getAccountStorageKey('jarvis_pref_dynamic_island'));
+        setShowDynamicIsland(islandVal !== null ? islandVal !== 'false' : true);
+        const dockVal = localStorage.getItem(getAccountStorageKey('jarvis_pref_agent_dock'));
+        setShowAgentDock(dockVal !== null ? dockVal !== 'false' : true);
+      } catch {}
+    };
+
+    window.addEventListener('jarvis_ui_preferences_changed', syncPreferences);
+    window.addEventListener('storage', syncPreferences);
+    return () => {
+      window.removeEventListener('jarvis_ui_preferences_changed', syncPreferences);
+      window.removeEventListener('storage', syncPreferences);
+    };
+  }, []);
   const [chatLoaded, setChatLoaded] = useState(
     () => tabFromLocation(window.location.pathname, window.location.search) === 'chat'
   );
@@ -256,10 +308,16 @@ const DashboardApp: React.FC = () => {
     };
   }, []);
 
-  const loadData = async () => {
-    setHealthLoading(true);
-    setApprovalsLoading(true);
-    const [healthResult, approvalsResult] = await Promise.allSettled([fetchHealth(), fetchApprovals()]);
+  const loadData = async (opts: { initial?: boolean } = {}) => {
+    if (opts.initial) {
+      setHealthLoading(true);
+      setApprovalsLoading(true);
+    }
+    const [healthResult, approvalsResult, resourcesResult] = await Promise.allSettled([
+      fetchHealth(),
+      fetchApprovals(),
+      fetchResources(),
+    ]);
     if (healthResult.status === 'fulfilled') {
       setHealth(healthResult.value);
       setHealthError(null);
@@ -274,11 +332,17 @@ const DashboardApp: React.FC = () => {
       setApprovalsError(approvalsResult.reason instanceof Error ? approvalsResult.reason.message : 'Falha ao consultar aprovações.');
     }
     setApprovalsLoading(false);
+    if (resourcesResult.status === 'fulfilled') {
+      setSystemResources(resourcesResult.value);
+    }
   };
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 8000);
+    loadData({ initial: true });
+    const interval = setInterval(() => {
+      // Não consulta o backend com a aba em segundo plano.
+      if (document.visibilityState === 'visible') loadData();
+    }, 8000);
     return () => clearInterval(interval);
   }, []);
 
@@ -301,11 +365,16 @@ const DashboardApp: React.FC = () => {
       }}
     >
       {/* Dynamic Island no topo central (OpenBot Style) */}
-      <DynamicIsland
-        activeAgentName="JARVIS AI Hub"
-        systemStatus={{ cpu: 31, memory: 33 }}
-        onOpenVoice={() => navigate('chat')}
-      />
+      {showDynamicIsland && (
+        <DynamicIsland
+          activeAgentName="JARVIS AI Hub"
+          systemStatus={{
+            cpu: systemResources?.cpu_percent ?? null,
+            memory: systemResources?.ram_percent ?? null,
+          }}
+          onOpenVoice={() => navigate('chat')}
+        />
+      )}
 
       {/* Trilho Lateral Esquerdo 64px Fixo (OpenBot Style) */}
       {!isSidebarCollapsed && (
@@ -331,8 +400,8 @@ const DashboardApp: React.FC = () => {
           backgroundColor: 'var(--bg-primary)',
         }}
       >
-        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora do Chat, Configurações, Loja e Novidades & Ajuda) */}
-        {activeTab !== 'chat' && activeTab !== 'settings' && activeTab !== 'skills' && activeTab !== 'learning' && (
+        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora das telas de área útil) */}
+        {!NO_HEADER_TABS.has(activeTab) && (
           <header
             style={{
             height: '46px',
@@ -639,9 +708,9 @@ const DashboardApp: React.FC = () => {
         <main
           style={{
             flex: 1,
-            overflowY: activeTab === 'chat' || activeTab === 'coding' || activeTab === 'settings' || activeTab === 'learning' || activeTab === 'skills' ? 'hidden' : 'auto',
+            overflowY: FULLSCREEN_TABS.has(activeTab) || activeTab === 'coding' ? 'hidden' : 'auto',
             minWidth: 0,
-            padding: activeTab === 'chat' || activeTab === 'settings' || activeTab === 'learning' || activeTab === 'skills' ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
+            padding: FULLSCREEN_TABS.has(activeTab) ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
             backgroundColor: 'var(--bg-primary)',
           }}
         >
@@ -658,6 +727,13 @@ const DashboardApp: React.FC = () => {
           <Suspense fallback={<ViewFallback />}>
             {activeTab === 'overview' && <Overview health={health} approvals={approvals} healthLoading={healthLoading} approvalsLoading={approvalsLoading} healthError={healthError} approvalsError={approvalsError} />}
             {activeTab === 'coding' && <CodingAgentView />}
+            {activeTab === 'workflows' && <WorkflowCanvasView />}
+            {activeTab === 'usage' && <UsageAnalyticsView />}
+            {/* A Loja vive no SkillsManagerView (apps + agentes + habilidades, com
+                persistência por conta). Havia uma segunda implementação em
+                components/store/AppStoreView com dados fixos; foi removida. */}
+            {activeTab === 'store' && <SkillsManagerView />}
+            {activeTab === 'skills' && <SkillsManagerView />}
             {chatLoaded && (
               <div style={{ display: activeTab === 'chat' ? 'block' : 'none', height: '100%' }}>
                 <ChatMaster
@@ -690,7 +766,6 @@ const DashboardApp: React.FC = () => {
             {activeTab === 'design' && <DesignStudioView />}
             {activeTab === 'executive_report' && <ExecutiveReportView />}
             {activeTab === 'models' && <ModelManagerView />}
-            {activeTab === 'skills' && <SkillsManagerView />}
             {activeTab === 'knowledge' && <KnowledgeVaultView />}
             {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
             {activeTab === 'advisor' && <HardwareAdvisorView />}
@@ -754,13 +829,15 @@ const DashboardApp: React.FC = () => {
       <ApprovalPromptHost />
 
       {/* Dock Flutuante de Agentes na Direita (OpenBot Style) */}
-      <AgentDock
-        onSelectAgent={(agentId) => {
-          setTargetChatSessionId('agent_' + agentId);
-          navigate('chat');
-        }}
-        onAddAgent={() => navigate('skills')}
-      />
+      {showAgentDock && (
+        <AgentDock
+          onSelectAgent={(agentId) => {
+            setTargetChatSessionId('agent_' + agentId);
+            navigate('chat');
+          }}
+          onAddAgent={() => navigate('skills')}
+        />
+      )}
 
       {/* Notificações Toast Globais */}
       <ToastContainer />

@@ -7,7 +7,13 @@ from typing import Any
 
 import httpx
 
-from .provider_defaults import default_model_for_provider
+from .context_budget import resolve_num_ctx
+from .provider_catalog import (
+    LOCAL_MODEL_NAMES,
+    resolve_base_url,
+    resolve_model,
+    supports_sampling,
+)
 from .types import InferenceRequest, InferenceResponse, ModelMetadata
 
 logger = logging.getLogger("jarvis.model_runtime.adapter")
@@ -118,15 +124,19 @@ class BaseModelAdapter(ABC):
 class OllamaAdapter(BaseModelAdapter):
     """Adaptador assíncrono para o runtime local Ollama."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:11434"):
+    def __init__(self, base_url: str | None = None):
+        if not base_url:
+            base_url = (
+                os.getenv("JARVIS_OLLAMA_BASE_URL")
+                or os.getenv("OLLAMA_BASE_URL")
+                or "http://127.0.0.1:11434"
+            )
         self.base_url = base_url.rstrip("/")
         self.cpu_threads: int | None = None
         self.keep_alive = os.getenv("JARVIS_OLLAMA_KEEP_ALIVE", "15m").strip() or "15m"
-        try:
-            configured_ctx = int(os.getenv("JARVIS_OLLAMA_NUM_CTX", "0"))
-        except ValueError:
-            configured_ctx = 0
-        self.context_window = configured_ctx if 2048 <= configured_ctx <= 8192 else None
+        # Janela de contexto explícita: sem isto o Ollama trunca o prompt em
+        # silêncio (2048/4096) e o modelo perde o system prompt.
+        self.context_window = resolve_num_ctx()
 
     def set_cpu_threads(self, threads: int | None) -> None:
         """Define o limite máximo de threads de CPU para inferência local no Ollama."""
@@ -177,7 +187,7 @@ class OllamaAdapter(BaseModelAdapter):
                         "prompt": "",
                         "stream": False,
                         "keep_alive": self.keep_alive,
-                        "options": {"num_ctx": self.context_window or 2048},
+                        "options": {"num_ctx": self.context_window},
                     }
                     if self.cpu_threads and self.cpu_threads > 0:
                         payload["options"]["num_thread"] = self.cpu_threads
@@ -290,9 +300,7 @@ class OllamaAdapter(BaseModelAdapter):
         payload["options"]["num_predict"] = request.max_tokens if request.max_tokens else 1024
         if request.stop_sequences:
             payload["options"]["stop"] = request.stop_sequences
-        payload["options"]["num_ctx"] = self.context_window or (
-            2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
-        )
+        payload["options"]["num_ctx"] = self.context_window
         if self.cpu_threads and self.cpu_threads > 0:
             payload["options"]["num_thread"] = self.cpu_threads
 
@@ -351,9 +359,7 @@ class OllamaAdapter(BaseModelAdapter):
         payload["options"]["num_predict"] = request.max_tokens if request.max_tokens else 1024
         if request.stop_sequences:
             payload["options"]["stop"] = request.stop_sequences
-        payload["options"]["num_ctx"] = self.context_window or (
-            2048 if (not request.max_tokens or request.max_tokens <= 1500) else 4096
-        )
+        payload["options"]["num_ctx"] = self.context_window
         if self.cpu_threads and self.cpu_threads > 0:
             payload["options"]["num_thread"] = self.cpu_threads
 
@@ -490,28 +496,18 @@ class UniversalOnlineAdapter(BaseModelAdapter):
     ):
         self.api_key = api_key.strip() if api_key else ""
         self.provider_name = (provider_name or "openai").lower()
-        self.base_url = (base_url or self._default_base_url(self.provider_name)).rstrip("/")
-        self.default_model = default_model or self._default_model_for_provider(self.provider_name)
+        resolved_base_url = resolve_base_url(self.provider_name, base_url)
+        if not resolved_base_url:
+            raise ValueError(f"O provedor '{self.provider_name}' exige uma 'base_url' explícita.")
+        self.base_url = resolved_base_url.rstrip("/")
+        resolved_model = resolve_model(self.provider_name, default_model)
+        if not resolved_model:
+            raise ValueError(f"O provedor '{self.provider_name}' exige um modelo explícito.")
+        self.default_model = resolved_model
         self.timeout_seconds = timeout_seconds
         # Última utilização reportada pelo provedor durante streaming (quando disponível).
         # O roteador híbrido usa esse dado para contabilizar custos sem inventar valores.
         self.last_stream_usage: dict[str, int] | None = None
-
-    @staticmethod
-    def _default_base_url(provider: str) -> str:
-        presets = {
-            "openai": "https://api.openai.com/v1",
-            "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
-            "groq": "https://api.groq.com/openai/v1",
-            "deepseek": "https://api.deepseek.com",
-            "anthropic": "https://api.anthropic.com/v1",
-            "openrouter": "https://openrouter.ai/api/v1",
-        }
-        return presets.get(provider, "https://api.openai.com/v1")
-
-    @staticmethod
-    def _default_model_for_provider(provider: str) -> str:
-        return default_model_for_provider(provider)
 
     async def health_check(self) -> bool:
         try:
@@ -649,8 +645,7 @@ class UniversalOnlineAdapter(BaseModelAdapter):
         except ImportError:
             pass
 
-        local_model_names = {"llama3.2:3b", "qwen2.5-coder:7b", "qwen2.5:7b", "mock-model"}
-        if not request.model_name or request.model_name in local_model_names:
+        if not request.model_name or request.model_name in LOCAL_MODEL_NAMES:
             target_model = self.default_model
         else:
             target_model = request.model_name
@@ -673,7 +668,7 @@ class UniversalOnlineAdapter(BaseModelAdapter):
             }
             if safe_system:
                 payload["system"] = safe_system
-            if request.temperature is not None:
+            if request.temperature is not None and supports_sampling("anthropic", target_model):
                 payload["temperature"] = request.temperature
             if request.stop_sequences:
                 payload["stop_sequences"] = request.stop_sequences
@@ -803,8 +798,7 @@ class UniversalOnlineAdapter(BaseModelAdapter):
 
         self.last_stream_usage = None
 
-        local_model_names = {"llama3.2:3b", "qwen2.5-coder:7b", "qwen2.5:7b", "mock-model"}
-        if not request.model_name or request.model_name in local_model_names:
+        if not request.model_name or request.model_name in LOCAL_MODEL_NAMES:
             target_model = self.default_model
         else:
             target_model = request.model_name
@@ -836,9 +830,10 @@ class UniversalOnlineAdapter(BaseModelAdapter):
                 "model": target_model,
                 "max_tokens": request.max_tokens or 2048,
                 "messages": [{"role": "user", "content": safe_prompt}],
-                "temperature": request.temperature,
                 "stream": True,
             }
+            if request.temperature is not None and supports_sampling("anthropic", target_model):
+                payload["temperature"] = request.temperature
             if safe_system:
                 payload["system"] = safe_system
             anthropic_tools = _to_anthropic_tools(request.tools)

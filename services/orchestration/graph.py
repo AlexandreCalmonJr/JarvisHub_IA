@@ -11,6 +11,13 @@ from langgraph.graph import END, START, StateGraph
 from packages.contracts.agent import AgentOutputContract, AgentRole, ResourceUsage
 from services.model_runtime import InferenceRequest, ModelManager
 from services.model_runtime.agent_routing import resolve_account_agent_route
+from services.model_runtime.context_budget import (
+    context_budget,
+    estimate_tokens,
+    resolve_num_ctx,
+    trim_turns,
+)
+from services.model_runtime.provider_catalog import LOCAL_MODEL_NAMES
 from services.security_core import PermissionDeniedError, SecurityCore
 
 from .output_validation import OutputContractError, validate_and_repair_contract
@@ -86,7 +93,8 @@ def create_master_graph(
             from agents.registry import AgentRegistry
 
             agent_registry = AgentRegistry()
-        except Exception:
+        except Exception as exc:
+            logger.warning("AgentRegistry indisponível; orquestração usará fallback: %s", exc)
             agent_registry = None
 
     if skills_catalog is None:
@@ -94,7 +102,8 @@ def create_master_graph(
             from services.skills_manager import SkillsCatalog
 
             skills_catalog = SkillsCatalog()
-        except Exception:
+        except Exception as exc:
+            logger.warning("SkillsCatalog indisponível; skills não serão carregadas: %s", exc)
             skills_catalog = None
 
     if db_manager is None:
@@ -102,7 +111,8 @@ def create_master_graph(
             from services.memory.database import DatabaseManager
 
             db_manager = DatabaseManager()
-        except Exception:
+        except Exception as exc:
+            logger.warning("DatabaseManager indisponível; persistência desativada: %s", exc)
             db_manager = None
 
     async def classify_intent(state: TaskState) -> dict[str, Any]:
@@ -601,7 +611,7 @@ def create_master_graph(
         if not pref or pref in ("auto", "auto_hybrid"):
             # Delega a escolha ao seletor governado do ModelManager.
             model_name = "auto_hybrid" if is_hybrid_active else "auto"
-        elif is_hybrid_active and pref in ("llama3.2:3b", "qwen2.5:7b", "qwen2.5-coder:7b"):
+        elif is_hybrid_active and pref in LOCAL_MODEL_NAMES:
             model_name = hybrid_default
         else:
             # Preferências explícitas e personalizadas do perfil são preservadas.
@@ -850,9 +860,10 @@ def create_master_graph(
                 agent_role=arch_role.value,
                 key_id=arch_route.key_id,
             )
-            arch_p_tokens = 35
-            arch_c_tokens = 110
-            arch_dur_ms = 12.0
+            arch_p_tokens = 0
+            arch_c_tokens = 0
+            arch_dur_ms = 0.0
+            arch_error: str | None = None
             try:
                 arch_resp = await model_manager.generate(arch_req)
                 arch_summary = arch_resp.content.strip()
@@ -860,29 +871,17 @@ def create_master_graph(
                 arch_c_tokens = arch_resp.completion_tokens
                 arch_dur_ms = arch_resp.duration_ms
             except Exception as exc:
-                logger.info("Deliberação rápida do Arquiteto de Software: %s", exc)
-                if is_english:
-                    arch_summary = (
-                        f"Arquitetura aprovada para a plataforma de exercícios de inglês '{slug}'. "
-                        "Estrutura modular segregando motor de quiz interativo, validação de lacunas em tempo real, "
-                        "flashcards com síntese nativa de voz (Web Speech API) e persistência de histórico de pontuação em localStorage. "
-                        "Padrão responsivo e semântico HTML5/CSS3/ES6+."
-                    )
-                elif is_security:
-                    arch_summary = (
-                        f"Arquitetura defensiva aprovada para o portal de cibersegurança '{slug}'. "
-                        "Segregação modular em 3 camadas: Apresentação Reativa (HTML5/CSS3), Simulador de Varredura de Vulnerabilidades OWASP, "
-                        "Analisador de Entropia de Senhas e Telemetria de Incidentes SOC em tempo real. "
-                        "Zero dependências externas e conformidade estrita com padrões defensivos."
-                    )
-                else:
-                    arch_summary = (
-                        f"Arquitetura modular aprovada para o projeto '{slug}' ({project_type.upper()}). "
-                        f"Separação estrita de camadas e componentes desenhada sob medida para a solicitação: '{user_prompt}'."
-                    )
+                logger.warning("Arquiteto de Software indisponível: %s", exc)
+                # Falha do provedor nunca vira "arquitetura aprovada".
+                arch_error = f"{type(exc).__name__}: {exc}"[:200]
+                arch_summary = (
+                    f"O Arquiteto de Software não produziu parecer de arquitetura para "
+                    f"'{slug}': o provedor de inferência falhou ou está indisponível."
+                )
 
             # --- ETAPA 1.5: Auditoria do Especialista em Cibersegurança (quando aplicável) ---
             sec_summary = ""
+            sec_error: str | None = None
             if is_security:
                 sec_sys = build_specialist_prompt(
                     agent_role=sec_role.value,
@@ -916,12 +915,12 @@ def create_master_graph(
                     sec_resp = await model_manager.generate(sec_req)
                     sec_summary = sec_resp.content.strip()
                 except Exception as exc:
-                    logger.info("Deliberação rápida do Engenheiro de Cibersegurança: %s", exc)
+                    logger.warning("Engenheiro de Cibersegurança indisponível: %s", exc)
+                    # Nunca emitir um atestado de segurança sem auditoria real.
+                    sec_error = f"{type(exc).__name__}: {exc}"[:200]
                     sec_summary = (
-                        f"Auditoria de Cibersegurança aprovada para '{slug}'. "
-                        "Diretrizes OWASP Top 10 aplicadas com sucesso: sanitização estrita de entradas, "
-                        "políticas de Content-Security-Policy e HSTS ativadas, mitigação contra injeções SQL/XSS "
-                        "e incorporação de simulador de scanner de vulnerabilidades com telemetria SOC em tempo real."
+                        f"A auditoria de cibersegurança de '{slug}' NÃO foi executada: "
+                        "o provedor de inferência falhou ou está indisponível."
                     )
 
             # --- ETAPA 2: Geração Física dos Arquivos pelo Desenvolvedor Especialista ---
@@ -1044,19 +1043,35 @@ def create_master_graph(
                         agent_role=arch_role.value,
                         objective="Arquitetura do novo projeto",
                         summary=arch_summary,
-                        evidence=["Análise de arquitetura concluída; sem escrita no workspace."],
-                        actions_taken=["Análise de requisitos", "Planeamento de arquitetura"],
+                        evidence=(
+                            []
+                            if arch_error
+                            else [f"Parecer de arquitetura produzido por '{arch_model}'."]
+                        ),
+                        actions_taken=(
+                            []
+                            if arch_error
+                            else ["Análise de requisitos", "Planeamento de arquitetura"]
+                        ),
                         affected_files=[],
                         tests_executed=[],
                         risks=[],
-                        blockers=[],
+                        blockers=(
+                            [f"Arquiteto de Software indisponível ({arch_error})."]
+                            if arch_error
+                            else []
+                        ),
                         resource_usage=ResourceUsage(
                             model_name=model_name,
                             tokens_prompt=arch_p_tokens,
                             tokens_completion=arch_c_tokens,
                             duration_ms=arch_dur_ms,
                         ),
-                        next_recommendation="Rever o plano e aprovar a criação do projeto.",
+                        next_recommendation=(
+                            "Restabelecer o provedor de inferência e repetir a fase de arquitetura."
+                            if arch_error
+                            else "Rever o plano e aprovar a criação do projeto."
+                        ),
                     ).model_dump(),
                     AgentOutputContract(
                         agent_role=dev_role.value,
@@ -1102,19 +1117,31 @@ def create_master_graph(
                         agent_role=sec_role.value,
                         objective="Revisão defensiva do projeto",
                         summary=sec_summary,
-                        evidence=["Revisão de requisitos de segurança; sem escrita no workspace."],
-                        actions_taken=["Análise defensiva e de ameaças"],
+                        evidence=(
+                            []
+                            if sec_error
+                            else ["Revisão de requisitos de segurança; sem escrita no workspace."]
+                        ),
+                        actions_taken=[] if sec_error else ["Análise defensiva e de ameaças"],
                         affected_files=[],
                         tests_executed=[],
                         risks=[],
-                        blockers=[],
+                        blockers=(
+                            [f"Engenheiro de Cibersegurança indisponível ({sec_error})."]
+                            if sec_error
+                            else []
+                        ),
                         resource_usage=ResourceUsage(
                             model_name=model_name,
                             tokens_prompt=0,
                             tokens_completion=0,
                             duration_ms=0.0,
                         ),
-                        next_recommendation="Validar os controlos durante a implementação aprovada.",
+                        next_recommendation=(
+                            "Restabelecer o provedor e executar a auditoria de segurança antes de publicar."
+                            if sec_error
+                            else "Validar os controlos durante a implementação aprovada."
+                        ),
                     ).model_dump()
                 )
 
@@ -1170,30 +1197,67 @@ def create_master_graph(
             }
 
         elif intent == "code_modification" and workspace_service:
-            msg, affected = execute_workspace_modification(
-                workspace_service=workspace_service,
-                user_prompt=state["user_prompt"],
-                project_id=project_id,
-            )
+            try:
+                msg, affected = execute_workspace_modification(
+                    workspace_service=workspace_service,
+                    user_prompt=state["user_prompt"],
+                    project_id=project_id,
+                    task_id=state.get("task_id"),
+                    approval_id=state.get("approval_id"),
+                )
+            except Exception as exc:
+                # Nenhuma escrita ocorreu: reportar como bloqueio, nunca como sucesso.
+                reason = str(exc)[:400]
+                agent_outputs.append(
+                    AgentOutputContract(
+                        agent_role=primary_agent,
+                        objective="Modificação de arquivo de projeto no computador",
+                        summary=f"A alteração solicitada não foi aplicada: {reason}",
+                        evidence=[],
+                        actions_taken=[],
+                        affected_files=[],
+                        tests_executed=[],
+                        risks=[],
+                        blockers=[reason],
+                        resource_usage=ResourceUsage(
+                            model_name=model_name,
+                            tokens_prompt=0,
+                            tokens_completion=0,
+                            duration_ms=0.0,
+                        ),
+                        next_recommendation=(
+                            "Reformular o pedido com o ficheiro e o trecho exatos, ou usar o Coding Agent."
+                        ),
+                    ).model_dump()
+                )
+                return {
+                    "final_summary": (
+                        "Não foi possível aplicar a alteração de código. Nada foi escrito em disco."
+                        f"\n\nMotivo: {reason}"
+                    ),
+                    "is_completed": False,
+                    "agent_outputs": agent_outputs,
+                }
+
             primary_output = AgentOutputContract(
                 agent_role=primary_agent,
                 objective="Modificação de arquivo de projeto no computador",
                 summary=msg,
                 evidence=[
-                    "Arquivo lido do disco",
-                    "Alteração aplicada com backup .bak",
-                    "Diff unificado gerado",
+                    f"Ficheiro lido do disco e regravado: {', '.join(affected) or 'n/d'}",
+                    "Diff unificado gerado a partir do conteúdo real do arquivo",
                 ],
-                actions_taken=state.get("plan_steps", []),
+                actions_taken=["Aplicação da alteração aprovada por um humano"],
                 affected_files=affected,
-                tests_executed=["Verificação de integridade pós-modificação"],
+                # Nenhum teste é executado nesta via: não inventar verificações.
+                tests_executed=[],
                 risks=[],
                 blockers=[],
                 resource_usage=ResourceUsage(
                     model_name=model_name,
-                    tokens_prompt=20,
-                    tokens_completion=80,
-                    duration_ms=8.0,
+                    tokens_prompt=0,
+                    tokens_completion=0,
+                    duration_ms=0.0,
                 ),
                 next_recommendation="Recarregue o navegador para visualizar a alteração aplicada.",
             )
@@ -1222,21 +1286,85 @@ def create_master_graph(
                     "Responda SEMPRE em português do Brasil, de forma atenciosa, inteligente, detalhada e personalizada à solicitação do usuário. "
                     "Nunca use templates pré-moldados. Raciocine profundamente sobre o assunto pedido."
                 )
+                session_id = state.get("session_id")
+                owner_user_id = state.get("owner_user_id")
+                effective_prompt = user_prompt
+
+                # Compactação contínua de histórico da sessão no orquestrador (H3)
+                if db_manager and session_id and hasattr(db_manager, "list_chat_messages"):
+                    try:
+                        raw_history = db_manager.list_chat_messages(
+                            session_id, limit=20, owner_user_id=owner_user_id
+                        )
+                        history_turns: list[dict[str, str]] = []
+                        for m in raw_history:
+                            role = m.get("role")
+                            content = (m.get("content") or "").strip()
+                            if role in ("user", "assistant") and content:
+                                history_turns.append({"role": role, "content": content})
+                        if history_turns:
+                            turns_to_trim = (
+                                [{"role": "system", "content": conv_sys}]
+                                + history_turns
+                                + [{"role": "user", "content": user_prompt}]
+                            )
+                            trimmed_turns, dropped = trim_turns(
+                                turns_to_trim,
+                                num_ctx=resolve_num_ctx(),
+                                output_reserve=1000,
+                            )
+                            if dropped:
+                                logger.debug(
+                                    "Orquestrador: histórico compactado (%d turnos antigos removidos) na sessão %s",
+                                    dropped,
+                                    session_id,
+                                )
+                            history_formatted = []
+                            for t in trimmed_turns[1:-1]:
+                                r = "Usuário" if t["role"] == "user" else "JARVIS"
+                                history_formatted.append(f"{r}: {t['content']}")
+                            if history_formatted:
+                                effective_prompt = (
+                                    "Histórico recente da conversa:\n"
+                                    + "\n".join(history_formatted[-8:])
+                                    + f"\n\nUsuário: {user_prompt}"
+                                )
+                    except Exception as exc:
+                        logger.debug("Falha ao recuperar/compactar histórico do chat no orquestrador: %s", exc)
+
                 conv_req = InferenceRequest(
-                    prompt=user_prompt,
+                    prompt=effective_prompt,
                     system_prompt=conv_sys,
                     model_name=model_name,
                     max_tokens=1000,
                     temperature=0.7,
                     timeout_seconds=45.0,
                     task_id=state.get("task_id"),
-                    owner_user_id=state.get("owner_user_id"),
+                    owner_user_id=owner_user_id,
                     agent_role=primary_agent,
                     key_id=primary_key_id,
                 )
                 try:
                     conv_resp = await model_manager.generate(conv_req)
                     llm_text = conv_resp.content.strip()
+                    if db_manager and session_id and hasattr(db_manager, "add_chat_message"):
+                        try:
+                            db_manager.add_chat_message(
+                                session_id=session_id,
+                                role="user",
+                                content=user_prompt,
+                                project_id=project_id,
+                                owner_user_id=owner_user_id,
+                            )
+                            db_manager.add_chat_message(
+                                session_id=session_id,
+                                role="assistant",
+                                content=llm_text,
+                                project_id=project_id,
+                                owner_user_id=owner_user_id,
+                            )
+                        except Exception as exc:
+                            logger.debug("Falha ao persistir turnos da conversa no banco: %s", exc)
                 except Exception as exc:
                     logger.exception(
                         "O modelo conversacional não conseguiu responder à tarefa %s",
@@ -1431,12 +1559,28 @@ def create_master_graph(
                     ).model_dump()
                 )
 
+            # Orçamento governado de contexto para evitar truncamento no Ollama (H3)
+            num_ctx = resolve_num_ctx()
+            budget = context_budget(num_ctx, output_reserve=1200)
+            clean_tokens = estimate_tokens(clean_prompt)
+            avail_for_peers = max(400, budget - clean_tokens - 400)
+            per_peer_limit_chars = max(800, (avail_for_peers // max(1, len(peer_outputs))) * 4)
+
+            bounded_peers = []
+            for item in peer_outputs:
+                role = item["agent_role"]
+                summary_text = item["summary"]
+                if len(summary_text) > per_peer_limit_chars:
+                    summary_text = (
+                        summary_text[:per_peer_limit_chars].rstrip()
+                        + "… [truncado para adequação à janela de contexto]"
+                    )
+                bounded_peers.append(f"Parecer de {role}:\n{summary_text}")
+
             master_prompt = (
-                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\\n\\n"
-                + "\\n\\n".join(
-                    f"Parecer de {item['agent_role']}:\\n{item['summary']}" for item in peer_outputs
-                )
-                + "\\n\\nCompare as recomendações, identifique convergências e divergências, "
+                f"Delibere como JARVIS Maestro sobre a tarefa: {clean_prompt}.\n\n"
+                + "\n\n".join(bounded_peers)
+                + "\n\nCompare as recomendações, identifique convergências e divergências, "
                 "resolva conflitos com justificativa e apresente um plano final. "
                 "Não invente consenso, testes, ferramentas, evidências ou ações que não ocorreram."
             )
@@ -1483,15 +1627,15 @@ def create_master_graph(
                 raise RuntimeError("O JARVIS Maestro retornou uma síntese vazia.")
 
             consensus_summary = (
-                f"# {consensus_title}\\n\\n"
-                + "\\n\\n".join(
-                    f"### {index}. {role}\\n{summary}"
+                f"# {consensus_title}\n\n"
+                + "\n\n".join(
+                    f"### {index}. {role}\n{summary}"
                     for index, (role, summary) in enumerate(
                         [(item["agent_role"], item["summary"]) for item in peer_outputs],
                         start=1,
                     )
                 )
-                + f"\\n\\n### Deliberação do JARVIS Maestro\\n\\n{master_summary}"
+                + f"\n\n### Deliberação do JARVIS Maestro\n\n{master_summary}"
             )
             agent_outputs.extend(peer_contracts)
             agent_outputs.append(
@@ -1633,8 +1777,8 @@ def create_master_graph(
                 previous_outputs=agent_outputs,
             )
             secondary_prompt = (
-                f"Execute sua análise como especialista {secondary_role} para o pedido abaixo.\\n"
-                f"Pedido original: {user_prompt}\\n\\n"
+                f"Execute sua análise como especialista {secondary_role} para o pedido abaixo.\n"
+                f"Pedido original: {user_prompt}\n\n"
                 "Considere criticamente os pareceres anteriores incluídos no contexto. "
                 "Aponte concordâncias, divergências, riscos e recomendações específicas. "
                 "Não afirme que executou ferramentas, testes ou alterações que não realizou."
@@ -1792,7 +1936,7 @@ def create_master_graph(
         if state.get("error"):
             partial = state.get("final_summary") or "A execução multiagente não foi concluída."
             return {
-                "final_summary": (partial + "\\n\\n**Execução parcial:** " + str(state["error"])),
+                "final_summary": (partial + "\n\n**Execução parcial:** " + str(state["error"])),
                 "is_completed": False,
             }
 

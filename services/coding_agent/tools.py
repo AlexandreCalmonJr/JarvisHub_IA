@@ -20,6 +20,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from services.security_core import PermissionDeniedError, SecurityCore
+from services.security_core.redaction import redact_string
 from services.tool_gateway.specialized_tools import (
     execute_audit_dependencies,
     execute_duckdb_query,
@@ -32,7 +33,7 @@ from services.tool_gateway.specialized_tools import (
 )
 from services.tool_gateway.web_search import safe_web_search
 
-from .context import IGNORED_DIRS, _is_probably_text
+from .context import IGNORED_DIRS, _is_probably_text, detect_project_commands
 from .types import ToolCall, ToolResult, ToolRisk, ToolSpec
 
 MAX_READ_BYTES = 400_000
@@ -64,13 +65,37 @@ DANGEROUS_COMMAND_PATTERNS = [
 
 
 def _sanitize_commit_message(message: str) -> str:
-    """Normaliza a mensagem para uso seguro em shell e em uma linha de commit."""
+    """Normaliza a mensagem para uma única linha de commit.
+
+    O commit é executado com uma lista de argumentos (sem shell), por isso não
+    há necessidade de remover aspas, ``$`` ou backticks: fazer isso corromperia
+    mensagens legítimas sem aumentar a segurança.
+    """
     text = re.sub(r"[\r\n\t]+", " ", str(message or ""))
-    text = re.sub(r'["\'`$%!]', "", text)
     text = re.sub(r"\s{2,}", " ", text).strip()
     if not text:
         raise ValueError("A mensagem de commit não pode ser vazia.")
     return text[:300]
+
+
+def _audit_arguments_summary(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Resumo dos argumentos para auditoria: sem corpos de ficheiro integrais.
+
+    Os valores textuais são truncados e redigidos antes de chegarem ao
+    ``AuditTrail``; o conteúdo completo de um ``write_file`` nunca é persistido.
+    """
+    summary: dict[str, Any] = {}
+    for key, value in (arguments or {}).items():
+        if isinstance(value, str):
+            clipped = value[:200]
+            summary[key] = redact_string(clipped) + ("…" if len(value) > 200 else "")
+        elif isinstance(value, (int, float, bool)) or value is None:
+            summary[key] = value
+        elif isinstance(value, (list, tuple)):
+            summary[key] = [str(item)[:80] for item in value[:20]]
+        else:
+            summary[key] = str(value)[:200]
+    return summary
 
 
 def _tool_specs() -> list[ToolSpec]:
@@ -232,6 +257,57 @@ def _tool_specs() -> list[ToolSpec]:
                     },
                 },
                 "required": ["command"],
+            },
+            risk=ToolRisk.EXEC,
+            requires_approval=True,
+        ),
+        ToolSpec(
+            name="run_tests",
+            description=(
+                "Executa a suite de testes do projeto com o comando detectado automaticamente "
+                "(npm test, pytest, flutter test, go test, mvn test ou dotnet test). "
+                "Exige aprovação humana. Use o resultado real como evidência de validação."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Comando explícito (opcional; por omissão usa o detectado).",
+                        "default": "",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Timeout em segundos (máx. 1200).",
+                        "default": 600,
+                    },
+                },
+                "required": [],
+            },
+            risk=ToolRisk.EXEC,
+            requires_approval=True,
+        ),
+        ToolSpec(
+            name="run_linter",
+            description=(
+                "Executa o linter/formatter check do projeto com o comando detectado "
+                "(npm run lint, ruff check, flutter analyze). Exige aprovação humana."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Comando explícito (opcional; por omissão usa o detectado).",
+                        "default": "",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Timeout em segundos (máx. 1200).",
+                        "default": 600,
+                    },
+                },
+                "required": [],
             },
             risk=ToolRisk.EXEC,
             requires_approval=True,
@@ -614,7 +690,11 @@ class CodingToolExecutor:
                 "reversible": True,
             }
 
-        if call.name == "run_command":
+        # ``execute_command`` é alias de ``run_command`` e partilha o mesmo
+        # contrato de aprovação. Manter os dois no preview é obrigatório: o
+        # runtime é fail-closed para ferramentas com ``requires_approval`` e
+        # recusa executar quando o preview não é produzido.
+        if call.name in {"run_command", "execute_command"}:
             command = str(call.arguments.get("command", "")).strip()
             if not command:
                 raise ValueError("Comando vazio.")
@@ -637,6 +717,29 @@ class CodingToolExecutor:
             return {
                 "operation": "RUN_COMMAND",
                 "impact_summary": f"Executar comando no projeto: `{command}`",
+                "affected_resources": [f"shell:{command}"],
+                "proposed_diff": json.dumps(preview, ensure_ascii=False, indent=2),
+                "reversible": False,
+            }
+
+        if call.name in {"run_tests", "run_linter"}:
+            command, root, timeout = self._resolve_verification(
+                call.name, call.arguments, project_id
+            )
+            preview = {
+                "mode": "dry_run",
+                "command": command,
+                "cwd": str(root),
+                "timeout_seconds": timeout,
+                "risk": "exec",
+                "effect": "O comando ainda não foi executado; a execução só começa após aprovação.",
+            }
+            return {
+                "operation": "RUN_TESTS" if call.name == "run_tests" else "RUN_LINTER",
+                "impact_summary": (
+                    f"Executar {'os testes' if call.name == 'run_tests' else 'o linter'} "
+                    f"do projeto: `{command}`"
+                ),
                 "affected_resources": [f"shell:{command}"],
                 "proposed_diff": json.dumps(preview, ensure_ascii=False, indent=2),
                 "reversible": False,
@@ -703,12 +806,12 @@ class CodingToolExecutor:
             audit_parameters = {"changed_files": result.changed_files}
             if call.name in {"run_command", "execute_command"}:
                 audit_parameters = {
-                    "command": str(call.arguments.get("command", ""))[:2000],
+                    "command": redact_string(str(call.arguments.get("command", "")))[:2000],
                     "timeout_seconds": call.arguments.get("timeout_seconds"),
                     "duration_ms": result.duration_ms,
                     "exit_code": result.exit_code,
-                    "output_redacted": result.output[:2000],
-                    "error": result.error,
+                    "output_redacted": redact_string(result.output or "")[:2000],
+                    "error": redact_string(str(result.error)) if result.error else None,
                 }
             self._audit(
                 call.name,
@@ -727,10 +830,12 @@ class CodingToolExecutor:
                 "DENIED",
                 reason=str(exc),
                 parameters={
-                    "command": str(call.arguments.get("command", ""))[:2000]
+                    "command": redact_string(str(call.arguments.get("command", "")))[:2000]
                     if call.name in {"run_command", "execute_command"}
                     else None,
-                    "arguments": call.arguments,
+                    # Nunca gravar os argumentos completos: `write_file` carrega
+                    # o conteúdo integral do ficheiro e inflacionava o audit DB.
+                    "arguments": _audit_arguments_summary(call.arguments),
                 },
                 user_id=owner_user_id,
             )
@@ -747,8 +852,8 @@ class CodingToolExecutor:
                 call.name,
                 project_id,
                 "FAILED",
-                reason=str(exc),
-                parameters={"arguments": call.arguments},
+                reason=redact_string(str(exc)),
+                parameters={"arguments": _audit_arguments_summary(call.arguments)},
                 user_id=owner_user_id,
             )
             return result
@@ -816,7 +921,7 @@ class CodingToolExecutor:
                 severity=AuditEventSeverity.INFO
                 if status == "SUCCESS"
                 else AuditEventSeverity.WARNING,
-                reason=reason,
+                reason=redact_string(reason) if reason else None,
             )
         except Exception as exc:
             logger.debug("Falha ao registrar auditoria de ferramenta: %s", exc)
@@ -1081,6 +1186,66 @@ class CodingToolExecutor:
             duration_ms=duration,
         )
 
+    def _resolve_verification(
+        self, name: str, args: dict[str, Any], project_id: str
+    ) -> tuple[str, Path, int]:
+        """Resolve o comando de testes/linter e valida-o contra a política."""
+        root = self._project_root(project_id)
+        explicit = str(args.get("command") or "").strip()
+        if explicit:
+            lowered = explicit.lower()
+            for pattern in DANGEROUS_COMMAND_PATTERNS:
+                if re.search(pattern, lowered, re.IGNORECASE):
+                    raise PermissionDeniedError(
+                        "Comando bloqueado pela política de segurança "
+                        "(padrão destrutivo detectado)."
+                    )
+            command = explicit
+        else:
+            detected = detect_project_commands(root)
+            command = detected.get("test" if name == "run_tests" else "lint", "")
+            if not command:
+                kind = "testes" if name == "run_tests" else "linter"
+                raise ValueError(
+                    f"Não foi possível detetar um comando de {kind} para este projeto. "
+                    "Indique `command` explicitamente."
+                )
+        timeout = max(1, min(int(args.get("timeout_seconds") or 600), 1200))
+        return command, root, timeout
+
+    async def _run_run_tests(self, args: dict[str, Any], project_id: str) -> ToolResult:
+        return await self._run_verification("run_tests", args, project_id)
+
+    async def _run_run_linter(self, args: dict[str, Any], project_id: str) -> ToolResult:
+        return await self._run_verification("run_linter", args, project_id)
+
+    async def _run_verification(
+        self, name: str, args: dict[str, Any], project_id: str
+    ) -> ToolResult:
+        try:
+            command, _root, timeout = self._resolve_verification(name, args, project_id)
+        except (ValueError, PermissionDeniedError) as exc:
+            return ToolResult(
+                call_id="",
+                name=name,
+                success=False,
+                output="",
+                error=str(exc),
+            )
+        exit_code, stdout, stderr, duration = await self._run_shell(command, project_id, timeout)
+        output = stdout
+        if stderr:
+            output += f"\n[stderr]\n{stderr}"
+        return ToolResult(
+            call_id="",
+            name=name,
+            success=exit_code == 0,
+            output=output.strip(),
+            error=None if exit_code == 0 else f"'{command}' terminou com código {exit_code}.",
+            duration_ms=duration,
+            exit_code=exit_code,
+        )
+
     async def _run_git_commit(self, args: dict[str, Any], project_id: str) -> ToolResult:
         message = _sanitize_commit_message(str(args.get("message", "")))
         raw_paths = args.get("paths") or []
@@ -1088,24 +1253,66 @@ class CodingToolExecutor:
         for rel in paths:
             self._resolve(project_id, rel)
 
-        add_targets = " ".join(f'"{rel}"' for rel in paths) or "."
-        # Backups .bak nunca entram no commit, mesmo com git add -A.
-        command = (
-            f"git add -A -- {add_targets} "
-            f'":(exclude)**/*.bak" ":(exclude)*.bak" '
-            f'&& git commit -m "{message}"'
+        add_targets = list(paths) or ["."]
+        # Backups .bak e ficheiros de segredo nunca entram no commit, mesmo com
+        # `git add -A`, para que uma execução automática não publique credenciais.
+        excludes = [
+            f":(exclude){pattern}"
+            for pattern in (
+                "**/*.bak",
+                "*.bak",
+                "**/.env",
+                "**/.env.*",
+                "**/*.pem",
+                "**/*.key",
+                "**/id_rsa*",
+                "**/node_modules/**",
+                "**/.venv/**",
+            )
+        ]
+        # Sem shell: caminhos e mensagem são argumentos de `git`, nunca texto
+        # interpretado por `cmd.exe`/`/bin/sh`.
+        exit_code, stdout, stderr, duration = await self.workspace_service.run_git_command(
+            ["add", "-A", "--", *add_targets, *excludes],
+            cwd=self._project_root(project_id),
+            timeout_seconds=60,
         )
-        exit_code, stdout, stderr, duration = await self._run_shell(command, project_id, 60)
         output = stdout
         if stderr:
             output += f"\n[stderr]\n{stderr}"
+        if exit_code != 0:
+            return ToolResult(
+                call_id="",
+                name="git_commit",
+                success=False,
+                output=output.strip(),
+                error=f"Git add falhou (código {exit_code}).",
+                exit_code=exit_code,
+                duration_ms=duration,
+            )
+
+        (
+            commit_code,
+            commit_stdout,
+            commit_stderr,
+            commit_duration,
+        ) = await self.workspace_service.run_git_command(
+            ["commit", "-m", message],
+            cwd=self._project_root(project_id),
+            timeout_seconds=60,
+        )
+        if commit_stdout:
+            output += f"\n{commit_stdout}"
+        if commit_stderr:
+            output += f"\n[stderr]\n{commit_stderr}"
         return ToolResult(
             call_id="",
             name="git_commit",
-            success=exit_code == 0,
-            output=output.strip() or ("Commit criado." if exit_code == 0 else ""),
-            error=None if exit_code == 0 else f"Git commit falhou (código {exit_code}).",
-            duration_ms=duration,
+            success=commit_code == 0,
+            output=output.strip() or ("Commit criado." if commit_code == 0 else ""),
+            error=None if commit_code == 0 else f"Git commit falhou (código {commit_code}).",
+            exit_code=commit_code,
+            duration_ms=duration + commit_duration,
         )
 
     async def _run_duckdb_query(self, args: dict[str, Any], project_id: str) -> ToolResult:

@@ -6,6 +6,26 @@ interface MarkdownMessageProps {
   content: string;
 }
 
+const ALLOWED_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+/**
+ * Só devolve um href para esquemas seguros. Saída de modelo (ou conteúdo
+ * externo que chegue ao modelo) pode emitir `javascript:`/`data:`, que
+ * executariam código ao clique.
+ */
+export function safeHref(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  try {
+    // Base fictícia: links relativos ficam resolvidos como https e são rejeitados.
+    const url = new URL(value, 'https://jarvis.invalid');
+    if (!ALLOWED_LINK_PROTOCOLS.has(url.protocol)) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 export const MarkdownMessage: React.FC<MarkdownMessageProps> = React.memo(({ content }) => {
   // Parser de blocos (código, cabeçalhos, listas, parágrafos)
   const renderFormattedText = (text: string) => {
@@ -313,11 +333,12 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = React.memo(({ con
         );
       } else if (token.startsWith('[') && token.includes('](')) {
         const linkMatch = token.match(/\[([^\]]+)\]\(([^)]+)\)/);
-        if (linkMatch) {
+        const href = linkMatch ? safeHref(linkMatch[2]) : null;
+        if (linkMatch && href) {
           parts.push(
             <a
               key={`link-${match.index}`}
-              href={linkMatch[2]}
+              href={href}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -328,6 +349,13 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = React.memo(({ con
             >
               {linkMatch[1]}
             </a>
+          );
+        } else if (linkMatch) {
+          // Esquema não permitido: mostra o texto, nunca o link.
+          parts.push(
+            <span key={`link-blocked-${match.index}`} title="Link bloqueado por segurança">
+              {linkMatch[1]} ({linkMatch[2]})
+            </span>
           );
         } else {
           parts.push(token);

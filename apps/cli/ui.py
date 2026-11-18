@@ -114,6 +114,14 @@ def render_help() -> None:
         "/mode <plan|ask|auto>",
         "Altera o modo do Coding Agent (plan=leitura, ask=aprovações, auto=autônomo)",
     )
+    table.add_row("/diff", "Exibe o diff git de alterações não commitadas")
+    table.add_row(
+        "/undo", "Reverte com segurança alterações recentes no repositório (git rollback)"
+    )
+    table.add_row(
+        "/test [comando]", "Executa a suíte de testes (ex: /test pytest) e reporta resultado"
+    )
+    table.add_row("/map", "Gera e exibe o Repo Map sintático compacto do projeto (<1000 tokens)")
     table.add_row("/compact", "Compacta semanticamente o histórico de contexto reduzindo tokens")
     table.add_row("/teammates", "Lista todos os AI Teammates ativos e seus estados")
     table.add_row("/status", "Exibe o status do servidor, provedor de modelo e projeto ativo")

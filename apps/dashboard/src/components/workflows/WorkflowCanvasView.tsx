@@ -91,7 +91,6 @@ export const WorkflowCanvasView: React.FC = () => {
   const [workflowTitle, setWorkflowTitle] = useState('Fluxos de trabalho sem título');
   const [titleDropdownOpen, setTitleDropdownOpen] = useState(false);
   const [addNodeMenuOpen, setAddNodeMenuOpen] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Manipulação de Zoom
@@ -173,25 +172,14 @@ export const WorkflowCanvasView: React.FC = () => {
     notify(`Nó "${title}" adicionado ao fluxo.`, 'info');
   };
 
-  // Executar Fluxo de Trabalho (Simulação Animada)
-  const handleRunWorkflow = async () => {
-    if (isRunning) return;
-    setIsRunning(true);
-    notify('Iniciando execução do fluxo de nós em paralelo...', 'info');
-
-    for (let i = 0; i < nodes.length; i++) {
-      const currentNode = nodes[i];
-      setNodes((prev) =>
-        prev.map((n) => (n.id === currentNode.id ? { ...n, status: 'running' } : n))
-      );
-      await new Promise((r) => setTimeout(r, 800));
-      setNodes((prev) =>
-        prev.map((n) => (n.id === currentNode.id ? { ...n, status: 'success' } : n))
-      );
-    }
-
-    setIsRunning(false);
-    notify('Fluxo de trabalho executado com sucesso!', 'success');
+  // O canvas é um editor visual e ainda não está ligado a um motor de
+  // execução de fluxos. Em vez de animar sucesso simulado, informamos que a
+  // execução não está disponível.
+  const handleRunWorkflow = () => {
+    notify(
+      'Execução de fluxos ainda não está disponível: o canvas é apenas um editor visual.',
+      'warning'
+    );
   };
 
   // Deletar nó selecionado
@@ -370,7 +358,6 @@ export const WorkflowCanvasView: React.FC = () => {
           <button
             type="button"
             onClick={handleRunWorkflow}
-            disabled={isRunning}
             className="btn btn-primary"
             style={{
               display: 'flex',
@@ -383,9 +370,10 @@ export const WorkflowCanvasView: React.FC = () => {
               padding: '6px 14px',
               borderRadius: '999px',
             }}
+            title="A execução de fluxos ainda não está ligada ao orquestrador"
           >
             <Play size={14} fill="#09090b" />
-            <span>{isRunning ? 'Executando...' : 'Executar Fluxo'}</span>
+            <span>Executar Fluxo</span>
           </button>
         </div>
       </header>
@@ -445,16 +433,6 @@ export const WorkflowCanvasView: React.FC = () => {
                     stroke="rgba(255, 255, 255, 0.18)"
                     strokeWidth="2.5"
                   />
-                  {isRunning && (
-                    <path
-                      d={pathData}
-                      fill="none"
-                      stroke="#38bdf8"
-                      strokeWidth="3"
-                      strokeDasharray="8 8"
-                      style={{ animation: 'dash 1.2s linear infinite' }}
-                    />
-                  )}
                 </g>
               );
             })}

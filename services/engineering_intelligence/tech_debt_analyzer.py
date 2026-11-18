@@ -61,7 +61,6 @@ def calculate_ast_cyclomatic_complexity(code_str: str) -> list[dict[str, Any]]:
     return results
 
 
-
 class EngineeringIntelligenceService:
     def __init__(self, workspace_service: Any = None, db_manager: Any = None):
         self.workspace_service = workspace_service

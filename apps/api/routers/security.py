@@ -218,14 +218,16 @@ async def pair_mobile_device(
 
         lan_ip = get_local_ip()
         server_url = f"http://{lan_ip}:8000"
-        pairing_payload = json.dumps({
-            "hub": "jarvis-hub",
-            "v": "3.0.1",
-            "url": server_url,
-            "token": reg.device_token,
-            "device_id": reg.device_id,
-            "device_name": reg.device_name,
-        })
+        pairing_payload = json.dumps(
+            {
+                "hub": "jarvis-hub",
+                "v": "3.0.1",
+                "url": server_url,
+                "token": reg.device_token,
+                "device_id": reg.device_id,
+                "device_name": reg.device_name,
+            }
+        )
         return {
             "status": "paired",
             "device_id": reg.device_id,

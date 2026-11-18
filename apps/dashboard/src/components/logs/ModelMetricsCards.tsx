@@ -4,7 +4,7 @@ import { Clock, Zap, Cpu, ShieldCheck } from 'lucide-react';
 interface ModelMetrics {
   total_inferences: number;
   total_tokens: number;
-  total_savings_usd: number;
+  total_savings_usd: number | null;
   average_latency_seconds: number;
   average_tokens_per_second: number;
   fastest_model: string;
@@ -72,7 +72,7 @@ export const ModelMetricsCards: React.FC<ModelMetricsCardsProps> = ({ metrics })
           >
             {metrics && metrics.average_latency_seconds > 0
               ? `${metrics.average_latency_seconds}s`
-              : 'Calculando...'}
+              : '—'}
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--accent-color)', marginTop: '2px' }}>
             Tempo total por resposta
@@ -127,7 +127,7 @@ export const ModelMetricsCards: React.FC<ModelMetricsCardsProps> = ({ metrics })
           >
             {metrics && metrics.average_tokens_per_second > 0
               ? `${metrics.average_tokens_per_second} t/s`
-              : '12 a 15 t/s'}
+              : '—'}
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
             Tokens por segundo na CPU

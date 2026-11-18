@@ -47,7 +47,8 @@ def test_self_correction_markdown():
     healed_md, corrections = SelfCorrectionEngine.heal_markdown_text(md)
     assert len(corrections) > 0
     assert "def somar(x, y):" in healed_md
-    assert "⚡ **Self-Correction Ativo**" in healed_md
+    assert "**Aviso de auto-correção heurística**" in healed_md
+    assert "não foi compilado nem executado" in healed_md
 
 
 @pytest.mark.asyncio

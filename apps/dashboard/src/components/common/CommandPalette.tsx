@@ -19,6 +19,8 @@ import {
   Server,
   BarChart3,
   Building2,
+  Store,
+  Workflow,
 } from 'lucide-react';
 import { openWorkspaceRoot, savePonytailLevel } from '../../api';
 import { notify } from './Toast';
@@ -254,6 +256,43 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       badge: 'Skills',
       action: () => {
         onNavigate('skills');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-store',
+      category: 'Navegação',
+      title: 'Loja de Integrações',
+      subtitle: 'Aplicativos, agentes e habilidades conectados ao hub',
+      icon: Store,
+      iconColor: '#38bdf8',
+      badge: 'Loja',
+      action: () => {
+        onNavigate('store');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-workflows',
+      category: 'Navegação',
+      title: 'Fluxos de Trabalho',
+      subtitle: 'Canvas visual de orquestração de etapas e agentes',
+      icon: Workflow,
+      iconColor: '#c084fc',
+      action: () => {
+        onNavigate('workflows');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-usage',
+      category: 'Navegação',
+      title: 'Uso & Consumo',
+      subtitle: 'Tokens, custo acumulado e telemetria de hardware',
+      icon: BarChart3,
+      iconColor: '#f472b6',
+      action: () => {
+        onNavigate('usage');
         onClose();
       },
     },

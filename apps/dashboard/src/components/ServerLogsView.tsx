@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../services/api/client';
-import { fetchServerLogs, clearServerLogs, fetchModelMetrics } from '../api';
+import { fetchServerLogs, clearServerLogs } from '../api';
+import { fetchOverviewTelemetry } from '../services/api/system';
 import { ModelMetricsCards } from './logs/ModelMetricsCards';
 import { InferenceHistoryTable } from './logs/InferenceHistoryTable';
 import { TerminalLogConsole } from './logs/TerminalLogConsole';
@@ -17,12 +18,59 @@ interface LogEntry {
 interface ModelMetrics {
   total_inferences: number;
   total_tokens: number;
-  total_savings_usd: number;
+  total_savings_usd: number | null;
   average_latency_seconds: number;
   average_tokens_per_second: number;
   fastest_model: string;
   success_rate_percent: number;
   recent_inferences: any[];
+}
+
+function toModelMetrics(telemetry: {
+  summary: {
+    total_inferences: number;
+    successful: number;
+    total_tokens: number;
+    average_latency_ms: number;
+  };
+  records: any[];
+  model_performance: any[];
+}): ModelMetrics {
+  const records = telemetry.records || [];
+  const successful = records.filter(
+    (record) => record.status === 'success' && Number(record.duration_ms) > 0
+  );
+  const totalDurationMs = successful.reduce(
+    (sum, record) => sum + Number(record.duration_ms || 0),
+    0
+  );
+  const totalCompletionTokens = successful.reduce(
+    (sum, record) => sum + Number(record.completion_tokens || 0),
+    0
+  );
+  const fastest = [...(telemetry.model_performance || [])]
+    .filter((entry) => Number(entry.average_latency_ms) > 0)
+    .sort((a, b) => Number(a.average_latency_ms) - Number(b.average_latency_ms))[0];
+
+  return {
+    total_inferences: telemetry.summary.total_inferences,
+    total_tokens: telemetry.summary.total_tokens,
+    // Não existe uma métrica de "economia" no backend; apresentar um valor
+    // estimado seria inventar dados. A UI mostra "—" até existir telemetria real.
+    total_savings_usd: null,
+    average_latency_seconds:
+      Math.round((Number(telemetry.summary.average_latency_ms) / 1000) * 100) / 100,
+    average_tokens_per_second: totalDurationMs
+      ? Math.round((totalCompletionTokens / (totalDurationMs / 1000)) * 10) / 10
+      : 0,
+    fastest_model: fastest?.model_name || '—',
+    success_rate_percent: telemetry.summary.total_inferences
+      ? Math.round(
+          (telemetry.summary.successful / telemetry.summary.total_inferences) * 1000
+        ) / 10
+      : 0,
+    recent_inferences: records,
+  };
 }
 
 export const ServerLogsView: React.FC = () => {
@@ -68,7 +116,7 @@ export const ServerLogsView: React.FC = () => {
     setLoading(true);
     const [logsResult, metricsResult] = await Promise.allSettled([
       fetchServerLogs(300, levelFilter, searchFilter),
-      fetchModelMetrics(),
+      fetchOverviewTelemetry(50),
     ]);
     if (logsResult.status === 'fulfilled') {
       setLogs(logsResult.value.logs || []);
@@ -77,7 +125,7 @@ export const ServerLogsView: React.FC = () => {
       setLogsError(logsResult.reason instanceof Error ? logsResult.reason.message : 'Falha ao carregar logs do servidor.');
     }
     if (metricsResult.status === 'fulfilled') {
-      setMetrics(metricsResult.value);
+      setMetrics(toModelMetrics(metricsResult.value));
       setMetricsError(null);
     } else {
       setMetricsError(metricsResult.reason instanceof Error ? metricsResult.reason.message : 'Falha ao carregar métricas.');
@@ -89,42 +137,72 @@ export const ServerLogsView: React.FC = () => {
     if (isAdmin) void loadInitialData();
   }, [levelFilter, isAdmin]);
 
-  // Conexão SSE para streaming em tempo real
+  // Atualiza as métricas reais de inferência (endpoint de telemetria existente).
+  useEffect(() => {
+    if (!isAdmin) return;
+    const interval = setInterval(async () => {
+      try {
+        setMetrics(toModelMetrics(await fetchOverviewTelemetry(50)));
+        setMetricsError(null);
+      } catch (error) {
+        setMetricsError(
+          error instanceof Error ? error.message : 'Falha ao carregar métricas.'
+        );
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isAdmin]);
+
+  // Conexão SSE para streaming em tempo real, com reconexão exponencial.
   useEffect(() => {
     if (!isAdmin || !isStreaming) return;
 
+    let cancelled = false;
     let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource(`${API_BASE}/system/server-logs/stream`, { withCredentials: true });
-      eventSource.onmessage = (event) => {
-        try {
-          const entry: LogEntry = JSON.parse(event.data);
-          setLogs((prev) => {
-            const next = [...prev, entry];
-            return next.length > 500 ? next.slice(-500) : next;
-          });
-        } catch (err) {
-          console.warn('Erro ao processar log SSE:', err);
-        }
-      };
-      eventSource.onerror = () => {
-        eventSource?.close();
-        setIsStreaming(false);
-      };
-    } catch (e) {
-      console.error('Falha ao iniciar SSE de logs:', e);
-    }
+    let retryTimer: number | undefined;
+    let attempt = 0;
 
-    const interval = setInterval(async () => {
+    const connect = () => {
+      if (cancelled) return;
       try {
-        const m = await fetchModelMetrics();
-        setMetrics(m);
-      } catch {}
-    }, 4000);
+        eventSource = new EventSource(`${API_BASE}/system/server-logs/stream`, {
+          withCredentials: true,
+        });
+        eventSource.onopen = () => {
+          attempt = 0;
+        };
+        eventSource.onmessage = (event) => {
+          try {
+            const entry: LogEntry = JSON.parse(event.data);
+            setLogs((prev) => {
+              const next = [...prev, entry];
+              return next.length > 500 ? next.slice(-500) : next;
+            });
+          } catch (err) {
+            console.warn('Erro ao processar log SSE:', err);
+          }
+        };
+        eventSource.onerror = () => {
+          // EventSource não reconecta sozinho quando o servidor fecha a ligação
+          // com credenciais inválidas; fechamos e voltamos a tentar com backoff.
+          eventSource?.close();
+          eventSource = null;
+          if (cancelled) return;
+          const delay = Math.min(30000, 1000 * 2 ** attempt);
+          attempt += 1;
+          retryTimer = window.setTimeout(connect, delay);
+        };
+      } catch (e) {
+        console.error('Falha ao iniciar SSE de logs:', e);
+      }
+    };
+
+    connect();
 
     return () => {
+      cancelled = true;
       if (eventSource) eventSource.close();
-      clearInterval(interval);
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, [isAdmin, isStreaming]);
 

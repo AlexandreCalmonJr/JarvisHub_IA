@@ -496,19 +496,29 @@ def execute_audit_dependencies(project_root: Path) -> tuple[bool, str, str]:
         return False, "", f"Erro ao auditar dependências: {exc}"
 
     scanned_str = ", ".join(report.get("files_scanned", [])) or "nenhum manifesto"
+    scan_mode_label = report.get("scan_mode", "offline")
     if report.get("vulnerabilities_found", 0) == 0:
+        msg = f"✅ Auditoria de Dependências Concluída ({scan_mode_label}): Nenhuma vulnerabilidade ou CVE conhecida encontrada nos manifestos ({scanned_str}). Score de Segurança: 100/100."
+        if report.get("warning"):
+            msg += f"\n⚠️ **Aviso ({scan_mode_label})**: {report['warning']}"
         return (
             True,
-            f"✅ Auditoria de Dependências Concluída: Nenhuma vulnerabilidade ou CVE conhecida encontrada nos manifestos ({scanned_str}). Score de Segurança: 100/100.",
+            msg,
             "",
         )
 
     findings = report.get("findings", [])
     md_lines = [
-        f"🚨 **Auditoria de Vulnerabilidades & CVEs**: Detectadas {len(findings)} vulnerabilidades conhecidas (Score de Segurança: {report.get('security_score', 0)}/100):\n",
-        "| Pacote | Versão Detectada | CVE / Vulnerabilidade | Severidade | Remediação Recomendada |",
-        "| :--- | :---: | :--- | :---: | :--- |",
+        f"🚨 **Auditoria de Vulnerabilidades & CVEs ({scan_mode_label})**: Detectadas {len(findings)} vulnerabilidades conhecidas (Score de Segurança: {report.get('security_score', 0)}/100):\n",
     ]
+    if report.get("warning"):
+        md_lines.append(f"> ⚠️ **Modo de Varredura ({scan_mode_label})**: {report['warning']}\n")
+    md_lines.extend(
+        [
+            "| Pacote | Versão Detectada | CVE / Vulnerabilidade | Severidade | Remediação Recomendada |",
+            "| :--- | :---: | :--- | :---: | :--- |",
+        ]
+    )
     for f in findings[:60]:
         md_lines.append(
             f"| `{f['package']}` | `{f['detected_version']}` | `{f['cve']}` - {f.get('title', '')[:50]} | **{f['severity']}** | {f['remediation']} |"

@@ -436,6 +436,17 @@ class DatabaseManager:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def list_all_projects(self) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM projects ORDER BY updated_at DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_project(self, project_id: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+
     def save_task(
         self,
         task_id: str,
@@ -568,11 +579,11 @@ class DatabaseManager:
                 cur = conn.execute("DELETE FROM tasks WHERE session_id = ?", (session_id,))
                 return cur.rowcount
             conn.execute(
-                "DELETE FROM chat_messages WHERE session_id = ? AND owner_user_id = ?",
+                "DELETE FROM chat_messages WHERE session_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL)",
                 (session_id, owner_user_id),
             )
             cur = conn.execute(
-                "DELETE FROM tasks WHERE session_id = ? AND owner_user_id = ?",
+                "DELETE FROM tasks WHERE session_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL)",
                 (session_id, owner_user_id),
             )
             return cur.rowcount
@@ -770,7 +781,7 @@ class DatabaseManager:
                 cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             else:
                 cur = conn.execute(
-                    "DELETE FROM tasks WHERE id = ? AND owner_user_id = ?",
+                    "DELETE FROM tasks WHERE id = ? AND (owner_user_id = ? OR owner_user_id IS NULL)",
                     (task_id, owner_user_id),
                 )
             return cur.rowcount > 0
@@ -1011,7 +1022,9 @@ class DatabaseManager:
                 else (
                     existing["is_read_only"]
                     if existing and "is_read_only" in existing.keys()  # noqa: SIM118 - sqlite3.Row membership checks values, keys() checks schema.
-                    else 1
+                    # Sem valor explícito e sem registo anterior: NULL significa
+                    # "não definido" e não aplica restrição de escrita ao agente.
+                    else None
                 )
             )
             cur_key = (

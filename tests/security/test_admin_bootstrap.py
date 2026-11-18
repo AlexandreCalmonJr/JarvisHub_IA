@@ -44,6 +44,26 @@ def test_bootstrap_resets_existing_admin_once(tmp_path, monkeypatch):
     assert service.user_store.authenticate("admin", "jarvishub") is None
 
 
+def test_bootstrap_does_not_reset_admin_after_password_change(tmp_path, monkeypatch):
+    monkeypatch.delenv("JARVIS_BOOTSTRAP_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setenv("JARVIS_ENVIRONMENT", "development")
+    service = _service(tmp_path)
+    service._ensure_initial_admin_user()
+    assert service.user_store.authenticate("admin", "jarvishub") is not None
+    assert service.provisional_password_marker.exists()
+
+    # Operador troca a senha e limpa o marcador provisório
+    service.user_store.set_password("admin", "minha-nova-senha")
+    service.clear_provisional_password_marker()
+    assert not service.provisional_password_marker.exists()
+
+    # Novo arranque do servidor não pode repor jarvishub nem recriar o marcador provisório
+    service._ensure_initial_admin_user()
+    assert service.user_store.authenticate("admin", "minha-nova-senha") is not None
+    assert service.user_store.authenticate("admin", "jarvishub") is None
+    assert not service.provisional_password_marker.exists()
+
+
 def test_production_does_not_apply_known_default_password(tmp_path, monkeypatch):
     monkeypatch.delenv("JARVIS_BOOTSTRAP_ADMIN_PASSWORD", raising=False)
     monkeypatch.setenv("JARVIS_ENVIRONMENT", "production")

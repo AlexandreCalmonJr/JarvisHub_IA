@@ -97,7 +97,9 @@ async def transcribe_audio_endpoint(file: Annotated[UploadFile, File()]):
                 if res.status_code == 200:
                     transcription = res.json().get("text", "").strip()
                     logger.info(
-                        "Áudio transcrito com sucesso via Whisper (%s): '%s'", model, transcription
+                        "Áudio transcrito com sucesso via Whisper (%s): %d caracteres",
+                        model,
+                        len(transcription),
                     )
                     return {
                         "text": transcription,

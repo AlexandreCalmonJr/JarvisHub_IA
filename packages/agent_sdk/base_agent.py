@@ -1,8 +1,10 @@
+import logging
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, Field
 
 from packages.contracts.agent import (
+    DEFAULT_OUTPUT_TOKENS,
     MAX_AGENT_SUMMARY_WORDS,
     AgentOutputContract,
     AgentRole,
@@ -12,6 +14,8 @@ from packages.contracts.agent import (
     ResourceUsage,
 )
 from services.model_runtime import InferenceRequest, ModelManager
+
+logger = logging.getLogger("jarvis.agent_sdk.base_agent")
 
 
 class AgentProfile(BaseModel):
@@ -157,13 +161,17 @@ class AutonomousAgent(BaseAgent):
         tokens_prompt: int = 0,
         tokens_completion: int = 0,
     ) -> AgentOutputContract:
-        """Gera contrato estruturado padronizado obrigatório de resposta."""
+        """Gera contrato estruturado padronizado obrigatório de resposta.
+
+        Evidências e ações ficam vazias quando o chamador não as fornece: um
+        parecer sem observação real não deve parecer um parecer verificado.
+        """
         return AgentOutputContract(
             agent_role=self.profile.role,
             objective=objective,
             summary=summary,
-            evidence=evidence or ["Inspeção de escopo concluída."],
-            actions_taken=actions_taken or ["Análise técnica pelo especialista."],
+            evidence=evidence or [],
+            actions_taken=actions_taken or [],
             affected_files=affected_files or [],
             tests_executed=tests_executed or [],
             risks=risks or [],
@@ -208,29 +216,52 @@ class AutonomousAgent(BaseAgent):
             prompt=task_request.user_prompt,
             system_prompt=system_prompt,
             model_name=self.profile.preferred_model,
-            max_tokens=1024,
+            max_tokens=DEFAULT_OUTPUT_TOKENS,
             temperature=0.3,
             timeout_seconds=300.0,
             task_id=task_request.task_id,
             key_id=self.profile.assigned_key_id,
         )
 
+        failure_reason: str | None = None
         try:
             resp = await model_manager.generate(inf_req)
             content = resp.content.strip()
             model_used = resp.model_name
             dur = resp.duration_ms or 0.0
-        except Exception:
-            content = f"Parecer técnico estruturado de {self.profile.name}: Análise de '{task_request.user_prompt}' concluída."
-            model_used = self.profile.preferred_model
-            dur = 0.0
+            tokens_prompt = resp.prompt_tokens or 0
+            tokens_completion = resp.completion_tokens or 0
+        except Exception as exc:
+            # Nunca sintetizar um parecer: a falha é reportada como bloqueio.
+            failure_reason = f"{type(exc).__name__}: {exc}"[:300]
+            logger.warning("Falha ao gerar parecer de %s: %s", self.profile.name, failure_reason)
+            return self.create_output_contract(
+                objective=f"Execução de tarefa por {self.profile.name}",
+                summary=(
+                    f"O especialista {self.profile.name} não produziu parecer: o provedor de "
+                    "inferência falhou ou está indisponível."
+                ),
+                evidence=[],
+                actions_taken=[],
+                blockers=[
+                    f"Provedor indisponível para o modelo '{self.profile.preferred_model}'.",
+                    f"Detalhe técnico: {failure_reason}",
+                ],
+                next_recommendation=(
+                    "Verificar a disponibilidade do modelo/provedor e repetir a execução."
+                ),
+                model_name=self.profile.preferred_model,
+                duration_ms=0.0,
+            )
 
         return self.create_output_contract(
             objective=f"Execução de tarefa por {self.profile.name}",
             summary=content,
-            evidence=[f"Análise executada por modelo {model_used}"],
-            actions_taken=[f"Processamento pelo especialista {self.profile.name}"],
+            evidence=[f"Resposta produzida pelo modelo '{model_used}'."],
+            actions_taken=[],
             next_recommendation=f"Revisar parecer de {self.profile.name} e definir próximos passos.",
             model_name=model_used,
             duration_ms=dur,
+            tokens_prompt=tokens_prompt,
+            tokens_completion=tokens_completion,
         )

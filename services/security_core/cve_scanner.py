@@ -330,12 +330,20 @@ class CVEScannerService:
         # 3. Auditoria com pip-audit para requirements.txt (se disponível)
         findings: list[dict[str, Any]] = []
         pip_audit_covered_pkgs: set[str] = set()
+        scan_mode = "offline"
+        warning: str | None = None
         if req_file.exists():
             pip_results = self.scan_with_pip_audit(req_file)
             if pip_results is not None:
+                scan_mode = "authoritative"
                 findings.extend(pip_results)
                 for f in pip_results:
                     pip_audit_covered_pkgs.add(f["package"].lower().replace("_", "-"))
+            else:
+                warning = (
+                    "Auditoria autoritativa online (pip-audit / OSV) indisponível ou não concluída "
+                    "(falha de rede, timeout ou pacote ausente); varredura executada usando base estática offline."
+                )
 
         # 4. Cruzamento complementar com a base estática de CVEs (NPM e PyPI offline)
         for pkg, version in detected_deps.items():
@@ -389,8 +397,9 @@ class CVEScannerService:
             ),
         )
 
-        return {
+        report = {
             "status": "completed",
+            "scan_mode": scan_mode,
             "files_scanned": files_scanned,
             "total_dependencies_found": len(detected_deps),
             "vulnerabilities_found": len(findings),
@@ -399,3 +408,6 @@ class CVEScannerService:
             "is_safe": len(findings) == 0,
             "findings": findings,
         }
+        if warning:
+            report["warning"] = warning
+        return report

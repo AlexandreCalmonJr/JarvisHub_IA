@@ -124,11 +124,17 @@ def test_audit_dependencies_detects_vulnerabilities(tmp_path: Path):
     assert "lodash" in out
 
 
-def test_audit_dependencies_safe_project(tmp_path: Path):
+def test_audit_dependencies_safe_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     safe_dir = tmp_path / "safe"
     safe_dir.mkdir()
     req_txt = safe_dir / "requirements.txt"
     req_txt.write_text("fastapi==0.115.0\npydantic==2.9.0\n", encoding="utf-8")
+
+    # Garante execução hermética sem dependência de advisories futuros da rede externa
+    monkeypatch.setattr(
+        "services.security_core.cve_scanner.CVEScannerService.scan_with_pip_audit",
+        lambda self, p: [],
+    )
 
     ok, out, err = execute_audit_dependencies(project_root=safe_dir)
     assert ok is True

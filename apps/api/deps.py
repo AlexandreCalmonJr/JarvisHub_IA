@@ -216,6 +216,7 @@ model_manager = ModelManager(
 db_manager = DatabaseManager(db_path=str(data_dir / "jarvis.db"))
 model_manager.inference_cache = db_manager
 security_core.set_db_manager(db_manager)
+workspace_service.set_db_manager(db_manager)
 resource_manager = ResourceManager(audit_trail=security_core.audit)
 skills_catalog = SkillsCatalog()
 agent_registry = AgentRegistry()

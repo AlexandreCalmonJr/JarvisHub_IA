@@ -88,7 +88,7 @@ async def test_agent_playground_maps_inference_token_usage(monkeypatch):
 
     async def fake_generate(request, has_external_data_approval=False):
         assert request.agent_role == "qa_engineer"
-        assert request.max_tokens == 256
+        assert request.max_tokens == 512
         return InferenceResponse(
             content="Resposta de teste.",
             model_name="modelo-teste",

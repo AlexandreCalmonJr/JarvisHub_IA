@@ -5,7 +5,7 @@ from typing import Any
 
 from packages.contracts.security import AuditEvent, AuditEventSeverity
 
-from .redaction import redact_data
+from .redaction import redact_data, redact_string
 
 logger = logging.getLogger("jarvis.security.audit_trail")
 
@@ -77,7 +77,7 @@ class AuditTrail:
             tool_name=tool_name,
             parameters_redacted=redacted_params,
             status=status,
-            reason=reason,
+            reason=redact_string(reason) if reason else reason,
         )
         self._events.append(event)
         self._save_event_to_db(event)

@@ -22,7 +22,7 @@ test('workspace list and project memory API errors are not converted to empty ar
 
 test('workspace page distinguishes loading failures from an empty project list', () => {
   assert.match(view, /loadError/);
-  assert.match(view, /Os projetos não puderam ser carregados/);
+  assert.match(view, /Não foi possível carregar os projetos/);
   assert.match(view, /role="alert"/);
 });
 

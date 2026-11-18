@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  sendChatMessage,
   streamChatMessage,
   savePonytailLevel,
   rollbackWorkspaceProject,
@@ -45,6 +44,7 @@ export function useChatStream(
   const audioContextRef = useRef<AudioContext | null>(null);
   const vadTimerRef = useRef<any>(null);
   const isListeningRef = useRef<boolean>(false);
+  const speechRecognitionRef = useRef<any>(null);
 
   // Mensagens carregadas do localStorage ou boas-vindas
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -98,6 +98,15 @@ export function useChatStream(
 
   // Limpeza de recursos de áudio do microfone e analisador de silêncio
   const cleanupAudio = () => {
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.onresult = null;
+        speechRecognitionRef.current.onerror = null;
+        speechRecognitionRef.current.onend = null;
+        speechRecognitionRef.current.stop();
+      } catch {}
+      speechRecognitionRef.current = null;
+    }
     if (vadTimerRef.current) {
       clearInterval(vadTimerRef.current);
       vadTimerRef.current = null;
@@ -118,10 +127,50 @@ export function useChatStream(
     setIsListening(false);
   };
 
-  // Entrada por Voz Inteligente (100% nativa via Whisper Groq/LPU - Sem dependência do Google Speech)
-  const handleToggleVoiceInput = async (onTranscript: (text: string) => void) => {
-    // Se já estiver gravando, para e transcreve imediatamente
+  // Encerra microfone, gravador, VAD e stream SSE quando o hook sai de cena.
+  // Sem isto, navegar durante uma gravação deixava o microfone aberto e o
+  // AbortController pendente a escrever estado num componente desmontado.
+  useEffect(() => {
+    return () => {
+      try {
+        if (speechRecognitionRef.current) {
+          speechRecognitionRef.current.stop();
+        }
+      } catch {}
+      speechRecognitionRef.current = null;
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {
+        /* gravador já finalizado */
+      }
+      mediaRecorderRef.current = null;
+      try {
+        abortControllerRef.current?.abort();
+      } catch {
+        /* já abortado */
+      }
+      abortControllerRef.current = null;
+      cleanupAudio();
+    };
+    // `cleanupAudio` apenas manipula refs estáveis e setters do próprio hook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Entrada por Voz Inteligente (Digitação em Tempo Real no chat com SpeechRecognition + fallback Whisper)
+  const handleToggleVoiceInput = async (
+    onTranscript: (text: string, isLive?: boolean) => void,
+    baseText?: string
+  ) => {
+    // Se já estiver gravando/ouvindo, encerra imediatamente
     if (isListeningRef.current) {
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch {}
+        speechRecognitionRef.current = null;
+      }
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         try {
           mediaRecorderRef.current.stop();
@@ -130,6 +179,59 @@ export function useChatStream(
         cleanupAudio();
       }
       return;
+    }
+
+    // 1. Tenta SpeechRecognition nativo para digitação em tempo real ao vivo (ChatGPT style)
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRec) {
+      try {
+        const recognition = new SpeechRec();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'pt-BR';
+        speechRecognitionRef.current = recognition;
+
+        let finalAccumulated = '';
+        const startingText = (baseText || '').trim();
+
+        recognition.onresult = (event: any) => {
+          let interim = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const item = event.results[i];
+            if (item.isFinal) {
+              finalAccumulated += (finalAccumulated ? ' ' : '') + item[0].transcript.trim();
+            } else {
+              interim += item[0].transcript;
+            }
+          }
+
+          const activeText = [finalAccumulated, interim].filter(Boolean).join(' ').trim();
+          if (activeText) {
+            const full = startingText ? `${startingText} ${activeText}` : activeText;
+            onTranscript(full, true);
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          console.warn('SpeechRecognition erro:', event.error);
+          if (event.error === 'not-allowed') {
+            notify('Acesso ao microfone negado no navegador.', 'warning');
+          }
+          cleanupAudio();
+        };
+
+        recognition.onend = () => {
+          cleanupAudio();
+        };
+
+        recognition.start();
+        isListeningRef.current = true;
+        setIsListening(true);
+        notify('Ouvindo... Fale normalmente que o texto será digitado no chat.', 'info');
+        return;
+      } catch (recErr) {
+        console.warn('Falha ao iniciar SpeechRecognition, utilizando Whisper:', recErr);
+      }
     }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -277,10 +379,11 @@ export function useChatStream(
     });
   };
 
-  const handleNewChat = () => {
-    const newSession = generateSessionId();
+  const handleNewChat = (customSessionId?: string): string => {
+    const newSession = customSessionId || generateSessionId();
     setSessionId(newSession);
     setMessages([INITIAL_GREETING]);
+    return newSession;
   };
 
   const handleExportChat = async () => {
@@ -656,82 +759,27 @@ export function useChatStream(
       if (err.name === 'AbortError') {
         return;
       }
-      // Fallback em bloco
-      try {
-        const response = await sendChatMessage(finalPrompt, activeProjectId || undefined, sessionId, modelOverride);
-        const finalText = response.final_summary || 'Tarefa concluída pelo orquestrador.';
-        setMessages((prev) => {
-          const next = [...prev];
-          const lastIdx = next.length - 1;
-          if (lastIdx >= 0 && next[lastIdx].sender === 'jarvis') {
-            next[lastIdx] = {
-              sender: 'jarvis',
-              text: finalText,
-              taskData: response,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-          }
-          return next;
-        });
-
-        let fallbackArtPayload = false;
-        try {
-          const trimmedFallback = finalText.trim();
-          let jsonStr = '';
-          if (trimmedFallback.startsWith('{') && trimmedFallback.endsWith('}')) {
-            jsonStr = trimmedFallback;
-          } else {
-            const m = trimmedFallback.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-            if (m) jsonStr = m[1];
-          }
-          if (jsonStr) {
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.artifact_payload && parsed.artifact_payload.code) {
-              fallbackArtPayload = true;
-              if (onArtifactDetected) {
-                onArtifactDetected({
-                  title: parsed.artifact_payload.title || 'Artefato de Código',
-                  content: parsed.artifact_payload.code,
-                  htmlContent: parsed.artifact_payload.language === 'html' ? parsed.artifact_payload.code : undefined,
-                  mode: parsed.active_agent_mode,
-                  planStatus: parsed.ui_layout_instructions?.plan_status,
-                });
-              }
-            }
-          }
-        } catch {}
-
-        if (!fallbackArtPayload) {
-          const prjMatch = finalText.match(/workspace\/([a-zA-Z0-9_-]+)/);
-          const diffMatch = finalText.match(/```diff\n([\s\S]*?)\n```/);
-          if (prjMatch || diffMatch) {
-            if (onArtifactDetected) {
-              onArtifactDetected({
-                title: prjMatch ? `Projeto: ${prjMatch[1]}` : 'Diff de Alterações',
-                projectId: prjMatch ? prjMatch[1] : undefined,
-                diffContent: diffMatch ? diffMatch[1] : undefined,
-                content: finalText,
-              });
-            }
-            if (onProjectsNeedRefresh) {
-              onProjectsNeedRefresh();
-            }
-          }
+      // Não repetir o POST em bloco: o pedido pode já ter criado uma tarefa no
+      // backend e o reenvio duplicaria execuções (e custos). Mostra o erro e
+      // deixa o utilizador decidir, mantendo a tarefa original intacta.
+      const message =
+        err?.message ||
+        'A ligação de streaming falhou. A tarefa pode continuar em execução no servidor.';
+      setMessages((prev) => {
+        const next = [...prev];
+        const lastIdx = next.length - 1;
+        if (lastIdx >= 0 && next[lastIdx].sender === 'jarvis') {
+          next[lastIdx] = {
+            ...next[lastIdx],
+            text: `[Erro de ligação]: ${message}`,
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          };
         }
-      } catch (fallbackErr: any) {
-        setMessages((prev) => {
-          const next = [...prev];
-          const lastIdx = next.length - 1;
-          if (lastIdx >= 0 && next[lastIdx].sender === 'jarvis') {
-            next[lastIdx] = {
-              sender: 'jarvis',
-              text: `[Erro]: ${fallbackErr.message || 'Falha ao conectar com o backend'}`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-          }
-          return next;
-        });
-      }
+        return next;
+      });
     } finally {
       finishStream();
       setLoading(false);

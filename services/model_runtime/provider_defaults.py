@@ -1,36 +1,36 @@
-"""Modelos predefinidos por provedor e substituições de modelos descontinuados.
+"""Modelos predefinidos por provedor.
 
-A lista de modelos é mantida num único local para evitar que o wizard, o cofre,
-o adaptador e os agentes divirjam. A Groq descontinuou os modelos Llama para os
-planos Free/Developer em 16/08/2026; pedidos a esses IDs devolvem
-``model_not_found``. Os equivalentes atuais são aplicados automaticamente.
+A tabela real vive em :mod:`services.model_runtime.provider_catalog`; este
+módulo mantém a API pública usada pelo adaptador, pelo cofre e pelos agentes e
+apenas aplica as substituições de IDs descontinuados.
 """
 
 from __future__ import annotations
 
+from .provider_catalog import PROVIDERS_BY_ID, get_provider, resolve_base_url, resolve_model
+
+# Compatibilidade: mapa simples provider -> modelo predefinido.
 DEFAULT_MODELS: dict[str, str] = {
-    "openai": "gpt-4o-mini",
-    "gemini": "gemini-2.5-flash",
-    "groq": "openai/gpt-oss-120b",
-    "deepseek": "deepseek-chat",
-    "anthropic": "claude-3-5-haiku-20241022",
-    "openrouter": "meta-llama/llama-3.3-70b-instruct",
-    "custom": "gpt-4o-mini",
+    spec.id: spec.default_model for spec in PROVIDERS_BY_ID.values() if spec.default_model
 }
 
-# Groq: https://console.groq.com/docs/deprecations
+#: IDs que deixaram de ser servidos e o seu substituto atual.
+#: Só entram aqui IDs verificados; nunca inventar versões de modelo.
 RETIRED_MODELS: dict[str, dict[str, str]] = {
     "groq": {
         "llama-3.3-70b-versatile": "openai/gpt-oss-120b",
         "llama-3.1-8b-instant": "openai/gpt-oss-20b",
-        "qwen/qwen3.6-27b": "qwen/qwen3.8-27b",
+    },
+    "anthropic": {
+        "claude-3-5-haiku-20241022": "claude-haiku-5-5",
+        "claude-3-5-sonnet-20241022": "claude-sonnet-5-5",
     },
 }
 
 
-def default_model_for_provider(provider: str | None) -> str:
-    """Devolve o modelo predefinido atual para o provedor indicado."""
-    return DEFAULT_MODELS.get((provider or "").lower().strip(), "gpt-4o-mini")
+def default_model_for_provider(provider: str | None) -> str | None:
+    """Modelo predefinido do provedor; ``None`` quando exige configuração."""
+    return resolve_model(provider)
 
 
 def normalize_model_for_provider(provider: str | None, model: str | None) -> str | None:
@@ -39,3 +39,14 @@ def normalize_model_for_provider(provider: str | None, model: str | None) -> str
         return None
     retired = RETIRED_MODELS.get((provider or "").lower().strip(), {})
     return retired.get(model.strip(), model)
+
+
+__all__ = [
+    "DEFAULT_MODELS",
+    "RETIRED_MODELS",
+    "default_model_for_provider",
+    "get_provider",
+    "normalize_model_for_provider",
+    "resolve_base_url",
+    "resolve_model",
+]

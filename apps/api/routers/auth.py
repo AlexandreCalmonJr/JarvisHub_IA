@@ -260,20 +260,13 @@ async def exchange_bootstrap(
 async def me(principal: Principal = Depends(get_principal)):
     payload = principal.to_dict()
     payload["user_id"] = principal.subject_id
-    environment = (
-        __import__("os")
-        .environ.get(
-            "JARVIS_ENVIRONMENT", __import__("os").environ.get("JARVIS_ENV", "development")
-        )
-        .strip()
-        .lower()
-    )
+    # A senha é provisória enquanto o marcador criado na inicialização existir.
+    # Não é feita qualquer verificação de senha aqui (evita PBKDF2 por request).
     payload["must_change_password"] = bool(
         principal.kind == "human"
         and principal.subject_id.casefold() == "admin"
         and not principal.via_admin_token
-        and environment not in {"prod", "production"}
-        and auth_service.user_store.authenticate(principal.subject_id, "jarvishub")
+        and auth_service.provisional_password_marker.exists()
     )
     if principal.session_id:
         session = auth_service.security.sessions.get_session(principal.session_id)
@@ -308,6 +301,8 @@ async def change_own_password(
         )
     if not auth_service.user_store.set_password(principal.subject_id, payload.new_password):
         raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    if principal.subject_id.casefold() == "admin":
+        auth_service.clear_provisional_password_marker()
     for session in auth_service.security.sessions.list_sessions(include_revoked=False):
         if (
             session.user_id.casefold() == principal.subject_id.casefold()

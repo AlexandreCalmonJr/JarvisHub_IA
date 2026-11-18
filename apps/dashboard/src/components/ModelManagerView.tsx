@@ -15,6 +15,7 @@ import { ModelStatusHero } from './models/ModelStatusHero';
 import { HybridGatewayConfig, ProviderCard } from './models/HybridGatewayConfig';
 import { HuggingFaceHubSection } from './models/HuggingFaceHubSection';
 import { LocalModelsGrid } from './models/LocalModelsGrid';
+import { AgentRecommendationTable } from './models/AgentRecommendationTable';
 import { KeyVaultManager } from './models/KeyVaultManager';
 import { ModelQualityPanel } from './models/ModelQualityPanel';
 
@@ -51,6 +52,7 @@ export const ModelManagerView: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [downloadStatusText, setDownloadStatusText] = useState<string>('');
   const [agentRecommendations, setAgentRecommendations] = useState<Record<string, { model: string; reason: string }>>({});
+  const [providerPresets, setProviderPresets] = useState<ProviderCard[]>([]);
 
   const loadData = async (includeAdminConfig = isAdmin) => {
     setLoading(true);
@@ -74,6 +76,17 @@ export const ModelManagerView: React.FC = () => {
         setDefaultModel(hybridRes.default_model || 'gemini-2.5-flash');
         setBaseUrl(hybridRes.base_url || '');
         setMaxBudget(hybridRes.max_budget_usd || 5.0);
+        // A lista de provedores/modelos vem do backend (provider_catalog.py).
+        if (Array.isArray(hybridRes.presets)) {
+          setProviderPresets(
+            hybridRes.presets.map((p: any) => ({
+              id: String(p.id),
+              name: String(p.name || p.id),
+              defaultModel: p.default_model ? String(p.default_model) : '',
+              baseUrl: p.base_url ? String(p.base_url) : '',
+            })),
+          );
+        }
       } else if (includeAdminConfig && hybridResult.status === 'rejected') failures.push(hybridResult.reason instanceof Error ? hybridResult.reason.message : 'Falha ao consultar gateway híbrido.');
 
       if (curatedResult.status === 'fulfilled') setHfCurated(curatedResult.value);
@@ -470,6 +483,12 @@ export const ModelManagerView: React.FC = () => {
             onRefresh={() => loadData()}
           />}
           <LocalModelsGrid models={data?.models} />
+          <AgentRecommendationTable
+            recommendations={agentRecommendations}
+            isModelInstalled={isModelInstalled}
+            onInstallModel={handleInstallModel}
+            isInstalling={Boolean(downloadingModelId)}
+          />
         </div>
       )}
 
@@ -477,6 +496,7 @@ export const ModelManagerView: React.FC = () => {
       {isAdmin && activeTab === 'hybrid' && (
         <HybridGatewayConfig
           provider={provider}
+          providers={providerPresets}
           enabled={enabled}
           apiKey={apiKey}
           showKey={showKey}

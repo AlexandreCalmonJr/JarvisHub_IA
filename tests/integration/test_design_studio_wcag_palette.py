@@ -80,7 +80,9 @@ def test_design_studio_wcag_contrast_audit():
     assert res_low["passes_aa_large"] is False
 
     # Markup com estilo inline de baixo contraste deve ser detectado
-    bad_contrast_markup = '<div style="color: #888888; background-color: #777777;">Texto ilegível</div>'
+    bad_contrast_markup = (
+        '<div style="color: #888888; background-color: #777777;">Texto ilegível</div>'
+    )
     audit = service.audit_wcag_accessibility(bad_contrast_markup)
     assert any(f["rule"] == "WCAG_1.4.3_CONTRAST_MINIMUM" for f in audit["findings"])
 

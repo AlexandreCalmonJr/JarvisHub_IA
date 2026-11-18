@@ -12,6 +12,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from packages.contracts.agent import (
+    DEFAULT_OUTPUT_TOKENS,
+    MAX_OUTPUT_TOKENS,
+    MIN_OUTPUT_TOKENS,
+)
+
 
 class ToolRisk(str, Enum):
     """Nível de risco de uma ferramenta."""
@@ -136,7 +142,9 @@ class AgentRunConfig(BaseModel):
     agent_role: str = "backend_developer"
     max_iterations: int = 12
     temperature: float = 0.15
-    max_tokens: int = Field(default=1024, ge=256, le=1024)
+    max_tokens: int = Field(
+        default=DEFAULT_OUTPUT_TOKENS, ge=MIN_OUTPUT_TOKENS, le=MAX_OUTPUT_TOKENS
+    )
     timeout_seconds: float = 180.0
     include_history: bool = True
     approval_timeout_seconds: float = 900.0

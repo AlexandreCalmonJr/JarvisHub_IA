@@ -21,6 +21,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from services.model_runtime.context_budget import resolve_num_ctx, trim_turns
+
 from .context import build_project_context
 from .providers import ChatProvider, ProviderError
 from .types import ChatTurn
@@ -278,6 +280,20 @@ class ChatAgentRuntime:
             except Exception as exc:
                 logger.warning("Falha ao carregar histórico do chat %s: %s", session_id, exc)
         turns.append(ChatTurn(role="user", content=prompt))
+
+        # Compactação contínua de histórico para respeitar a janela de contexto (H3)
+        effective_num_ctx = resolve_num_ctx()
+        turns, dropped = trim_turns(
+            turns,
+            num_ctx=effective_num_ctx,
+            output_reserve=max(1024, config.max_tokens),
+        )
+        if dropped:
+            logger.debug(
+                "Contexto de chat compactado para a sessão %s: %d turno(s) podado(s).",
+                session_id,
+                dropped,
+            )
         return turns, sources
 
     def _persist(

@@ -1,9 +1,11 @@
+import asyncio
 import difflib
 import logging
 import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,8 +26,14 @@ class ProjectWorkspaceService:
     Controla o registo seguro de pastas locais, inventário, análise e scaffolding/modificação física de arquivos.
     """
 
-    def __init__(self, security_core: SecurityCore, base_dir: Path | str | None = None):
+    def __init__(
+        self,
+        security_core: SecurityCore,
+        base_dir: Path | str | None = None,
+        db_manager: Any = None,
+    ):
         self.security_core = security_core
+        self.db_manager = db_manager
         self.scanner = ProjectScanner()
         self.analyzer = ProjectAnalyzer()
         self.scaffolder = ProjectScaffolder()
@@ -38,6 +46,58 @@ class ProjectWorkspaceService:
         else:
             self.base_dir = (Path.cwd() / "workspace").resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        if self.db_manager:
+            self.rehydrate_from_db()
+
+    def set_db_manager(self, db_manager: Any) -> None:
+        """Configura a referência do DatabaseManager e reidrata projetos persistidos."""
+        self.db_manager = db_manager
+        self.rehydrate_from_db()
+
+    def rehydrate_from_db(self) -> int:
+        """Reidrata projetos externos importados persistidos no SQLite para _inventories e PermissionEngine."""
+        if not self.db_manager or not hasattr(self.db_manager, "list_all_projects"):
+            return 0
+        rehydrated = 0
+        try:
+            projects = self.db_manager.list_all_projects()
+            for p in projects:
+                pid = p.get("id")
+                if not pid:
+                    continue
+                root_path_str = p.get("root_path")
+                if not root_path_str:
+                    continue
+                p_path = Path(root_path_str).resolve()
+                if not p_path.exists():
+                    continue
+                if pid in self._inventories:
+                    continue
+                mode_str = p.get("mode", "read_only")
+                try:
+                    mode = ProjectWorkMode(mode_str)
+                except Exception:
+                    mode = (
+                        ProjectWorkMode.EDIT_APPROVED
+                        if mode_str == "edit_approved"
+                        else ProjectWorkMode.READ_ONLY
+                    )
+                try:
+                    self.security_core.permission_engine.register_project(
+                        project_id=pid,
+                        root_path=str(p_path),
+                        mode=mode,
+                    )
+                except Exception as exc:
+                    logger.debug("Falha ao registrar permissão para projeto reidratado %s: %s", pid, exc)
+                try:
+                    self._inventories[pid] = self.scanner.scan(project_id=pid, root_path=p_path)
+                    rehydrated += 1
+                except Exception as exc:
+                    logger.debug("Falha ao escanear inventário para projeto reidratado %s: %s", pid, exc)
+        except Exception as exc:
+            logger.warning("Falha ao reidratar projetos externos do banco de dados: %s", exc)
+        return rehydrated
 
     def get_project_dir(self, project_id: str) -> Path:
         """Retorna o caminho físico seguro do diretório do projeto no computador."""
@@ -46,6 +106,34 @@ class ProjectWorkspaceService:
             inv = self._inventories[project_id]
             if inv.root_path and Path(inv.root_path).exists():
                 return Path(inv.root_path).resolve()
+
+        # Tenta reidratar sob demanda do banco de dados se não estiver na memória
+        if self.db_manager and hasattr(self.db_manager, "get_project"):
+            try:
+                db_p = self.db_manager.get_project(project_id)
+                if db_p and db_p.get("root_path"):
+                    p_path = Path(db_p["root_path"]).resolve()
+                    if p_path.exists():
+                        mode_str = db_p.get("mode", "read_only")
+                        try:
+                            mode = ProjectWorkMode(mode_str)
+                        except Exception:
+                            mode = (
+                                ProjectWorkMode.EDIT_APPROVED
+                                if mode_str == "edit_approved"
+                                else ProjectWorkMode.READ_ONLY
+                            )
+                        self.security_core.permission_engine.register_project(
+                            project_id=project_id,
+                            root_path=str(p_path),
+                            mode=mode,
+                        )
+                        self._inventories[project_id] = self.scanner.scan(
+                            project_id=project_id, root_path=p_path
+                        )
+                        return p_path
+            except Exception as exc:
+                logger.debug("Tentativa de reidratação sob demanda falhou para %s: %s", project_id, exc)
 
         if hasattr(self.security_core, "permission_engine") and hasattr(
             self.security_core.permission_engine, "_project_allowlists"
@@ -228,6 +316,12 @@ class ProjectWorkspaceService:
         self._inventories.pop(project_id, None)
         self._reports.pop(project_id, None)
 
+        if self.db_manager and hasattr(self.db_manager, "delete_project"):
+            try:
+                self.db_manager.delete_project(project_id)
+            except Exception as exc:
+                logger.debug("Falha ao remover projeto do banco de dados: %s", exc)
+
         if hasattr(self.security_core, "permission_engine"):
             if hasattr(self.security_core.permission_engine, "_project_allowlists"):
                 self.security_core.permission_engine._project_allowlists.pop(project_id, None)
@@ -243,7 +337,9 @@ class ProjectWorkspaceService:
             )
         return True
 
-    def _run_git(self, project_dir: Path, args: list[str]) -> subprocess.CompletedProcess:
+    def _run_git(
+        self, project_dir: Path, args: list[str], timeout_seconds: float | None = None
+    ) -> subprocess.CompletedProcess:
         """Executa um comando Git estritamente isolado no repositório do projeto."""
         norm_dir = project_dir.resolve()
         git_dir = norm_dir / ".git"
@@ -265,6 +361,47 @@ class ProjectWorkspaceService:
             text=True,
             encoding="utf-8",
             errors="replace",
+            timeout=timeout_seconds,
+        )
+
+    async def run_git_command(
+        self,
+        args: list[str],
+        cwd: Path | None = None,
+        timeout_seconds: float | None = None,
+    ) -> tuple[int, str, str, float]:
+        """Executa Git sem shell, apenas no repositório isolado do projeto.
+
+        ``args`` é passado directamente ao executável (sem interpolação), pelo que
+        caminhos e mensagens controlados pelo modelo nunca são interpretados pelo
+        shell. O repositório tem de existir dentro de ``cwd``: um projeto sem
+        ``.git`` próprio falha em vez de reutilizar o repositório pai.
+        """
+        target = Path(cwd or self.base_dir)
+        started = time.perf_counter()
+        try:
+            completed = await asyncio.to_thread(
+                self._run_git, target, list(args), timeout_seconds or 60.0
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                124,
+                "",
+                "git excedeu o tempo limite.",
+                (time.perf_counter() - started) * 1000.0,
+            )
+        except FileNotFoundError:
+            return (
+                127,
+                "",
+                "Executável 'git' não encontrado no sistema.",
+                (time.perf_counter() - started) * 1000.0,
+            )
+        return (
+            completed.returncode,
+            completed.stdout or "",
+            completed.stderr or "",
+            (time.perf_counter() - started) * 1000.0,
         )
 
     async def run_shell_command(
@@ -489,7 +626,10 @@ class ProjectWorkspaceService:
         if not target.exists() or not target.is_dir():
             raise FileNotFoundError(f"O diretório informado não foi encontrado: '{folder_path}'")
 
-        raw_roots = os.environ.get("JARVIS_WORKSPACE_IMPORT_ROOTS", "").strip()
+        raw_roots = (
+            os.environ.get("JARVIS_WORKSPACE_IMPORT_ROOTS", "")
+            or os.environ.get("ALLOWLIST_WORKSPACE_ROOT", "")
+        ).strip()
         separator = ";" if os.name == "nt" else ","
         configured = [item.strip() for item in raw_roots.split(separator) if item.strip()]
         allowed_roots = [Path(item).expanduser().resolve() for item in configured]
@@ -834,6 +974,9 @@ class ProjectWorkspaceService:
                         "has_web_preview": has_web_preview,
                     }
                 )
+
+        # Garante reidratação de projetos registrados no banco de dados
+        self.rehydrate_from_db()
 
         # Inclui projetos externos registrados
         for pid, inv in self._inventories.items():

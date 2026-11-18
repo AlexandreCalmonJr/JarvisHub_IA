@@ -11,8 +11,17 @@ import {
   FileText,
   X,
   Upload,
+  Sparkles,
+  Users,
+  ShieldCheck,
+  RotateCcw,
+  CheckCircle2,
+  Cpu,
+  Cloud,
+  Check,
 } from 'lucide-react';
 import { fetchModels } from '../../api';
+import { FormattedChatModel, parseChatModelOptions } from '../../services/chatModels';
 import { notify } from '../common/Toast';
 import { getAccountStorageKey } from '../../services/accountScope';
 import { humanizeLabel } from '../../types';
@@ -23,15 +32,7 @@ interface AttachedFile {
   content: string;
 }
 
-export interface RealChatModel {
-  id: string;
-  name: string;
-  label: string;
-  effort: string;
-  isCloud?: boolean;
-}
-
-
+export type RealChatModel = FormattedChatModel;
 
 interface ChatInputProps {
   input: string;
@@ -46,6 +47,9 @@ interface ChatInputProps {
   onDetachProject: () => void;
   onOpenProjectModal?: () => void;
   isFloatingCenter?: boolean;
+  selectedModelId?: string | null;
+  onSelectModelId?: (modelId: string) => void;
+  availableModels?: FormattedChatModel[];
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -61,6 +65,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onDetachProject,
   onOpenProjectModal,
   isFloatingCenter = false,
+  selectedModelId,
+  onSelectModelId,
+  availableModels,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,54 +79,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
+    if (availableModels && availableModels.length > 0) {
+      setModelOptions(availableModels);
+      return;
+    }
     let isMounted = true;
     fetchModels()
       .then((data: any) => {
         if (!isMounted || !data) return;
-        const list: RealChatModel[] = [];
-
-        // Adiciona modelo do Gateway Híbrido se habilitado
-        if (data.hybrid_gateway?.enabled && data.hybrid_gateway?.model) {
-          const provName = (data.hybrid_gateway.provider || 'Nuvem').toUpperCase();
-          list.push({
-            id: data.hybrid_gateway.model,
-            name: data.hybrid_gateway.model,
-            label: `${data.hybrid_gateway.model}`,
-            effort: `${provName} Nuvem`,
-            isCloud: true,
-          });
-        }
-
-        // Adiciona modelos locais instalados no Ollama (filtrando modelos de embedding que não são LLMs de chat)
-        if (Array.isArray(data.models)) {
-          for (const m of data.models) {
-            const nameLower = (m.name || '').toLowerCase();
-            if (nameLower.includes('embed') || nameLower.includes('nomic') || nameLower.includes('bge-') || nameLower.includes('minilm')) {
-              continue;
-            }
-            const role = m.role || 'Local';
-            const shortRole = role.split(',')[0].trim();
-            list.push({
-              id: m.name,
-              name: m.name,
-              label: m.name,
-              effort: `${m.parameter_size || 'Local'} (${shortRole})`,
-              isCloud: false,
-            });
-          }
-        }
-
+        const list = parseChatModelOptions(data);
         setModelOptions(list);
-        const savedModelId = localStorage.getItem(getAccountStorageKey('jarvis_selected_model'));
-        let found = list.find((item) => item.id === savedModelId);
-        if (found && (found.id.toLowerCase().includes('embed') || found.id.toLowerCase().includes('nomic'))) {
-          found = undefined;
-          localStorage.removeItem(getAccountStorageKey('jarvis_selected_model'));
-        }
-        if (!found && list.length > 0) {
-          found = list.find((item) => item.id.toLowerCase().includes('qwen') || item.id.toLowerCase().includes('llama')) || list[0];
-        }
-        setSelectedModel(found || null);
       })
       .catch((err) => {
         console.warn('Falha ao carregar modelos reais no ChatInput:', err);
@@ -128,7 +97,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [availableModels]);
+
+  useEffect(() => {
+    if (modelOptions.length === 0) return;
+    const targetId = selectedModelId !== undefined
+      ? selectedModelId
+      : localStorage.getItem(getAccountStorageKey('jarvis_selected_model'));
+
+    let found = modelOptions.find((item) => item.id === targetId);
+    if (!found && !selectedModelId && modelOptions.length > 0) {
+      found = modelOptions.find((item) => item.id.toLowerCase().includes('qwen') || item.id.toLowerCase().includes('llama')) || modelOptions[0];
+    }
+    setSelectedModel(found || null);
+  }, [selectedModelId, modelOptions]);
 
   useEffect(() => {
     if (!input && textareaRef.current) {
@@ -351,6 +333,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onChange={handleTextareaChange}
           onKeyDown={handleKeyDown}
           placeholder="Como posso ajudar você hoje?"
+          aria-label="Mensagem para o JARVIS"
           disabled={loading}
           style={{
             width: '100%',
@@ -405,20 +388,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <div
                 style={{
                   position: 'absolute',
-                  bottom: '38px',
+                  bottom: '44px',
                   left: 0,
-                  width: '260px',
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
-                  padding: '6px',
-                  zIndex: 100,
+                  width: '320px',
+                  backgroundColor: 'rgba(20, 20, 23, 0.96)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '14px',
+                  boxShadow: '0 20px 48px rgba(0, 0, 0, 0.65)',
+                  padding: '8px',
+                  zIndex: 200,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '2px',
+                  gap: '4px',
                 }}
               >
+                {/* Seção Anexos */}
+                <div style={{ padding: '4px 8px 2px 8px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Anexos & Contexto
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -427,15 +416,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   }}
                   className="btn btn-ghost"
                   style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'flex-start',
-                    padding: '7px 10px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
                     fontSize: '0.80rem',
                     width: '100%',
-                    gap: '8px',
+                    gap: '10px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
                   }}
                 >
-                  <Paperclip size={14} color="var(--accent-color)" />
-                  <span>Anexar Arquivo (Código, Log, PDF)</span>
+                  <div style={{ width: '26px', height: '26px', borderRadius: '7px', backgroundColor: 'rgba(217, 119, 87, 0.15)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <Paperclip size={13} color="var(--accent-color)" />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Anexar Arquivo</span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Código, logs, texto ou PDF</span>
+                  </div>
                 </button>
 
                 {onOpenProjectModal && (
@@ -447,73 +445,81 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     }}
                     className="btn btn-ghost"
                     style={{
+                      display: 'flex',
+                      alignItems: 'center',
                       justifyContent: 'flex-start',
-                      padding: '7px 10px',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
                       fontSize: '0.80rem',
                       width: '100%',
-                      gap: '8px',
+                      gap: '10px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.03)',
                     }}
                   >
-                    <FolderGit2 size={14} color="var(--accent-color)" />
-                    <span>Anexar Projeto do Workspace</span>
+                    <div style={{ width: '26px', height: '26px', borderRadius: '7px', backgroundColor: 'rgba(56, 189, 248, 0.15)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <FolderGit2 size={13} color="#38bdf8" />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Anexar Projeto do Workspace</span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Vincular repositório ao chat</span>
+                    </div>
                   </button>
                 )}
 
-                <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
+                <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.07)', margin: '4px 0' }} />
 
-                <button
-                  type="button"
-                  onClick={() => handleSelectCommand('/ponytail senior')}
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '0.78rem', width: '100%' }}
-                >
-                  <span>/ponytail senior — Código enxuto YAGNI</span>
-                </button>
+                {/* Seção Comandos */}
+                <div style={{ padding: '2px 8px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Comandos Rápidos
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleSelectCommand('/debate')}
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '0.78rem', width: '100%' }}
-                >
-                  <span>/debate — Mesa Redonda de Especialistas</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectCommand('/audit')}
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '0.78rem', width: '100%' }}
-                >
-                  <span>/audit — Auditoria de Segurança OWASP</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectCommand('/rollback')}
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '0.78rem', width: '100%' }}
-                >
-                  <span>/rollback — Reverter última alteração Git</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectCommand('/test')}
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '0.78rem', width: '100%' }}
-                >
-                  <span>/test — Gerar Suíte de Testes QA</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectCommand('/doc')}
-                  className="btn btn-ghost"
-                  style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '0.78rem', width: '100%' }}
-                >
-                  <span>/doc — Documentar Arquitetura</span>
-                </button>
+                {[
+                  { slug: '/ponytail senior', desc: 'Código enxuto YAGNI', icon: Sparkles },
+                  { slug: '/debate', desc: 'Mesa Redonda de Especialistas', icon: Users },
+                  { slug: '/audit', desc: 'Auditoria de Segurança OWASP', icon: ShieldCheck },
+                  { slug: '/rollback', desc: 'Reverter última alteração Git', icon: RotateCcw },
+                  { slug: '/test', desc: 'Gerar Suíte de Testes QA', icon: CheckCircle2 },
+                  { slug: '/doc', desc: 'Documentar Arquitetura', icon: FileText },
+                ].map((cmd) => {
+                  const IconComponent = cmd.icon;
+                  return (
+                    <button
+                      key={cmd.slug}
+                      type="button"
+                      onClick={() => handleSelectCommand(cmd.slug)}
+                      className="btn btn-ghost"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-start',
+                        padding: '6px 8px',
+                        borderRadius: '8px',
+                        fontSize: '0.78rem',
+                        width: '100%',
+                        gap: '8px',
+                      }}
+                    >
+                      <IconComponent size={13} color="var(--accent-color)" style={{ flexShrink: 0 }} />
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono, monospace)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: 'rgba(217, 119, 87, 0.14)',
+                          color: 'var(--accent-color)',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {cmd.slug}
+                      </span>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {cmd.desc}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -554,27 +560,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <div
                   style={{
                     position: 'absolute',
-                    bottom: '36px',
+                    bottom: '42px',
                     right: 0,
-                    width: '210px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '12px',
-                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
-                    padding: '6px',
-                    zIndex: 100,
+                    width: '320px',
+                    backgroundColor: 'rgba(20, 20, 23, 0.96)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '14px',
+                    boxShadow: '0 20px 48px rgba(0, 0, 0, 0.7)',
+                    padding: '8px',
+                    zIndex: 200,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '2px',
+                    gap: '4px',
                   }}
                 >
-                  <div style={{ padding: '4px 8px', fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                    MODELOS REAIS DISPONÍVEIS
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <span>MODELOS REAIS DISPONÍVEIS</span>
+                    <span style={{ color: 'var(--accent-color)' }}>{modelOptions.length + 1} opções</span>
                   </div>
+
+                  {/* Opção Automático (Maestro) */}
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedModel(null);
+                      if (onSelectModelId) {
+                        onSelectModelId('auto');
+                      }
                       try {
                         localStorage.removeItem(getAccountStorageKey('jarvis_selected_model'));
                       } catch {
@@ -587,52 +600,105 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '7px 8px',
-                      fontSize: '0.78rem',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
                       width: '100%',
-                      backgroundColor: selectedModel === null ? 'var(--accent-glow)' : 'transparent',
-                      color: selectedModel === null ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      backgroundColor: selectedModel === null ? 'rgba(217, 119, 87, 0.16)' : 'rgba(255, 255, 255, 0.03)',
+                      border: selectedModel === null ? '1px solid rgba(217, 119, 87, 0.35)' : '1px solid transparent',
                     }}
                   >
-                    <span>Automático (Maestro)</span>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--accent-color)' }}>Recomendado</span>
-                  </button>
-                  {modelOptions.length === 0 && (
-                    <div style={{ padding: '8px', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-                      Nenhum modelo foi confirmado pela API. A seleção automática continua disponível.
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                      <Sparkles size={14} color="var(--accent-color)" style={{ flexShrink: 0 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.80rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          Automático (Maestro)
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                          Roteamento dinâmico
+                        </span>
+                      </div>
                     </div>
-                  )}
-                  {modelOptions.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedModel(m);
-                        try {
-                          localStorage.setItem(getAccountStorageKey('jarvis_selected_model'), m.id);
-                        } catch {
-                          // A seleção continua ativa nesta sessão mesmo sem persistência local.
-                        }
-                        setShowModelMenu(false);
-                      }}
-                      className="btn btn-ghost"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '6px 8px',
-                        fontSize: '0.78rem',
-                        width: '100%',
-                        backgroundColor: selectedModel?.id === m.id ? 'rgba(217, 119, 87, 0.15)' : 'transparent',
-                        color: selectedModel?.id === m.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      }}
-                    >
-                      <span style={{ fontWeight: selectedModel?.id === m.id ? 600 : 400 }}>{m.label}</span>
-                      <span style={{ fontSize: '0.68rem', color: m.isCloud ? 'var(--accent-color)' : 'var(--text-muted)' }}>
-                        {m.effort}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.66rem', color: 'var(--accent-color)', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(217, 119, 87, 0.12)', fontWeight: 600 }}>
+                        Recomendado
                       </span>
-                    </button>
-                  ))}
+                      {selectedModel === null && <Check size={13} color="var(--accent-color)" />}
+                    </div>
+                  </button>
+
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.07)', margin: '3px 0' }} />
+
+                  {/* Lista com scroll dos Modelos */}
+                  <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {modelOptions.length === 0 && (
+                      <div style={{ padding: '8px', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                        Nenhum modelo foi confirmado pela API. A seleção automática continua disponível.
+                      </div>
+                    )}
+                    {modelOptions.map((m) => {
+                      const isSelected = selectedModel?.id === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedModel(m);
+                            if (onSelectModelId) {
+                              onSelectModelId(m.id);
+                            }
+                            try {
+                              localStorage.setItem(getAccountStorageKey('jarvis_selected_model'), m.id);
+                            } catch {
+                              // A seleção continua ativa nesta sessão mesmo sem persistência local.
+                            }
+                            setShowModelMenu(false);
+                          }}
+                          className="btn btn-ghost"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '7px 10px',
+                            borderRadius: '8px',
+                            width: '100%',
+                            backgroundColor: isSelected ? 'rgba(217, 119, 87, 0.16)' : 'transparent',
+                            border: isSelected ? '1px solid rgba(217, 119, 87, 0.35)' : '1px solid transparent',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                            {m.isCloud ? (
+                              <Cloud size={13} color="var(--accent-color)" style={{ flexShrink: 0 }} />
+                            ) : (
+                              <Cpu size={13} color="#38bdf8" style={{ flexShrink: 0 }} />
+                            )}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                              <span style={{ fontSize: '0.80rem', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#ffffff' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {m.label}
+                              </span>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {m.effort}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <span
+                              style={{
+                                fontSize: '0.65rem',
+                                color: m.isCloud ? 'var(--accent-color)' : '#38bdf8',
+                                padding: '2px 5px',
+                                borderRadius: '4px',
+                                backgroundColor: m.isCloud ? 'rgba(217, 119, 87, 0.12)' : 'rgba(56, 189, 248, 0.12)',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {m.isCloud ? 'GROQ Nuvem' : 'Local'}
+                            </span>
+                            {isSelected && <Check size={13} color="var(--accent-color)" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

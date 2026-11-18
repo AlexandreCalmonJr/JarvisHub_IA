@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -21,6 +21,19 @@ const MAX_WIDTH_MAP = {
   full: '96vw',
 };
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
+// Modais podem empilhar (ex.: wizard sobre um modal de detalhe). O bloqueio de
+// scroll do body só é levantado quando o último diálogo fecha.
+let openModalCount = 0;
+
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
@@ -31,14 +44,68 @@ export const Modal: React.FC<ModalProps> = ({
   footer,
   maxWidth = 'lg',
 }) => {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const subtitleId = useId();
+
   useEffect(() => {
+    if (!isOpen) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    // Diálogo modal: o conteúdo por baixo não deve poder rolar.
+    openModalCount += 1;
+    if (openModalCount === 1) {
+      document.body.dataset.modalScrollLock = document.body.style.overflow || '';
+      document.body.style.overflow = 'hidden';
+    }
+
+    const panel = panelRef.current;
+    const getFocusable = (): HTMLElement[] => {
+      if (!panel) return [];
+      return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      );
+    };
+
+    // Foco inicial dentro do diálogo (nunca atrás do overlay).
+    const initial = getFocusable()[0] ?? panel;
+    initial?.focus();
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
         onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === panel)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      openModalCount = Math.max(0, openModalCount - 1);
+      if (openModalCount === 0) {
+        document.body.style.overflow = document.body.dataset.modalScrollLock ?? '';
+        delete document.body.dataset.modalScrollLock;
+      }
+      // Devolve o foco ao elemento que abriu o diálogo.
+      previouslyFocused?.focus?.();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -61,6 +128,12 @@ export const Modal: React.FC<ModalProps> = ({
       onClick={onClose}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={subtitle ? subtitleId : undefined}
+        tabIndex={-1}
         style={{
           width: '100%',
           maxWidth: MAX_WIDTH_MAP[maxWidth],
@@ -72,6 +145,7 @@ export const Modal: React.FC<ModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          outline: 'none',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -90,6 +164,7 @@ export const Modal: React.FC<ModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {icon && (
               <div
+                aria-hidden="true"
                 style={{
                   width: '36px',
                   height: '36px',
@@ -107,11 +182,18 @@ export const Modal: React.FC<ModalProps> = ({
               </div>
             )}
             <div>
-              <h3 className="claude-serif-title" style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+              <h3
+                id={titleId}
+                className="claude-serif-title"
+                style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}
+              >
                 {title}
               </h3>
               {subtitle && (
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', margin: 0 }}>
+                <p
+                  id={subtitleId}
+                  style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', margin: 0 }}
+                >
                   {subtitle}
                 </p>
               )}
@@ -119,12 +201,14 @@ export const Modal: React.FC<ModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-ghost"
             style={{ padding: '6px', borderRadius: '8px' }}
             title="Fechar (Esc)"
+            aria-label="Fechar"
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

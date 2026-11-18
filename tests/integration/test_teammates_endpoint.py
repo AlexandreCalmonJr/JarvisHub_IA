@@ -38,7 +38,8 @@ async def test_teammates_endpoints_full_cycle():
             json={"task": "Elaborar diagrama C4 do subsistema de visão"},
         )
         assert dispatch_res.status_code == 200
-        assert dispatch_res.json()["status"] == "completed"
+        assert dispatch_res.json()["status"] == "failed"
+        assert dispatch_res.json()["reason"] == "teammate_execution_unsupported"
 
         # 5. Delete
         del_res = await client.delete(f"/api/v1/teammates/{t_id}")

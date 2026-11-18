@@ -3,13 +3,14 @@ import { Volume2, Cpu, HardDrive } from 'lucide-react';
 
 interface DynamicIslandProps {
   activeAgentName?: string;
-  systemStatus?: { cpu?: number; memory?: number };
+  /** Métricas reais de `GET /api/v1/system/resources`. Ausentes = indisponível. */
+  systemStatus?: { cpu?: number | null; memory?: number | null };
   onOpenVoice?: () => void;
 }
 
 export const DynamicIsland: React.FC<DynamicIslandProps> = ({
   activeAgentName = 'JARVIS AI Hub',
-  systemStatus = { cpu: 31, memory: 33 },
+  systemStatus,
   onOpenVoice,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -103,11 +104,11 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#a1a1aa' }}>
             <Cpu size={13} color="#f59e0b" />
-            <span>{systemStatus.cpu ?? 31}%</span>
+            <span>{typeof systemStatus?.cpu === 'number' ? `${Math.round(systemStatus.cpu)}%` : '—'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#a1a1aa' }}>
             <HardDrive size={13} color="#38bdf8" />
-            <span>{systemStatus.memory ?? 33}%</span>
+            <span>{typeof systemStatus?.memory === 'number' ? `${Math.round(systemStatus.memory)}%` : '—'}</span>
           </div>
           <span style={{ color: '#e4e4e7', fontWeight: 600 }}>{activeAgentName}</span>
         </div>

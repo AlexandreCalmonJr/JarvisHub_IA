@@ -1705,7 +1705,12 @@ class _ChatScreenState extends State<ChatScreen> {
       },
     );
 
-    if (response.isSuccess && response.json is Map) {
+    // O servidor devolve 200 com `success: false` quando não há modelo de
+    // visão disponível: nesse caso mostramos o motivo, nunca uma descrição.
+    final bool analyzed = response.isSuccess &&
+        response.json is Map &&
+        response.json['success'] == true;
+    if (analyzed) {
       final desc = response.json['description']?.toString() ?? 'Análise visual concluída.';
       setState(() {
         _messages.add(
@@ -1718,7 +1723,9 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       });
     } else {
-      final err = response.errorMessage ?? 'Falha ao processar frame de visão.';
+      final err = response.json is Map && response.json['description'] != null
+          ? response.json['description'].toString()
+          : (response.errorMessage ?? 'Falha ao processar frame de visão.');
       setState(() {
         _messages.add(ChatMessage(role: 'assistant', text: err, isVision: true));
       });

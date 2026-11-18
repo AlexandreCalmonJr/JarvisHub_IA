@@ -130,23 +130,23 @@ DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:3000",
     "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
 ]
 
 
 def _resolve_allowed_origins() -> list[str]:
+    """Origens explícitas autorizadas.
+
+    Não são derivadas do IP da máquina: expor o backend numa interface de rede
+    passa a ser uma decisão consciente do operador, via ``JARVIS_ALLOWED_ORIGINS``.
+    """
     raw = os.environ.get("JARVIS_ALLOWED_ORIGINS", "").strip()
-    origins = [item.strip() for item in raw.split(",") if item.strip()] if raw else list(DEFAULT_ALLOWED_ORIGINS)
-    try:
-        from apps.api.services.network_discovery import get_local_ip
-        local_ip = get_local_ip()
-        if local_ip:
-            origins.extend([
-                f"http://{local_ip}:8000",
-                f"http://{local_ip}:5173",
-                f"http://{local_ip}:3000",
-            ])
-    except Exception:
-        pass
+    origins = (
+        [item.strip() for item in raw.split(",") if item.strip()]
+        if raw
+        else list(DEFAULT_ALLOWED_ORIGINS)
+    )
     return list(dict.fromkeys(origins))
 
 
@@ -156,7 +156,9 @@ app.add_middleware(AuthMiddleware, service=auth_service)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_resolve_allowed_origins(),
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$",
+    # Apenas loopback entra por regex. Intervalos privados (192.168/10/172.16)
+    # exigem configuração explícita em JARVIS_ALLOWED_ORIGINS.
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Device-Token", "X-CSRF-Token"],

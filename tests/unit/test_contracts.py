@@ -56,10 +56,26 @@ def test_autonomous_agent_generation_limit_is_bounded():
         agent_role=AgentRole.JARVIS_MASTER,
         prompt="Resuma o status do projeto.",
     )
-    assert config.max_tokens == 1024
+    assert config.max_tokens == 2048
+    # O teto existe (evita pedidos absurdos) mas permite escrever um ficheiro
+    # inteiro: 1024 cortava as respostas a meio.
+    assert (
+        AutonomousAgentRunConfig(
+            agent_role=AgentRole.JARVIS_MASTER,
+            prompt="Resuma o status do projeto.",
+            max_tokens=8192,
+        ).max_tokens
+        == 8192
+    )
     with pytest.raises(ValidationError):
         AutonomousAgentRunConfig(
             agent_role=AgentRole.JARVIS_MASTER,
             prompt="Resuma o status do projeto.",
-            max_tokens=2048,
+            max_tokens=8193,
+        )
+    with pytest.raises(ValidationError):
+        AutonomousAgentRunConfig(
+            agent_role=AgentRole.JARVIS_MASTER,
+            prompt="Resuma o status do projeto.",
+            max_tokens=100,
         )

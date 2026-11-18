@@ -28,7 +28,10 @@ async def test_vision_endpoint_analyzes_frame():
         )
     assert response.status_code == 200
     data = response.json()
-    assert data["success"] is True
+    # Sem modelo multimodal configurado a resposta é explícita, não simulada.
+    assert data["success"] is False
+    assert data["reason"] == "vision_unavailable"
+    assert data["detected_objects"] == []
     assert "metadata" in data
     assert data["metadata"]["width"] == 640
     assert data["metadata"]["height"] == 480

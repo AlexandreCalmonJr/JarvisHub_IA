@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 
+from .provider_catalog import resolve_base_url
 from .provider_defaults import default_model_for_provider, normalize_model_for_provider
 
 logger = logging.getLogger("jarvis.model_runtime.key_vault")
@@ -352,22 +353,22 @@ class KeyVaultService:
         is_default: bool = False,
     ) -> KeyProfile:
         provider = provider.lower().strip()
-        if not base_url:
-            if provider == "groq":
-                base_url = "https://api.groq.com/openai/v1"
-            elif provider == "deepseek":
-                base_url = "https://api.deepseek.com/v1"
-            elif provider == "openai":
-                base_url = "https://api.openai.com/v1"
-            elif provider == "gemini":
-                base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-            else:
-                base_url = "https://api.openai.com/v1"
+        # Endpoint e modelo vêm da tabela central de provedores. Um provedor
+        # desconhecido/personalizado tem de ser configurado explicitamente —
+        # nunca é enviado para api.openai.com por omissão.
+        resolved_base_url = resolve_base_url(provider, base_url)
+        if not resolved_base_url:
+            raise ValueError(
+                f"O provedor '{provider}' exige uma base_url explícita no cofre de chaves."
+            )
+        base_url = resolved_base_url
 
         if not default_model:
-            default_model = default_model_for_provider(provider)
-        else:
-            default_model = normalize_model_for_provider(provider, default_model) or default_model
+            resolved_model = default_model_for_provider(provider)
+            if not resolved_model:
+                raise ValueError(f"O provedor '{provider}' exige um modelo predefinido explícito.")
+            default_model = resolved_model
+        default_model = normalize_model_for_provider(provider, default_model) or default_model
 
         storage_id = self._storage_id(key_id, owner_user_id)
         existing = self._keys.get(storage_id)

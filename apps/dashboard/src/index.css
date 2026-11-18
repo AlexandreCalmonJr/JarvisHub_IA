@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* As fontes são pedidas uma única vez no index.html (<link rel="stylesheet">).
+   O @import aqui duplicava a descarga e bloqueava a renderização. */
 
 :root {
   /* Paleta Claude Dark Editorial (Warm Charcoal / Obsidian) */
@@ -16,7 +17,8 @@
 
   --text-primary: #f3f2ee;
   --text-secondary: #9c9a92;
-  --text-muted: #6b6963;
+  /* 4,6:1 sobre --bg-primary (#1f1e1d) → cumpre WCAG 2.1 AA para texto pequeno. */
+  --text-muted: #8a877f;
 
   /* Terracota / Coral clássico do Claude */
   --accent-color: #d97757;
@@ -70,13 +72,6 @@ code, pre {
   color: var(--text-primary);
 }
 
-.claude-asterisk {
-  color: var(--accent-color);
-  display: inline-block;
-  user-select: none;
-}
-
-/* Cápsula de Input & Elementos Flutuantes */
 .claude-capsule {
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -241,20 +236,10 @@ code, pre {
   animation: spin 1s linear infinite;
 }
 
-@keyframes pulseGlow {
-  0%, 100% { opacity: 0.7; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.08); }
-}
-.pulse-glow {
-  animation: pulseGlow 2.5s ease-in-out infinite;
-}
-
+/* Referenciado por estilos inline (Modal, ChatMaster): não remover. */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
-}
-.animate-fade-in {
-  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Diff viewer line styling */
@@ -274,34 +259,11 @@ code, pre {
 }
 
 /* Responsividade utilitária */
-@media (max-width: 900px) {
-  .hide-tablet {
-    display: none !important;
-  }
-}
 @media (max-width: 680px) {
   .hide-mobile {
     display: none !important;
   }
 }
-
-/* Sidebar responsiva: drawer fora do fluxo em ecrãs estreitos */
-@media (max-width: 900px) {
-  .jarvis-sidebar {
-    position: fixed !important;
-    inset: 0 auto 0 0;
-    width: 260px !important;
-    max-width: min(86vw, 320px);
-    transform: translateX(-105%);
-    transition: transform 0.22s ease;
-    z-index: 999;
-  }
-
-  .jarvis-sidebar.is-mobile-open {
-    transform: translateX(0);
-  }
-}
-
 
 /* Autenticação — utiliza exclusivamente os tokens visuais do JARVIS */
 .auth-mode-links {
@@ -329,12 +291,11 @@ code, pre {
   background: var(--accent-glow);
 }
 .auth-mode-link:focus-visible,
-.auth-mode-link:focus-visible,
 [style*="var(--bg-primary)"] input:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
 }
-.first-run-screen, .auth-mode-links, .sessionPill { min-width: 0; }
+.auth-mode-links, .sessionPill { min-width: 0; }
 @media (max-width: 520px) {
   .auth-mode-links { display: grid; grid-template-columns: 1fr; }
   .auth-mode-link { width: 100%; }
@@ -383,11 +344,6 @@ code, pre {
 .user-profile-avatar-option:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
-}
-.user-profile-loading {
-  margin: 0 0 12px;
-  color: var(--text-secondary);
-  font-size: .82rem;
 }
 @media (max-width: 640px) {
   .user-profile-grid {
@@ -441,28 +397,6 @@ code, pre {
   border-radius: var(--radius-lg);
   background: var(--bg-tertiary);
   border: 1px dashed var(--border-hover);
-}
-
-.jarvis-input,
-.jarvis-select,
-.jarvis-textarea {
-  width: 100%;
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-  font-size: 0.85rem;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
-}
-
-.jarvis-input:focus,
-.jarvis-select:focus,
-.jarvis-textarea:focus {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 /* ========================================================
@@ -591,6 +525,22 @@ code, pre {
   background-color: rgba(255, 255, 255, 0.08);
 }
 
+.openbot-session-card .openbot-card-delete-btn {
+  opacity: 0.75;
+  color: #f87171 !important;
+  transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.1s ease;
+}
+
+.openbot-session-card:hover .openbot-card-delete-btn {
+  opacity: 1;
+  background-color: rgba(248, 113, 113, 0.18);
+}
+
+.openbot-session-card .openbot-card-delete-btn:hover {
+  background-color: rgba(248, 113, 113, 0.32);
+  transform: scale(1.1);
+}
+
 /* Bolha Coral do Usuário (OpenBot Style) */
 .openbot-coral-bubble {
   background-color: #e05244 !important;
@@ -717,6 +667,130 @@ code, pre {
   background-color: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.08);
 }
+
+/* ==========================================================================
+   Linear & Raycast Task Manager Aesthetic
+   ========================================================================== */
+.linear-task-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background-color: #121214;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.linear-task-item:hover {
+  background-color: #18181b;
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.linear-task-item.is-selected {
+  background-color: #1c1c20;
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.2);
+}
+
+.linear-task-item.is-selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-color, #38bdf8);
+}
+
+.linear-inspector {
+  background-color: #121215;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  animation: inspectorSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes inspectorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.linear-kanban-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.linear-kanban-column {
+  background-color: rgba(18, 18, 20, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 280px;
+}
+
+.linear-kanban-card {
+  background-color: #18181b;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.linear-kanban-card:hover {
+  background-color: #202024;
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.linear-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.linear-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  font-size: 0.76rem;
+  color: #a1a1aa;
+}
+
 
 
 

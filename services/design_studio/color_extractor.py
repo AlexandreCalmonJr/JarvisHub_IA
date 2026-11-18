@@ -53,7 +53,6 @@ def calculate_contrast_ratio(color1: tuple[int, int, int], color2: tuple[int, in
     return round((lighter + 0.05) / (darker + 0.05), 2)
 
 
-
 def _blend_color(
     color_rgb: tuple[int, int, int], target_rgb: tuple[int, int, int], factor: float
 ) -> str:

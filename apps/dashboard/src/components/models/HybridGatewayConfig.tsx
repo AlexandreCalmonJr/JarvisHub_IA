@@ -9,6 +9,8 @@ export interface ProviderCard {
 
 interface Props {
   provider: string;
+  /** Presets vindos do backend; usa `fallbackProviders` quando ausente. */
+  providers?: ProviderCard[];
   enabled: boolean;
   apiKey: string;
   showKey: boolean;
@@ -30,19 +32,25 @@ interface Props {
   onSaveConfig: (event: React.FormEvent<HTMLFormElement>) => void;
 }
 
-const providers: ProviderCard[] = [
+/**
+ * Fallback local. A lista real vem de `GET /api/v1/models/hybrid-config`
+ * (`presets`), gerada por `services/model_runtime/provider_catalog.py`.
+ * Mantenha estes valores em sincronia com a tabela do backend.
+ */
+const fallbackProviders: ProviderCard[] = [
   { id: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o-mini', baseUrl: 'https://api.openai.com/v1' },
   { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-2.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-  { id: 'groq', name: 'Groq', defaultModel: 'qwen/qwen3.8-27b', baseUrl: 'https://api.groq.com/openai/v1' },
-  { id: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-chat', baseUrl: 'https://api.deepseek.com' },
+  { id: 'groq', name: 'Groq', defaultModel: 'openai/gpt-oss-120b', baseUrl: 'https://api.groq.com/openai/v1' },
+  { id: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-chat', baseUrl: 'https://api.deepseek.com/v1' },
+  { id: 'openrouter', name: 'OpenRouter', defaultModel: 'meta-llama/llama-3.3-70b-instruct', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'anthropic', name: 'Anthropic', defaultModel: 'claude-3-5-haiku-20241022', baseUrl: 'https://api.anthropic.com/v1' },
-  { id: 'custom', name: 'Compatível OpenAI / personalizado', defaultModel: 'custom-model', baseUrl: 'https://api.openai.com/v1' },
+  { id: 'custom', name: 'Compatível OpenAI / personalizado', defaultModel: '', baseUrl: '' },
 ];
 
 export const HybridGatewayConfig: React.FC<Props> = (props) => {
   const {
     provider, enabled, apiKey, showKey, defaultModel, baseUrl, maxBudget,
-    testLoading, testResult, saveLoading, saveMessage, onProviderSelect,
+    testLoading, testResult, saveLoading, saveMessage, onProviderSelect, providers,
     onToggleEnabled, onApiKeyChange, onToggleShowKey, onDefaultModelChange,
     onBaseUrlChange, onMaxBudgetChange, onTestConnection, onSaveConfig,
   } = props;
@@ -57,7 +65,7 @@ export const HybridGatewayConfig: React.FC<Props> = (props) => {
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
-        {providers.map((item) => (
+        {(providers && providers.length > 0 ? providers : fallbackProviders).map((item) => (
           <button key={item.id} type="button" onClick={() => onProviderSelect(item)} style={{
             textAlign: 'left', padding: 13, borderRadius: 10, cursor: 'pointer',
             border: provider === item.id ? '1px solid var(--accent-color)' : '1px solid var(--border-color)',

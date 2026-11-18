@@ -30,6 +30,7 @@ import {
 import { getUserProfile, saveUserProfile, UserProfileData } from '../common/UserProfileModal';
 import { notify } from '../common/Toast';
 import { getAccountStorageKey } from '../../services/accountScope';
+import { KeyVaultManager } from '../models/KeyVaultManager';
 
 interface SettingsViewProps {
   initialSubTab?: string;
@@ -55,10 +56,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [sttModel, setSttModel] = useState('Parakeet TDT 0.6B v3 (Local Rápido)');
   const [vadPauseSeconds, setVadPauseSeconds] = useState(1.5);
   const [ttsModel, setTtsModel] = useState('Supertonic 3 (Local)');
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [selectedVoice, setSelectedVoice] = useState('female_1');
+  const [speechSpeed, setSpeechSpeed] = useState<number>(1.0);
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
 
-  // Configurações do Computador & Dynamic Island / Dock
-  const [dynamicIslandEnabled, setDynamicIslandEnabled] = useState(true);
-  const [agentDockEnabled, setAgentDockEnabled] = useState(true);
+  // Provedores de IA (Tela 8 do plano OpenBot)
+
+  // Configurações do Computador & Dynamic Island / Dock (Persistidas por Conta)
+  const [dynamicIslandEnabled, setDynamicIslandEnabled] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(getAccountStorageKey('jarvis_pref_dynamic_island'));
+      return v !== null ? v !== 'false' : true;
+    } catch {
+      return true;
+    }
+  });
+  const [agentDockEnabled, setAgentDockEnabled] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(getAccountStorageKey('jarvis_pref_agent_dock'));
+      return v !== null ? v !== 'false' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleIsland = () => {
+    const nextVal = !dynamicIslandEnabled;
+    setDynamicIslandEnabled(nextVal);
+    try {
+      localStorage.setItem(getAccountStorageKey('jarvis_pref_dynamic_island'), String(nextVal));
+      window.dispatchEvent(new Event('jarvis_ui_preferences_changed'));
+    } catch {}
+    notify(`Dynamic Island ${nextVal ? 'ativada' : 'ocultada'}!`, 'info');
+  };
+
+  const handleToggleDock = () => {
+    const nextVal = !agentDockEnabled;
+    setAgentDockEnabled(nextVal);
+    try {
+      localStorage.setItem(getAccountStorageKey('jarvis_pref_agent_dock'), String(nextVal));
+      window.dispatchEvent(new Event('jarvis_ui_preferences_changed'));
+    } catch {}
+    notify(`Dock de Agentes ${nextVal ? 'ativado' : 'ocultado'}!`, 'info');
+  };
   const [launchOnStartup, setLaunchOnStartup] = useState(true);
   const [minimizeToTray, setMinimizeToTray] = useState(true);
 
@@ -74,8 +115,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [contextWindow, setContextWindow] = useState('8192');
   const [logLevel, setLogLevel] = useState<'INFO' | 'DEBUG' | 'WARNING' | 'ERROR'>('INFO');
   const [testingApi, setTestingApi] = useState(false);
+  const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
   const [testingOllama, setTestingOllama] = useState(false);
-  const [optimizingDb, setOptimizingDb] = useState(false);
   const [backingUpDb, setBackingUpDb] = useState(false);
 
   // Aparência e Tema
@@ -84,18 +125,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [uiDensity, setUiDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [glassmorphism, setGlassmorphism] = useState(true);
   const [smoothAnimations, setSmoothAnimations] = useState(true);
+  const [railAgentsMode, setRailAgentsMode] = useState<'auto' | 'always' | 'never'>('auto');
 
   // Notificações
   const [notifyTaskCompletion, setNotifyTaskCompletion] = useState(true);
   const [notifySecurityAlerts, setNotifySecurityAlerts] = useState(true);
   const [soundEffects, setSoundEffects] = useState(true);
   const [dailyDigest, setDailyDigest] = useState(false);
-
-  // Uso do Computador & Sandbox
-  const [restrictWorkspaceAccess, setRestrictWorkspaceAccess] = useState(true);
-  const [blockHiddenFiles, setBlockHiddenFiles] = useState(true);
-  const [requireTerminalApproval, setRequireTerminalApproval] = useState(true);
-  const [terminalTimeoutSeconds, setTerminalTimeoutSeconds] = useState(60);
 
   // Atualizações
   const [updateChannel, setUpdateChannel] = useState<'stable' | 'beta' | 'dev'>('stable');
@@ -180,8 +216,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         if (typeof parsed.linkTelemetryToAccount === 'boolean') setLinkTelemetryToAccount(parsed.linkTelemetryToAccount);
         if (typeof parsed.vadPauseSeconds === 'number') setVadPauseSeconds(parsed.vadPauseSeconds);
       }
+      const savedRail = localStorage.getItem(getAccountStorageKey('jarvis_rail_agents_mode')) as any;
+      if (savedRail && ['auto', 'always', 'never'].includes(savedRail)) {
+        setRailAgentsMode(savedRail);
+      }
     } catch {}
   }, []);
+
+  const handleRailAgentsModeChange = (mode: 'auto' | 'always' | 'never') => {
+    setRailAgentsMode(mode);
+    try {
+      localStorage.setItem(getAccountStorageKey('jarvis_rail_agents_mode'), mode);
+      window.dispatchEvent(new Event('jarvis_rail_agents_mode_changed'));
+    } catch {}
+    notify(`Modo de especialistas definido para: ${mode === 'auto' ? 'Automático' : mode === 'always' ? 'Seção Separada' : 'Modo Limpo'}`, 'info');
+  };
 
   const saveGeneralSettings = (updates: Record<string, any>) => {
     try {
@@ -211,16 +260,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/health', { credentials: 'include' })
+      .then((res) => {
+        if (!cancelled) setApiHealthy(res.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setApiHealthy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleTestApi = async () => {
     setTestingApi(true);
     try {
       const res = await fetch('/health', { credentials: 'include' });
+      setApiHealthy(res.ok);
       if (res.ok) {
         notify('Comunicação com a API FastAPI confirmada: Operacional (200 OK)!', 'success');
       } else {
         notify(`A API respondeu com status ${res.status}`, 'warning');
       }
     } catch (e: any) {
+      setApiHealthy(false);
       notify(`Erro ao conectar à API: ${e.message}`, 'error');
     } finally {
       setTestingApi(false);
@@ -230,25 +295,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleTestOllama = async () => {
     setTestingOllama(true);
     try {
-      const res = await fetch('/api/v1/models/catalog', { credentials: 'include' });
-      if (res.ok) {
-        notify('Runtime Ollama local respondendo normalmente!', 'success');
-      } else {
-        notify('Ollama local indisponível ou em fallback.', 'warning');
+      // `GET /api/v1/models` devolve o runtime ativo e a lista de modelos locais.
+      const res = await fetch('/api/v1/models', { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        notify(data.detail || 'Ollama local indisponível ou em fallback.', 'warning');
+        return;
       }
+      const installed = Array.isArray(data.models) ? data.models.length : 0;
+      const gateway = data.hybrid_gateway || {};
+      const route = gateway.enabled ? `${gateway.provider} · ${gateway.model}` : 'Ollama local';
+      notify(
+        installed > 0
+          ? `Runtime local respondendo — ${installed} modelo(s) instalado(s). Rota ativa: ${route}.`
+          : `Runtime local respondendo, mas nenhum modelo instalado. Rota ativa: ${route}.`,
+        installed > 0 ? 'success' : 'warning',
+      );
     } catch {
       notify('Não foi possível conectar ao Ollama local.', 'warning');
     } finally {
       setTestingOllama(false);
     }
-  };
-
-  const handleOptimizeDb = () => {
-    setOptimizingDb(true);
-    setTimeout(() => {
-      notify('Banco SQLite otimizado com sucesso (VACUUM & WAL index verificados)!', 'success');
-      setOptimizingDb(false);
-    }, 700);
   };
 
   const handleBackupDb = async () => {
@@ -268,42 +335,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleExportDiagnostics = () => {
-    const report = {
-      timestamp: new Date().toISOString(),
-      app: 'JARVIS AI Hub',
-      version: '3.0.1',
-      server: {
-        host: serverHost,
-        port: serverPort,
-        jwt_expiration_hours: jwtExpirationHours,
-        log_level: logLevel,
-      },
-      runtime: {
-        ollama_endpoint: ollamaEndpoint,
-        context_window: contextWindow,
-      },
-      storage: {
-        database: 'data/jarvis.db',
-        wal_mode: true,
-      },
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `jarvis-server-diagnostics-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    notify('Relatório de diagnóstico exportado com sucesso!', 'success');
+  const handleExportDiagnostics = async () => {
+    try {
+      const response = await fetch('/api/v1/system/health/details', { credentials: 'include' });
+      const details = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(details.detail || `O servidor respondeu ${response.status}`);
+      }
+      const report = {
+        timestamp: new Date().toISOString(),
+        source: '/api/v1/system/health/details',
+        health: details,
+      };
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jarvis-server-diagnostics-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify('Diagnóstico real do servidor exportado com sucesso!', 'success');
+    } catch (e: any) {
+      notify(`Não foi possível exportar o diagnóstico: ${e.message}`, 'error');
+    }
   };
 
   const handleCheckUpdates = () => {
-    setCheckingUpdates(true);
-    setTimeout(() => {
-      setCheckingUpdates(false);
-      notify('Você já está na versão mais recente (v3.0.1). Nenhuma atualização necessária.', 'success');
-    }, 800);
+    setCheckingUpdates(false);
+    notify(
+      'A verificação de atualizações ainda não está disponível nesta instalação. Consulte o repositório para obter a versão mais recente.',
+      'warning'
+    );
   };
 
   const renderToggle = (checked: boolean, onToggle: () => void) => (
@@ -338,6 +400,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     </button>
   );
 
+  const renderPolicyBadge = (label: string) => (
+    <span
+      style={{
+        fontSize: '0.72rem',
+        padding: '3px 10px',
+        borderRadius: '999px',
+        backgroundColor: 'rgba(16, 185, 129, 0.12)',
+        border: '1px solid rgba(16, 185, 129, 0.28)',
+        color: '#34d399',
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </span>
+  );
+
   const MENU_SECTIONS = [
     {
       title: null,
@@ -359,6 +438,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     {
       title: 'Este computador',
       items: [
+        { id: 'providers', label: 'Provedores de IA', icon: Cpu },
         { id: 'behavior', label: 'Comportamento do app', icon: Power },
         { id: 'island', label: 'Dynamic Island', icon: Layers },
         { id: 'dock', label: 'Dock de agentes', icon: Sparkles },
@@ -933,16 +1013,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           fontSize: '0.72rem',
                           padding: '2px 8px',
                           borderRadius: '10px',
-                          backgroundColor: 'rgba(52, 211, 153, 0.2)',
-                          color: '#34d399',
+                          backgroundColor: mobileDiscovery?.server_url
+                            ? 'rgba(52, 211, 153, 0.2)'
+                            : 'rgba(248, 113, 113, 0.15)',
+                          color: mobileDiscovery?.server_url ? '#34d399' : '#f87171',
                           fontWeight: 600,
                         }}
                       >
-                        ONLINE
+                        {mobileDiscovery?.server_url ? 'ONLINE' : 'INDISPONÍVEL'}
                       </span>
                     </div>
                     <p style={{ fontSize: '0.78rem', color: '#888888', margin: '2px 0 0 0' }}>
-                      Beacon UDP ativo na porta {mobileDiscovery?.udp_beacon_port || 8001} · Descoberta por broadcast sem fio
+                      {mobileDiscovery?.server_url
+                        ? `Beacon UDP ativo na porta ${mobileDiscovery.udp_beacon_port} · Descoberta por broadcast sem fio`
+                        : 'Descoberta automática indisponível. Use o pareamento por QR Code abaixo.'}
                     </p>
                   </div>
                 </div>
@@ -987,15 +1071,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               >
                 <div>
                   <span style={{ color: '#888888', display: 'block', fontSize: '0.74rem' }}>IP NA REDE LOCAL (LAN)</span>
-                  <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{mobileDiscovery?.local_ip || '192.168.1.81'}</span>
+                  <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{mobileDiscovery?.local_ip || '—'}</span>
                 </div>
                 <div>
                   <span style={{ color: '#888888', display: 'block', fontSize: '0.74rem' }}>PORTA DA API REST & WS</span>
-                  <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{mobileDiscovery?.api_port || 8000}</span>
+                  <span style={{ fontWeight: 600, color: '#f5f5f5' }}>{mobileDiscovery?.api_port ?? '—'}</span>
                 </div>
                 <div>
                   <span style={{ color: '#888888', display: 'block', fontSize: '0.74rem' }}>DESCOBERTA UDP (BROADCAST)</span>
-                  <span style={{ fontWeight: 600, color: '#34d399' }}>Porta {mobileDiscovery?.udp_beacon_port || 8001} (Ativo)</span>
+                  <span style={{ fontWeight: 600, color: mobileDiscovery ? '#34d399' : '#f87171' }}>
+                    {mobileDiscovery
+                      ? `Porta ${mobileDiscovery.udp_beacon_port} (Ativo)`
+                      : 'Indisponível'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1298,6 +1386,213 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <option value="WebSpeech API (Navegador)">WebSpeech API Nativa do Navegador</option>
                 </select>
               </div>
+
+              {/* Ler respostas em voz alta */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '16px' }}>
+                <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Ler respostas em voz alta</div>
+                  <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
+                    O JARVIS reproduzirá a fala automaticamente ao término da resposta gerada.
+                  </div>
+                </div>
+                {renderToggle(ttsEnabled, () => setTtsEnabled(!ttsEnabled))}
+              </div>
+
+              {/* Seletor de Voz & Preview */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <label style={{ fontSize: '0.84rem', color: '#f5f5f5', fontWeight: 600 }}>Voz do Assistente</label>
+                  <select
+                    value={selectedVoice}
+                    onChange={(e) => setSelectedVoice(e.target.value)}
+                    style={{
+                      width: '100%',
+                      backgroundColor: '#1f1f1f',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      color: '#f5f5f5',
+                      fontSize: '0.82rem',
+                      marginTop: '6px',
+                    }}
+                  >
+                    <option value="female_1">Voz feminina 1 (Suave)</option>
+                    <option value="male_1">Voz masculina 1 (Grave)</option>
+                    <option value="neutral_1">Voz neutra (Equilibrada)</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if ('speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        const utt = new SpeechSynthesisUtterance('Olá! Esta é uma demonstração da voz configurada no JARVIS.');
+                        utt.lang = 'pt-BR';
+                        utt.rate = speechSpeed;
+                        setIsPlayingVoice(true);
+                        utt.onend = () => setIsPlayingVoice(false);
+                        utt.onerror = () => setIsPlayingVoice(false);
+                        window.speechSynthesis.speak(utt);
+                      } else {
+                        notify('Navegador não suporta síntese de áudio.', 'warning');
+                      }
+                    }}
+                    disabled={isPlayingVoice}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.80rem', padding: '8px 14px', borderRadius: '8px' }}
+                  >
+                    <span>{isPlayingVoice ? 'Reproduzindo...' : '▷ Ouvir Demonstração'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Velocidade da Fala */}
+              <div>
+                <label style={{ fontSize: '0.84rem', color: '#f5f5f5', fontWeight: 600 }}>Velocidade da Fala</label>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                  {[1.0, 1.25, 1.5].map((speed) => (
+                    <button
+                      key={speed}
+                      type="button"
+                      onClick={() => setSpeechSpeed(speed)}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid',
+                        borderColor: speechSpeed === speed ? '#38bdf8' : 'rgba(255, 255, 255, 0.1)',
+                        backgroundColor: speechSpeed === speed ? 'rgba(56, 189, 248, 0.15)' : '#18181b',
+                        color: speechSpeed === speed ? '#38bdf8' : '#a1a1aa',
+                        fontSize: '0.80rem',
+                        fontWeight: speechSpeed === speed ? 600 : 400,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {speed}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* ABA: PROVEDORES DE IA (Tela 8 do Plano OpenBot)                           */}
+        {/* ========================================================================= */}
+        {activeSubTab === 'providers' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            <div>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
+                Provedores de IA & Modelos
+              </h1>
+              <p style={{ fontSize: '0.82rem', color: '#888888', marginTop: '4px' }}>
+                Gerencie os provedores conectados, modelos locais instalados e chaves de APIs na nuvem.
+              </p>
+            </div>
+
+            {/* Provedor Padrão */}
+            <div
+              style={{
+                backgroundColor: '#18181b',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f5f5f5' }}>Provedor Padrão de Inferência</div>
+                <div style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '2px' }}>
+                  Utilizado para orquestração automática e conversas do chat.
+                </div>
+              </div>
+
+              <div
+                style={{
+                  backgroundColor: '#0c0c0e',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  padding: '8px 14px',
+                  color: '#a1a1aa',
+                  fontSize: '0.82rem',
+                  maxWidth: '320px',
+                }}
+              >
+                Configurado por conta em Modelos → Rotas de Agentes
+              </div>
+            </div>
+
+            {/* Provedores Conectados */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#a1a1aa' }}>
+                Provedores Conectados
+              </div>
+
+              <div
+                style={{
+                  backgroundColor: '#141417',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'rgba(56, 189, 248, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+                    💻
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#f4f4f5' }}>OpenCode CLI</div>
+                    <div style={{ fontSize: '0.76rem', color: '#71717a' }}>Disponível neste computador · Motor local integrado</div>
+                  </div>
+                </div>
+
+                <span style={{ fontSize: '0.72rem', backgroundColor: 'rgba(52, 211, 153, 0.15)', color: '#34d399', fontWeight: 600, padding: '3px 10px', borderRadius: '999px' }}>
+                  ✓ Conectado
+                </span>
+              </div>
+
+              <div
+                style={{
+                  backgroundColor: '#141417',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'rgba(192, 132, 252, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+                    🤖
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#f4f4f5' }}>Ollama Local Daemon</div>
+                    <div style={{ fontSize: '0.76rem', color: '#71717a' }}>http://localhost:11434 · Modelos: qwen2.5-coder:7b</div>
+                  </div>
+                </div>
+
+                <span style={{ fontSize: '0.72rem', backgroundColor: 'rgba(52, 211, 153, 0.15)', color: '#34d399', fontWeight: 600, padding: '3px 10px', borderRadius: '999px' }}>
+                  ✓ Conectado
+                </span>
+              </div>
+            </div>
+
+            {/* Credenciais reais: KeyVault cifrado por conta */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#a1a1aa' }}>
+                Chaves de Provedores (KeyVault)
+              </div>
+              <KeyVaultManager />
             </div>
           </div>
         )}
@@ -1307,9 +1602,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* ========================================================================= */}
         {(activeSubTab === 'island' || activeSubTab === 'dock') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
-              {activeSubTab === 'island' ? 'Dynamic Island' : 'Dock de Agentes'}
-            </h1>
+            <div>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
+                {activeSubTab === 'island' ? 'Dynamic Island' : 'Dock de Agentes'}
+              </h1>
+              <p style={{ fontSize: '0.76rem', color: '#38bdf8', marginTop: '6px' }}>
+                Preferência aplicada em tempo real e sincronizada com a interface do painel.
+              </p>
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1327,8 +1627,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (activeSubTab === 'island') setDynamicIslandEnabled(!dynamicIslandEnabled);
-                    else setAgentDockEnabled(!agentDockEnabled);
+                    if (activeSubTab === 'island') handleToggleIsland();
+                    else handleToggleDock();
                   }}
                   style={{
                     width: '42px',
@@ -1364,9 +1664,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* ========================================================================= */}
         {activeSubTab === 'behavior' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
-              Comportamento do App
-            </h1>
+            <div>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 600, color: '#f5f5f5', margin: 0 }}>
+                Comportamento do App
+              </h1>
+              <p style={{ fontSize: '0.76rem', color: '#fbbf24', marginTop: '6px' }}>
+                Preferências do cliente desktop: o dashboard web não altera o arranque do sistema nem a bandeja.
+              </p>
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1460,7 +1765,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 Aparência e Tema
               </h1>
               <p style={{ fontSize: '0.82rem', color: '#888888', marginTop: '4px' }}>
-                Personalize o visual, contraste e acabamentos gráficos do JARVIS AI Hub.
+                Pré-visualização local de tema e contraste.
+              </p>
+              <p style={{ fontSize: '0.76rem', color: '#fbbf24', marginTop: '6px' }}>
+                Estas escolhas ainda não são aplicadas globalmente à interface nesta build.
               </p>
             </div>
 
@@ -1569,6 +1877,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Exibir Dynamic Island</div>
+                  <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
+                    Entalhe curvo superior com o robô e telemetria de CPU/RAM.
+                  </div>
+                </div>
+                {renderToggle(dynamicIslandEnabled, handleToggleIsland)}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Exibir Dock de Agentes</div>
+                  <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
+                    Barra vertical flutuante na direita com os avatares dos especialistas.
+                  </div>
+                </div>
+                {renderToggle(agentDockEnabled, handleToggleDock)}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
                   <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Densidade da Interface</div>
                   <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
                     Controla o espaçamento entre cards, botões e mensagens do chat.
@@ -1592,6 +1920,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <option value="compact">Compacta (Alta Densidade)</option>
                 </select>
               </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Especialistas na Barra Lateral</div>
+                  <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
+                    Escolha como os atalhos de especialistas (QA, Bug Fixer, Security, Copy, Design) aparecem no histórico.
+                  </div>
+                </div>
+                <select
+                  value={railAgentsMode}
+                  onChange={(e) => handleRailAgentsModeChange(e.target.value as any)}
+                  style={{
+                    backgroundColor: '#1f1f1f',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    color: '#f5f5f5',
+                    fontSize: '0.80rem',
+                    cursor: 'pointer',
+                    minWidth: '220px',
+                  }}
+                >
+                  <option value="auto">Automático (Ocultar ao ter conversas)</option>
+                  <option value="always">Seção Separada (Abaixo de conversas)</option>
+                  <option value="never">Modo Limpo (Não exibir especialistas)</option>
+                </select>
+              </div>
             </div>
           </div>
         )}
@@ -1606,13 +1961,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 Notificações
               </h1>
               <p style={{ fontSize: '0.82rem', color: '#888888', marginTop: '4px' }}>
-                Alertas visuais de término de tarefa, aprovações pendentes de segurança e status do nó.
+                Preferências locais de alertas visuais e sonoros.
+              </p>
+              <p style={{ fontSize: '0.76rem', color: '#fbbf24', marginTop: '6px' }}>
+                Estas opções ainda não estão ligadas ao sistema de notificações do sistema operacional;
+                ficam guardadas apenas nesta sessão da interface.
               </p>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
               <h3 style={{ fontSize: '0.90rem', fontWeight: 600, color: '#ffffff', margin: 0 }}>
-                Notificações do Sistema Operacional
+                Preferências de Notificação
               </h3>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1758,62 +2117,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 Segurança e Permissões do Sistema de Arquivos
               </h3>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
                 <div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Restringir Leitura aos Workspaces</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Leitura Restrita ao Workspace</div>
                   <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
-                    Impede que agentes acessem pastas fora dos projetos vinculados da sua conta.
+                    Caminhos absolutos e travessias para fora do projeto ativo são bloqueados pelo executor.
                   </div>
                 </div>
-                {renderToggle(restrictWorkspaceAccess, () => setRestrictWorkspaceAccess(!restrictWorkspaceAccess))}
+                {renderPolicyBadge('Aplicado pelo backend')}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
                 <div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Bloquear Arquivos Ocultos Sensíveis</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Redação de Segredos</div>
                   <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
-                    Protege arquivos de ambiente (.env), chaves SSH (.ssh) e configurações do git.
+                    Chaves e tokens conhecidos são removidos das saídas e dos registos de auditoria.
                   </div>
                 </div>
-                {renderToggle(blockHiddenFiles, () => setBlockHiddenFiles(!blockHiddenFiles))}
+                {renderPolicyBadge('Ativa')}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
                 <div>
                   <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Aprovação de Comandos no Terminal</div>
                   <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
-                    Exige confirmação manual antes de executar comandos com impacto no disco ou rede.
+                    Escritas e execuções exigem aprovação humana no modo ASK e continuam protegidas no modo AUTO.
                   </div>
                 </div>
-                {renderToggle(requireTerminalApproval, () => setRequireTerminalApproval(!requireTerminalApproval))}
+                {renderPolicyBadge('Obrigatória')}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
                 <div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Timeout Máximo de Comandos</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#f5f5f5' }}>Timeout de Comandos</div>
                   <div style={{ fontSize: '0.78rem', color: '#888888', marginTop: '2px' }}>
-                    Tempo limite de espera antes de cancelar um comando que não finalizou.
+                    Definido por chamada da ferramenta e limitado pelo backend; não é configurável nesta página.
                   </div>
                 </div>
-                <select
-                  value={terminalTimeoutSeconds}
-                  onChange={(e) => setTerminalTimeoutSeconds(parseInt(e.target.value, 10))}
-                  style={{
-                    backgroundColor: '#1f1f1f',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    borderRadius: '8px',
-                    padding: '6px 12px',
-                    color: '#f5f5f5',
-                    fontSize: '0.80rem',
-                    cursor: 'pointer',
-                    minWidth: '150px',
-                  }}
-                >
-                  <option value={30}>30 segundos</option>
-                  <option value={60}>60 segundos (Padrão)</option>
-                  <option value={120}>120 segundos</option>
-                  <option value={300}>5 minutos</option>
-                </select>
+                {renderPolicyBadge('Por chamada')}
               </div>
             </div>
 
@@ -1840,7 +2181,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 Atualizações do Sistema
               </h1>
               <p style={{ fontSize: '0.82rem', color: '#888888', marginTop: '4px' }}>
-                JARVIS AI Hub v3.0.1 • Sua instalação está atualizada na ramificação principal.
+                JARVIS AI Hub v3.0.1 • O estado de atualização não é verificado automaticamente nesta instalação.
               </p>
             </div>
 
@@ -1861,12 +2202,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <CheckCircle2 size={16} color="#10b981" />
                   <strong style={{ fontSize: '0.94rem', color: '#ffffff' }}>Versão Instalada: v3.0.1</strong>
-                  <span style={{ fontSize: '0.70rem', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 600 }}>
-                    Estável
+                  <span style={{ fontSize: '0.70rem', padding: '2px 8px', borderRadius: '999px', backgroundColor: 'rgba(113, 113, 122, 0.2)', color: '#a1a1aa', fontWeight: 600 }}>
+                    Não verificado
                   </span>
                 </div>
                 <span style={{ fontSize: '0.78rem', color: '#888888', marginTop: '4px', display: 'block' }}>
-                  Ambiente local sincronizado com a branch principal do repositório.
+                  A verificação de releases ainda não está ligada ao backend. Consulte o repositório para confirmar atualizações.
                 </span>
               </div>
 
@@ -1951,13 +2292,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     gap: '6px',
                     padding: '6px 12px',
                     borderRadius: '8px',
-                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    backgroundColor:
+                      apiHealthy === false
+                        ? 'rgba(248, 113, 113, 0.12)'
+                        : 'rgba(16, 185, 129, 0.12)',
+                    border:
+                      apiHealthy === false
+                        ? '1px solid rgba(248, 113, 113, 0.3)'
+                        : '1px solid rgba(16, 185, 129, 0.3)',
                   }}
                 >
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981' }} />
-                  <span style={{ fontSize: '0.78rem', color: '#34d399', fontWeight: 600 }}>
-                    FastAPI Operacional · 127.0.0.1:8000
+                  <div
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: apiHealthy === false ? '#f87171' : '#10b981',
+                      boxShadow: apiHealthy === false ? '0 0 8px #f87171' : '0 0 8px #10b981',
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: '0.78rem',
+                      color: apiHealthy === false ? '#f87171' : '#34d399',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {apiHealthy === null
+                      ? 'FastAPI: a verificar...'
+                      : apiHealthy
+                        ? 'FastAPI Operacional'
+                        : 'FastAPI indisponível'}
                   </span>
                 </div>
 
@@ -1972,6 +2337,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <span>{testingApi ? 'Testando...' : 'Testar Conexão'}</span>
                 </button>
               </div>
+            </div>
+
+            <div
+              role="note"
+              style={{
+                padding: '12px 16px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.28)',
+                fontSize: '0.78rem',
+                color: '#fbbf24',
+                lineHeight: 1.5,
+              }}
+            >
+              Configuração apenas de leitura: bind, porta, expiração de sessão, runtime e nível de
+              logs são definidos no arranque do backend por variáveis de ambiente ou ficheiro de
+              configuração. Alterações aqui não são aplicadas; reinicie o servidor com os valores
+              pretendidos.
             </div>
 
             {/* SEÇÃO 1: ACESSOS E USUÁRIOS (Exatamente o card da imagem do usuário) */}
@@ -2037,6 +2420,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <select
                   value={jwtExpirationHours}
                   onChange={(e) => setJwtExpirationHours(parseInt(e.target.value, 10))}
+                  disabled
+                  title="Definido no arranque do backend; não editável no dashboard."
                   style={{
                     backgroundColor: '#1f1f1f',
                     border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -2085,6 +2470,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <select
                     value={serverHost}
                     onChange={(e) => setServerHost(e.target.value as any)}
+                    disabled
+                    title="Definido no arranque do backend; não editável no dashboard."
                     style={{
                       backgroundColor: '#1f1f1f',
                       border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -2108,6 +2495,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="number"
                       value={serverPort}
                       onChange={(e) => setServerPort(parseInt(e.target.value, 10) || 8000)}
+                      readOnly
+                      title="Definido no arranque do backend; não editável no dashboard."
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -2167,16 +2556,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    onClick={handleOptimizeDb}
-                    disabled={optimizingDb}
-                    className="btn btn-secondary"
-                    style={{ fontSize: '0.78rem', padding: '6px 12px', borderRadius: '8px' }}
-                  >
-                    <span>{optimizingDb ? 'Otimizando...' : 'Otimizar (VACUUM)'}</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={handleBackupDb}
                     disabled={backingUpDb}
                     className="btn btn-secondary"
@@ -2220,6 +2599,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="text"
                       value={ollamaEndpoint}
                       onChange={(e) => setOllamaEndpoint(e.target.value)}
+                      readOnly
+                      title="Configurado pelo backend; use Testar Ollama para verificar o runtime ativo."
                       style={{
                         backgroundColor: '#1f1f1f',
                         border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -2254,6 +2635,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <select
                     value={contextWindow}
                     onChange={(e) => setContextWindow(e.target.value)}
+                    disabled
+                    title="Configurado pelo backend; não editável no dashboard."
                     style={{
                       backgroundColor: '#1f1f1f',
                       border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -2306,6 +2689,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <select
                     value={logLevel}
                     onChange={(e) => setLogLevel(e.target.value as any)}
+                    disabled
+                    title="Definido no arranque do backend; não editável no dashboard."
                     style={{
                       backgroundColor: '#1f1f1f',
                       border: '1px solid rgba(255, 255, 255, 0.12)',

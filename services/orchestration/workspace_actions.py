@@ -121,7 +121,14 @@ def execute_workspace_modification(
             )
 
     if new_content == content:
-        new_content += f"\n/* Modificação JARVIS: {user_prompt} */\n"
+        # O patcher determinístico só entende ajustes simples (cores e título).
+        # Sem interpretação possível não se escreve nada — nem sequer um
+        # comentário-marcador — porque isso simularia uma alteração inexistente.
+        raise ValueError(
+            "Não foi possível derivar a alteração de código solicitada para este ficheiro. "
+            "O modo determinístico do Maestro apenas aplica ajustes simples de tema e título; "
+            "para alterações de código utilize o Coding Agent (edição com diff e aprovação)."
+        )
 
     project_root = workspace_service.get_project_dir(target_project).resolve()
     target_path = (project_root / target_file).resolve()

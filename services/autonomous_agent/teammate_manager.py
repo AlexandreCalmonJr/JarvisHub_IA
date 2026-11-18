@@ -162,25 +162,30 @@ class TeammateManager:
         teammate.status = "running"
         teammate.add_log(f"Tarefa atribuída: {clean_task}")
 
-        # Simulação de processamento de background com retorno do plano de ação
+        # A execução autônoma de teammates ainda não está ligada a um runtime de
+        # agente: o ambiente físico é preparado, mas a tarefa NÃO é executada.
+        # Reportar "completed" aqui seria uma simulação apresentada como facto.
         workspace_info = (
-            f"no worktree isolado '{teammate.worktree_path}'"
+            f"worktree isolado '{teammate.worktree_path}'"
             if teammate.isolated_workspace
-            else "no workspace compartilhado"
+            else "workspace compartilhado"
         )
         result_summary = (
-            f"O agente '{teammate.name}' ({teammate.role}) assumiu a tarefa: '{clean_task}' {workspace_info}. "
-            "A análise foi estruturada e o workspace de execução foi associado."
+            f"A tarefa '{clean_task}' não foi executada: a orquestração autônoma de "
+            f"teammates ainda não está ligada ao runtime de agentes. "
+            f"O ambiente ({workspace_info}) foi preparado e permanece disponível. "
+            "Use o Coding Agent ou um especialista para executar o trabalho."
         )
 
-        teammate.status = "completed"
-        teammate.add_log(f"Tarefa finalizada com sucesso: {result_summary}")
+        teammate.status = "failed"
+        teammate.add_log(f"Execução não suportada: {result_summary}")
 
         return {
             "teammate_id": teammate.id,
             "status": teammate.status,
             "task": clean_task,
             "summary": result_summary,
+            "reason": "teammate_execution_unsupported",
             "isolated_workspace": teammate.isolated_workspace,
             "worktree_path": teammate.worktree_path,
             "updated_at": teammate.updated_at,

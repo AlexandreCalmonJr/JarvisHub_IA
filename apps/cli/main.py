@@ -9,12 +9,15 @@ import uuid
 
 from rich.table import Table
 
+from services.coding_agent.repo_map import generate_repo_map
+
 from .client import JarvisClient
 from .session import create_cli_session, format_prompt
 from .ui import (
     console,
     print_banner,
     render_approval_prompt,
+    render_diff,
     render_help,
     render_markdown,
     render_tool_call,
@@ -129,6 +132,87 @@ async def handle_slash_command(
             console.print(f"[bold green]✓ Modo alterado para: {state['mode'].upper()}[/]")
         else:
             console.print("[yellow]Uso: /mode <plan|ask|auto>[/]")
+        return True
+
+    if base_cmd == "/diff":
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                "git diff",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await proc.communicate()
+            diff_text = stdout.decode("utf-8", errors="replace")
+            if diff_text.strip():
+                render_diff(diff_text)
+            else:
+                console.print("[dim]Nenhuma alteração não commitada no repositório.[/dim]")
+        except Exception as exc:
+            console.print(f"[bold red]Erro ao executar git diff: {exc}[/]")
+        return True
+
+    if base_cmd == "/undo":
+        ans = (
+            console.input(
+                "[bold yellow]Deseja reverter todas as alterações não commitadas (git checkout -- .)? [y/N]: [/]"
+            )
+            .strip()
+            .lower()
+        )
+        if ans in {"y", "s", "yes", "sim"}:
+            try:
+                proc = await asyncio.create_subprocess_shell(
+                    "git checkout -- .",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await proc.communicate()
+                if proc.returncode == 0:
+                    console.print(
+                        "[bold green]✓ Alterações revertidas com sucesso (Rollback concluído).[/]"
+                    )
+                else:
+                    console.print("[bold red]Falha ao executar rollback git.[/]")
+            except Exception as exc:
+                console.print(f"[bold red]Erro no rollback: {exc}[/]")
+        else:
+            console.print("[dim]Operação cancelada.[/dim]")
+        return True
+
+    if base_cmd == "/test":
+        cmd_to_run = " ".join(parts[1:]) if len(parts) > 1 else "pytest -q"
+        console.print(f"[cyan]Executando suíte de testes: [bold]{cmd_to_run}[/]...[/cyan]")
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd_to_run,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await proc.communicate()
+            output = stdout.decode("utf-8", errors="replace")
+            if proc.returncode == 0:
+                console.print("[bold green]✓ Testes passaram com sucesso (Exit Code 0)[/]")
+            else:
+                console.print(f"[bold red]✗ Testes falharam (Exit Code {proc.returncode})[/]")
+            console.print(output.strip()[-2000:])
+        except Exception as exc:
+            console.print(f"[bold red]Erro ao executar testes: {exc}[/]")
+        return True
+
+    if base_cmd == "/map":
+        console.print("[cyan]Gerando Repo Map sintático compacto (AST <1000 tokens)...[/cyan]")
+        try:
+            from pathlib import Path
+
+            repo_map = generate_repo_map(Path("."), max_tokens=1000)
+            if repo_map:
+                render_markdown(
+                    f"### Mapa Sintático de Repositório (Repo Map)\n```\n{repo_map}\n```"
+                )
+            else:
+                console.print("[dim]Nenhum símbolo de código encontrado no diretório atual.[/dim]")
+        except Exception as exc:
+            console.print(f"[bold red]Erro ao gerar repo map: {exc}[/]")
         return True
 
     if base_cmd == "/compact":

@@ -7,110 +7,290 @@ import {
   ChevronRight,
   ChevronLeft,
 } from 'lucide-react';
-import { fetchResources } from '../../services/api/system';
+import {
+  fetchOverviewTelemetry,
+  fetchResources,
+  InferenceTelemetryDetail,
+  InferenceTelemetrySummary,
+  ModelPerformanceSummary,
+} from '../../services/api/system';
 
-interface DailyUsagePoint {
+type Metric = 'Custo' | 'Tokens' | 'Latência';
+
+interface UsagePoint {
   day: string;
-  cost: number;
-  tokens: number;
+  value: number;
 }
+
+interface ProviderUsage {
+  id: string;
+  name: string;
+  models: string[];
+  inferences: number;
+  successful: number;
+  tokens: number;
+  cost: number;
+  averageLatencyMs: number;
+}
+
+const PERIOD_DAYS: Record<string, number> = {
+  '7 dias': 7,
+  '30 dias': 30,
+  '90 dias': 90,
+  'Este ano': 365,
+};
+
+const formatInteger = (value: number) => Math.round(value).toLocaleString('pt-BR');
+
+const formatUsd = (value: number) =>
+  value >= 1 ? `US$ ${value.toFixed(2)}` : `US$ ${value.toFixed(4)}`;
+
+const formatCompact = (value: number) => {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} mi`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} mil`;
+  return formatInteger(value);
+};
 
 export const UsageAnalyticsView: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState('Todos os agentes');
-  const [selectedMetric, setSelectedMetric] = useState('Custo');
+  const [selectedMetric, setSelectedMetric] = useState<Metric>('Custo');
   const [selectedPeriod, setSelectedPeriod] = useState('30 dias');
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [metricDropdownOpen, setMetricDropdownOpen] = useState(false);
   const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [cpuUsage, setCpuUsage] = useState(31);
-  const [ramUsage, setRamUsage] = useState(33);
-  const [expandedProvider, setExpandedProvider] = useState<string | null>('opencode');
+  const [cpuUsage, setCpuUsage] = useState<number | null>(null);
+  const [ramUsage, setRamUsage] = useState<number | null>(null);
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const [summary, setSummary] = useState<InferenceTelemetrySummary | null>(null);
+  const [records, setRecords] = useState<InferenceTelemetryDetail[]>([]);
+  const [modelPerformance, setModelPerformance] = useState<ModelPerformanceSummary[]>([]);
+  const [telemetryError, setTelemetryError] = useState<string | null>(null);
 
-  // Consulta métricas reais de hardware
   const loadHardwareMetrics = async () => {
-    setLoading(true);
     try {
       const resources = await fetchResources();
-      if (typeof resources.cpu_percent === 'number') setCpuUsage(Math.round(resources.cpu_percent));
-      if (typeof resources.ram_percent === 'number') setRamUsage(Math.round(resources.ram_percent));
+      setCpuUsage(
+        typeof resources.cpu_percent === 'number' ? Math.round(resources.cpu_percent) : null
+      );
+      setRamUsage(
+        typeof resources.ram_percent === 'number' ? Math.round(resources.ram_percent) : null
+      );
     } catch (e) {
       console.warn('Falha ao obter telemetria de hardware:', e);
+      setCpuUsage(null);
+      setRamUsage(null);
+    }
+  };
+
+  const loadTelemetry = async () => {
+    setLoading(true);
+    try {
+      const telemetry = await fetchOverviewTelemetry(500);
+      setSummary(telemetry.summary);
+      setRecords(telemetry.records);
+      setModelPerformance(telemetry.model_performance);
+      setTelemetryError(null);
+    } catch (e) {
+      setTelemetryError(
+        e instanceof Error ? e.message : 'Falha ao carregar a telemetria de inferência.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  const refresh = async () => {
+    await Promise.all([loadHardwareMetrics(), loadTelemetry()]);
+  };
+
   useEffect(() => {
-    loadHardwareMetrics();
-    const interval = setInterval(loadHardwareMetrics, 30000);
+    void refresh();
+    const interval = setInterval(() => {
+      void loadHardwareMetrics();
+      void loadTelemetry();
+    }, 30000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Dados dos 30 dias para a curva suave SVG
-  const chartData: DailyUsagePoint[] = useMemo(() => {
-    const points: DailyUsagePoint[] = [];
-    const now = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dayLabel = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-      // Curva simulada com pico nos últimos 3 dias
-      const cost = i < 3 ? (3 - i) * 0.04 : 0.0;
-      const tokens = i < 3 ? (3 - i) * 4200 : 150;
-      points.push({ day: dayLabel, cost, tokens });
+  const agentOptions = useMemo(() => {
+    const roles = new Set<string>();
+    for (const record of records) {
+      roles.add(record.agent_role || 'Não atribuído');
     }
-    return points;
-  }, []);
+    return ['Todos os agentes', ...Array.from(roles).sort()];
+  }, [records]);
 
-  // Provedores Conectados & Detalhamento
-  const providers = [
-    {
-      id: 'opencode',
-      name: 'OpenCode CLI',
-      icon: '💻',
-      tokens: '12,42 mil',
-      cost: 'US$ 0,00',
-      type: 'Local Engine / CLI',
-      subtext: 'qwen2.5-coder:7b integrado localmente',
-      details: {
-        cacheReads: '12,42 mil',
-        cachedInput: '0',
-        uncachedInput: '11,92 mil',
-        output: '499 tokens',
-      },
-    },
-    {
-      id: 'ollama',
-      name: 'Ollama Local Daemon',
-      icon: '🤖',
-      tokens: '48,15 mil',
-      cost: 'US$ 0,00',
-      type: 'Inference Local (GPU/CPU)',
-      subtext: 'Zero custos de API externa',
-      details: {
-        cacheReads: '48,15 mil',
-        cachedInput: '8,20 mil',
-        uncachedInput: '39,95 mil',
-        output: '2,10 mil tokens',
-      },
-    },
-    {
-      id: 'cloud_models',
-      name: 'Provedores de Nuvem (Anthropic / OpenAI)',
-      icon: '☁️',
-      tokens: '0 tokens',
-      cost: 'US$ 0,00',
-      type: 'Nuvem sob demanda',
-      subtext: 'Nenhuma chamada externa tarifada neste período',
-      details: {
-        cacheReads: '0',
-        cachedInput: '0',
-        uncachedInput: '0',
-        output: '0',
-      },
-    },
-  ];
+  const filteredRecords = useMemo(() => {
+    const days = PERIOD_DAYS[selectedPeriod] ?? 30;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    return records.filter((record) => {
+      const timestamp = Date.parse(record.created_at);
+      if (Number.isFinite(timestamp) && timestamp < cutoff) return false;
+      if (
+        selectedAgent !== 'Todos os agentes' &&
+        (record.agent_role || 'Não atribuído') !== selectedAgent
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [records, selectedAgent, selectedPeriod]);
+
+  const totals = useMemo(() => {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cost = 0;
+    let successfulDuration = 0;
+    let successfulCount = 0;
+    let successful = 0;
+    for (const record of filteredRecords) {
+      inputTokens += Number(record.prompt_tokens || 0);
+      outputTokens += Number(record.completion_tokens || 0);
+      cost += Number(record.cost_usd || 0);
+      if (record.status === 'success') {
+        successful += 1;
+        if (Number(record.duration_ms) > 0) {
+          successfulDuration += Number(record.duration_ms);
+          successfulCount += 1;
+        }
+      }
+    }
+    return {
+      inputTokens,
+      outputTokens,
+      tokens: inputTokens + outputTokens,
+      cost,
+      inferences: filteredRecords.length,
+      successRate: filteredRecords.length
+        ? Math.round((successful / filteredRecords.length) * 1000) / 10
+        : 0,
+      averageLatencyMs: successfulCount ? successfulDuration / successfulCount : 0,
+    };
+  }, [filteredRecords]);
+
+  // Série diária calculada exclusivamente a partir das inferências reais.
+  const series = useMemo<UsagePoint[]>(() => {
+    const days = PERIOD_DAYS[selectedPeriod] ?? 30;
+    const buckets = new Map<string, { total: number; count: number }>();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let offset = days - 1; offset >= 0; offset -= 1) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - offset);
+      buckets.set(date.toISOString().slice(0, 10), { total: 0, count: 0 });
+    }
+
+    for (const record of filteredRecords) {
+      const timestamp = Date.parse(record.created_at);
+      if (!Number.isFinite(timestamp)) continue;
+      const key = new Date(timestamp).toISOString().slice(0, 10);
+      const bucket = buckets.get(key);
+      if (!bucket) continue;
+      const value =
+        selectedMetric === 'Custo'
+          ? Number(record.cost_usd || 0)
+          : selectedMetric === 'Tokens'
+            ? Number(record.prompt_tokens || 0) + Number(record.completion_tokens || 0)
+            : Number(record.duration_ms || 0);
+      bucket.total += value;
+      bucket.count += 1;
+    }
+
+    return Array.from(buckets.entries()).map(([key, bucket]) => {
+      const date = new Date(`${key}T00:00:00`);
+      return {
+        day: date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+        value:
+          selectedMetric === 'Latência'
+            ? bucket.count
+              ? bucket.total / bucket.count
+              : 0
+            : bucket.total,
+      };
+    });
+  }, [filteredRecords, selectedMetric, selectedPeriod]);
+
+  const chartMax = useMemo(
+    () => Math.max(...series.map((point) => point.value), 0),
+    [series]
+  );
+
+  const chart = useMemo(() => {
+    const coords = series.map((point, index) => ({
+      x: series.length <= 1 ? 0 : (index / (series.length - 1)) * 800,
+      y: chartMax > 0 ? 92 - (point.value / chartMax) * 70 : 92,
+    }));
+    const line = coords
+      .map((coord, index) => `${index === 0 ? 'M' : 'L'} ${coord.x.toFixed(1)} ${coord.y.toFixed(1)}`)
+      .join(' ');
+    return {
+      line,
+      area: line ? `${line} L 800 95 L 0 95 Z` : '',
+      last: coords[coords.length - 1],
+    };
+  }, [series, chartMax]);
+
+  const providers = useMemo<ProviderUsage[]>(() => {
+    const groups = new Map<string, ProviderUsage & { duration: number; durationCount: number }>();
+    for (const record of filteredRecords) {
+      const id = record.provider || 'desconhecido';
+      const group =
+        groups.get(id) ||
+        {
+          id,
+          name: id === 'ollama' ? 'Ollama (local)' : id,
+          models: [],
+          inferences: 0,
+          successful: 0,
+          tokens: 0,
+          cost: 0,
+          averageLatencyMs: 0,
+          duration: 0,
+          durationCount: 0,
+        };
+      group.inferences += 1;
+      group.tokens += Number(record.prompt_tokens || 0) + Number(record.completion_tokens || 0);
+      group.cost += Number(record.cost_usd || 0);
+      if (!group.models.includes(record.model_name)) group.models.push(record.model_name);
+      if (record.status === 'success') {
+        group.successful += 1;
+        if (Number(record.duration_ms) > 0) {
+          group.duration += Number(record.duration_ms);
+          group.durationCount += 1;
+        }
+      }
+      groups.set(id, group);
+    }
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        averageLatencyMs: group.durationCount ? group.duration / group.durationCount : 0,
+      }))
+      .sort((a, b) => b.inferences - a.inferences);
+  }, [filteredRecords]);
+
+  const mainValue =
+    selectedMetric === 'Custo'
+      ? formatUsd(totals.cost)
+      : selectedMetric === 'Tokens'
+        ? `${formatInteger(totals.tokens)} tokens`
+        : totals.averageLatencyMs > 0
+          ? `${(totals.averageLatencyMs / 1000).toFixed(2)} s`
+          : '—';
+
+  // `modelPerformance` é mantido para indicar que a telemetria inclui o
+  // desempenho por modelo; a UI abaixo deriva os detalhes das chamadas reais.
+  const fastestModel = useMemo(() => {
+    const withLatency = modelPerformance.filter(
+      (entry) => Number(entry.average_latency_ms) > 0
+    );
+    return withLatency.sort(
+      (a, b) => Number(a.average_latency_ms) - Number(b.average_latency_ms)
+    )[0]?.model_name;
+  }, [modelPerformance]);
 
   return (
     <div
@@ -124,7 +304,7 @@ export const UsageAnalyticsView: React.FC = () => {
         color: '#f4f4f5',
       }}
     >
-      {/* Top Header com Estilo OpenBot */}
+      {/* Top Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -152,14 +332,13 @@ export const UsageAnalyticsView: React.FC = () => {
               Uso e Custos
             </h1>
             <p style={{ fontSize: '0.80rem', color: '#888888', marginTop: '2px' }}>
-              Telemetria de tokens de contexto, custos de API e métricas de hardware da máquina local.
+              Telemetria real de inferências, tokens e custos da sua conta, além de métricas de hardware.
             </p>
           </div>
         </div>
 
-        {/* Barra de Filtros e Status do Hardware (Estilo OpenBot Image 5) */}
+        {/* Filtros e hardware */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Pílula CPU */}
           <div
             style={{
               display: 'flex',
@@ -174,11 +353,10 @@ export const UsageAnalyticsView: React.FC = () => {
             }}
           >
             <Cpu size={14} color="#38bdf8" />
-            <span style={{ fontWeight: 600 }}>{cpuUsage}%</span>
+            <span style={{ fontWeight: 600 }}>{cpuUsage === null ? '—' : `${cpuUsage}%`}</span>
             <span style={{ color: '#71717a' }}>CPU</span>
           </div>
 
-          {/* Pílula RAM */}
           <div
             style={{
               display: 'flex',
@@ -193,11 +371,11 @@ export const UsageAnalyticsView: React.FC = () => {
             }}
           >
             <HardDrive size={14} color="#c084fc" />
-            <span style={{ fontWeight: 600 }}>{ramUsage}%</span>
+            <span style={{ fontWeight: 600 }}>{ramUsage === null ? '—' : `${ramUsage}%`}</span>
             <span style={{ color: '#71717a' }}>RAM</span>
           </div>
 
-          {/* Dropdown Filtro Agentes */}
+          {/* Dropdown Agente */}
           <div style={{ position: 'relative' }}>
             <button
               type="button"
@@ -225,7 +403,7 @@ export const UsageAnalyticsView: React.FC = () => {
                   position: 'absolute',
                   top: '36px',
                   right: 0,
-                  width: '180px',
+                  width: '200px',
                   backgroundColor: '#18181b',
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                   borderRadius: '10px',
@@ -234,18 +412,18 @@ export const UsageAnalyticsView: React.FC = () => {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
                 }}
               >
-                {['Todos os agentes', 'Telegram Orchestrator', 'QA Tester', 'Copy Editor', 'Bug Fixer', 'Security Auditor'].map((ag) => (
+                {agentOptions.map((agent) => (
                   <button
-                    key={ag}
+                    key={agent}
                     type="button"
                     onClick={() => {
-                      setSelectedAgent(ag);
+                      setSelectedAgent(agent);
                       setAgentDropdownOpen(false);
                     }}
                     className="btn btn-ghost"
                     style={{ width: '100%', justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
                   >
-                    {ag}
+                    {agent}
                   </button>
                 ))}
               </div>
@@ -289,18 +467,18 @@ export const UsageAnalyticsView: React.FC = () => {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
                 }}
               >
-                {['Custo', 'Tokens', 'Latência'].map((m) => (
+                {(['Custo', 'Tokens', 'Latência'] as Metric[]).map((metric) => (
                   <button
-                    key={m}
+                    key={metric}
                     type="button"
                     onClick={() => {
-                      setSelectedMetric(m);
+                      setSelectedMetric(metric);
                       setMetricDropdownOpen(false);
                     }}
                     className="btn btn-ghost"
                     style={{ width: '100%', justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
                   >
-                    {m}
+                    {metric}
                   </button>
                 ))}
               </div>
@@ -344,28 +522,27 @@ export const UsageAnalyticsView: React.FC = () => {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
                 }}
               >
-                {['7 dias', '30 dias', '90 dias', 'Este ano'].map((p) => (
+                {Object.keys(PERIOD_DAYS).map((period) => (
                   <button
-                    key={p}
+                    key={period}
                     type="button"
                     onClick={() => {
-                      setSelectedPeriod(p);
+                      setSelectedPeriod(period);
                       setPeriodDropdownOpen(false);
                     }}
                     className="btn btn-ghost"
                     style={{ width: '100%', justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
                   >
-                    {p}
+                    {period}
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Botão de Atualizar */}
           <button
             type="button"
-            onClick={loadHardwareMetrics}
+            onClick={() => void refresh()}
             disabled={loading}
             className="btn btn-ghost"
             style={{
@@ -381,17 +558,25 @@ export const UsageAnalyticsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Métrica Principal (US$ 0,00 · 2 sessões · Estimativa de API · USD) */}
+      {telemetryError && (
+        <div role="alert" style={{ fontSize: '12px', color: '#fca5a5' }}>
+          Telemetria indisponível: {telemetryError}
+        </div>
+      )}
+
+      {/* Métrica principal */}
       <div style={{ marginTop: '8px' }}>
         <div style={{ fontSize: '2.5rem', fontWeight: 600, color: '#f5f5f5', letterSpacing: '-0.03em' }}>
-          US$ 0,00
+          {mainValue}
         </div>
         <div style={{ fontSize: '13px', color: '#71717a', marginTop: '2px' }}>
-          2 sessões · Estimativa de API · USD
+          {formatInteger(totals.inferences)} inferências · {selectedPeriod} · taxa de sucesso{' '}
+          {totals.inferences ? `${totals.successRate}%` : '—'}
+          {fastestModel ? ` · modelo mais rápido: ${fastestModel}` : ''}
         </div>
       </div>
 
-      {/* Gráfico Temporal Interativo dos 30 dias (SVG Curva Suave) */}
+      {/* Gráfico temporal */}
       <div
         style={{
           width: '100%',
@@ -406,6 +591,22 @@ export const UsageAnalyticsView: React.FC = () => {
           justifyContent: 'space-between',
         }}
       >
+        {totals.inferences === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+              color: '#71717a',
+              pointerEvents: 'none',
+            }}
+          >
+            Sem inferências registadas neste período.
+          </div>
+        )}
         <svg
           style={{ width: '100%', height: '110px', overflow: 'visible' }}
           viewBox="0 0 800 100"
@@ -418,50 +619,44 @@ export const UsageAnalyticsView: React.FC = () => {
             </linearGradient>
           </defs>
 
-          {/* Linhas de Grade de Fundo */}
           <line x1="0" y1="20" x2="800" y2="20" stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
           <line x1="0" y1="60" x2="800" y2="60" stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
           <line x1="0" y1="95" x2="800" y2="95" stroke="rgba(255,255,255,0.08)" />
 
-          {/* Área com Gradiente */}
-          <path
-            d="M 0 95 L 0 95 C 200 95, 400 95, 600 95 C 650 95, 700 80, 750 40 L 800 30 L 800 95 Z"
-            fill="url(#usageGradient)"
-          />
-
-          {/* Curva Suave Principal */}
-          <path
-            d="M 0 95 C 200 95, 400 95, 600 95 C 650 95, 700 80, 750 40 L 800 30"
-            fill="none"
-            stroke="#38bdf8"
-            strokeWidth="2.5"
-          />
-
-          {/* Ponto Final Ativo */}
-          <circle cx="800" cy="30" r="4.5" fill="#38bdf8" stroke="#0c0c0e" strokeWidth="2" />
+          {chart.area && <path d={chart.area} fill="url(#usageGradient)" />}
+          {chart.line && (
+            <path d={chart.line} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
+          )}
+          {chart.last && (
+            <circle cx={chart.last.x} cy={chart.last.y} r="4.5" fill="#38bdf8" stroke="#0c0c0e" strokeWidth="2" />
+          )}
         </svg>
 
-        {/* Eixo de Datas Inferior */}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#52525b', padding: '0 4px' }}>
-          <span>{chartData[0]?.day}</span>
-          <span>{chartData[10]?.day}</span>
-          <span>{chartData[20]?.day}</span>
+          <span>{series[0]?.day}</span>
+          <span>{series[Math.floor(series.length / 3)]?.day}</span>
+          <span>{series[Math.floor((series.length * 2) / 3)]?.day}</span>
           <span>Hoje</span>
         </div>
       </div>
 
-      {/* Detalhamento Expansível de Provedores */}
+      {/* Detalhamento por provedor */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, color: '#a1a1aa', marginBottom: '4px' }}>
           Detalhamento por Provedor
         </div>
 
-        {providers.map((p) => {
-          const isExpanded = expandedProvider === p.id;
+        {providers.length === 0 && (
+          <div style={{ fontSize: '12px', color: '#71717a' }}>
+            Nenhuma chamada a provedores neste período.
+          </div>
+        )}
 
+        {providers.map((provider) => {
+          const isExpanded = expandedProvider === provider.id;
           return (
             <div
-              key={p.id}
+              key={provider.id}
               style={{
                 backgroundColor: '#141417',
                 border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -471,7 +666,7 @@ export const UsageAnalyticsView: React.FC = () => {
               }}
             >
               <div
-                onClick={() => setExpandedProvider(isExpanded ? null : p.id)}
+                onClick={() => setExpandedProvider(isExpanded ? null : provider.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -487,17 +682,18 @@ export const UsageAnalyticsView: React.FC = () => {
                     color="#71717a"
                     style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}
                   />
-                  <span style={{ fontSize: '15px' }}>{p.icon}</span>
                   <div>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>{p.name}</span>
-                    <span style={{ fontSize: '12px', color: '#71717a', marginLeft: '8px' }}>({p.tokens})</span>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#f4f4f5' }}>{provider.name}</span>
+                    <span style={{ fontSize: '12px', color: '#71717a', marginLeft: '8px' }}>
+                      ({formatCompact(provider.tokens)} tokens)
+                    </span>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <span style={{ fontSize: '13px', color: '#a1a1aa' }}>{p.cost}</span>
+                  <span style={{ fontSize: '13px', color: '#a1a1aa' }}>{formatUsd(provider.cost)}</span>
                   <span style={{ fontSize: '11px', color: '#34d399', backgroundColor: 'rgba(52, 211, 153, 0.12)', padding: '2px 8px', borderRadius: '999px' }}>
-                    {p.type}
+                    {provider.inferences} chamadas
                   </span>
                 </div>
               </div>
@@ -513,23 +709,29 @@ export const UsageAnalyticsView: React.FC = () => {
                     gap: '10px',
                   }}
                 >
-                  <p style={{ margin: 0, fontSize: '12px', color: '#71717a' }}>{p.subtext}</p>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#71717a' }}>
+                    Modelos: {provider.models.join(', ') || '—'}
+                  </p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginTop: '4px' }}>
                     <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#71717a' }}>Leituras de cache</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>{p.details.cacheReads}</div>
+                      <div style={{ fontSize: '11px', color: '#71717a' }}>Inferências</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>{formatInteger(provider.inferences)}</div>
                     </div>
                     <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#71717a' }}>Entrada em cache</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>{p.details.cachedInput}</div>
+                      <div style={{ fontSize: '11px', color: '#71717a' }}>Taxa de sucesso</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>
+                        {provider.inferences ? `${Math.round((provider.successful / provider.inferences) * 1000) / 10}%` : '—'}
+                      </div>
                     </div>
                     <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#71717a' }}>Entrada sem cache</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>{p.details.uncachedInput}</div>
+                      <div style={{ fontSize: '11px', color: '#71717a' }}>Latência média</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>
+                        {provider.averageLatencyMs > 0 ? `${(provider.averageLatencyMs / 1000).toFixed(2)} s` : '—'}
+                      </div>
                     </div>
                     <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#71717a' }}>Saída gerada</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>{p.details.output}</div>
+                      <div style={{ fontSize: '11px', color: '#71717a' }}>Custo registado</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#e4e4e7', marginTop: '2px' }}>{formatUsd(provider.cost)}</div>
                     </div>
                   </div>
                 </div>
@@ -539,10 +741,10 @@ export const UsageAnalyticsView: React.FC = () => {
         })}
       </div>
 
-      {/* Grid de Totais de Tokens (Estilo OpenBot Image 5) */}
+      {/* Totais */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, color: '#a1a1aa' }}>
-          Totais de Tokens (Últimos 30 dias)
+          Totais de Tokens ({selectedPeriod})
         </div>
 
         <div
@@ -552,65 +754,35 @@ export const UsageAnalyticsView: React.FC = () => {
             gap: '12px',
           }}
         >
-          <div
-            style={{
-              backgroundColor: '#141417',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '12px',
-              padding: '14px',
-            }}
-          >
-            <div style={{ fontSize: '11px', color: '#71717a', lineHeight: 1.3 }}>Tokens sem leitura de cache</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f4f4f5', marginTop: '6px' }}>12,42 mil</div>
-          </div>
-
-          <div
-            style={{
-              backgroundColor: '#141417',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '12px',
-              padding: '14px',
-            }}
-          >
-            <div style={{ fontSize: '11px', color: '#71717a', lineHeight: 1.3 }}>Tokens com leituras de cache</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f4f4f5', marginTop: '6px' }}>12,42 mil</div>
-          </div>
-
-          <div
-            style={{
-              backgroundColor: '#141417',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '12px',
-              padding: '14px',
-            }}
-          >
-            <div style={{ fontSize: '11px', color: '#71717a', lineHeight: 1.3 }}>Entrada em cache</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f4f4f5', marginTop: '6px' }}>0</div>
-          </div>
-
-          <div
-            style={{
-              backgroundColor: '#141417',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '12px',
-              padding: '14px',
-            }}
-          >
-            <div style={{ fontSize: '11px', color: '#71717a', lineHeight: 1.3 }}>Entrada sem cache</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f4f4f5', marginTop: '6px' }}>11,92 mil</div>
-          </div>
-
-          <div
-            style={{
-              backgroundColor: '#141417',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '12px',
-              padding: '14px',
-            }}
-          >
-            <div style={{ fontSize: '11px', color: '#71717a', lineHeight: 1.3 }}>Saída gerada</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f4f4f5', marginTop: '6px' }}>499 tokens</div>
-          </div>
+          {[
+            { label: 'Inferências', value: formatInteger(totals.inferences) },
+            { label: 'Tokens de entrada', value: formatInteger(totals.inputTokens) },
+            { label: 'Tokens de saída', value: formatInteger(totals.outputTokens) },
+            { label: 'Custo total', value: formatUsd(totals.cost) },
+            {
+              label: 'Latência média',
+              value: totals.averageLatencyMs > 0 ? `${(totals.averageLatencyMs / 1000).toFixed(2)} s` : '—',
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                backgroundColor: '#141417',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '14px',
+              }}
+            >
+              <div style={{ fontSize: '11px', color: '#71717a', lineHeight: 1.3 }}>{item.label}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f4f4f5', marginTop: '6px' }}>
+                {item.value}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: '11px', color: '#52525b' }}>
+          Fonte: /api/v1/system/inference-telemetry (janela das 500 inferências mais recentes da conta).
+          {summary ? ` Total histórico: ${formatInteger(summary.total_inferences)} inferências.` : ''}
         </div>
       </div>
     </div>

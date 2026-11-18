@@ -81,8 +81,13 @@ def safe_project(tmp_path: Path):
     return proj_dir
 
 
-def test_cve_scanner_detects_vulnerabilities(vulnerable_project):
-    """Valida detecção offline de CVEs conhecidas em requirements.txt e package.json."""
+def test_cve_scanner_detects_vulnerabilities(vulnerable_project, monkeypatch):
+    """Valida detecção offline de CVEs conhecidas em requirements.txt e package.json.
+
+    ``pip-audit`` consulta PyPI/OSV em tempo real: a base muda entre execuções e o
+    resultado deixaria de ser reproduzível. O teste fixa a base estática offline.
+    """
+    monkeypatch.setattr(CVEScannerService, "scan_with_pip_audit", lambda self, _p: None)
     scanner = CVEScannerService()
     report = scanner.scan_project_dependencies(vulnerable_project)
 
@@ -98,8 +103,14 @@ def test_cve_scanner_detects_vulnerabilities(vulnerable_project):
     assert report["security_score"] < 70
 
 
-def test_cve_scanner_safe_project(safe_project):
-    """Valida que um projeto com versões modernas e seguras recebe score máximo."""
+def test_cve_scanner_safe_project(safe_project, monkeypatch):
+    """Valida que a base offline não gera achados para versões modernas.
+
+    O caminho online (`pip-audit`) é desativado neste teste porque depende de
+    PyPI/OSV: advisories publicados depois da escrita do teste fariam o resultado
+    oscilar conforme a conectividade do executor.
+    """
+    monkeypatch.setattr(CVEScannerService, "scan_with_pip_audit", lambda self, _p: None)
     scanner = CVEScannerService()
     report = scanner.scan_project_dependencies(safe_project)
 

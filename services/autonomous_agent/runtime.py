@@ -51,6 +51,11 @@ from services.coding_agent.types import (
     ToolSpec,
 )
 from services.model_runtime.agent_routing import resolve_account_agent_route, resolve_agent_model
+from services.model_runtime.context_budget import (
+    resolve_num_ctx,
+    tool_output_char_limit,
+    trim_turns,
+)
 from services.orchestration.output_validation import count_words, validate_summary_text
 from services.security_core import PermissionDeniedError, SecurityCore
 
@@ -303,6 +308,18 @@ class AutonomousAgentRuntime:
             tools_disabled_next = False
             extra_prompt_tokens = 0
             extra_completion_tokens = 0
+
+            # Corta o histórico antigo para caber na janela do modelo.
+            messages, dropped_turns = trim_turns(
+                messages,
+                num_ctx=resolve_num_ctx(),
+                output_reserve=max(1024, config.max_tokens),
+            )
+            if dropped_turns:
+                logger.debug(
+                    "Contexto compactado: %d turno(s) antigo(s) removido(s).", dropped_turns
+                )
+
             try:
                 reply = await provider.complete(
                     turns=messages,
@@ -633,19 +650,18 @@ class AutonomousAgentRuntime:
 
         # 6. Construção e Emissão do Contrato Padronizado de Saída
         if not final_content:
-            if execution_failed:
-                final_content = f"A execução do especialista {profile.name} não foi concluída."
+            # Chegar aqui significa que nenhuma resposta narrativa foi produzida:
+            # o resultado é reportado como falha, nunca como sucesso.
+            final_content = f"A execução do especialista {profile.name} não foi concluída."
+            if not blockers_encountered:
                 blockers_encountered.append("A execução terminou sem resposta final válida.")
-            else:
-                final_content = (
-                    f"Parecer técnico executivo de {profile.name} concluído com sucesso."
-                )
+            execution_failed = True
 
         contract = agent_instance.create_output_contract(
             objective=config.prompt,
             summary=final_content,
-            evidence=evidence_collected or [f"Inspeção técnica pelo especialista {profile.name}."],
-            actions_taken=actions_taken or ["Análise técnica pelo especialista."],
+            evidence=evidence_collected,
+            actions_taken=actions_taken,
             affected_files=sorted(set(affected_files)),
             tests_executed=tests_executed,
             risks=risks_identified,
@@ -960,6 +976,34 @@ class AutonomousAgentRuntime:
                     yield event
                 return
 
+            if preview is None:
+                # Fail-closed: ferramenta com aprovação obrigatória que não
+                # produz pré-visualização de impacto nunca é executada.
+                tool_result = ToolResult(
+                    call_id=call.id,
+                    name=call.name,
+                    success=False,
+                    denied=True,
+                    error=(
+                        f"A ferramenta '{call.name}' exige aprovação humana, mas não gerou "
+                        "pré-visualização de impacto; execução bloqueada."
+                    ),
+                )
+                async for event in self._finish_tool(
+                    tool_result,
+                    config,
+                    role,
+                    messages,
+                    actions_taken,
+                    evidence_collected,
+                    affected_files,
+                    tests_executed,
+                    risks_identified,
+                    blockers_encountered,
+                ):
+                    yield event
+                return
+
             if preview is not None:
                 ticket = self.broker.create(
                     task_id=task_id,
@@ -1096,7 +1140,9 @@ class AutonomousAgentRuntime:
             )
             risks_identified.append(f"Falha na ferramenta {tool_result.name}: {tool_result.error}")
         else:
-            model_text = tool_result.to_model_text()
+            model_text = tool_result.to_model_text(
+                max_chars=tool_output_char_limit(resolve_num_ctx(), max(1024, config.max_tokens))
+            )
             actions_taken.append(f"Executou {tool_result.name}")
             if tool_result.output:
                 evidence_collected.append(

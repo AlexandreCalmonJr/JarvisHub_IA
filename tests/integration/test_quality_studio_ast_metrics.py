@@ -98,9 +98,12 @@ def test_quality_studio_chaos_edge_cases():
 @pytest.mark.anyio
 async def test_quality_studio_execute_playwright():
     service = QualityStudioService()
+    target_data_url = (
+        "data:text/html,<html><head><title>JARVIS</title></head><body><h1>API</h1></body></html>"
+    )
     res = await service.execute_playwright_test(
-        target_url="http://127.0.0.1:8000/api",
-        steps=[{"action": "goto", "target": "http://127.0.0.1:8000/api"}],
+        target_url=target_data_url,
+        steps=[{"action": "goto", "target": target_data_url}],
         timeout_seconds=10,
     )
     assert res["status"] == "success"

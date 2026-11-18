@@ -71,10 +71,12 @@ desktop.ini
 
 # Project specific local data & models
 /data/
-backups/
+/backups/
 *.db
 *.sqlite3
-models/
+# Pesos de LLM na raiz do repositório. Ancorado para não excluir código-fonte
+# em diretórios chamados "models" (ex.: apps/dashboard/src/components/models/).
+/models/
 *.bin
 *.gguf
 *.safetensors

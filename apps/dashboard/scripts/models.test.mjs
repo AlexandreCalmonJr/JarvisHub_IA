@@ -16,7 +16,8 @@ test('model manager distinguishes API and permission failures from missing data'
 
 test('unavailable model catalogs and metrics are not replaced with fabricated values', () => {
   assert.doesNotMatch(backend, /"llama3\.2:3b"|"qwen2\.5-coder:7b"|"qwen2\.5:7b"/);
-  assert.match(api, /Falha ao carregar métricas de inferência/);
+  // O endpoint /system/model-metrics nunca existiu; a UI usa a telemetria real.
+  assert.doesNotMatch(api, /system\/model-metrics/);
   assert.match(api, /Falha ao carregar modelos curados/);
   assert.match(api, /Falha ao pesquisar modelos/);
   assert.doesNotMatch(api, /total_inferences: 0|return \[\]|return \{\}/);

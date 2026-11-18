@@ -87,105 +87,114 @@ CURATED_HUGGINGFACE_MODELS = [
     },
 ]
 
-# Mapeamento do modelo ótimo para cada um dos 26 Especialistas do JARVIS
-AGENT_MODEL_RECOMMENDATIONS = {
-    "maestro": {
+# Modelo local recomendado para cada um dos 26 papéis reais do hub
+# (``packages.contracts.agent.AgentRole``). Apenas modelos presentes em
+# ``provider_catalog.LOCAL_MODEL_NAMES`` são referenciados: recomendar um tag
+# que o hub não conhece faria a UI oferecer um download que nunca é usado.
+AGENT_MODEL_RECOMMENDATIONS: dict[str, dict[str, str]] = {
+    "jarvis_master": {
         "model": "llama3.2:3b",
-        "reason": "Velocidade instantânea de triagem e coordenação (~14 t/s).",
-    },
-    "general_assistant": {
-        "model": "llama3.2:3b",
-        "reason": "Chat cotidiano fluido sem aquecimento da CPU.",
-    },
-    "code_explanation": {
-        "model": "llama3.2:3b",
-        "reason": "Consultoria e explicações didáticas rápidas.",
+        "reason": "Triagem e coordenação rápidas, com contexto curto e previsível.",
     },
     "software_architect": {
         "model": "qwen2.5-coder:7b",
-        "reason": "Profundidade em padrões arquiteturais, DDD e microserviços.",
+        "reason": "Padrões arquiteturais, DDD e desenho de módulos.",
     },
-    "requirements_analyst": {
-        "model": "llama3.2:3b",
-        "reason": "Elaboração de escopo e histórias de usuário.",
-    },
-    "python_developer": {
-        "model": "qwen2.5-coder:7b",
-        "reason": "Melhor modelo para FastAPI, Pydantic, SQLAlchemy e scripts.",
-    },
-    "java_developer": {
-        "model": "qwen2.5-coder:7b",
-        "reason": "Precisão em Java 21, Spring Boot e Maven.",
-    },
-    "csharp_developer": {
-        "model": "qwen2.5-coder:7b",
-        "reason": "Excelente suporte a C# 12 e .NET 8.",
-    },
-    "go_developer": {
-        "model": "qwen2.5-coder:7b",
-        "reason": "Geração idiomática de Go 1.22 com concorrência.",
-    },
-    "kotlin_developer": {"model": "qwen2.5-coder:7b", "reason": "Suporte a Kotlin e Gradle DSL."},
-    "flutter_developer": {
-        "model": "llama3.2:3b",
-        "reason": "Scaffolds rápidos em Dart e widgets mobile.",
-    },
-    "frontend_developer": {
-        "model": "llama3.2:3b",
-        "reason": "Geração ágil de HTML5, CSS3 moderno e JS interativo.",
-    },
-    "database_administrator": {
-        "model": "qwen2.5-coder:7b",
-        "reason": "Modelagem relacional, índices e queries complexas.",
-    },
-    "security_auditor": {
-        "model": "llama3.2:3b",
-        "reason": "Auditoria OWASP e sanitização ágil sem atrasos.",
-    },
-    "qa_engineer": {
-        "model": "starcoder2:3b",
-        "reason": "Especialista em testes unitários e cobertura.",
-    },
-    "devops_engineer": {
-        "model": "llama3.2:3b",
-        "reason": "Configurações Dockerfile, CI/CD e shell scripts.",
-    },
-    "tech_lead": {"model": "llama3.2:3b", "reason": "Code reviews e alinhamento de entregáveis."},
     "project_manager": {
         "model": "llama3.2:3b",
         "reason": "Cronogramas, marcos e priorização de backlog.",
     },
-    "cloud_architect": {
-        "model": "qwen2.5-coder:7b",
-        "reason": "Topologia de nuvem, serverless e infraestrutura.",
-    },
-    "observability_engineer": {
+    "research_analyst": {
         "model": "llama3.2:3b",
-        "reason": "Métricas Prometheus, OpenTelemetry e logs.",
+        "reason": "Síntese de fontes e comparação de alternativas.",
     },
-    "api_designer": {
+    "project_designer_planner": {
         "model": "llama3.2:3b",
-        "reason": "Especificações OpenAPI/Swagger e contratos REST.",
+        "reason": "Planeamento de projeto e decomposição de entregáveis.",
     },
-    "mobile_architect": {
+    "ux_ui_designer": {
         "model": "llama3.2:3b",
-        "reason": "Padrões arquiteturais mobile (Clean, BLoC).",
+        "reason": "Estrutura de ecrãs, fluxos e microcopy.",
     },
-    "performance_engineer": {
+    "frontend_mobile_developer": {
         "model": "qwen2.5-coder:7b",
-        "reason": "Profiling de CPU, memória e benchmarking.",
+        "reason": "Componentes React/Flutter e integração com APIs.",
     },
-    "data_engineer": {
+    "backend_developer": {
         "model": "qwen2.5-coder:7b",
-        "reason": "Pipelines de dados, ETL e transformações.",
+        "reason": "FastAPI, Pydantic, SQLAlchemy e contratos de serviço.",
     },
-    "ai_engineer": {
+    "qa_engineer": {
+        "model": "starcoder2:3b",
+        "reason": "Testes unitários, fixtures e cobertura de casos-limite.",
+    },
+    "code_reviewer": {
         "model": "qwen2.5-coder:7b",
-        "reason": "Engenharia de prompts, embeddings e RAG.",
+        "reason": "Revisão de diffs, bugs subtis e consistência de estilo.",
     },
-    "compliance_officer": {
+    "data_scientist": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Análise exploratória, métricas e código de modelação.",
+    },
+    "business_intelligence": {
         "model": "llama3.2:3b",
-        "reason": "Auditoria de conformidade, LGPD e governança.",
+        "reason": "KPIs, dashboards e leitura de indicadores.",
+    },
+    "data_engineering_intelligence": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Qualidade de dados, catálogos e linhagem.",
+    },
+    "data_engineer_pipelines": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "ETL, orquestração e transformações idempotentes.",
+    },
+    "devops_engineer": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Dockerfiles, CI/CD e automação de infraestrutura.",
+    },
+    "network_infrastructure_engineer": {
+        "model": "llama3.2:3b",
+        "reason": "Topologias, DNS, TLS e diagnóstico de conectividade.",
+    },
+    "cybersecurity_engineer": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Revisão OWASP, hardening e análise de superfície de ataque.",
+    },
+    "automation_engineer": {
+        "model": "llama3.2:3b",
+        "reason": "Scripts de automação e integrações entre serviços.",
+    },
+    "threat_modeling_security_architect": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "STRIDE, fronteiras de confiança e cenários de abuso.",
+    },
+    "secure_code_auditor": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Auditoria de código com foco em falhas exploráveis.",
+    },
+    "api_security_specialist": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Autenticação, autorização e validação de contratos de API.",
+    },
+    "identity_access_management": {
+        "model": "llama3.2:3b",
+        "reason": "RBAC/ABAC, ciclo de vida de identidades e privilégios.",
+    },
+    "software_supply_chain_security": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Dependências, SBOM e integridade de artefactos.",
+    },
+    "soc_incident_response": {
+        "model": "llama3.2:3b",
+        "reason": "Triagem de alertas e passos de contenção.",
+    },
+    "ai_security_red_team": {
+        "model": "qwen2.5-coder:7b",
+        "reason": "Prompt injection, jailbreaks e testes adversariais.",
+    },
+    "privacy_data_protection": {
+        "model": "llama3.2:3b",
+        "reason": "Minimização de dados, retenção e requisitos de privacidade.",
     },
 }
 

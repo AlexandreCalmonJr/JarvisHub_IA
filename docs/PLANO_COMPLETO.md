@@ -538,6 +538,14 @@ Adicionar ao JARVIS a capacidade de:
 - **Voz:** V0 concluído; V1 parcial; V2–V6 em aberto.
 - **Governança:** GOV-01 ativo; 454/454 testes de backend verdes em 212 s; 98/98 testes do dashboard verdes; Ruff 100% limpo em 285+ arquivos.
 
+### Fecho da auditoria em 18/11/2026
+
+- **P1 fechados com código e teste:** H4 (teto de 2048/8192 também no coding agent), H6 (git sem shell), H7 (redação de segredos e auditoria), H8 (catálogo único de provedores/modelos), H9 (20 ferramentas declaradas ⊆ executor), H10 (KeyVault em Settings), H11 (telemetria real, sem execução simulada nem VACUUM falso) e H12 (SSE com backoff, sem POST duplicado). C6 passou a registar falhas de inicialização.
+- **Gates:** `ruff check .` 0; `ruff format --check .` 339 ficheiros; `pytest -q` **526 passed**; `npm run test:dashboard` **125/125**; `tsc --noEmit` limpo; `npm run build` ok; E2E Playwright **5/5** em 16,6 s.
+- **Achado do E2E:** o coding agent ainda validava `max_tokens ≤ 1024`; corrigido para as constantes partilhadas (2048 por omissão, 8192 máximo).
+- **Dívida remanescente:** H3 (janela de contexto nos loops ReAct), preferências locais de Settings por ligar (notificações, tema, Island/Dock, comportamento desktop, canal de atualização), acessibilidade (87 inputs, 35 `div onClick`, 19 bootstraps de `/auth/me`), persistência de projetos externos importados, `CVEScannerService` que assume `is_safe` em falha de rede, cobertura RBAC limitada pelo token admin do `conftest`, e variáveis mortas no `.env.example`.
+- **Qualidade:** sem nova rubrica humana; mantém-se a referência de 15/11 (390 notas, `mean_review_score=4.68`). O fecho não declara metas de qualidade cumpridas.
+
 ---
 
 ## 15. Matriz de verificação por capacidade

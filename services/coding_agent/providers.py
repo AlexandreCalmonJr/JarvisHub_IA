@@ -25,6 +25,8 @@ from typing import Any
 
 import httpx
 
+from services.model_runtime.context_budget import resolve_num_ctx
+from services.model_runtime.provider_catalog import get_provider, supports_sampling
 from services.model_runtime.provider_defaults import default_model_for_provider
 
 from .types import ChatTurn, ProviderReply, ToolCall, ToolSpec
@@ -32,6 +34,11 @@ from .types import ChatTurn, ProviderReply, ToolCall, ToolSpec
 logger = logging.getLogger("jarvis.coding_agent.providers")
 
 STREAM_CHUNK_CHARS = 64
+
+
+def _anthropic_default_model() -> str:
+    spec = get_provider("anthropic")
+    return (spec.default_model if spec else None) or "claude-haiku-5-5"
 
 
 def _fallback_chunks(text: str, size: int = STREAM_CHUNK_CHARS) -> Iterator[str]:
@@ -268,6 +275,8 @@ class OllamaChatProvider(ChatProvider):
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
+                # Janela explícita: sem num_ctx o Ollama trunca o prompt em silêncio.
+                "num_ctx": resolve_num_ctx(),
             },
         }
         if tools:
@@ -329,7 +338,11 @@ class OllamaChatProvider(ChatProvider):
             "model": target_model,
             "messages": to_ollama_messages(turns),
             "stream": True,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+                "num_ctx": resolve_num_ctx(),
+            },
         }
         if tools:
             payload["tools"] = [spec.to_openai_schema() for spec in tools]
@@ -543,11 +556,11 @@ class AnthropicChatProvider(ChatProvider):
         self,
         api_key: str,
         base_url: str = "https://api.anthropic.com/v1",
-        default_model: str = "claude-3-5-sonnet-20241022",
+        default_model: str | None = None,
     ):
         self.api_key = (api_key or "").strip()
         self.base_url = base_url.rstrip("/")
-        self.default_model = default_model
+        self.default_model = default_model or _anthropic_default_model()
 
     async def complete(
         self,
@@ -571,8 +584,9 @@ class AnthropicChatProvider(ChatProvider):
             "model": target_model,
             "max_tokens": max_tokens,
             "messages": messages,
-            "temperature": temperature,
         }
+        if supports_sampling("anthropic", target_model):
+            payload["temperature"] = temperature
         if system:
             payload["system"] = system
         if tools:
@@ -647,9 +661,10 @@ class AnthropicChatProvider(ChatProvider):
             "model": target_model,
             "max_tokens": max_tokens,
             "messages": messages,
-            "temperature": temperature,
             "stream": True,
         }
+        if supports_sampling("anthropic", target_model):
+            payload["temperature"] = temperature
         if system:
             payload["system"] = system
         if tools:
@@ -1005,7 +1020,7 @@ def resolve_chat_provider(
         primary = AnthropicChatProvider(
             api_key=api_key,
             base_url=base_url or "https://api.anthropic.com/v1",
-            default_model=default_model or "claude-3-5-sonnet-20241022",
+            default_model=default_model or _anthropic_default_model(),
         )
     else:
         primary = OpenAICompatibleChatProvider(

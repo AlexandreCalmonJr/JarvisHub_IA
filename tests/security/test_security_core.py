@@ -35,6 +35,41 @@ def test_redaction_secrets():
     assert redacted_dict["nested"]["info"] == "public"
 
 
+def test_redaction_covers_cloud_and_scm_credentials():
+    secrets = [
+        "sk-proj-abcdefghijklmnop1234",
+        "sk-ant-api03-abcdefghijklmnop1234",
+        "gsk_abcdefghijklmnopqrst",
+        "AIzaSyA1234567890abcdefghijklmnopqrstu",
+        "AKIAIOSFODNN7EXAMPLE",
+        "github_pat_11ABCDEFG0123456789_abcdefghijklmnop",
+        "hf_abcdefghijklmnopqrstuvwx",
+        "sk_live_abcdefghijklmnop1234",
+        "xoxb-123456789012-abcdefghijkl",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop",
+    ]
+    sanitized = redact_string(" | ".join(secrets))
+    for secret in secrets:
+        assert secret not in sanitized
+
+
+def test_redact_data_does_not_mask_benign_keys_with_similar_names():
+    redacted = redact_data(
+        {
+            "keywords": "público",
+            "monkey": "público",
+            "api_key": "segredo",
+            "access_token": "segredo",
+            "authorization": "Bearer abcdefghijklmnopqrstuvwx",
+        }
+    )
+    assert redacted["keywords"] == "público"
+    assert redacted["monkey"] == "público"
+    assert redacted["api_key"] == "[REDACTED_SECRET]"
+    assert redacted["access_token"] == "[REDACTED_SECRET]"
+    assert redacted["authorization"] == "[REDACTED_SECRET]"
+
+
 def test_path_traversal_prevention(security, tmp_path):
     project_root = tmp_path / "my_project"
     project_root.mkdir()

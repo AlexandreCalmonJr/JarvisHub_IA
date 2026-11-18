@@ -12,6 +12,8 @@ from typing import Any
 
 import httpx
 
+from services.model_runtime.provider_catalog import vision_endpoint
+
 logger = logging.getLogger("jarvis.vision_engine")
 
 
@@ -69,19 +71,15 @@ class VisionEngine:
         b64_data = base64.b64encode(image_bytes).decode("ascii")
         mime = meta["mime_type"]
 
-        # 1. Tentativa de análise via modelo multimodal online configurado (Groq/OpenAI)
-        if self.hybrid_router and self.hybrid_router.online_config:
-            cfg = self.hybrid_router.online_config
-            if cfg.api_key:
+        # 1. Análise via modelo multimodal do provedor configurado.
+        #    Endpoint e modelo vêm da tabela única (provider_catalog.py): a Groq,
+        #    o DeepSeek e a Anthropic não servem visão por este caminho.
+        cfg = self.hybrid_router.online_config if self.hybrid_router else None
+        if cfg and cfg.api_key:
+            provider = (cfg.provider_name or "").lower()
+            base_url, model = vision_endpoint(provider)
+            if base_url and model:
                 try:
-                    provider = cfg.provider_name.lower()
-                    if provider == "groq":
-                        base_url = "https://api.groq.com/openai/v1"
-                        model = "llama-3.2-11b-vision-preview"
-                    else:
-                        base_url = cfg.base_url or "https://api.openai.com/v1"
-                        model = "gpt-4o-mini"
-
                     headers = {
                         "Authorization": f"Bearer {cfg.api_key}",
                         "Content-Type": "application/json",
@@ -136,24 +134,19 @@ class VisionEngine:
                 except Exception as exc:
                     logger.warning("Exceção ao chamar modelo de visão: %s", exc)
 
-        # 2. Fallback analítico seguro quando não houver modelo vision ativo
-        heuristic_desc = (
-            f"Imagem processada com sucesso no formato {meta['mime_type']}. "
-            f"Dimensões identificadas: {meta['width']}x{meta['height']} ({meta['size_bytes']} bytes). "
-            f"Tarefa solicitada: '{task_type}'. "
-            "A imagem foi validada e armazenada no pipeline de telemetria visual do JARVIS."
-        )
-
-        detected_objects = []
-        if task_type == "objects":
-            detected_objects = ["viewport", "camera_frame", "visual_surface"]
-
+        # 2. Sem modelo de visão disponível: declara a indisponibilidade.
+        #    Não é produzida qualquer descrição, deteção ou "validação" fictícia.
         return {
-            "success": True,
-            "description": heuristic_desc,
+            "success": False,
+            "reason": "vision_unavailable",
+            "description": (
+                "Nenhum modelo de visão está disponível para o provedor configurado. "
+                f"A imagem foi apenas inspecionada nos metadados: {meta['mime_type']}, "
+                f"{meta['width']}x{meta['height']}, {meta['size_bytes']} bytes."
+            ),
             "task_type": task_type,
-            "detected_objects": detected_objects,
-            "provider": "local_vision_engine",
-            "model": "heuristic-vision-v1",
+            "detected_objects": [],
+            "provider": None,
+            "model": None,
             "metadata": meta,
         }

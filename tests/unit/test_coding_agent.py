@@ -17,6 +17,7 @@ from services.coding_agent import (
     ToolCall,
 )
 from services.coding_agent.providers import to_anthropic_messages, to_openai_messages
+from services.coding_agent.tools import _audit_arguments_summary, _tool_specs
 from services.memory import DatabaseManager
 from services.project_workspace import ProjectWorkspaceService
 from services.security_core import (
@@ -64,6 +65,17 @@ def _collect(agen):
         return [event async for event in agen]
 
     return asyncio.run(_run())
+
+
+def test_agent_run_config_uses_the_shared_output_budget():
+    config = AgentRunConfig(prompt="x", project_id="demo", session_id="session")
+    assert config.max_tokens == 2048
+    assert (
+        AgentRunConfig(
+            prompt="x", project_id="demo", session_id="session", max_tokens=8192
+        ).max_tokens
+        == 8192
+    )
 
 
 class TestTools:
@@ -181,6 +193,29 @@ class TestTools:
         assert event.parameters_redacted["exit_code"] == 0
         assert "audit-check" in event.parameters_redacted["output_redacted"]
 
+    def test_audit_arguments_summary_redacts_secrets_and_truncates_bodies(self):
+        secret = "sk-proj-abcdefghijklmnopqrstuvwx"
+        summary = _audit_arguments_summary(
+            {
+                "path": "app.py",
+                "content": "A" * 500 + f" token={secret}",
+                "api_key": secret,
+                "count": 3,
+                "dry_run": True,
+                "note": None,
+            }
+        )
+
+        assert summary["path"] == "app.py"
+        # O corpo do ficheiro nunca é auditado por inteiro e o segredo é redigido.
+        assert len(summary["content"]) <= 201
+        assert summary["content"].endswith("…")
+        assert secret not in summary["content"]
+        assert summary["api_key"] == "[REDACTED_SECRET]"
+        assert summary["count"] == 3
+        assert summary["dry_run"] is True
+        assert summary["note"] is None
+
     def test_write_and_edit_generate_diff_and_backup(self, tmp_path: Path):
         security, workspace, root = _workspace_with_project(tmp_path)
         executor = CodingToolExecutor(security, workspace)
@@ -229,6 +264,23 @@ class TestTools:
                 ),
                 "demo",
             )
+
+
+def test_declared_agent_tools_exist_in_the_coding_executor():
+    from agents.registry import AgentRegistry
+
+    specs = {spec.name for spec in _tool_specs()}
+    declared = {tool for agent in AgentRegistry().list_agents() for tool in agent.allowed_tools}
+
+    assert len(declared) == 20
+    assert declared <= specs
+    # Ferramentas de meta-orquestração não são executáveis pelo agente de código.
+    assert not declared & {
+        "delegate_agent",
+        "list_projects",
+        "request_approval",
+        "query_audit",
+    }
 
 
 class TestBroker:
@@ -493,10 +545,30 @@ class TestGitCommitTool:
         result = asyncio.run(executor.execute(call, "demo"))
         assert result.success, result.error
         log = self._git(root, "log", "--oneline")
-        assert "teste commit com aspas" in log
+        # H6: o commit já não passa pelo shell, por isso as aspas são preservadas
+        # literalmente em vez de removidas da mensagem.
+        assert 'teste "commit" com aspas' in log
         tracked = self._git(root, "ls-files")
         assert "app.py" in tracked
         assert "app.py.bak" not in tracked
+
+    @pytest.mark.skipif(__import__("shutil").which("git") is None, reason="git ausente")
+    def test_git_commit_does_not_interpret_shell_metacharacters(self, tmp_path: Path):
+        security, workspace, root = _workspace_with_project(tmp_path)
+        self._git(root, "init")
+        self._git(root, "config", "user.email", "dev@example.com")
+        self._git(root, "config", "user.name", "Dev Local")
+
+        executor = CodingToolExecutor(security, workspace)
+        malicious = "fix $(touch hacked) `touch hacked2`; & echo x"
+        call = ToolCall(id="1", name="git_commit", arguments={"message": malicious})
+
+        result = asyncio.run(executor.execute(call, "demo"))
+
+        assert result.success, result.error
+        assert not (root / "hacked").exists()
+        assert not (root / "hacked2").exists()
+        assert "touch hacked" in self._git(root, "log", "--oneline")
 
     def test_git_commit_rejects_empty_message(self, tmp_path: Path):
         security, workspace, _ = _workspace_with_project(tmp_path)

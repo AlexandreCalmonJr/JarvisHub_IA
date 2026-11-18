@@ -11,6 +11,7 @@ from packages.contracts.security import AuditEventSeverity
 from services.security_core import ApprovalEngine, AuditTrail, contains_sensitive_data
 
 from .adapter import BaseModelAdapter
+from .provider_catalog import provider_presets
 from .provider_defaults import (
     default_model_for_provider,
     normalize_model_for_provider,
@@ -19,56 +20,7 @@ from .types import InferenceRequest, InferenceResponse
 
 logger = logging.getLogger("jarvis.model_runtime.hybrid_router")
 
-PROVIDER_PRESETS: list[dict[str, Any]] = [
-    {
-        "id": "openai",
-        "name": "OpenAI (GPT-4o / GPT-4o-mini)",
-        "default_model": "gpt-4o-mini",
-        "base_url": "https://api.openai.com/v1",
-        "cost_per_1k_input": 0.00015,
-        "cost_per_1k_output": 0.00060,
-    },
-    {
-        "id": "gemini",
-        "name": "Google Gemini (Gemini 2.5 Flash)",
-        "default_model": "gemini-2.5-flash",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "cost_per_1k_input": 0.000075,
-        "cost_per_1k_output": 0.00030,
-    },
-    {
-        "id": "groq",
-        "name": "Groq (GPT-OSS 120B / LPU Ultra Rápido)",
-        "default_model": "openai/gpt-oss-120b",
-        "base_url": "https://api.groq.com/openai/v1",
-        "cost_per_1k_input": 0.00015,
-        "cost_per_1k_output": 0.00060,
-    },
-    {
-        "id": "deepseek",
-        "name": "DeepSeek (V3 / R1 Reasoner)",
-        "default_model": "deepseek-chat",
-        "base_url": "https://api.deepseek.com",
-        "cost_per_1k_input": 0.00014,
-        "cost_per_1k_output": 0.00028,
-    },
-    {
-        "id": "anthropic",
-        "name": "Anthropic Claude (3.5 Sonnet / Haiku)",
-        "default_model": "claude-3-5-haiku-20241022",
-        "base_url": "https://api.anthropic.com/v1",
-        "cost_per_1k_input": 0.00080,
-        "cost_per_1k_output": 0.00400,
-    },
-    {
-        "id": "custom",
-        "name": "Personalizado / Compatível OpenAI",
-        "default_model": "custom-model",
-        "base_url": "https://api.openai.com/v1",
-        "cost_per_1k_input": 0.00100,
-        "cost_per_1k_output": 0.00200,
-    },
-]
+PROVIDER_PRESETS: list[dict[str, Any]] = provider_presets()
 
 
 _PROVIDER_PRESETS_BY_ID: dict[str, dict[str, Any]] = {p["id"]: p for p in PROVIDER_PRESETS}

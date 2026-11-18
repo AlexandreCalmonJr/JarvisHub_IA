@@ -257,7 +257,7 @@ async def delete_workspace_project_endpoint(
     principal: Principal = Depends(get_principal),
 ):
     """Solicita aprovação explícita antes da exclusão física irreversível."""
-    _require_human(principal)
+    _require_owned_project(project_id, principal)
     try:
         project_dir = workspace_service.get_project_dir(project_id).resolve()
         task_id = f"workspace:delete:{project_id}:{project_dir}"
@@ -324,7 +324,7 @@ async def dockerize_project_endpoint(
     principal: Principal = Depends(get_principal),
 ):
     """Gera ficheiros Docker somente após aprovação humana explícita."""
-    _require_human(principal)
+    _require_owned_project(project_id, principal)
     try:
         project_dir = workspace_service.get_project_dir(project_id).resolve()
         task_id = f"workspace:dockerize:{project_id}:{project_dir}"

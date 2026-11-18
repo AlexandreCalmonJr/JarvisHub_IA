@@ -83,6 +83,34 @@ export async function fetchChatSessions(): Promise<ChatSessionItem[]> {
   return handleApiResponse<ChatSessionItem[]>(res, 'Falha ao carregar sessões de conversa.');
 }
 
+export interface ChatSessionDetails {
+  session_id: string;
+  tasks: any[];
+  messages: Array<{
+    id?: number;
+    session_id: string;
+    project_id?: string | null;
+    role: string;
+    content: string;
+    tool_calls?: any[];
+    created_at?: string;
+  }>;
+}
+
+export async function fetchChatSessionDetails(sessionId: string): Promise<ChatSessionDetails> {
+  const res = await fetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar a conversa.' }));
+    throw new Error(errorData.detail || 'Falha ao carregar a conversa.');
+  }
+  const data = await res.json();
+  return {
+    session_id: data.session_id || sessionId,
+    tasks: Array.isArray(data.tasks) ? data.tasks : [],
+    messages: Array.isArray(data.messages) ? data.messages : [],
+  };
+}
+
 export async function fetchChatSessionTasks(sessionId: string): Promise<any[]> {
   const res = await fetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`);
   if (!res.ok) {

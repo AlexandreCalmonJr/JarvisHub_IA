@@ -131,7 +131,6 @@ async def compact_coding_session(
     }
 
 
-
 @router.post("/api/v1/coding/run/stream")
 async def run_coding_agent_stream(
     payload: CodingRunRequest, principal: Principal = Depends(get_principal)

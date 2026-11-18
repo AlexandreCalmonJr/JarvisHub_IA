@@ -42,11 +42,15 @@ class OmnichannelGateway:
         if principal is None:
             from apps.api.auth import Principal
 
+            # Canal externo autenticado criptograficamente (segredo do Telegram /
+            # assinatura Ed25519 do Discord), mas SEM identidade humana: o papel
+            # sintético "channel" não existe em ROLE_PERMISSIONS, portanto o
+            # principal tem zero permissões em vez de um wildcard.
             effective_principal = Principal(
                 subject_id=f"{channel}_{sender_id}",
                 kind="human",
-                role="developer",
-                scopes=frozenset({"*"}),
+                role="channel",
+                scopes=frozenset(),
             )
         else:
             effective_principal = principal

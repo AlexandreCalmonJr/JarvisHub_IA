@@ -191,4 +191,3 @@ async def test_voice_command_blocks_when_kill_switch_active():
             assert "parada de emergência" in data["reply"]
     finally:
         security_core.kill_switch.reset_global_kill(authorized_by="admin-test")
-

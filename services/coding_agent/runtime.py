@@ -23,6 +23,11 @@ from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
+from services.model_runtime.context_budget import (
+    resolve_num_ctx,
+    tool_output_char_limit,
+    trim_turns,
+)
 from services.security_core import PermissionDeniedError, SecurityCore
 
 from .broker import ApprovalBroker
@@ -188,6 +193,19 @@ class CodingAgentRuntime:
                 break
 
             yield {"type": "thinking", "iteration": iteration}
+
+            # Corta o histórico antigo para caber na janela do modelo. Sem isto,
+            # os resultados de ferramentas (até 30k caracteres cada) fazem o
+            # Ollama truncar o prompt em silêncio.
+            messages, dropped_turns = trim_turns(
+                messages,
+                num_ctx=resolve_num_ctx(),
+                output_reserve=max(1024, config.max_tokens),
+            )
+            if dropped_turns:
+                logger.debug(
+                    "Contexto compactado: %d turno(s) antigo(s) removido(s).", dropped_turns
+                )
 
             try:
                 reply = await provider.complete(
@@ -381,6 +399,23 @@ class CodingAgentRuntime:
                     yield event
                 return
 
+            if preview is None:
+                # Fail-closed: uma ferramenta que exige aprovação e não produz
+                # pré-visualização de impacto nunca é executada.
+                tool_result = ToolResult(
+                    call_id=call.id,
+                    name=call.name,
+                    success=False,
+                    denied=True,
+                    error=(
+                        f"A ferramenta '{call.name}' exige aprovação humana, mas não gerou "
+                        "pré-visualização de impacto; execução bloqueada."
+                    ),
+                )
+                async for event in self._finish_tool(tool_result, config, messages, result):
+                    yield event
+                return
+
             if preview is not None:
                 ticket = self.broker.create(
                     task_id=task_id,
@@ -485,7 +520,9 @@ class CodingAgentRuntime:
         result: AgentRunResult,
     ) -> AsyncIterator[dict[str, Any]]:
         result.tool_calls += 1
-        model_text = tool_result.to_model_text(max_chars=30_000)
+        model_text = tool_result.to_model_text(
+            max_chars=tool_output_char_limit(resolve_num_ctx(), max(1024, config.max_tokens))
+        )
         messages.append(
             ChatTurn(
                 role="tool",

@@ -7,9 +7,24 @@ export async function fetchHealth(): Promise<SystemHealth> {
   return res.json();
 }
 
-export async function fetchResources(): Promise<any> {
-  const res = await fetch(`${API_BASE}/system/resources`);
-  if (!res.ok) throw new Error("Falha ao obter métricas de recursos do sistema");
+/** Métricas reais do anfitrião devolvidas por `GET /api/v1/system/resources`. */
+export interface SystemResourceUsage {
+  cpu_percent: number;
+  ram_used_mb: number;
+  ram_total_mb: number;
+  ram_percent: number;
+  disk_free_gb: number;
+  disk_total_gb: number;
+  disk_percent: number;
+  inference_queue_active: number;
+  inference_queue_waiting: number;
+  is_throttled: boolean;
+  offline_mode_active: boolean;
+}
+
+export async function fetchResources(): Promise<SystemResourceUsage> {
+  const res = await fetch(`${API_BASE}/system/resources`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Falha ao obter métricas de recursos do sistema');
   return res.json();
 }
 

@@ -2,6 +2,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from packages.contracts.agent import (
+    DEFAULT_OUTPUT_TOKENS,
+    MAX_OUTPUT_TOKENS,
+    MIN_OUTPUT_TOKENS,
+)
+
 
 class ChatRequest(BaseModel):
     prompt: str = Field(..., description="Instrução ou pedido do utilizador")
@@ -32,7 +38,7 @@ class CodingRunRequest(BaseModel):
     )
     max_iterations: int = Field(12, ge=1, le=40)
     temperature: float = Field(0.15, ge=0.0, le=1.0)
-    max_tokens: int = Field(1024, ge=256, le=1024)
+    max_tokens: int = Field(DEFAULT_OUTPUT_TOKENS, ge=MIN_OUTPUT_TOKENS, le=MAX_OUTPUT_TOKENS)
     timeout_seconds: float = Field(180.0, ge=10.0, le=1800.0)
     approval_timeout_seconds: float = Field(900.0, ge=30.0, le=3600.0)
     include_history: bool = True
@@ -51,9 +57,10 @@ class CodingApprovalDecision(BaseModel):
 class CompactSessionRequest(BaseModel):
     """Parâmetros para compactação semântica de sessão de contexto."""
 
-    keep_recent: int = Field(4, ge=2, le=20, description="Quantidade de turnos recentes preservados")
+    keep_recent: int = Field(
+        4, ge=2, le=20, description="Quantidade de turnos recentes preservados"
+    )
     project_id: str | None = Field(None, description="ID do projeto associado à sessão")
-
 
 
 class UserProfilePayload(BaseModel):
@@ -199,7 +206,7 @@ class AgentMemoryCreateRequest(BaseModel):
 class AgentPlaygroundRequest(BaseModel):
     prompt: str = Field(..., description="Instrução direta ao especialista")
     project_id: str | None = Field(None, description="Projeto associado opcional")
-    max_tokens: int = Field(default=256, ge=32, le=1024)
+    max_tokens: int = Field(default=512, ge=32, le=4096)
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
@@ -346,7 +353,9 @@ class AutonomousAgentRunRequest(BaseModel):
     )
     max_iterations: int = Field(default=15, ge=1, le=50)
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=1024, ge=256, le=1024)
+    max_tokens: int = Field(
+        default=DEFAULT_OUTPUT_TOKENS, ge=MIN_OUTPUT_TOKENS, le=MAX_OUTPUT_TOKENS
+    )
     timeout_seconds: float = Field(default=180.0, ge=10.0, le=1800.0)
     include_history: bool = True
 

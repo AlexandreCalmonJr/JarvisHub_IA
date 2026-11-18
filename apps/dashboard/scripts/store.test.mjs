@@ -55,7 +55,11 @@ test('OpenBot Store default connected apps match the screenshot', () => {
 });
 
 test('OpenBot Store full-screen layout integration in App.tsx', () => {
-  assert.ok(app.includes("activeTab !== 'skills'"), 'App shell must suppress secondary header in Loja');
-  assert.ok(app.includes("activeTab === 'skills' ? 'hidden' : 'auto'"), 'App shell must set hidden overflow for Loja');
-  assert.ok(rail.includes("activeTab === 'skills'"), 'PrimaryRail must support active Loja tab');
+  assert.ok(app.includes('NO_HEADER_TABS.has(activeTab)'), 'App shell must suppress secondary header in full-screen modules');
+  assert.ok(
+    /FULLSCREEN_TABS = new Set\(\[[\s\S]*?'store'[\s\S]*?\]\)/.test(app),
+    'App shell must treat Loja as a full-screen module',
+  );
+  assert.ok(app.includes("FULLSCREEN_TABS.has(activeTab) ? '0'"), 'App shell must remove outer padding in Loja');
+  assert.ok(rail.includes("activeTab === 'store'"), 'PrimaryRail must support active Loja tab');
 });

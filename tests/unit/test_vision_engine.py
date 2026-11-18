@@ -31,7 +31,8 @@ def test_vision_engine_extracts_metadata():
 
 
 @pytest.mark.asyncio
-async def test_vision_engine_local_heuristic_fallback():
+async def test_vision_engine_declares_unavailability_without_model():
+    """Sem modelo multimodal não há descrição: o resultado é explicitamente indisponível."""
     engine = VisionEngine(hybrid_router=None)
     dummy_bytes = (
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
@@ -41,7 +42,12 @@ async def test_vision_engine_local_heuristic_fallback():
     )
 
     result = await engine.analyze_image(dummy_bytes, prompt="Descreva a cena", task_type="objects")
-    assert result["success"] is True
-    assert result["provider"] == "local_vision_engine"
+    assert result["success"] is False
+    assert result["reason"] == "vision_unavailable"
+    assert result["provider"] is None
+    assert result["model"] is None
+    # Nenhuma deteção inventada.
+    assert result["detected_objects"] == []
+    # Os metadados reais continuam disponíveis.
     assert "200x150" in result["description"]
-    assert "camera_frame" in result["detected_objects"]
+    assert result["metadata"]["width"] == 200

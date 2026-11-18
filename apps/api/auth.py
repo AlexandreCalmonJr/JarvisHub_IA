@@ -204,6 +204,8 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     ({"POST"}, re.compile(r"^/api/v1/mcp/reload$"), "mcp:reload"),
     # Voz
     ({"POST"}, re.compile(r"^/api/v1/voice/.*$"), "voice:use"),
+    # Canal omnicanal autenticado (os webhooks públicos têm verificação própria)
+    ({"POST"}, re.compile(r"^/api/v1/omnichannel/inbound$"), "chat:use"),
     # Mock Server: execução dos endpoints simulados apenas para utilizadores autenticados com escopo dedicado.
     (
         {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"},
@@ -358,35 +360,84 @@ class AuthService:
     # Bootstrap / admin
     # ------------------------------------------------------------------
     def _ensure_initial_admin_user(self) -> None:
-        """Garante a conta admin de homologação sem redefinir a senha a cada arranque.
+        """Garante a conta administrativa sem reintroduzir uma senha conhecida.
 
-        Em desenvolvimento, a credencial inicial é admin / jarvishub.
-        A redefinição de uma conta existente ocorre uma única vez, controlada
-        por um marcador local. Em produção, uma senha conhecida nunca é aplicada.
+        Regras:
+        - ``JARVIS_BOOTSTRAP_ADMIN_PASSWORD`` define a senha quando presente;
+        - ambiente de desenvolvimento **declarado explicitamente** aceita a senha
+          de homologação ``jarvishub`` (útil em testes e demos locais);
+        - ambiente de produção sem senha configurada falha fechado;
+        - instalação sem ambiente declarado recebe uma senha aleatória, gravada
+          num arquivo restrito — nunca uma senha conhecida e partilhada.
         """
         environment = (
-            os.environ.get("JARVIS_ENVIRONMENT", os.environ.get("JARVIS_ENV", "development"))
+            (os.environ.get("JARVIS_ENVIRONMENT") or os.environ.get("JARVIS_ENV") or "")
             .strip()
             .lower()
         )
         is_production = environment in {"prod", "production"}
-        password = os.environ.get("JARVIS_BOOTSTRAP_ADMIN_PASSWORD")
-        if not password and not is_production:
-            password = "jarvishub"
-        if not password and not is_production:
-            raise RuntimeError("Defina JARVIS_BOOTSTRAP_ADMIN_PASSWORD para inicializar o admin.")
-        if password and len(password) < 8:
-            raise RuntimeError("A senha inicial do administrador deve ter pelo menos 8 caracteres.")
+        is_declared_dev = environment in {"development", "dev", "local", "test", "testing"}
+        env_password = os.environ.get("JARVIS_BOOTSTRAP_ADMIN_PASSWORD")
+        provisional_marker = self.auth_dir / ".admin-bootstrap-password-initialized"
 
-        users = self.user_store.list_users()
         admin_user = next(
             (
                 user
-                for user in users
+                for user in self.user_store.list_users()
                 if user.get("username", "").casefold() == "admin" and user.get("role") == "admin"
             ),
             None,
         )
+
+        # ``password_source`` evita que uma senha gerada substitua uma senha
+        # já escolhida pelo operador em execuções seguintes.
+        password: str | None = None
+        password_source: str | None = None
+        if env_password:
+            password, password_source = env_password, "env"
+        elif admin_user is None:
+            if is_declared_dev:
+                password, password_source = "jarvishub", "dev_default"
+            elif is_production:
+                raise RuntimeError(
+                    "Ambiente de produção exige JARVIS_BOOTSTRAP_ADMIN_PASSWORD na primeira "
+                    "inicialização; nenhuma senha conhecida é aplicada."
+                )
+            else:
+                # Instalação não configurada: senha aleatória de uso único,
+                # entregue apenas por arquivo restrito (o launcher mostra o caminho).
+                generated_path = self.auth_dir / ".initial-admin-password"
+                password = secrets.token_urlsafe(18)
+                password_source = "generated"
+                try:
+                    write_private_file(
+                        generated_path,
+                        (
+                            "Senha inicial do administrador do JARVIS AI Hub\n"
+                            "Altere-a no primeiro acesso.\n\n"
+                            f"{password}\n"
+                        ),
+                    )
+                except OSError as exc:
+                    raise RuntimeError(
+                        "Não foi possível proteger o arquivo da senha inicial do administrador. "
+                        "Defina JARVIS_BOOTSTRAP_ADMIN_PASSWORD explicitamente."
+                    ) from exc
+                logger.warning(
+                    "Administrador inicial criado com senha aleatória. O valor está em arquivo "
+                    "restrito (%s) e deve ser alterado no primeiro acesso.",
+                    generated_path,
+                )
+        elif (
+            is_declared_dev
+            and not self.bootstrap_completed_marker.exists()
+            and not provisional_marker.exists()
+        ):
+            # Homologação local: repõe a senha de demonstração uma única vez.
+            password, password_source = "jarvishub", "dev_default"
+
+        if password and len(password) < 8:
+            raise RuntimeError("A senha inicial do administrador deve ter pelo menos 8 caracteres.")
 
         if admin_user is None:
             # Não altera outras contas existentes; cria a conta administrativa
@@ -399,21 +450,20 @@ class AuthService:
                         password=password,
                         role="admin",
                     )
-                    if not is_production:
-                        (self.auth_dir / ".admin-bootstrap-password-initialized").write_text(
-                            "initialized\\n", encoding="utf-8"
-                        )
                 except ValueError as exc:
                     raise RuntimeError(
                         "A conta 'admin' já existe com outro perfil. "
                         "Ajuste-a pela administração antes de inicializar."
                     ) from exc
-        elif not is_production:
-            marker = self.auth_dir / ".admin-bootstrap-password-initialized"
-            if not marker.exists():
-                if not self.user_store.set_password("admin", password):
-                    raise RuntimeError("Não foi possível definir a senha inicial da conta admin.")
-                marker.write_text("initialized\\n", encoding="utf-8")
+                self.bootstrap_completed_marker.write_text("completed\n", encoding="utf-8")
+                if password_source in {"dev_default", "generated"}:
+                    provisional_marker.write_text("initialized\n", encoding="utf-8")
+        elif password and password_source in {"env", "dev_default"}:
+            if not self.user_store.set_password("admin", password):
+                raise RuntimeError("Não foi possível definir a senha inicial da conta admin.")
+            self.bootstrap_completed_marker.write_text("completed\n", encoding="utf-8")
+            if password_source in {"dev_default", "generated"}:
+                provisional_marker.write_text("initialized\n", encoding="utf-8")
 
         # Uma conta admin desativada não pode autenticar. Reativa somente a
         # conta de homologação explicitamente definida acima.
@@ -432,6 +482,27 @@ class AuthService:
                 "para criar a conta na primeira inicialização."
             )
         logger.info("Conta administrativa inicial verificada/criada automaticamente.")
+
+    @property
+    def provisional_password_marker(self) -> Path:
+        """Indica que a senha do admin ainda é a inicial (deve ser trocada)."""
+        return self.auth_dir / ".admin-bootstrap-password-initialized"
+
+    @property
+    def bootstrap_completed_marker(self) -> Path:
+        """Indica que a inicialização do admin foi concluída e não deve ser refeita."""
+        return self.auth_dir / ".admin-bootstrap-completed"
+
+    def clear_provisional_password_marker(self) -> None:
+        """Chamado após uma troca de senha bem-sucedida do próprio admin."""
+        try:
+            self.provisional_password_marker.unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - defensivo
+            logger.warning("Não foi possível remover o marcador de senha provisória.")
+        try:
+            self.bootstrap_completed_marker.write_text("completed\n", encoding="utf-8")
+        except OSError:  # pragma: no cover - defensivo
+            pass
 
     def _ensure_admin_credential(self) -> None:
         env_token = os.environ.get("JARVIS_ADMIN_TOKEN", "").strip()

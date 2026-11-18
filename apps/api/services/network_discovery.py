@@ -3,7 +3,7 @@ import json
 import logging
 import socket
 from datetime import UTC, datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger("jarvis.services.discovery")
 
@@ -23,7 +23,7 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
-def get_discovery_info(api_port: int = 8000, dashboard_port: int = 5173) -> Dict[str, Any]:
+def get_discovery_info(api_port: int = 8000, dashboard_port: int = 5173) -> dict[str, Any]:
     """Informações de identificação do servidor para pareamento e descoberta."""
     lan_ip = get_local_ip()
     return {
@@ -45,7 +45,7 @@ class UdpDiscoveryServerProtocol(asyncio.DatagramProtocol):
 
     def __init__(self, api_port: int = 8000):
         self.api_port = api_port
-        self.transport: Optional[asyncio.DatagramTransport] = None
+        self.transport: asyncio.DatagramTransport | None = None
 
     def connection_made(self, transport: asyncio.DatagramTransport):
         self.transport = transport
@@ -54,7 +54,11 @@ class UdpDiscoveryServerProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data: bytes, addr: tuple[str, int]):
         try:
             message = data.decode("utf-8", errors="ignore").strip()
-            if DISCOVERY_MAGIC_KEY in message or "JARVIS_DISCOVER" in message or "jarvis" in message.lower():
+            if (
+                DISCOVERY_MAGIC_KEY in message
+                or "JARVIS_DISCOVER" in message
+                or "jarvis" in message.lower()
+            ):
                 payload = json.dumps(get_discovery_info(self.api_port)).encode("utf-8")
                 if self.transport:
                     self.transport.sendto(payload, addr)
@@ -63,7 +67,7 @@ class UdpDiscoveryServerProtocol(asyncio.DatagramProtocol):
             logger.debug("Erro ao processar pacote de descoberta UDP: %s", e)
 
 
-async def start_discovery_beacon(api_port: int = 8000) -> Optional[asyncio.DatagramTransport]:
+async def start_discovery_beacon(api_port: int = 8000) -> asyncio.DatagramTransport | None:
     """Inicia o ouvinte UDP para responder a scanners mobile na rede local."""
     loop = asyncio.get_running_loop()
     try:

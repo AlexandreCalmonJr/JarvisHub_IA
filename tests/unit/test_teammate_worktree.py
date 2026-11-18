@@ -26,7 +26,8 @@ def test_teammate_worktree_spawn_and_terminate():
 
         # Dispatch
         dispatch_res = manager.dispatch_task(teammate.id, "Refatorar imports")
-        assert dispatch_res["status"] == "completed"
+        assert dispatch_res["status"] == "failed"
+        assert dispatch_res["reason"] == "teammate_execution_unsupported"
         assert dispatch_res["isolated_workspace"] is True
 
         # Terminate

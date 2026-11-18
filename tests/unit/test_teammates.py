@@ -20,11 +20,13 @@ def test_teammate_manager_lifecycle():
     assert len(manager.list_teammates(project_id="proj-1")) == 1
     assert len(manager.list_teammates(project_id="other-proj")) == 0
 
-    # 3. Dispatch task
+    # 3. Dispatch task — a execução autônoma não está ligada: falha explícita.
     dispatch = manager.dispatch_task(t1.id, "Revisar PR #42 de autenticação")
-    assert dispatch["status"] == "completed"
+    assert dispatch["status"] == "failed"
+    assert dispatch["reason"] == "teammate_execution_unsupported"
+    assert "não foi executada" in dispatch["summary"]
     assert "Revisar PR #42" in dispatch["task"]
-    assert t1.status == "completed"
+    assert t1.status == "failed"
 
     # 4. Terminate
     terminated = manager.terminate_teammate(t1.id)

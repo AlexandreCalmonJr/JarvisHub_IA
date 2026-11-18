@@ -11,6 +11,7 @@ import {
   Check,
   ChevronDown,
 } from 'lucide-react';
+import { FormattedChatModel } from '../../services/chatModels';
 
 export interface ChatTabItem {
   id: string;
@@ -27,6 +28,7 @@ interface OpenBotChatHeaderProps {
   isRailOpen: boolean;
   selectedModel: string;
   onSelectModel: (model: string) => void;
+  availableModels?: FormattedChatModel[];
   activeProjectId?: string | null;
   activeProjectName?: string | null;
   onDetachProject?: () => void;
@@ -52,6 +54,7 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
   isRailOpen,
   selectedModel,
   onSelectModel,
+  availableModels,
   activeProjectId,
   activeProjectName,
   onDetachProject,
@@ -59,6 +62,17 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
   onExportChat,
 }) => {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+
+  const modelList = availableModels && availableModels.length > 0
+    ? availableModels.map((m) => ({
+        id: m.id,
+        label: m.label,
+        provider: m.provider,
+        badge: m.effort,
+      }))
+    : AVAILABLE_MODELS;
+
+  const activeModelObj = modelList.find((m) => m.id === selectedModel);
 
   return (
     <header
@@ -229,7 +243,7 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
             title="Trocar modelo de inteligência artificial"
           >
             <Cpu size={12} color="#38bdf8" />
-            <span style={{ fontWeight: 500 }}>{selectedModel}</span>
+            <span style={{ fontWeight: 500 }}>{activeModelObj ? activeModelObj.label : selectedModel}</span>
             <ChevronDown size={11} color="#737373" />
           </button>
 
@@ -238,25 +252,27 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
               onClick={(e) => e.stopPropagation()}
               style={{
                 position: 'absolute',
-                top: '32px',
+                top: '36px',
                 right: 0,
-                width: '260px',
-                backgroundColor: '#1b1b1b',
+                width: '300px',
+                backgroundColor: 'rgba(20, 20, 23, 0.98)',
+                backdropFilter: 'blur(16px)',
                 border: '1px solid rgba(255, 255, 255, 0.12)',
-                borderRadius: '10px',
-                boxShadow: '0 12px 36px rgba(0, 0, 0, 0.7)',
-                padding: '6px',
+                borderRadius: '12px',
+                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.7)',
+                padding: '8px',
                 zIndex: 10000,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '2px',
+                gap: '3px',
               }}
             >
-              <div style={{ padding: '6px 8px', fontSize: '0.68rem', color: '#737373', fontWeight: 600, textTransform: 'uppercase' }}>
-                Modelos Conectados
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 6px 6px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <span>Modelos Conectados</span>
+                <span style={{ color: '#38bdf8' }}>{modelList.length} ativos</span>
               </div>
 
-              {AVAILABLE_MODELS.map((m) => {
+              {modelList.map((m) => {
                 const isSelected = selectedModel === m.id;
                 return (
                   <button
@@ -268,27 +284,36 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
                     }}
                     className="btn btn-ghost"
                     style={{
+                      display: 'flex',
+                      alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '7px 10px',
+                      padding: '8px 10px',
                       fontSize: '0.78rem',
-                      borderRadius: '6px',
-                      backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
-                      color: isSelected ? '#38bdf8' : '#d4d4d4',
+                      borderRadius: '8px',
+                      backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.14)' : 'rgba(255, 255, 255, 0.02)',
+                      border: isSelected ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+                      color: isSelected ? '#ffffff' : '#d4d4d4',
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{m.label}</span>
-                      <span style={{ fontSize: '0.66rem', color: '#737373' }}>{m.provider}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                      <Cpu size={13} color={isSelected ? '#38bdf8' : '#888888'} style={{ flexShrink: 0 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: isSelected ? 600 : 500, fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {m.label}
+                        </span>
+                        <span style={{ fontSize: '0.66rem', color: '#888888' }}>{m.provider}</span>
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                       <span
                         style={{
-                          fontSize: '0.62rem',
-                          padding: '1px 5px',
+                          fontSize: '0.64rem',
+                          padding: '2px 6px',
                           borderRadius: '4px',
-                          backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                          color: '#a3a3a3',
+                          backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.16)' : 'rgba(255, 255, 255, 0.05)',
+                          color: isSelected ? '#38bdf8' : '#a3a3a3',
+                          fontWeight: 500,
                         }}
                       >
                         {m.badge}

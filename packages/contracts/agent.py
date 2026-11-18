@@ -13,6 +13,12 @@ MAX_AGENT_RECOMMENDATION_CHARS = 1_000
 MAX_AGENT_LIST_ITEMS = 50
 MAX_AGENT_LIST_ITEM_CHARS = 2_000
 
+# Limites de geração. O teto anterior (1024) impedia escrever um ficheiro
+# inteiro: o modelo era cortado a meio da resposta.
+MAX_OUTPUT_TOKENS = 8_192
+DEFAULT_OUTPUT_TOKENS = 2_048
+MIN_OUTPUT_TOKENS = 256
+
 
 class AgentRole(str, Enum):
     JARVIS_MASTER = "jarvis_master"
@@ -184,6 +190,8 @@ class AutonomousAgentRunConfig(BaseModel):
     mode: AutonomousAgentMode = AutonomousAgentMode.ASK
     max_iterations: int = 15
     temperature: float = 0.3
-    max_tokens: int = Field(default=1024, ge=256, le=1024)
+    max_tokens: int = Field(
+        default=DEFAULT_OUTPUT_TOKENS, ge=MIN_OUTPUT_TOKENS, le=MAX_OUTPUT_TOKENS
+    )
     timeout_seconds: float = 180.0
     include_history: bool = True

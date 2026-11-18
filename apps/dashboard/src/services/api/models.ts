@@ -50,12 +50,6 @@ export async function testHybridConnection(payload: {
   return res.json();
 }
 
-export async function fetchModelMetrics(): Promise<any> {
-  const res = await fetch(`${API_BASE}/system/model-metrics`, { credentials: 'include' });
-  if (!res.ok) throw new Error('Falha ao carregar métricas de inferência.');
-  return res.json();
-}
-
 export async function fetchCuratedHuggingFaceModels(): Promise<any[]> {
   const res = await fetch(`${API_BASE}/models/huggingface/curated`);
   if (!res.ok) throw new Error('Falha ao carregar modelos curados do Hugging Face.');

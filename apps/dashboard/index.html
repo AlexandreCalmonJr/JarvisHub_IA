@@ -5,13 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JARVIS AI HUB — Dashboard Administrativo</title>
     <meta name="description" content="JARVIS AI HUB — Painel de orquestração de agentes, Coding Agent, modelos locais/híbridos, governança e telemetria." />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23d97757'><circle cx='12' cy='12' r='10'/></svg>" />
+    <!-- Alinhado com --bg-primary/--bg-secondary do index.css -->
+    <meta name="theme-color" content="#1f1e1d" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <!-- Fonte única de carregamento; o CSS já não repete a importação.
+         Offline: a stack de fallback do index.css assume sem bloquear o render. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>
+    <noscript>O painel do JARVIS AI HUB requer JavaScript ativado.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

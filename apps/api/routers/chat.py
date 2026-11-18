@@ -530,8 +530,8 @@ async def list_session_messages_endpoint(
 async def delete_chat_session_endpoint(
     session_id: str, principal: Principal = Depends(get_principal)
 ):
-    owner = _private_owner(principal)
-    deleted_count = db_manager.delete_session(session_id, owner_user_id=owner)
+    owner_user_id = None if principal.role == "admin" else _private_owner(principal)
+    deleted_count = db_manager.delete_session(session_id, owner_user_id=owner_user_id)
     return {"session_id": session_id, "deleted_tasks": deleted_count}
 
 
