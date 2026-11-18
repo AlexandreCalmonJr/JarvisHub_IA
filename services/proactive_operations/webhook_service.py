@@ -5,7 +5,6 @@ Envia notificações em tempo real para Discord e Telegram quando tarefas demora
 """
 
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -74,9 +73,10 @@ class WebhookNotificationService:
             incoming["discord_webhook_url"] = current.get("discord_webhook_url", "")
 
         merged = {**current, **incoming}
-        self._settings.set(
-            "notification_webhooks", merged, owner_user_id=self._owner_user_id
-        )
+        if self.db:
+            self._settings.set(
+                "notification_webhooks", merged, owner_user_id=self._owner_user_id
+            )
         return self.get_safe_config()
 
     async def send_notification(
