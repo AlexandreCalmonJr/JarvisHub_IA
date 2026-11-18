@@ -6,6 +6,7 @@ module owns only account-row persistence and its transactional invariants.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, Any
@@ -34,8 +35,16 @@ class SqliteIdentityRepository:
         conn.execute("PRAGMA busy_timeout=10000")
         return conn
 
+    @contextmanager
+    def _connection(self):
+        conn = self._connect()
+        try:
+            yield conn
+        finally:
+            conn.close()
+
     def _initialize(self) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS human_users (
