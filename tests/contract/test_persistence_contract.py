@@ -52,6 +52,8 @@ def test_project_memory_repository_round_trip_and_owner_scope(sqlite_database_fa
     assert [(fact["key"], fact["content"]) for fact in facts_b] == [("database", "SQLite")]
     assert facts_a[0]["sources"] == ["adr/001.md"]
     assert repository.list_facts("project-a", owner_user_id="user-b") == []
+    # Omitting the owner exposes only legacy rows with no owner, never tenant data.
+    assert repository.list_facts("project-a") == []
 
 
 def test_settings_repository_round_trip_is_account_scoped(sqlite_database_factory):
