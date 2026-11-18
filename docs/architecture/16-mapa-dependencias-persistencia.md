@@ -161,3 +161,18 @@ Definir explicitamente o escopo de `agent_configs`, `user_settings`, `inference_
 ## 7. Limites desta entrega
 
 Este mapa é uma análise estática do código da branch; não substitui testes dinâmicos. Não foram executados serviços, não houve acesso a bancos locais, não foram lidos dados reais, e nenhuma chamada de runtime foi redirecionada. A migração do banco ainda não começou.
+
+
+## 8. Implementação incremental iniciada
+
+Na sequência do mapa, a primeira extração foi aplicada sem trocar o backend SQLite:
+- Criado o contrato `ProjectMemoryRepository` e o adapter `SqliteProjectMemoryRepository`.
+- `LayeredMemoryManager` deixou de abrir `db_manager._get_connection()`; agora usa os métodos públicos `set_project_memory` e `list_project_memory` através do repositório.
+- Criado o contrato `SettingsRepository` e o adapter `SqliteSettingsRepository`.
+- `WebhookNotificationService` deixou de executar SQL direto e passou a usar `get_setting/set_setting` do `DatabaseManager` através do repositório.
+- `DatabaseBackupManager` passou a chamar `DatabaseManager.create_database_backup()`, sem acessar a conexão privada.
+- A consulta de memória de projeto passou a filtrar explicitamente `owner_user_id`; quando não informado, só devolve registros legados sem proprietário.
+- Adicionados os primeiros modelos SQLAlchemy de `Project`, `ProjectMemory` e `UserSetting`.
+- Criada a suíte inicial de contratos em `tests/contract/test_persistence_contract.py`, preparada para receber futuramente o adapter PostgreSQL.
+
+O adapter PostgreSQL ainda não existe e os testes ainda precisam ser executados em CI/local. O runtime continua em SQLite. O restore de snapshots continua explicitamente SQLite neste estágio.
