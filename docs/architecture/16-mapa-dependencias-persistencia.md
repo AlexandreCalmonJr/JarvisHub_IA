@@ -107,9 +107,9 @@ Estes módulos precisam ser migrados para repositórios/serviços próprios. Nã
 
 | Módulo | Acesso atual | Responsabilidade | Destino |
 |---|---|---|---|
-| `services/memory/project_memory.py` | `db_manager._get_connection()` e SQL direto | Memória de projeto | `ProjectMemoryRepository` |
-| `services/proactive_operations/webhook_service.py` | `db_manager._get_connection()` e SQL direto | Persistência de webhooks/notificações | `WebhookRepository` |
-| `services/memory/backup_restore.py` | API privada `_get_connection()` | Backup SQLite | Serviço de backup por backend |
+| `services/memory/project_memory.py` | `ProjectMemoryRepository` → API pública do `DatabaseManager` (extraído nesta etapa) | Memória de projeto | Adapter PostgreSQL do `ProjectMemoryRepository` |
+| `services/proactive_operations/webhook_service.py` | `SettingsRepository` → API pública do `DatabaseManager` (extraído nesta etapa) | Persistência de webhooks/notificações | Adapter PostgreSQL de settings/webhooks |
+| `services/memory/backup_restore.py` | Métodos públicos `create_database_backup` e `restore_database_backup` (extraído nesta etapa) | Backup/restore SQLite legado | `BackupService` por backend |
 | `services/security_core/auth_store.py` | `sqlite3.connect` independente | Contas e hashes de senha | `UserIdentityRepository` |
 | `apps/api/auth.py` | `sqlite3.connect` independente | Rate limiting persistente | `AuthRateLimitRepository` |
 | `services/observability/telemetry_store.py` | SQL SQLite independente | Telemetria e feedback | `TelemetryRepository` |
