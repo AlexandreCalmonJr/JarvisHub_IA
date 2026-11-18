@@ -5,5 +5,16 @@ from .base import Base
 from .identity import HumanUser
 from .project import Project, ProjectMemory
 from .settings import UserSetting
+from .telemetry import InferenceQualityFeedback, InferenceTelemetry, ModelSelectionDecision
 
-__all__ = ["AuthAttempt", "Base", "HumanUser", "Project", "ProjectMemory", "UserSetting"]
+__all__ = [
+    "AuthAttempt",
+    "Base",
+    "HumanUser",
+    "InferenceQualityFeedback",
+    "InferenceTelemetry",
+    "ModelSelectionDecision",
+    "Project",
+    "ProjectMemory",
+    "UserSetting",
+]
