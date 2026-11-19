@@ -4,11 +4,12 @@ Envia notificações em tempo real para Discord e Telegram quando tarefas demora
 (exportações, dockerização, download de modelos ou auditorias de segurança) forem concluídas.
 """
 
-import json
 import logging
 from typing import Any
 
 import httpx
+
+from services.database.repositories.settings import SettingsRepository, SqliteSettingsRepository
 
 logger = logging.getLogger("jarvis.webhooks")
 
@@ -18,8 +19,12 @@ class WebhookNotificationService:
         self,
         db_manager: Any,
         transport: httpx.AsyncBaseTransport | None = None,
+        repository: SettingsRepository | None = None,
+        owner_user_id: str | None = None,
     ):
-        self.db = db_manager
+        self.db = db_manager  # Mantido para compatibilidade com consumidores existentes.
+        self._settings = repository or SqliteSettingsRepository(db_manager)
+        self._owner_user_id = owner_user_id
         # Permite substituir o transporte em ensaios operacionais e testes,
         # sem abrir a porta a URLs arbitrários na configuração de produção.
         self._transport = transport
@@ -28,21 +33,12 @@ class WebhookNotificationService:
         return httpx.AsyncClient(timeout=5.0, transport=self._transport)
 
     def get_raw_config(self) -> dict[str, Any]:
-        """Recupera a configuração bruta de webhooks do banco SQLite."""
+        """Recupera a configuração de webhooks através do repositório de settings."""
         if not self.db:
             return {}
-        with self.db._get_connection() as conn:
-            row = conn.execute(
-                "SELECT value_json FROM user_settings WHERE key = 'notification_webhooks'"
-            ).fetchone()
-            if row:
-                try:
-                    return json.loads(row["value_json"])
-                except Exception:
-                    logger.debug(
-                        "Configuração de webhooks inválida no banco; a usar predefinições.",
-                        exc_info=True,
-                    )
+        value = self._settings.get("notification_webhooks", owner_user_id=self._owner_user_id)
+        if isinstance(value, dict):
+            return value
         return {
             "enabled": False,
             "discord_webhook_url": "",
@@ -66,31 +62,21 @@ class WebhookNotificationService:
         return safe
 
     def save_config(self, new_cfg: dict[str, Any]) -> dict[str, Any]:
-        """Salva preferências de webhooks no SQLite."""
+        """Salva preferências de webhooks através do repositório de settings."""
         current = self.get_raw_config()
+        incoming = dict(new_cfg)
 
-        # Preserva credenciais se o usuário enviou o valor ofuscado de volta
-        if "telegram_bot_token" in new_cfg and "..." in new_cfg["telegram_bot_token"]:
-            new_cfg["telegram_bot_token"] = current.get("telegram_bot_token", "")
-        if "discord_webhook_url" in new_cfg and "..." in new_cfg["discord_webhook_url"]:
-            new_cfg["discord_webhook_url"] = current.get("discord_webhook_url", "")
+        # Preserva credenciais se o usuário enviou o valor ofuscado de volta.
+        if "telegram_bot_token" in incoming and "..." in incoming["telegram_bot_token"]:
+            incoming["telegram_bot_token"] = current.get("telegram_bot_token", "")
+        if "discord_webhook_url" in incoming and "..." in incoming["discord_webhook_url"]:
+            incoming["discord_webhook_url"] = current.get("discord_webhook_url", "")
 
-        merged = {**current, **new_cfg}
-        val_str = json.dumps(merged)
-        from datetime import UTC, datetime
-
-        now = datetime.now(UTC).isoformat()
-
+        merged = {**current, **incoming}
         if self.db:
-            with self.db._get_connection() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO user_settings (key, value_json, updated_at)
-                    VALUES ('notification_webhooks', ?, ?)
-                    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
-                    """,
-                    (val_str, now),
-                )
+            self._settings.set(
+                "notification_webhooks", merged, owner_user_id=self._owner_user_id
+            )
         return self.get_safe_config()
 
     async def send_notification(

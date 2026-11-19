@@ -1,11 +1,10 @@
-import json
-import uuid
-from datetime import UTC, datetime
 from typing import Any
 
+from services.database.repositories.project_memory import (
+    ProjectMemoryRepository,
+    SqliteProjectMemoryRepository,
+)
 from services.security_core.redaction import redact_string
-
-from .database import DatabaseManager
 
 
 class LayeredMemoryManager:
@@ -17,8 +16,15 @@ class LayeredMemoryManager:
     Garante que segredos NUNCA sejam persistidos em memória textual.
     """
 
-    def __init__(self, db_manager: DatabaseManager):
-        self.db = db_manager
+    def __init__(
+        self,
+        db_manager: Any | None = None,
+        repository: ProjectMemoryRepository | None = None,
+    ):
+        if repository is None and db_manager is None:
+            raise ValueError("É necessário fornecer db_manager ou repository.")
+        self.db = db_manager  # Mantido para compatibilidade com consumidores existentes.
+        self._project_memory = repository or SqliteProjectMemoryRepository(db_manager)
         # task_id -> dict
         self._task_memory: dict[str, dict[str, Any]] = {}
 
@@ -42,45 +48,28 @@ class LayeredMemoryManager:
         key: str,
         content: str,
         sources: list[str],
+        owner_user_id: str | None = None,
     ) -> None:
-        """Regista um fato, decisão ou convenção do projeto com redação estrita de segredos."""
+        """Regista um fato sem segredos, delegando a persistência ao repositório."""
         sanitized_content = redact_string(content)
-        sources_json = json.dumps(sources)
-        now = datetime.now(UTC).isoformat()
-        fact_id = f"mem-{uuid.uuid4().hex[:10]}"
-
-        with self.db._get_connection() as conn:
-            conn.execute(
-                """
-            INSERT INTO project_memory (id, project_id, category, key, content, sources_json, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(project_id, category, key) DO UPDATE SET
-                content=excluded.content,
-                sources_json=excluded.sources_json,
-                updated_at=excluded.updated_at
-            """,
-                (fact_id, project_id, category, key, sanitized_content, sources_json, now),
-            )
+        self._project_memory.save_fact(
+            project_id=project_id,
+            category=category,
+            key=key,
+            content=sanitized_content,
+            sources=sources,
+            owner_user_id=owner_user_id,
+        )
 
     def get_project_facts(
-        self, project_id: str, category: str | None = None
+        self,
+        project_id: str,
+        category: str | None = None,
+        owner_user_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Recupera apenas fatos pertencentes ao project_id solicitado (isolamento total entre projetos)."""
-        with self.db._get_connection() as conn:
-            if category:
-                cur = conn.execute(
-                    "SELECT category, key, content, sources_json, updated_at FROM project_memory WHERE project_id = ? AND category = ?",
-                    (project_id, category),
-                )
-            else:
-                cur = conn.execute(
-                    "SELECT category, key, content, sources_json, updated_at FROM project_memory WHERE project_id = ?",
-                    (project_id,),
-                )
-
-            results = []
-            for r in cur.fetchall():
-                item = dict(r)
-                item["sources"] = json.loads(item["sources_json"])
-                results.append(item)
-            return results
+        """Recupera fatos do projeto solicitado, com escopo opcional de proprietário."""
+        return self._project_memory.list_facts(
+            project_id=project_id,
+            category=category,
+            owner_user_id=owner_user_id,
+        )

@@ -878,12 +878,9 @@ class DatabaseManager:
     ) -> list[dict[str, Any]]:
         query = (
             "SELECT id, project_id, category, key, content, sources_json, updated_at "
-            "FROM project_memory WHERE project_id = ?"
+            "FROM project_memory WHERE project_id = ? AND owner_user_id IS ?"
         )
-        params: list[Any] = [project_id]
-        if owner_user_id is not None:
-            query += " AND owner_user_id = ?"
-            params.append(owner_user_id)
+        params: list[Any] = [project_id, owner_user_id]
         query += " ORDER BY updated_at DESC"
         with self._get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
@@ -1152,6 +1149,40 @@ class DatabaseManager:
         owner_hash = hashlib.sha256(owner_user_id.encode("utf-8")).hexdigest()[:20]
         return f"account:{owner_hash}:{key}"
 
+    def get_setting(self, key: str, owner_user_id: str | None = None) -> Any | None:
+        """Read a JSON setting through the public persistence API."""
+        setting_key = self._account_setting_key(key, owner_user_id)
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT value_json FROM user_settings WHERE key = ?", (setting_key,)
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row["value_json"])
+        except (TypeError, ValueError):
+            logger.warning("Configuração '%s' contém JSON inválido.", key)
+            return None
+
+    def set_setting(
+        self, key: str, value: Any, owner_user_id: str | None = None
+    ) -> None:
+        """Persist a JSON setting through the public persistence API."""
+        setting_key = self._account_setting_key(key, owner_user_id)
+        now = datetime.now(UTC).isoformat()
+        value_json = json.dumps(value)
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_settings (key, value_json, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    updated_at = excluded.updated_at
+                """,
+                (setting_key, value_json, now),
+            )
+
     def get_user_profile(self, owner_user_id: str | None = None) -> dict[str, Any]:
         """Recupera perfil privado da conta, sem recorrer a valores globais legados."""
         setting_key = self._account_setting_key("developer_profile", owner_user_id)
@@ -1229,17 +1260,41 @@ class DatabaseManager:
                 (prompt_hash, f"[redacted:{prompt_hash[:16]}]", model_name, response, now),
             )
 
-    def create_database_backup(self, backup_dir: Path | str = "backups") -> str:
+    def create_database_backup(
+        self,
+        backup_dir: Path | str = "backups",
+        filename_prefix: str = "jarvis_backup",
+        extension: str = ".db",
+    ) -> str:
         """Cria uma cópia física segura de backup do banco de dados SQLite."""
         b_dir = Path(backup_dir)
         b_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = b_dir / f"jarvis_backup_{timestamp}.db"
+        backup_file = b_dir / f"{filename_prefix}_{timestamp}{extension}"
 
         with self._get_connection() as src_conn, sqlite3.connect(str(backup_file)) as dst_conn:
             src_conn.backup(dst_conn)
 
         return str(backup_file.resolve())
+
+    @staticmethod
+    def restore_database_backup(
+        snapshot_file: Path | str, target_db_path: Path | str
+    ) -> "DatabaseManager":
+        """Restaura um snapshot SQLite usando a API nativa, dentro da camada de persistência."""
+        snapshot_path = Path(snapshot_file)
+        target_path = Path(target_db_path)
+        if not snapshot_path.exists():
+            raise FileNotFoundError(f"Arquivo de snapshot '{snapshot_path}' não encontrado.")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        src_conn = sqlite3.connect(str(snapshot_path))
+        dest_conn = sqlite3.connect(str(target_path))
+        try:
+            src_conn.backup(dest_conn)
+        finally:
+            dest_conn.close()
+            src_conn.close()
+        return DatabaseManager(db_path=str(target_path))
 
     # --- Métodos de Configuração do Modo Ponytail ---
 
