@@ -63,12 +63,13 @@ interface ProjectCardProps {
 
   };
 
-  onOpenFile: (projectId: string, filePath: string) => void;
+  onOpenFile?: (projectId: string, filePath: string) => void;
 
   onDeleteProject?: (projectId: string) => Promise<void> | void;
 
   onSelectForChat?: (projectId: string) => void;
   onOpenMemory?: (projectId: string) => void;
+  layoutMode?: 'row' | 'grid';
 
 }
 
@@ -83,6 +84,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onSelectForChat,
 
   onOpenMemory,
+
+  layoutMode = 'row',
 
 }) => {
 
@@ -113,87 +116,26 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const fNames = project.files.map((f) => f.toLowerCase());
 
   let techLabel = 'Web Application';
-
-  let badgeColor = 'badge-info';
-
   let TechIcon = Globe;
 
-  let iconColor = 'var(--accent-color)';
-
-  let iconBg = 'var(--accent-soft)';
-
   if (pType === 'python' || fNames.some((f) => f.endsWith('.py') || f.includes('requirements.txt'))) {
-
     techLabel = 'Python 3.12 (FastAPI)';
-
-    badgeColor = 'badge-purple';
-
     TechIcon = Terminal;
-
-    iconColor = '#38bdf8';
-
-    iconBg = 'rgba(56, 189, 248, 0.15)';
-
   } else if (pType === 'java' || fNames.some((f) => f.includes('pom.xml') || f.endsWith('.java'))) {
-
     techLabel = 'Java 21 (Maven)';
-
-    badgeColor = 'badge-warning';
-
     TechIcon = Coffee;
-
-    iconColor = '#f59e0b';
-
-    iconBg = 'rgba(245, 158, 11, 0.15)';
-
   } else if (pType === 'csharp' || fNames.some((f) => f.endsWith('.csproj') || f.endsWith('.cs'))) {
-
     techLabel = '.NET 8 / C# 12';
-
-    badgeColor = 'badge-purple';
-
     TechIcon = Code2;
-
-    iconColor = '#a855f7';
-
-    iconBg = 'rgba(168, 85, 247, 0.15)';
-
   } else if (pType === 'go' || fNames.some((f) => f.includes('go.mod') || f.endsWith('.go'))) {
-
     techLabel = 'Go (Golang 1.22)';
-
-    badgeColor = 'badge-success';
-
     TechIcon = Zap;
-
-    iconColor = '#06b6d4';
-
-    iconBg = 'rgba(6, 182, 212, 0.15)';
-
   } else if (pType === 'kotlin' || fNames.some((f) => f.endsWith('.kt') || f.includes('gradle.kts'))) {
-
     techLabel = 'Kotlin 2.0 (Gradle)';
-
-    badgeColor = 'badge-purple';
-
     TechIcon = Layers;
-
-    iconColor = '#c084fc';
-
-    iconBg = 'rgba(192, 132, 252, 0.15)';
-
   } else if (pType === 'flutter' || fNames.some((f) => f.includes('main.dart') || f.includes('pubspec.yaml'))) {
-
     techLabel = 'Flutter Mobile';
-
-    badgeColor = 'badge-purple';
-
     TechIcon = Smartphone;
-
-    iconColor = '#c084fc';
-
-    iconBg = 'rgba(168, 85, 247, 0.15)';
-
   }
 
   const handleOpenFolder = async () => {
@@ -328,381 +270,31 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     }
   };
 
-  return (
-
-    <div
-
-      className="glass-card"
-
-      style={{
-
-        padding: '20px 22px',
-
-        display: 'flex',
-
-        flexDirection: 'column',
-
-        gap: '14px',
-
-        border: '1px solid var(--border-color)',
-
-        borderRadius: '14px',
-
-        transition: 'transform 0.2s, box-shadow 0.2s',
-
-      }}
-
-    >
-
-      {/* Header do Card */}
-
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-
-          <div
-
-            style={{
-
-              width: '44px',
-
-              height: '44px',
-
-              borderRadius: '12px',
-
-              backgroundColor: iconBg,
-
-              border: `1px solid ${iconColor}44`,
-
-              display: 'flex',
-
-              alignItems: 'center',
-
-              justifyContent: 'center',
-
-              color: iconColor,
-
-              flexShrink: 0,
-
-            }}
-
-          >
-
-            <TechIcon size={22} />
-
-          </div>
-
-          <div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-
-              <h3 className="claude-serif-title" style={{ fontSize: '1.1rem', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
-
-                {project.name || humanizeLabel(project.id)}
-
-              </h3>
-
-              <span className={`badge ${badgeColor}`}>{techLabel}</span>
-
-              {project.size_formatted && (
-
-                <span className="badge badge-info" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
-
-                  {project.size_formatted}
-
-                </span>
-
-              )}
-
-            </div>
-
-            {/* Caminho Físico com Botão de Copiar */}
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-
-              <span
-
-                style={{
-
-                  fontSize: '0.74rem',
-
-                  color: 'var(--text-muted)',
-
-                  fontFamily: 'var(--font-mono)',
-
-                  maxWidth: '240px',
-
-                  overflow: 'hidden',
-
-                  textOverflow: 'ellipsis',
-
-                  whiteSpace: 'nowrap',
-
-                }}
-
-                title={fullPath}
-
-              >
-
-                {fullPath}
-
-              </span>
-
-              <button
-
-                type="button"
-
-                onClick={handleCopyPath}
-
-                className="btn btn-ghost"
-
-                style={{ padding: '2px 5px', fontSize: '0.7rem', color: copiedPath ? '#34d399' : 'var(--text-muted)' }}
-
-                title="Copiar caminho da pasta"
-
-              >
-
-                {copiedPath ? <Check size={11} color="#34d399" /> : <Copy size={11} />}
-
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      {project.description && (
-
-        <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-
-          {project.description}
-
-        </p>
-
-      )}
-
-      {/* Barra de Ações: Abrir Pasta no Explorer, VS Code, Vincular ao Chat, Opções, Excluir */}
-      <div
-        style={{
-          marginTop: 'auto',
-          paddingTop: '14px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '8px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Ação Primária: Abrir Pasta no Explorer nativo */}
-          <button
-            type="button"
-            onClick={handleOpenFolder}
-            className="btn btn-primary"
-            style={{
-              fontSize: '0.78rem',
-              padding: '6px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: folderOpened ? '#10b981' : 'var(--accent-color)',
-              color: '#ffffff',
-              fontWeight: 500,
-              boxShadow: '0 2px 8px rgba(217, 119, 87, 0.25)',
-              transition: 'all 0.2s ease',
-            }}
-            title="Abrir a pasta com os arquivos reais deste projeto no Windows Explorer"
-            disabled={openingFolder}
-          >
-            <FolderOpen size={14} />
-            <span>{openingFolder ? 'Abrindo...' : folderOpened ? 'Pasta Aberta!' : 'Abrir Pasta'}</span>
-          </button>
-
-          {/* Ação: Abrir no VS Code */}
-          <button
-            type="button"
-            onClick={handleOpenCode}
-            className="btn btn-secondary"
-            style={{
-              fontSize: '0.78rem',
-              padding: '6px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: '#38bdf8',
-              borderColor: 'rgba(56, 189, 248, 0.3)',
-              backgroundColor: 'rgba(56, 189, 248, 0.06)',
-            }}
-            title="Abrir o projeto completo no Visual Studio Code"
-            disabled={openingCode}
-          >
-            <Code2 size={14} />
-            <span>{openingCode ? 'Abrindo...' : 'VS Code'}</span>
-          </button>
-
-          {/* Ação Rápida: Visualizar no Navegador (se houver preview) */}
-          {project.has_web_preview && (
-            <a
-              href={getProjectPreviewUrl(project.id)}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary"
-              style={{
-                fontSize: '0.76rem',
-                padding: '6px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                color: '#34d399',
-                borderColor: 'rgba(52, 211, 153, 0.3)',
-                textDecoration: 'none',
-              }}
-              title="Visualizar a aplicação web em tempo real no navegador"
-            >
-              <Globe size={14} />
-              <span>Visualizar</span>
-            </a>
-          )}
-
-          {/* Ação Rápida: Conversar no Chat */}
-          {onSelectForChat && (
-            <button
-              type="button"
-              onClick={() => onSelectForChat(project.id)}
-              className="btn btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-              title="Vincular este projeto ao Chat do JARVIS para modificar ou auditar código"
-            >
-              <MessageSquare size={14} color="var(--accent-color)" />
-              <span>Tratar no Chat</span>
-            </button>
-          )}
-
-          {onOpenMemory && (
-            <button
-              type="button"
-              onClick={() => onOpenMemory(project.id)}
-              className="btn btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
-              title="Consultar e editar as regras e decisões privadas deste projeto"
-            >
-              <BookOpen size={13} />
-              <span>Memória</span>
-            </button>
-          )}
-
-          {/* Modal com Ferramentas Avançadas (Git Rollback, Docker, ZIP, Inspecionar) */}
-          <button
-            type="button"
-            onClick={() => setShowActionsModal(true)}
-            className="btn btn-secondary"
-            style={{
-              fontSize: '0.76rem',
-              padding: '6px 10px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              color: 'var(--text-secondary)',
-            }}
-            title="Mais opções: Inspecionar arquivos, Git Rollback, Docker, Exportar ZIP"
-          >
-            <Settings size={13} />
-            <span>Opções</span>
-          </button>
-        </div>
-
-        {onDeleteProject && (
-
-          <button
-
-            type="button"
-
-            onClick={() => setShowConfirmDelete(true)}
-
-            className="btn btn-ghost"
-
-            style={{
-
-              fontSize: '0.74rem',
-
-              padding: '6px 10px',
-
-              color: '#f87171',
-
-              display: 'flex',
-
-              alignItems: 'center',
-
-              gap: '4px',
-
-            }}
-
-            title="Excluir permanentemente este workspace do computador"
-
-            disabled={deleting}
-
-          >
-
-            <Trash2 size={13} color="#f87171" />
-
-            <span>{deleting ? 'Excluindo...' : 'Excluir'}</span>
-
-          </button>
-
-        )}
-
-      </div>
-
-            {/* Modal Central de Ações do Projeto */}
-
+  const modals = (
+    <>
+      {/* Modal Central de Ações do Projeto */}
       {showActionsModal && (
-
         <ProjectActionsModal
-
           isOpen={showActionsModal}
-
           onClose={() => setShowActionsModal(false)}
-
           project={project}
-
           fullPath={fullPath}
-
           openingFolder={openingFolder}
-
           openingCode={openingCode}
-
           rollingBack={rollingBack}
-
           dockerizing={dockerizing}
-
           folderOpened={folderOpened}
-
           copiedPath={copiedPath}
-
           onOpenFolder={handleOpenFolder}
-
           onOpenCode={handleOpenCode}
-
           onRollback={handleRollback}
-
           onDockerize={handleDockerize}
-
           onCopyPath={handleCopyPath}
-
           onConfirmDelete={() => setShowConfirmDelete(true)}
-
           onSelectForChat={onSelectForChat}
-
           getProjectExportZipUrl={getProjectExportZipUrl}
-
           getProjectPreviewUrl={getProjectPreviewUrl}
-
         />
-
       )}
 
       {/* Modal Seguro de Confirmação de Exclusão */}
@@ -723,10 +315,559 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           </>
         }
       />
-
-    </div>
-
+    </>
   );
 
+  /* Layout em Linhas Abertas (Estilo Linear / GitHub / Vercel) */
+  if (layoutMode === 'row') {
+    return (
+      <>
+        <div
+          className="workspace-project-row"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 18px',
+            backgroundColor: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid rgba(255, 255, 255, 0.07)',
+            borderRadius: '10px',
+            gap: '16px',
+            flexWrap: 'wrap',
+            transition: 'background-color 0.15s ease, border-color 0.15s ease',
+          }}
+        >
+          {/* Lado Esquerdo: Ícone + Título + Badges + Caminho/Descrição */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '260px', flex: 1 }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#d4d4d8',
+                flexShrink: 0,
+              }}
+            >
+              <TechIcon size={18} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f4f4f5' }}>
+                  {project.name || humanizeLabel(project.id)}
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.70rem',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                    color: '#d4d4d8',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    fontWeight: 500,
+                  }}
+                >
+                  {techLabel}
+                </span>
+                {project.size_formatted && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      padding: '2px 6px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                      color: '#a1a1aa',
+                    }}
+                  >
+                    {project.size_formatted}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span
+                  style={{
+                    fontSize: '0.73rem',
+                    color: '#71717a',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    maxWidth: '360px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={fullPath}
+                >
+                  {fullPath}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyPath}
+                  className="btn btn-ghost"
+                  style={{ padding: '2px 4px', color: copiedPath ? '#34d399' : '#71717a' }}
+                  title="Copiar caminho da pasta"
+                >
+                  {copiedPath ? <Check size={11} color="#34d399" /> : <Copy size={11} />}
+                </button>
+                {project.description && (
+                  <span
+                    style={{
+                      fontSize: '0.76rem',
+                      color: '#a1a1aa',
+                      maxWidth: '300px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    • {project.description}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Lado Direito: Barra de Ações em Linha (Estilo Linear / GitHub) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleOpenFolder}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.76rem',
+                padding: '5px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                backgroundColor: folderOpened ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                border: folderOpened ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.12)',
+                color: folderOpened ? '#34d399' : '#f4f4f5',
+                fontWeight: 500,
+                borderRadius: '6px',
+              }}
+              title="Abrir pasta no Windows Explorer"
+              disabled={openingFolder}
+            >
+              <FolderOpen size={13} />
+              <span>{openingFolder ? 'Abrindo...' : folderOpened ? 'Pasta Aberta!' : 'Abrir Pasta'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenCode}
+              className="btn btn-ghost"
+              style={{
+                fontSize: '0.76rem',
+                padding: '5px 9px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                color: '#d4d4d8',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '6px',
+              }}
+              title="Abrir no Visual Studio Code"
+              disabled={openingCode}
+            >
+              <Code2 size={13} />
+              <span>VS Code</span>
+            </button>
+
+            {project.has_web_preview && (
+              <a
+                href={getProjectPreviewUrl(project.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost"
+                style={{
+                  fontSize: '0.76rem',
+                  padding: '5px 9px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  color: '#d4d4d8',
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '6px',
+                  textDecoration: 'none',
+                }}
+                title="Visualizar preview web"
+              >
+                <Globe size={13} />
+                <span>Visualizar</span>
+              </a>
+            )}
+
+            {onSelectForChat && (
+              <button
+                type="button"
+                onClick={() => onSelectForChat(project.id)}
+                className="btn btn-ghost"
+                style={{
+                  fontSize: '0.76rem',
+                  padding: '5px 9px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  color: '#38bdf8',
+                  backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.2)',
+                  borderRadius: '6px',
+                }}
+                title="Conversar no Chat com este workspace"
+              >
+                <MessageSquare size={13} />
+                <span>Chat</span>
+              </button>
+            )}
+
+            {onOpenMemory && (
+              <button
+                type="button"
+                onClick={() => onOpenMemory(project.id)}
+                className="btn btn-ghost"
+                style={{
+                  fontSize: '0.76rem',
+                  padding: '5px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: '#a1a1aa',
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '6px',
+                }}
+                title="Consultar memória e regras do projeto"
+              >
+                <BookOpen size={13} />
+                <span>Memória</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowActionsModal(true)}
+              className="btn btn-ghost"
+              style={{
+                fontSize: '0.76rem',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                color: '#a1a1aa',
+                backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+              }}
+              title="Mais opções (Git, Docker, ZIP)"
+            >
+              <Settings size={13} />
+              <span>Opções</span>
+            </button>
+
+            {onDeleteProject && (
+              <button
+                type="button"
+                onClick={() => setShowConfirmDelete(true)}
+                className="btn btn-ghost"
+                style={{
+                  fontSize: '0.76rem',
+                  padding: '5px 8px',
+                  color: '#f87171',
+                  borderRadius: '6px',
+                }}
+                title="Excluir workspace"
+                disabled={deleting}
+              >
+                <Trash2 size={13} />
+                <span>{deleting ? '...' : ''}</span>
+              </button>
+            )}
+          </div>
+        </div>
+        {modals}
+      </>
+    );
+  }
+
+  /* Modo Grade Aberto e Refinado (sem fundo escuro pesado) */
+  return (
+    <>
+      <div
+        className="glass-card"
+        style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.07)',
+          borderRadius: '12px',
+          padding: '18px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+          transition: 'border-color 0.15s ease, transform 0.15s ease',
+        }}
+      >
+        {/* Header do Card */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '9px',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#d4d4d8',
+                flexShrink: 0,
+              }}
+            >
+              <TechIcon size={18} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: '0.98rem', fontWeight: 600, color: '#f4f4f5', margin: 0, letterSpacing: '-0.01em' }}>
+                  {project.name || humanizeLabel(project.id)}
+                </h3>
+                <span
+                  style={{
+                    fontSize: '0.70rem',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                    color: '#d4d4d8',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    fontWeight: 500,
+                  }}
+                >
+                  {techLabel}
+                </span>
+                {project.size_formatted && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      padding: '2px 6px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                      color: '#a1a1aa',
+                    }}
+                  >
+                    {project.size_formatted}
+                  </span>
+                )}
+              </div>
+
+              {/* Caminho Físico com Botão de Copiar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span
+                  style={{
+                    fontSize: '0.73rem',
+                    color: '#71717a',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    maxWidth: '260px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={fullPath}
+                >
+                  {fullPath}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyPath}
+                  className="btn btn-ghost"
+                  style={{ padding: '2px 4px', color: copiedPath ? '#34d399' : '#71717a' }}
+                  title="Copiar caminho da pasta"
+                >
+                  {copiedPath ? <Check size={11} color="#34d399" /> : <Copy size={11} />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {project.description && (
+          <p style={{ fontSize: '0.82rem', color: '#a1a1aa', lineHeight: '1.4', margin: 0 }}>
+            {project.description}
+          </p>
+        )}
+
+        {/* Barra de Ações: Abrir Pasta no Explorer, VS Code, Vincular ao Chat, Opções, Excluir */}
+        <div
+          style={{
+            marginTop: 'auto',
+            paddingTop: '12px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.07)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleOpenFolder}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.76rem',
+                padding: '5px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                backgroundColor: folderOpened ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                border: folderOpened ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.12)',
+                color: folderOpened ? '#34d399' : '#f4f4f5',
+                fontWeight: 500,
+                borderRadius: '6px',
+              }}
+              title="Abrir pasta no Windows Explorer"
+              disabled={openingFolder}
+            >
+              <FolderOpen size={13} />
+              <span>{openingFolder ? 'Abrindo...' : folderOpened ? 'Pasta Aberta!' : 'Abrir Pasta'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenCode}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.76rem',
+                padding: '5px 9px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                color: '#d4d4d8',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '6px',
+              }}
+              title="Abrir no Visual Studio Code"
+              disabled={openingCode}
+            >
+              <Code2 size={13} />
+              <span>VS Code</span>
+            </button>
+
+            {project.has_web_preview && (
+              <a
+                href={getProjectPreviewUrl(project.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary"
+                style={{
+                  fontSize: '0.76rem',
+                  padding: '5px 9px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  color: '#d4d4d8',
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '6px',
+                  textDecoration: 'none',
+                }}
+                title="Visualizar preview web"
+              >
+                <Globe size={13} />
+                <span>Visualizar</span>
+              </a>
+            )}
+
+            {onSelectForChat && (
+              <button
+                type="button"
+                onClick={() => onSelectForChat(project.id)}
+                className="btn btn-secondary"
+                style={{
+                  fontSize: '0.76rem',
+                  padding: '5px 9px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  color: '#38bdf8',
+                  backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.2)',
+                  borderRadius: '6px',
+                }}
+                title="Conversar no Chat com este workspace"
+              >
+                <MessageSquare size={13} />
+                <span>Chat</span>
+              </button>
+            )}
+
+            {onOpenMemory && (
+              <button
+                type="button"
+                onClick={() => onOpenMemory(project.id)}
+                className="btn btn-secondary"
+                style={{
+                  fontSize: '0.76rem',
+                  padding: '5px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: '#a1a1aa',
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '6px',
+                }}
+                title="Consultar memória e regras do projeto"
+              >
+                <BookOpen size={13} />
+                <span>Memória</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowActionsModal(true)}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.76rem',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                color: '#a1a1aa',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+              }}
+              title="Mais opções (Git, Docker, ZIP)"
+            >
+              <Settings size={13} />
+              <span>Opções</span>
+            </button>
+          </div>
+
+          {onDeleteProject && (
+            <button
+              type="button"
+              onClick={() => setShowConfirmDelete(true)}
+              className="btn btn-ghost"
+              style={{
+                fontSize: '0.74rem',
+                padding: '5px 8px',
+                color: '#f87171',
+                borderRadius: '6px',
+              }}
+              title="Excluir workspace"
+              disabled={deleting}
+            >
+              <Trash2 size={13} />
+              <span>{deleting ? '...' : 'Excluir'}</span>
+            </button>
+          )}
+        </div>
+      </div>
+      {modals}
+    </>
+  );
 };
 

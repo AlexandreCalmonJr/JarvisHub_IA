@@ -255,11 +255,11 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
                 top: '36px',
                 right: 0,
                 width: '300px',
-                backgroundColor: 'rgba(20, 20, 23, 0.98)',
+                backgroundColor: '#1b1b1e',
                 backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
                 borderRadius: '12px',
-                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.7)',
+                boxShadow: '0 16px 36px rgba(0, 0, 0, 0.45)',
                 padding: '8px',
                 zIndex: 10000,
                 display: 'flex',
@@ -267,9 +267,9 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
                 gap: '3px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 6px 6px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 6px 6px', fontSize: '0.66rem', color: '#71717a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 <span>Modelos Conectados</span>
-                <span style={{ color: '#38bdf8' }}>{modelList.length} ativos</span>
+                <span style={{ color: '#a1a1aa' }}>{modelList.length} ativos</span>
               </div>
 
               {modelList.map((m) => {
@@ -290,18 +290,18 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
                       padding: '8px 10px',
                       fontSize: '0.78rem',
                       borderRadius: '8px',
-                      backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.14)' : 'rgba(255, 255, 255, 0.02)',
-                      border: isSelected ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-                      color: isSelected ? '#ffffff' : '#d4d4d4',
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                      border: isSelected ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid transparent',
+                      color: isSelected ? '#ffffff' : '#d4d4d8',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                      <Cpu size={13} color={isSelected ? '#38bdf8' : '#888888'} style={{ flexShrink: 0 }} />
+                      <Cpu size={13} color="#a1a1aa" style={{ flexShrink: 0 }} />
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
                         <span style={{ fontFamily: 'var(--font-mono)', fontWeight: isSelected ? 600 : 500, fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {m.label}
                         </span>
-                        <span style={{ fontSize: '0.66rem', color: '#888888' }}>{m.provider}</span>
+                        <span style={{ fontSize: '0.66rem', color: '#71717a' }}>{m.provider}</span>
                       </div>
                     </div>
 
@@ -311,14 +311,15 @@ export const OpenBotChatHeader: React.FC<OpenBotChatHeaderProps> = ({
                           fontSize: '0.64rem',
                           padding: '2px 6px',
                           borderRadius: '4px',
-                          backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.16)' : 'rgba(255, 255, 255, 0.05)',
-                          color: isSelected ? '#38bdf8' : '#a3a3a3',
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.06)',
+                          color: '#a1a1aa',
                           fontWeight: 500,
                         }}
                       >
                         {m.badge}
                       </span>
-                      {isSelected && <Check size={13} color="#38bdf8" />}
+                      {isSelected && <Check size={13} color="#f4f4f5" />}
                     </div>
                   </button>
                 );

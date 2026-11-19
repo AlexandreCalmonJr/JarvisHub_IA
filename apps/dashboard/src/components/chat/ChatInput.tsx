@@ -349,7 +349,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           value={input}
           onChange={handleTextareaChange}
           onKeyDown={handleKeyDown}
-          placeholder="Como posso ajudar você hoje?"
+          placeholder={isListening ? "Ouvindo... pode falar que o texto será digitado no chat..." : "Como posso ajudar você hoje?"}
           aria-label="Mensagem para o JARVIS"
           disabled={loading}
           style={{
@@ -377,10 +377,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           }}
         >
           {/* Lado Esquerdo: Botão + com Menu Popover */}
-          <div style={{ position: 'relative' }}>
+          <div ref={plusMenuRef} style={{ position: 'relative' }}>
             <button
               type="button"
-              onClick={() => setShowPlusMenu((prev) => !prev)}
+              onClick={() => {
+                setShowPlusMenu((prev) => !prev);
+                setShowModelMenu(false);
+              }}
               disabled={loading}
               className="btn btn-ghost"
               style={{
@@ -408,11 +411,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   bottom: '44px',
                   left: 0,
                   width: '320px',
-                  backgroundColor: 'rgba(20, 20, 23, 0.96)',
-                  backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  backgroundColor: '#1b1b1e',
+                  backdropFilter: 'blur(16px)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
                   borderRadius: '14px',
-                  boxShadow: '0 20px 48px rgba(0, 0, 0, 0.65)',
+                  boxShadow: '0 16px 36px rgba(0, 0, 0, 0.45)',
                   padding: '8px',
                   zIndex: 200,
                   display: 'flex',
@@ -421,7 +424,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 }}
               >
                 {/* Seção Anexos */}
-                <div style={{ padding: '4px 8px 2px 8px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                <div style={{ padding: '4px 8px 2px 8px', fontSize: '0.66rem', color: '#71717a', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                   Anexos & Contexto
                 </div>
 
@@ -441,15 +444,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     fontSize: '0.80rem',
                     width: '100%',
                     gap: '10px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    backgroundColor: 'transparent',
                   }}
                 >
-                  <div style={{ width: '26px', height: '26px', borderRadius: '7px', backgroundColor: 'rgba(217, 119, 87, 0.15)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                    <Paperclip size={13} color="var(--accent-color)" />
+                  <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: 'rgba(255, 255, 255, 0.05)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <Paperclip size={13} color="#a1a1aa" />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Anexar Arquivo</span>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Código, logs, texto ou PDF</span>
+                    <span style={{ fontWeight: 500, color: '#f4f4f5' }}>Anexar Arquivo</span>
+                    <span style={{ fontSize: '0.68rem', color: '#71717a' }}>Código, logs, texto ou PDF</span>
                   </div>
                 </button>
 
@@ -470,33 +473,33 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       fontSize: '0.80rem',
                       width: '100%',
                       gap: '10px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                      backgroundColor: 'transparent',
                     }}
                   >
-                    <div style={{ width: '26px', height: '26px', borderRadius: '7px', backgroundColor: 'rgba(56, 189, 248, 0.15)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                      <FolderGit2 size={13} color="#38bdf8" />
+                    <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: 'rgba(255, 255, 255, 0.05)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <FolderGit2 size={13} color="#a1a1aa" />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Anexar Projeto do Workspace</span>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Vincular repositório ao chat</span>
+                      <span style={{ fontWeight: 500, color: '#f4f4f5' }}>Anexar Projeto do Workspace</span>
+                      <span style={{ fontSize: '0.68rem', color: '#71717a' }}>Vincular repositório ao chat</span>
                     </div>
                   </button>
                 )}
 
-                <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.07)', margin: '4px 0' }} />
+                <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.06)', margin: '4px 0' }} />
 
-                {/* Seção Comandos */}
-                <div style={{ padding: '2px 8px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                  Comandos Rápidos
+                {/* Seção Comandos / Especialistas */}
+                <div style={{ padding: '2px 8px', fontSize: '0.66rem', color: '#71717a', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Ações Rápidas & Especialistas
                 </div>
 
                 {[
-                  { slug: '/ponytail senior', desc: 'Código enxuto YAGNI', icon: Sparkles },
-                  { slug: '/debate', desc: 'Mesa Redonda de Especialistas', icon: Users },
-                  { slug: '/audit', desc: 'Auditoria de Segurança OWASP', icon: ShieldCheck },
-                  { slug: '/rollback', desc: 'Reverter última alteração Git', icon: RotateCcw },
-                  { slug: '/test', desc: 'Gerar Suíte de Testes QA', icon: CheckCircle2 },
-                  { slug: '/doc', desc: 'Documentar Arquitetura', icon: FileText },
+                  { slug: '/debate', title: 'Mesa Redonda', desc: 'Debate técnico entre múltiplos especialistas', icon: Users },
+                  { slug: '/ponytail senior', title: 'Código Enxuto (YAGNI)', desc: 'Simplificação radical sem complexidade', icon: Sparkles },
+                  { slug: '/audit', title: 'Auditoria de Segurança', desc: 'Análise preventiva de vulnerabilidades e OWASP', icon: ShieldCheck },
+                  { slug: '/test', title: 'Gerar Testes QA', desc: 'Criação automatizada de testes e validação', icon: CheckCircle2 },
+                  { slug: '/doc', title: 'Documentar Arquitetura', desc: 'Gera especificações técnicas e documentação', icon: FileText },
+                  { slug: '/rollback', title: 'Reverter Alterações', desc: 'Desfaz última alteração com segurança', icon: RotateCcw },
                 ].map((cmd) => {
                   const IconComponent = cmd.icon;
                   return (
@@ -509,31 +512,36 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'flex-start',
-                        padding: '6px 8px',
+                        padding: '7px 10px',
                         borderRadius: '8px',
-                        fontSize: '0.78rem',
+                        fontSize: '0.80rem',
                         width: '100%',
-                        gap: '8px',
+                        gap: '10px',
+                        backgroundColor: 'transparent',
+                        textAlign: 'left',
                       }}
                     >
-                      <IconComponent size={13} color="var(--accent-color)" style={{ flexShrink: 0 }} />
-                      <span
+                      <div
                         style={{
-                          fontFamily: 'var(--font-mono, monospace)',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          backgroundColor: 'rgba(217, 119, 87, 0.14)',
-                          color: 'var(--accent-color)',
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          display: 'grid',
+                          placeItems: 'center',
                           flexShrink: 0,
                         }}
                       >
-                        {cmd.slug}
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cmd.desc}
-                      </span>
+                        <IconComponent size={13} color="#a1a1aa" />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.80rem', fontWeight: 500, color: '#f4f4f5' }}>
+                          {cmd.title}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: '#71717a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {cmd.desc}
+                        </span>
+                      </div>
                     </button>
                   );
                 })}
@@ -543,11 +551,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
           {/* Lado Direito: Seletor de Modelo, Microfone, Onda de Voz e Botão de Envio */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Seletor de Modelo (Claude Desktop Style: "Sonnet 5.5 Médio ⌵") */}
-            <div style={{ position: 'relative' }}>
+            {/* Seletor de Modelo */}
+            <div ref={modelMenuRef} style={{ position: 'relative' }}>
               <button
                 type="button"
-                onClick={() => setShowModelMenu((prev) => !prev)}
+                onClick={() => {
+                  setShowModelMenu((prev) => !prev);
+                  setShowPlusMenu(false);
+                }}
                 className="btn btn-ghost"
                 style={{
                   display: 'flex',
@@ -556,7 +567,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   padding: '4px 10px',
                   borderRadius: '999px',
                   backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid var(--border-color)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
                   fontSize: '0.76rem',
                   color: 'var(--text-secondary)',
                   cursor: 'pointer',
@@ -566,10 +577,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
                   {selectedModel?.label || 'Automático (Maestro)'}
                 </span>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.70rem' }}>
+                <span style={{ color: '#71717a', fontSize: '0.70rem' }}>
                   {selectedModel?.effort || 'Seleção inteligente'}
                 </span>
-                <ChevronDown size={12} color="var(--text-muted)" />
+                <ChevronDown size={12} color="#71717a" />
               </button>
 
               {/* Dropdown de Modelos */}
@@ -580,11 +591,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     bottom: '42px',
                     right: 0,
                     width: '320px',
-                    backgroundColor: 'rgba(20, 20, 23, 0.96)',
-                    backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    backgroundColor: '#1b1b1e',
+                    backdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
                     borderRadius: '14px',
-                    boxShadow: '0 20px 48px rgba(0, 0, 0, 0.7)',
+                    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.45)',
                     padding: '8px',
                     zIndex: 200,
                     display: 'flex',
@@ -592,9 +603,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     gap: '4px',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', fontSize: '0.66rem', color: '#888888', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    <span>MODELOS REAIS DISPONÍVEIS</span>
-                    <span style={{ color: 'var(--accent-color)' }}>{modelOptions.length + 1} opções</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', fontSize: '0.66rem', color: '#71717a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <span>MODELOS DISPONÍVEIS</span>
+                    <span style={{ color: '#a1a1aa' }}>{modelOptions.length + 1} opções</span>
                   </div>
 
                   {/* Opção Automático (Maestro) */}
@@ -620,35 +631,35 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       padding: '8px 10px',
                       borderRadius: '8px',
                       width: '100%',
-                      backgroundColor: selectedModel === null ? 'rgba(217, 119, 87, 0.16)' : 'rgba(255, 255, 255, 0.03)',
-                      border: selectedModel === null ? '1px solid rgba(217, 119, 87, 0.35)' : '1px solid transparent',
+                      backgroundColor: selectedModel === null ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                      border: selectedModel === null ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid transparent',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                      <Sparkles size={14} color="var(--accent-color)" style={{ flexShrink: 0 }} />
+                      <Sparkles size={14} color="#a1a1aa" style={{ flexShrink: 0 }} />
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
-                        <span style={{ fontSize: '0.80rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <span style={{ fontSize: '0.80rem', fontWeight: 500, color: '#f4f4f5' }}>
                           Automático (Maestro)
                         </span>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: '0.68rem', color: '#71717a' }}>
                           Roteamento dinâmico
                         </span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '0.66rem', color: 'var(--accent-color)', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(217, 119, 87, 0.12)', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.66rem', color: '#d4d4d8', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.08)', fontWeight: 500 }}>
                         Recomendado
                       </span>
-                      {selectedModel === null && <Check size={13} color="var(--accent-color)" />}
+                      {selectedModel === null && <Check size={13} color="#f4f4f5" />}
                     </div>
                   </button>
 
-                  <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.07)', margin: '3px 0' }} />
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.06)', margin: '3px 0' }} />
 
                   {/* Lista com scroll dos Modelos */}
                   <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     {modelOptions.length === 0 && (
-                      <div style={{ padding: '8px', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                      <div style={{ padding: '8px', color: '#71717a', fontSize: '0.72rem' }}>
                         Nenhum modelo foi confirmado pela API. A seleção automática continua disponível.
                       </div>
                     )}
@@ -678,21 +689,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             padding: '7px 10px',
                             borderRadius: '8px',
                             width: '100%',
-                            backgroundColor: isSelected ? 'rgba(217, 119, 87, 0.16)' : 'transparent',
-                            border: isSelected ? '1px solid rgba(217, 119, 87, 0.35)' : '1px solid transparent',
+                            backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                            border: isSelected ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid transparent',
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                             {m.isCloud ? (
-                              <Cloud size={13} color="var(--accent-color)" style={{ flexShrink: 0 }} />
+                              <Cloud size={13} color="#a1a1aa" style={{ flexShrink: 0 }} />
                             ) : (
-                              <Cpu size={13} color="#38bdf8" style={{ flexShrink: 0 }} />
+                              <Cpu size={13} color="#a1a1aa" style={{ flexShrink: 0 }} />
                             )}
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
-                              <span style={{ fontSize: '0.80rem', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#ffffff' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: '0.80rem', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#ffffff' : '#d4d4d8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {m.label}
                               </span>
-                              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: '0.68rem', color: '#71717a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {m.effort}
                               </span>
                             </div>
@@ -701,16 +712,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             <span
                               style={{
                                 fontSize: '0.65rem',
-                                color: m.isCloud ? 'var(--accent-color)' : '#38bdf8',
+                                color: '#a1a1aa',
                                 padding: '2px 5px',
                                 borderRadius: '4px',
-                                backgroundColor: m.isCloud ? 'rgba(217, 119, 87, 0.12)' : 'rgba(56, 189, 248, 0.12)',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.06)',
                                 fontWeight: 500,
                               }}
                             >
-                              {m.isCloud ? 'GROQ Nuvem' : 'Local'}
+                              {m.isCloud ? 'Nuvem' : 'Local'}
                             </span>
-                            {isSelected && <Check size={13} color="var(--accent-color)" />}
+                            {isSelected && <Check size={13} color="#f4f4f5" />}
                           </div>
                         </button>
                       );
@@ -720,20 +732,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
             </div>
 
-            {/* Microfone com Whisper Turbo */}
+            {/* Microfone com Ditado e Transcrição em Tempo Real */}
             {isListening && (
               <span
                 style={{
                   fontSize: '0.72rem',
-                  color: '#ef4444',
-                  fontWeight: 600,
+                  color: '#a1a1aa',
+                  fontWeight: 500,
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  gap: '6px',
+                  padding: '3px 10px',
+                  borderRadius: '999px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.10)',
                 }}
               >
                 <span
@@ -745,7 +757,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     display: 'inline-block',
                   }}
                 />
-                Gravando... (clique para enviar)
+                Ouvindo...
               </span>
             )}
 
@@ -762,14 +774,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: isListening ? 'rgba(239, 68, 68, 0.22)' : 'transparent',
-                color: isListening ? '#ef4444' : 'var(--text-muted)',
+                backgroundColor: isListening ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+                color: isListening ? '#f87171' : 'var(--text-muted)',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
               }}
-              title={isListening ? 'Clique para parar e transcrever com Whisper' : 'Falar comando por voz (Whisper Turbo)'}
+              title={isListening ? 'Clique para encerrar ditado' : 'Falar (digitação por voz em tempo real)'}
             >
-              {isListening ? <MicOff size={15} color="#ef4444" /> : <Mic size={15} />}
+              {isListening ? <MicOff size={15} color="#f87171" /> : <Mic size={15} />}
             </button>
 
             {/* Botão de Envio (ArrowUp em círculo) ou Parada */}
@@ -816,7 +828,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   transition: 'all 0.18s ease',
                   boxShadow:
                     input.trim() || attachedFiles.length > 0
-                      ? '0 2px 10px rgba(217, 119, 87, 0.35)'
+                      ? '0 2px 8px rgba(0, 0, 0, 0.3)'
                       : 'none',
                 }}
                 title="Enviar mensagem (Enter)"
