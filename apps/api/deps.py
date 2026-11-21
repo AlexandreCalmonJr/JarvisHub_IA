@@ -227,6 +227,20 @@ resource_manager = ResourceManager(audit_trail=security_core.audit)
 skills_catalog = SkillsCatalog()
 agent_registry = AgentRegistry()
 
+def _apply_saved_agent_config(profile, config: dict) -> None:
+    """Aplica apenas os campos persistidos, preservando valores vazios explícitos."""
+    if config.get("system_prompt"):
+        profile.system_prompt = config["system_prompt"]
+    if config.get("preferred_model"):
+        profile.preferred_model = config["preferred_model"]
+    if "allowed_tools" in config and config["allowed_tools"] is not None:
+        profile.allowed_tools = list(config["allowed_tools"])
+    if "is_read_only" in config and config["is_read_only"] is not None:
+        profile.is_read_only = bool(config["is_read_only"])
+    if config.get("assigned_key_id"):
+        profile.assigned_key_id = config["assigned_key_id"]
+
+
 # Aplica customizações persistidas de especialistas a partir do SQLite no agent_registry
 try:
     saved_agent_configs = db_manager.get_agent_configs()
@@ -234,16 +248,7 @@ try:
         for p in [*agent_registry.list_agents(), *AGENT_PROFILES.values()]:
             p_role = p.role.value if hasattr(p.role, "value") else str(p.role)
             if p_role == role_key:
-                if cfg.get("system_prompt"):
-                    p.system_prompt = cfg["system_prompt"]
-                if cfg.get("preferred_model"):
-                    p.preferred_model = cfg["preferred_model"]
-                if cfg.get("allowed_tools"):
-                    p.allowed_tools = cfg["allowed_tools"]
-                if "is_read_only" in cfg and cfg["is_read_only"] is not None:
-                    p.is_read_only = bool(cfg["is_read_only"])
-                if cfg.get("assigned_key_id"):
-                    p.assigned_key_id = cfg["assigned_key_id"]
+                _apply_saved_agent_config(p, cfg)
 except Exception as exc:
     logger.warning("Falha ao sincronizar configurações customizadas de agentes: %s", exc)
 
