@@ -113,3 +113,35 @@ async def test_agent_playground_maps_inference_token_usage(monkeypatch):
     assert body["tokens_completion"] == 45
     assert body["prompt_tokens"] == 123
     assert body["completion_tokens"] == 45
+
+
+@pytest.mark.asyncio
+async def test_agent_config_does_not_report_success_when_persistence_fails(monkeypatch):
+    """A configuração em memória não pode avançar se a persistência falhar."""
+    from apps.api.routers import agents as agents_router
+
+    profile = agents_router.AGENT_PROFILES[next(
+        role for role in agents_router.AGENT_PROFILES if str(getattr(role, "value", role)) == "qa_engineer"
+    )]
+    registry_profile = next(
+        item for item in agents_router.agent_registry.list_agents()
+        if item.role.value == "qa_engineer"
+    )
+    original_prompt = profile.system_prompt
+    original_registry_prompt = registry_profile.system_prompt
+
+    def fail_persistence(**_kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(agents_router.db_manager, "set_agent_config", fail_persistence)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.put(
+            "/api/v1/agents/qa_engineer/config",
+            json={"system_prompt": "Este prompt não pode ser aplicado sem persistência."},
+        )
+
+    assert response.status_code == 500
+    assert profile.system_prompt == original_prompt
+    assert registry_profile.system_prompt == original_registry_prompt
