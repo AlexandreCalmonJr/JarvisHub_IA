@@ -9,7 +9,8 @@ const client = read('../src/services/api/client.ts');
 test('central API transport always uses same-origin cookie credentials by default', () => {
   assert.match(client, /credentials: init\.credentials \?\? 'same-origin'/);
   assert.match(client, /headers\.has\('Accept'\)/);
-  assert.doesNotMatch(client, /X-Jarvis-Session|sessionStorage|localStorage/);
+  const executable = client.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  assert.doesNotMatch(executable, /X-Jarvis-Session|sessionStorage|localStorage/);
 });
 
 for (const domain of ['chat', 'agents', 'models', 'workspace']) {
