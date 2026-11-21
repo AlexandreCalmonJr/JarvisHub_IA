@@ -14,6 +14,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from sqlalchemy import case, func, select
+
+from services.database.models.telemetry import (
+    InferenceQualityFeedback,
+    InferenceTelemetry,
+    ModelSelectionDecision,
+)
+
 
 class TelemetryRepository(Protocol):
     def record_inference(self, **kwargs: Any) -> str: ...
@@ -434,4 +442,376 @@ class SqliteTelemetryRepository:
             "total_tokens": int(row["total_tokens"] or 0),
             "total_cost_usd": round(float(row["total_cost_usd"] or 0), 6),
             "average_latency_ms": round(float(row["average_latency_ms"] or 0), 2),
+        }
+
+
+class SqlAlchemyTelemetryRepository:
+    """SQLAlchemy adapter for the telemetry repository port.
+
+    Persists operational metadata to relational storage (PostgreSQL/SQLite),
+    isolated strictly by account owner.
+    """
+
+    def __init__(self, session_factory):
+        self._session_factory = session_factory
+
+    @contextmanager
+    def _session(self):
+        if hasattr(self._session_factory, "begin"):
+            with self._session_factory.begin() as session:
+                yield session
+        else:
+            session = self._session_factory()
+            try:
+                with session.begin():
+                    yield session
+            finally:
+                session.close()
+
+    def record_inference(
+        self,
+        *,
+        owner_user_id: str | None,
+        task_id: str | None,
+        agent_role: str | None,
+        model_name: str,
+        provider: str,
+        status: str,
+        duration_ms: float,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        cost_usd: float = 0.0,
+        error_type: str | None = None,
+    ) -> str:
+        if status not in {"success", "failed"}:
+            raise ValueError("Invalid inference telemetry status")
+        record_id = str(uuid.uuid4())
+        created_at = datetime.now(UTC)
+        entry = InferenceTelemetry(
+            id=record_id,
+            owner_user_id=owner_user_id,
+            task_id=task_id,
+            agent_role=agent_role,
+            model_name=model_name,
+            provider=provider,
+            status=status,
+            duration_ms=max(0.0, float(duration_ms)),
+            prompt_tokens=max(0, int(prompt_tokens)),
+            completion_tokens=max(0, int(completion_tokens)),
+            cost_usd=max(0.0, float(cost_usd)),
+            error_type=error_type,
+            created_at=created_at,
+        )
+        with self._session() as session:
+            session.add(entry)
+        return record_id
+
+    def list_for_owner(
+        self, owner_user_id: str, limit: int = 50, task_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        safe_limit = max(1, min(int(limit), 500))
+        stmt = (
+            select(
+                InferenceTelemetry,
+                InferenceQualityFeedback.rating.label("feedback_rating"),
+            )
+            .outerjoin(
+                InferenceQualityFeedback,
+                (InferenceQualityFeedback.owner_user_id == InferenceTelemetry.owner_user_id)
+                & (InferenceQualityFeedback.inference_id == InferenceTelemetry.id),
+            )
+            .where(InferenceTelemetry.owner_user_id == owner_user_id)
+        )
+        if task_id:
+            stmt = stmt.where(InferenceTelemetry.task_id == task_id)
+        stmt = stmt.order_by(InferenceTelemetry.created_at.desc()).limit(safe_limit)
+
+        with self._session() as session:
+            results = session.execute(stmt).all()
+
+        rows = []
+        for telemetry, feedback_rating in results:
+            rows.append(
+                {
+                    "id": telemetry.id,
+                    "task_id": telemetry.task_id,
+                    "agent_role": telemetry.agent_role,
+                    "model_name": telemetry.model_name,
+                    "provider": telemetry.provider,
+                    "status": telemetry.status,
+                    "duration_ms": telemetry.duration_ms,
+                    "prompt_tokens": telemetry.prompt_tokens,
+                    "completion_tokens": telemetry.completion_tokens,
+                    "cost_usd": telemetry.cost_usd,
+                    "error_type": telemetry.error_type,
+                    "created_at": (
+                        telemetry.created_at.isoformat()
+                        if hasattr(telemetry.created_at, "isoformat")
+                        else str(telemetry.created_at)
+                    ),
+                    "feedback_rating": feedback_rating,
+                }
+            )
+        return rows
+
+    def performance_by_model_for_owner(
+        self,
+        owner_user_id: str,
+        limit: int = 100,
+        minimum_samples: int = 5,
+        minimum_success_rate: float = 0.95,
+    ) -> list[dict[str, Any]]:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        safe_limit = max(1, min(int(limit), 100))
+        safe_minimum_samples = max(1, int(minimum_samples))
+        safe_success_rate = min(1.0, max(0.0, float(minimum_success_rate)))
+
+        success_cond = InferenceTelemetry.status == "success"
+        stmt = (
+            select(
+                InferenceTelemetry.model_name,
+                InferenceTelemetry.provider,
+                InferenceTelemetry.agent_role,
+                func.count().label("total_inferences"),
+                func.sum(case((success_cond, 1), else_=0)).label("successful"),
+                func.sum(case((InferenceTelemetry.status == "failed", 1), else_=0)).label("failed"),
+                func.coalesce(
+                    func.avg(case((success_cond, InferenceTelemetry.duration_ms))), 0
+                ).label("average_latency_ms"),
+                func.coalesce(
+                    func.avg(
+                        case(
+                            (
+                                success_cond,
+                                InferenceTelemetry.prompt_tokens
+                                + InferenceTelemetry.completion_tokens,
+                            )
+                        )
+                    ),
+                    0,
+                ).label("average_tokens"),
+                func.coalesce(func.sum(InferenceTelemetry.cost_usd), 0).label("total_cost_usd"),
+                func.coalesce(
+                    func.avg(case((success_cond, InferenceTelemetry.cost_usd))), 0
+                ).label("average_cost_usd"),
+            )
+            .where(InferenceTelemetry.owner_user_id == owner_user_id)
+            .group_by(
+                InferenceTelemetry.model_name,
+                InferenceTelemetry.provider,
+                InferenceTelemetry.agent_role,
+            )
+            .order_by(
+                func.count().desc(),
+                func.coalesce(
+                    func.avg(case((success_cond, InferenceTelemetry.duration_ms))), 0
+                ).asc(),
+            )
+            .limit(safe_limit)
+        )
+
+        with self._session() as session:
+            rows = session.execute(stmt).all()
+
+        result = []
+        for row in rows:
+            total = int(row.total_inferences or 0)
+            successful = int(row.successful or 0)
+            success_rate = successful / total if total else 0.0
+            result.append(
+                {
+                    "model_name": row.model_name,
+                    "provider": row.provider,
+                    "agent_role": row.agent_role,
+                    "total_inferences": total,
+                    "successful": successful,
+                    "failed": int(row.failed or 0),
+                    "success_rate": round(success_rate, 4),
+                    "average_latency_ms": round(float(row.average_latency_ms or 0), 2),
+                    "average_tokens": round(float(row.average_tokens or 0), 2),
+                    "total_cost_usd": round(float(row.total_cost_usd or 0), 6),
+                    "average_cost_usd": round(float(row.average_cost_usd or 0), 6),
+                    "sample_sufficient": total >= safe_minimum_samples,
+                    "routing_eligible": (
+                        total >= safe_minimum_samples and success_rate >= safe_success_rate
+                    ),
+                }
+            )
+        return result
+
+    def record_model_selection(
+        self,
+        *,
+        owner_user_id: str,
+        task_id: str | None,
+        agent_role: str | None,
+        task_capability: str | None,
+        selected_model: str,
+        selected_provider: str,
+        selection_reason: str,
+        candidate_count: int,
+        estimated_cost_usd: float = 0.0,
+    ) -> str:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        record_id = str(uuid.uuid4())
+        entry = ModelSelectionDecision(
+            id=record_id,
+            owner_user_id=owner_user_id,
+            task_id=task_id,
+            agent_role=agent_role,
+            task_capability=task_capability,
+            selected_model=selected_model,
+            selected_provider=selected_provider,
+            selection_reason=selection_reason,
+            candidate_count=max(0, int(candidate_count)),
+            estimated_cost_usd=max(0.0, float(estimated_cost_usd)),
+            created_at=datetime.now(UTC),
+        )
+        with self._session() as session:
+            session.add(entry)
+        return record_id
+
+    def list_model_selections_for_owner(
+        self, owner_user_id: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        safe_limit = max(1, min(int(limit), 100))
+        stmt = (
+            select(ModelSelectionDecision)
+            .where(ModelSelectionDecision.owner_user_id == owner_user_id)
+            .order_by(ModelSelectionDecision.created_at.desc())
+            .limit(safe_limit)
+        )
+        with self._session() as session:
+            entries = session.scalars(stmt).all()
+        return [
+            {
+                "id": e.id,
+                "task_id": e.task_id,
+                "agent_role": e.agent_role,
+                "task_capability": e.task_capability,
+                "selected_model": e.selected_model,
+                "selected_provider": e.selected_provider,
+                "selection_reason": e.selection_reason,
+                "candidate_count": e.candidate_count,
+                "estimated_cost_usd": e.estimated_cost_usd,
+                "created_at": (
+                    e.created_at.isoformat()
+                    if hasattr(e.created_at, "isoformat")
+                    else str(e.created_at)
+                ),
+            }
+            for e in entries
+        ]
+
+    def record_quality_feedback(
+        self, *, owner_user_id: str, inference_id: str, rating: int
+    ) -> bool:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        if not inference_id or not inference_id.strip():
+            raise ValueError("inference_id is required")
+        if isinstance(rating, bool) or not 1 <= int(rating) <= 5:
+            raise ValueError("rating must be between 1 and 5")
+        with self._session() as session:
+            inf = session.scalar(
+                select(InferenceTelemetry).where(
+                    InferenceTelemetry.id == inference_id,
+                    InferenceTelemetry.owner_user_id == owner_user_id,
+                    InferenceTelemetry.status == "success",
+                )
+            )
+            if inf is None:
+                return False
+            feedback = session.scalar(
+                select(InferenceQualityFeedback).where(
+                    InferenceQualityFeedback.owner_user_id == owner_user_id,
+                    InferenceQualityFeedback.inference_id == inference_id,
+                )
+            )
+            if feedback is not None:
+                feedback.rating = int(rating)
+                feedback.created_at = datetime.now(UTC)
+            else:
+                session.add(
+                    InferenceQualityFeedback(
+                        id=str(uuid.uuid4()),
+                        owner_user_id=owner_user_id,
+                        inference_id=inf.id,
+                        model_name=inf.model_name,
+                        provider=inf.provider,
+                        agent_role=inf.agent_role,
+                        task_id=inf.task_id,
+                        rating=int(rating),
+                        created_at=datetime.now(UTC),
+                    )
+                )
+        return True
+
+    def quality_by_model_for_owner(
+        self, owner_user_id: str, minimum_feedback: int = 3
+    ) -> list[dict[str, Any]]:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        minimum = max(1, int(minimum_feedback))
+        stmt = (
+            select(
+                InferenceQualityFeedback.model_name,
+                InferenceQualityFeedback.provider,
+                InferenceQualityFeedback.agent_role,
+                func.count().label("feedback_count"),
+                func.avg(InferenceQualityFeedback.rating).label("average_rating"),
+            )
+            .where(InferenceQualityFeedback.owner_user_id == owner_user_id)
+            .group_by(
+                InferenceQualityFeedback.model_name,
+                InferenceQualityFeedback.provider,
+                InferenceQualityFeedback.agent_role,
+            )
+        )
+        with self._session() as session:
+            rows = session.execute(stmt).all()
+        return [
+            {
+                "model_name": row.model_name,
+                "provider": row.provider,
+                "agent_role": row.agent_role,
+                "feedback_count": int(row.feedback_count),
+                "average_rating": round(float(row.average_rating or 0), 3),
+                "sample_sufficient": int(row.feedback_count) >= minimum,
+            }
+            for row in rows
+        ]
+
+    def summary_for_owner(self, owner_user_id: str) -> dict[str, int | float]:
+        if not owner_user_id or not owner_user_id.strip():
+            raise ValueError("owner_user_id is required")
+        success_cond = InferenceTelemetry.status == "success"
+        stmt = select(
+            func.count().label("total_inferences"),
+            func.sum(case((success_cond, 1), else_=0)).label("successful"),
+            func.sum(case((InferenceTelemetry.status == "failed", 1), else_=0)).label("failed"),
+            func.coalesce(
+                func.sum(InferenceTelemetry.prompt_tokens + InferenceTelemetry.completion_tokens), 0
+            ).label("total_tokens"),
+            func.coalesce(func.sum(InferenceTelemetry.cost_usd), 0).label("total_cost_usd"),
+            func.coalesce(
+                func.avg(case((success_cond, InferenceTelemetry.duration_ms))), 0
+            ).label("average_latency_ms"),
+        ).where(InferenceTelemetry.owner_user_id == owner_user_id)
+
+        with self._session() as session:
+            row = session.execute(stmt).one()
+        return {
+            "total_inferences": int(row.total_inferences or 0),
+            "successful": int(row.successful or 0),
+            "failed": int(row.failed or 0),
+            "total_tokens": int(row.total_tokens or 0),
+            "total_cost_usd": round(float(row.total_cost_usd or 0), 6),
+            "average_latency_ms": round(float(row.average_latency_ms or 0), 2),
         }

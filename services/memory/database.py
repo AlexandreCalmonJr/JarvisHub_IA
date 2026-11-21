@@ -9,18 +9,58 @@ from typing import Any
 logger = logging.getLogger("jarvis.memory.database")
 
 
+def _looks_like_postgresql_snapshot(path: Path) -> bool:
+    name = path.name.lower()
+    if name.endswith((".json.gz", ".json")):
+        return True
+    try:
+        with path.open("rb") as handle:
+            return handle.read(2) == b"\x1f\x8b"
+    except OSError:
+        return False
+
+
 class DatabaseManager:
     """
     Gestor de persistência local SQLite do JARVIS AI HUB.
     Controla tabelas estruturadas, integridade referencial e migrações automáticas.
     """
 
-    def __init__(self, db_path: str = "data/jarvis.db"):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
+    def __init__(self, db_path: str = "data/jarvis.db", runtime: Any | None = None):
+        if runtime is not None:
+            self._runtime = runtime
+            self.is_postgresql = bool(
+                getattr(self._runtime, "settings", None)
+                and self._runtime.settings.is_postgresql
+            )
+            self.db_path = None
+        else:
+            from services.database.config import DatabaseConfigurationError, DatabaseSettings
 
-    def _get_connection(self) -> sqlite3.Connection:
+            settings = DatabaseSettings.from_env()
+            if settings.is_postgresql:
+                from services.database.session import get_database_runtime
+
+                try:
+                    self._runtime = get_database_runtime(settings, verify=True)
+                except Exception as exc:
+                    raise DatabaseConfigurationError(
+                        f"Falha na inicialização do runtime PostgreSQL: {exc}"
+                    ) from exc
+                self.is_postgresql = True
+                self.db_path = None
+            else:
+                self._runtime = None
+                self.is_postgresql = False
+                self.db_path = Path(db_path)
+                self.db_path.parent.mkdir(parents=True, exist_ok=True)
+                self._init_schema()
+
+    def _get_connection(self):
+        if self.is_postgresql:
+            from services.database.sql_compat import PgCompatConnection
+
+            return PgCompatConnection(self._runtime.engine.connect())
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -438,9 +478,7 @@ class DatabaseManager:
 
     def list_all_projects(self) -> list[dict[str, Any]]:
         with self._get_connection() as conn:
-            rows = conn.execute(
-                "SELECT * FROM projects ORDER BY updated_at DESC"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
             return [dict(row) for row in rows]
 
     def delete_project(self, project_id: str) -> None:
@@ -459,7 +497,7 @@ class DatabaseManager:
         now = datetime.now(UTC).isoformat()
         state_json = json.dumps(state_dict, default=str)
         intent = state_dict.get("classified_intent")
-        is_completed = 1 if state_dict.get("is_completed") else 0
+        is_completed = bool(state_dict.get("is_completed"))
 
         with self._get_connection() as conn:
             if owner_user_id is not None:
@@ -1014,11 +1052,11 @@ class DatabaseManager:
                 (clean_role,),
             ).fetchone()
             ro_val = (
-                (1 if is_read_only else 0)
+                bool(is_read_only)
                 if is_read_only is not None
                 else (
-                    existing["is_read_only"]
-                    if existing and "is_read_only" in existing.keys()  # noqa: SIM118 - sqlite3.Row membership checks values, keys() checks schema.
+                    bool(existing["is_read_only"])
+                    if existing and "is_read_only" in existing.keys() and existing["is_read_only"] is not None
                     # Sem valor explícito e sem registo anterior: NULL significa
                     # "não definido" e não aplica restrição de escrita ao agente.
                     else None
@@ -1164,9 +1202,7 @@ class DatabaseManager:
             logger.warning("Configuração '%s' contém JSON inválido.", key)
             return None
 
-    def set_setting(
-        self, key: str, value: Any, owner_user_id: str | None = None
-    ) -> None:
+    def set_setting(self, key: str, value: Any, owner_user_id: str | None = None) -> None:
         """Persist a JSON setting through the public persistence API."""
         setting_key = self._account_setting_key(key, owner_user_id)
         now = datetime.now(UTC).isoformat()
@@ -1254,8 +1290,14 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO inference_cache (prompt_hash, prompt, model_name, response_text, created_at, hit_count)
+                INSERT INTO inference_cache (prompt_hash, prompt, model_name, response_text, created_at, hit_count)
                 VALUES (?, ?, ?, ?, ?, 1)
+                ON CONFLICT(prompt_hash) DO UPDATE SET
+                    prompt = excluded.prompt,
+                    model_name = excluded.model_name,
+                    response_text = excluded.response_text,
+                    created_at = excluded.created_at,
+                    hit_count = 1
                 """,
                 (prompt_hash, f"[redacted:{prompt_hash[:16]}]", model_name, response, now),
             )
@@ -1266,7 +1308,21 @@ class DatabaseManager:
         filename_prefix: str = "jarvis_backup",
         extension: str = ".db",
     ) -> str:
-        """Cria uma cópia física segura de backup do banco de dados SQLite."""
+        """Cria um snapshot consistente do backend ativo.
+
+        SQLite usa a API nativa de backup; PostgreSQL usa o snapshot lógico
+        versionado em :mod:`services.database.backup`.
+        """
+        if self.is_postgresql:
+            from services.database.backup import create_postgresql_backup
+
+            report = create_postgresql_backup(
+                self._runtime.engine,
+                backup_dir=backup_dir,
+                filename_prefix=filename_prefix,
+            )
+            return report.path
+
         b_dir = Path(backup_dir)
         b_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1279,13 +1335,49 @@ class DatabaseManager:
 
     @staticmethod
     def restore_database_backup(
-        snapshot_file: Path | str, target_db_path: Path | str
+        snapshot_file: Path | str,
+        target_db_path: Path | str | None = None,
+        *,
+        allow_revision_mismatch: bool = False,
+        allow_production: bool = False,
     ) -> "DatabaseManager":
-        """Restaura um snapshot SQLite usando a API nativa, dentro da camada de persistência."""
+        """Restaura um snapshot SQLite ou PostgreSQL.
+
+        Em PostgreSQL, ``target_db_path`` deve ser a URL de destino. O nome da
+        base tem de terminar em ``_test``, salvo ``allow_production=True``.
+        """
         snapshot_path = Path(snapshot_file)
-        target_path = Path(target_db_path)
         if not snapshot_path.exists():
             raise FileNotFoundError(f"Arquivo de snapshot '{snapshot_path}' não encontrado.")
+
+        if _looks_like_postgresql_snapshot(snapshot_path):
+            if not target_db_path:
+                raise ValueError(
+                    "Restauro PostgreSQL exige a URL de destino em target_db_path."
+                )
+            from services.database.backup import restore_postgresql_backup
+            from services.database.config import settings_from_url
+            from services.database.session import DatabaseRuntime
+
+            settings = settings_from_url(str(target_db_path))
+            if not settings.is_postgresql:
+                raise ValueError("O snapshot PostgreSQL exige uma URL PostgreSQL.")
+            runtime = DatabaseRuntime.create(settings, verify=True)
+            try:
+                restore_postgresql_backup(
+                    runtime.engine,
+                    snapshot_path,
+                    allow_revision_mismatch=allow_revision_mismatch,
+                    allow_production=allow_production,
+                )
+            except Exception:
+                runtime.dispose()
+                raise
+            return DatabaseManager(runtime=runtime)
+
+        if target_db_path is None:
+            raise ValueError("Restauro SQLite exige o caminho de destino.")
+        target_path = Path(target_db_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         src_conn = sqlite3.connect(str(snapshot_path))
         dest_conn = sqlite3.connect(str(target_path))
@@ -1403,7 +1495,7 @@ class DatabaseManager:
                     skill.get("description", ""),
                     skill["instructions"],
                     agents_json,
-                    1 if skill.get("is_approved", True) else 0,
+                    bool(skill.get("is_approved", True)),
                     now,
                     now,
                     owner_user_id,
@@ -1577,7 +1669,7 @@ class DatabaseManager:
         )
         dec_at = decided_at.isoformat() if isinstance(decided_at, datetime) else decided_at
         resources_json = json.dumps(affected_resources or [])
-        rev_int = 1 if reversible else 0
+        rev_val = bool(reversible)
         with self._get_connection() as conn:
             if owner_user_id is not None:
                 task = conn.execute(
@@ -1622,7 +1714,7 @@ class DatabaseManager:
                     impact_summary,
                     resources_json,
                     proposed_diff,
-                    rev_int,
+                    rev_val,
                     status,
                     req_at,
                     dec_at,
@@ -1742,7 +1834,7 @@ class DatabaseManager:
             else (last_seen_at or datetime.now(UTC).isoformat())
         )
         scopes_json = json.dumps(scopes or [])
-        rev_int = 1 if is_revoked else 0
+        rev_val = bool(is_revoked)
         with self._get_connection() as conn:
             conn.execute(
                 """
@@ -1764,7 +1856,7 @@ class DatabaseManager:
                     device_name,
                     token_hash,
                     scopes_json,
-                    rev_int,
+                    rev_val,
                     p_at,
                     ls_at,
                     owner_user_id,
@@ -1874,7 +1966,7 @@ class DatabaseManager:
             else (last_seen_at or c_at)
         )
         scopes_json = json.dumps(scopes or [])
-        rev_int = 1 if is_revoked else 0
+        rev_val = bool(is_revoked)
         with self._get_connection() as conn:
             conn.execute(
                 """
@@ -1891,7 +1983,7 @@ class DatabaseManager:
                     last_seen_at=excluded.last_seen_at,
                     is_revoked=excluded.is_revoked
                 """,
-                (session_id, user_id, role, scopes_json, c_at, exp_at, ls_at, rev_int),
+                (session_id, user_id, role, scopes_json, c_at, exp_at, ls_at, rev_val),
             )
 
     def get_session(self, session_id: str) -> dict[str, Any] | None:

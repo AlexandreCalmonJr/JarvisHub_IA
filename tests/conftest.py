@@ -14,6 +14,9 @@ os.environ["JARVIS_ADMIN_TOKEN"] = TEST_ADMIN_TOKEN
 data_dir_override = Path(tempfile.mkdtemp(prefix="jarvis-tests-"))
 atexit.register(shutil.rmtree, data_dir_override, ignore_errors=True)
 os.environ["JARVIS_DATA_DIR"] = str(data_dir_override)
+os.environ["JARVIS_DATABASE_BACKEND"] = "sqlite"
+os.environ.pop("DATABASE_URL", None)
+os.environ.pop("JARVIS_DATABASE_URL", None)
 
 from apps.api.auth import auth_service
 

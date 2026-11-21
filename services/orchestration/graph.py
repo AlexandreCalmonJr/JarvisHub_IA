@@ -1330,7 +1330,10 @@ def create_master_graph(
                                     + f"\n\nUsuário: {user_prompt}"
                                 )
                     except Exception as exc:
-                        logger.debug("Falha ao recuperar/compactar histórico do chat no orquestrador: %s", exc)
+                        logger.debug(
+                            "Falha ao recuperar/compactar histórico do chat no orquestrador: %s",
+                            exc,
+                        )
 
                 conv_req = InferenceRequest(
                     prompt=effective_prompt,

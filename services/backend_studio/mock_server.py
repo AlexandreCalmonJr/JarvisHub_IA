@@ -22,6 +22,8 @@ class MockServerService:
     def _ensure_storage(self) -> None:
         if not self.db:
             return
+        if getattr(self.db, "is_postgresql", False):
+            return
         with self.db._get_connection() as conn:
             conn.executescript(
                 """
@@ -115,7 +117,7 @@ class MockServerService:
                 endpoint_data.get("headers", {"Content-Type": "application/json"})
             )
             latency_ms = max(0, min(10000, int(endpoint_data.get("latency_ms", 0))))
-            enabled = 1 if endpoint_data.get("enabled", True) else 0
+            enabled = bool(endpoint_data.get("enabled", True))
             conn.execute(
                 """
                 INSERT INTO mock_endpoints (

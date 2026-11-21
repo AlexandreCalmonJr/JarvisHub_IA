@@ -4,7 +4,16 @@
 
 PostgreSQL será o banco transacional principal. SQLite permanece preservado como origem de migração e backup temporário até que a paridade funcional, a integridade dos dados e os testes de isolamento sejam aprovados.
 
-**Estado desta etapa:** infraestrutura Docker isolada criada. O runtime da aplicação ainda utiliza SQLite; não altere `DATABASE_URL` nem considere a migração concluída até a implementação do adaptador e dos testes.
+**Estado desta etapa (2026-11-21):** runtime PostgreSQL ativado por configuração
+explícita (`JARVIS_DATABASE_BACKEND=postgresql`) e Alembic no head
+`0002_remaining_domains`. O `DatabaseManager`, a autenticação, a telemetria, o
+progresso de aprendizagem e o mock server usam o runtime SQLAlchemy + psycopg;
+uma configuração PostgreSQL inválida impede o arranque e nunca cai
+silenciosamente para SQLite. A importação dos dados atuais foi validada com
+fidelidade campo a campo e zero linhas inválidas. Os testes PostgreSQL cobrem
+autenticação, isolamento entre contas, concorrência, rollback transacional,
+backup/restauro e arranque da API. SQLite continua selecionável para
+desenvolvimento e rollback controlado. Ver `18-importacao-dados-postgresql.md`.
 
 ## Decisões
 

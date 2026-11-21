@@ -18,6 +18,7 @@ from services.tool_gateway.specialized_tools import execute_audit_dependencies
 # 1. Testes do CVEScannerService (Modo Authoritative vs Offline + Warnings)
 # ----------------------------------------------------------------------
 
+
 def test_cve_scanner_authoritative_mode(tmp_path, monkeypatch):
     """Quando o pip-audit executa com sucesso, o modo é authoritative."""
     req = tmp_path / "requirements.txt"
@@ -71,6 +72,7 @@ def test_cve_scanner_offline_mode_with_warning_on_pip_audit_failure(tmp_path, mo
 # 2. Testes de Reidratação de Projetos Importados no WorkspaceService
 # ----------------------------------------------------------------------
 
+
 def test_workspace_rehydration_from_sqlite(tmp_path):
     """Valida persistência e reidratação de projetos externos a partir do SQLite."""
     auth_dir = tmp_path / "auth"
@@ -120,6 +122,7 @@ def test_workspace_rehydration_from_sqlite(tmp_path):
 # 3. Testes de Variáveis de Ambiente (.env.example alignment)
 # ----------------------------------------------------------------------
 
+
 def test_ollama_adapter_reads_env_urls(monkeypatch):
     """Valida leitura de JARVIS_OLLAMA_BASE_URL e OLLAMA_BASE_URL."""
     monkeypatch.setenv("JARVIS_OLLAMA_BASE_URL", "http://ollama-primary:11434")
@@ -154,6 +157,7 @@ def test_validate_import_root_with_allowlist_alias(tmp_path, monkeypatch):
 # ----------------------------------------------------------------------
 # 4. Testes de Gestão de Contexto e Compacting (H3)
 # ----------------------------------------------------------------------
+
 
 class DummyChatProvider(ChatProvider):
     name = "dummy"

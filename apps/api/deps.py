@@ -205,7 +205,14 @@ hybrid_router = HybridModelRouter(
     audit_trail=security_core.audit,
     key_vault=key_vault,
 )
-telemetry_store = SqliteTelemetryStore(db_path=data_dir / "telemetry.db")
+db_manager = DatabaseManager(db_path=str(data_dir / "jarvis.db"))
+if db_manager.is_postgresql and db_manager._runtime is not None:
+    from services.database.repositories.telemetry import SqlAlchemyTelemetryRepository
+
+    telemetry_store = SqlAlchemyTelemetryRepository(db_manager._runtime.session_factory)
+else:
+    telemetry_store = SqliteTelemetryStore(db_path=data_dir / "telemetry.db")
+
 model_manager = ModelManager(
     adapter=OllamaAdapter(),
     kill_switch=security_core.kill_switch,
@@ -213,7 +220,6 @@ model_manager = ModelManager(
     hybrid_router=hybrid_router,
     telemetry_store=telemetry_store,
 )
-db_manager = DatabaseManager(db_path=str(data_dir / "jarvis.db"))
 model_manager.inference_cache = db_manager
 security_core.set_db_manager(db_manager)
 workspace_service.set_db_manager(db_manager)

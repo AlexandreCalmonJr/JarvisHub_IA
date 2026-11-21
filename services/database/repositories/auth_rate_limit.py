@@ -1,11 +1,17 @@
 """Persistent authentication rate-limit repository."""
+
 from __future__ import annotations
 
 import logging
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol
+
+from sqlalchemy import delete, func, select
+
+from services.database.models.auth_rate_limit import AuthAttempt
 
 logger = logging.getLogger("jarvis.auth.rate_limit")
 
@@ -83,3 +89,54 @@ class SqliteAuthRateLimitRepository:
         finally:
             if conn is not None:
                 conn.close()
+
+
+class SqlAlchemyAuthRateLimitRepository:
+    """SQLAlchemy adapter for authentication rate-limiting.
+
+    Uses transactional atomic delete+count+insert, failing closed if storage
+    is unavailable.
+    """
+
+    def __init__(self, session_factory):
+        self._session_factory = session_factory
+
+    @contextmanager
+    def _session(self):
+        if hasattr(self._session_factory, "begin"):
+            with self._session_factory.begin() as session:
+                yield session
+        else:
+            session = self._session_factory()
+            try:
+                with session.begin():
+                    yield session
+            finally:
+                session.close()
+
+    def allow_attempt(self, *, key: str, limit: int, window_seconds: int) -> bool:
+        now = time.time()
+        cutoff = now - window_seconds
+        try:
+            with self._session() as session:
+                session.execute(
+                    delete(AuthAttempt).where(
+                        AuthAttempt.attempted_at < (now - max(window_seconds * 4, 3600))
+                    )
+                )
+                count = (
+                    session.scalar(
+                        select(func.count(AuthAttempt.id)).where(
+                            AuthAttempt.bucket_key == key,
+                            AuthAttempt.attempted_at >= cutoff,
+                        )
+                    )
+                    or 0
+                )
+                if count >= limit:
+                    return False
+                session.add(AuthAttempt(bucket_key=key, attempted_at=now))
+                return True
+        except Exception:
+            logger.exception("Rate limiter persistente indisponível; tentativa bloqueada.")
+            return False

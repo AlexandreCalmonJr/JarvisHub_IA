@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from apps.api.auth import Principal, require_permission
-from apps.api.deps import data_dir
+from apps.api.deps import data_dir, db_manager
+from services.database.models.learning import LearningProgress
 
 router = APIRouter(prefix="/api/v1/learning", tags=["learning"])
 _STORE = data_dir / "learning_progress.sqlite3"
@@ -46,6 +47,23 @@ async def get_learning_progress(principal: Principal = Depends(require_permissio
         raise HTTPException(
             status_code=403, detail="Aprendizagem disponível apenas para contas humanas."
         )
+    if getattr(db_manager, "is_postgresql", False) and db_manager._runtime is not None:
+        with db_manager._runtime.session_factory() as session:
+            record = session.get(LearningProgress, principal.subject_id)
+            if not record:
+                return {"completed_ids": [], "updated_at": None}
+            try:
+                completed = json.loads(record.completed_ids_json)
+            except (TypeError, ValueError):
+                completed = []
+            return {
+                "completed_ids": completed if isinstance(completed, list) else [],
+                "updated_at": (
+                    record.updated_at.isoformat()
+                    if hasattr(record.updated_at, "isoformat")
+                    else str(record.updated_at)
+                ),
+            }
     with _connect() as conn:
         row = conn.execute(
             "SELECT completed_ids_json, updated_at FROM learning_progress WHERE owner_user_id = ?",
@@ -77,6 +95,22 @@ async def save_learning_progress(
         )
     completed = sorted(set(payload.completed_ids))
     now = datetime.now(UTC).isoformat()
+    if getattr(db_manager, "is_postgresql", False) and db_manager._runtime is not None:
+        now_dt = datetime.now(UTC)
+        with db_manager._runtime.session_scope() as session:
+            record = session.get(LearningProgress, principal.subject_id)
+            if record:
+                record.completed_ids_json = json.dumps(completed)
+                record.updated_at = now_dt
+            else:
+                session.add(
+                    LearningProgress(
+                        owner_user_id=principal.subject_id,
+                        completed_ids_json=json.dumps(completed),
+                        updated_at=now_dt,
+                    )
+                )
+        return {"status": "saved", "completed_ids": completed, "updated_at": now_dt.isoformat()}
     with _connect() as conn:
         conn.execute(
             """INSERT INTO learning_progress(owner_user_id, completed_ids_json, updated_at)

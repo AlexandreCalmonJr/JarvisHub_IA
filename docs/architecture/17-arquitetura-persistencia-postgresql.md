@@ -1,7 +1,7 @@
 # Arquitetura proposta da persistência definitiva
 
 - Branch: `feature/postgresql-foundation`
-- Estado: desenho técnico inicial; sem ativação PostgreSQL.
+- Estado: fundação implementada em ambiente isolado; runtime ainda em SQLite, sem ativação PostgreSQL.
 - Princípio central: preservar módulos existentes por meio de contratos/compatibilidade, migrando implementação de persistência por domínio.
 
 ## 1. Decisão arquitetural proposta

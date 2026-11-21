@@ -11,6 +11,10 @@ def hash_secret(secret: str) -> str:
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()
 
 
+class UserAlreadyExistsError(ValueError):
+    """Conflito de unicidade do nome de utilizador (não é um erro de tipo)."""
+
+
 class AdminCredentialStore:
     """
     Guarda a credencial de administrador apenas como hash SHA-256 de um token
@@ -129,7 +133,9 @@ class UserCredentialStore:
             import sqlite3
 
             if isinstance(exc, sqlite3.IntegrityError):
-                raise ValueError("Já existe uma conta com esse nome de utilizador.") from exc
+                raise UserAlreadyExistsError(
+                    "Já existe uma conta com esse nome de utilizador."
+                ) from exc
             raise
         return self.get_user(username)
 
@@ -144,8 +150,7 @@ class UserCredentialStore:
         if not self._verify_password(password, row["password_hash"]):
             return None
         return {
-            key: row[key]
-            for key in ("username", "display_name", "role", "is_active", "created_at")
+            key: row[key] for key in ("username", "display_name", "role", "is_active", "created_at")
         }
 
     def get_user(self, username: str) -> dict | None:

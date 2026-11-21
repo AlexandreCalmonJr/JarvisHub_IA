@@ -7,6 +7,7 @@ import sqlite3
 
 import pytest
 
+from services.database.config import DatabaseConfigurationError
 from services.events.event_bus import Event, InProcessEventBus
 from services.persistence.dual_engine import PersistenceEngine
 from services.persistence.write_buffer import AsyncWriteBuffer
@@ -107,6 +108,30 @@ async def test_dual_engine_sqlite_mode(tmp_path):
         assert status["running"] is True
     finally:
         await engine.stop()
+
+
+def test_dual_engine_rejects_postgresql_instead_of_falling_back(tmp_path):
+    with pytest.raises(DatabaseConfigurationError, match="DatabaseRuntime"):
+        PersistenceEngine(
+            db_path=tmp_path / "unused.db",
+            database_url="postgresql://user:pass@localhost:5432/jarvis",
+        )
+
+
+def test_dual_engine_rejects_unknown_backend(tmp_path):
+    with pytest.raises(DatabaseConfigurationError, match="não suportado"):
+        PersistenceEngine(
+            db_path=tmp_path / "unused.db",
+            database_url="mysql://user:pass@localhost/jarvis",
+        )
+
+
+def test_dual_engine_accepts_an_explicit_sqlite_url(tmp_path):
+    db_file = tmp_path / "explicit.db"
+    engine = PersistenceEngine(database_url=f"sqlite:///{db_file.as_posix()}")
+
+    assert engine.engine_type == "sqlite"
+    assert engine.db_path == db_file
 
 
 @pytest.mark.asyncio

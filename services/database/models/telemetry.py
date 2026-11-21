@@ -1,4 +1,5 @@
 """SQLAlchemy models for privacy-scoped inference telemetry."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -55,9 +56,7 @@ class ModelSelectionDecision(Base):
     estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    __table_args__ = (
-        Index("ix_model_selection_owner_created", "owner_user_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_model_selection_owner_created", "owner_user_id", "created_at"),)
 
 
 class InferenceQualityFeedback(Base):

@@ -1,5 +1,15 @@
-import asyncio
 import os
+import sys
+
+if "PYTEST_CURRENT_TEST" not in os.environ and "pytest" not in sys.modules:
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
+
+import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 

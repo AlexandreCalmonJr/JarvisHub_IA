@@ -74,9 +74,7 @@ class WebhookNotificationService:
 
         merged = {**current, **incoming}
         if self.db:
-            self._settings.set(
-                "notification_webhooks", merged, owner_user_id=self._owner_user_id
-            )
+            self._settings.set("notification_webhooks", merged, owner_user_id=self._owner_user_id)
         return self.get_safe_config()
 
     async def send_notification(

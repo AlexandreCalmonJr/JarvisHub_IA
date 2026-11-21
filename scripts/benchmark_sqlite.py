@@ -15,6 +15,7 @@ import statistics
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import closing
 from pathlib import Path
 
 
@@ -42,23 +43,26 @@ def main() -> int:
     if min(args.reads, args.writes, args.readers, args.writers) < 1:
         parser.error("all workload and worker values must be >= 1")
 
-    with tempfile.TemporaryDirectory(prefix="jarvis-sqlite-bench-") as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="jarvis-sqlite-bench-", ignore_cleanup_errors=True
+    ) as tmp:
         db_path = Path(tmp) / "benchmark.sqlite3"
-        with connect(db_path) as conn:
+        with closing(connect(db_path)) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("CREATE TABLE samples (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
             conn.execute("INSERT INTO samples(payload) VALUES (?)", ("seed",))
+            conn.commit()
 
         def read_one(_: int) -> tuple[str, float]:
             started = time.perf_counter()
-            with connect(db_path) as conn:
+            with closing(connect(db_path)) as conn:
                 conn.execute("SELECT payload FROM samples ORDER BY id DESC LIMIT 1").fetchone()
             return ("read", time.perf_counter() - started)
 
         def write_one(index: int) -> tuple[str, float]:
             started = time.perf_counter()
-            with connect(db_path) as conn:
+            with closing(connect(db_path)) as conn:
                 conn.execute("INSERT INTO samples(payload) VALUES (?)", (f"payload-{index}",))
                 conn.commit()
             return ("write", time.perf_counter() - started)
@@ -77,7 +81,7 @@ def main() -> int:
                 else:
                     write_latencies.append(latency)
         elapsed = time.perf_counter() - started
-        with connect(db_path) as conn:
+        with closing(connect(db_path)) as conn:
             rows = conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0]
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
 

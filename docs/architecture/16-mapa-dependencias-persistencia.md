@@ -2,8 +2,8 @@
 
 - Branch: `feature/postgresql-foundation`
 - Escopo: leitura estática dos consumidores do `DatabaseManager`, telemetria e armazenamentos auxiliares.
-- Situação: mapeamento inicial consolidado; requer confirmação por testes e revisão de chamadas indiretas/reflection.
-- Regra: manter contratos públicos e comportamento atual até existir adapter validado.
+- Situação (2026-11-21): mapeamento consolidado. Todos os domínios de dados têm modelos SQLAlchemy e migrações Alembic (`0001_initial_schema` e `0002_remaining_domains`). O runtime PostgreSQL está ativo por configuração explícita e a importação foi validada; SQLite permanece como backend de desenvolvimento e rollback.
+- Regra: manter contratos públicos e o comportamento observável durante a transição.
 
 ## 1. Visão geral
 
@@ -15,14 +15,13 @@ O `DatabaseManager` é uma fachada síncrona de persistência usada por rotas Fa
 FastAPI routers ───────────────┐
 Agent runtimes ────────────────┤
 Orchestration ─────────────────┤
-SecurityCore ──────────────────┼──> DatabaseManager ──> sqlite3 ──> data/jarvis.db
-Knowledge/Hardware/Workspace ──┘           │
-                                           ├── project_memory.py (SQL direto)
-                                           └── webhook_service.py (SQL direto)
+SecurityCore ──────────────────┼──> DatabaseManager ──┬──> SQLite (sqlite3) ──> data/jarvis.db
+Knowledge/Hardware/Workspace ──┘                     └──> PostgreSQL (SQLAlchemy + psycopg)
+                                                          └──> PgCompatConnection / repositórios
 
-ModelManager ──> TelemetryRepository ──> SqliteTelemetryRepository ──> data/telemetry.db
-AuthService ──> IdentityRepository ────> SqliteIdentityRepository ─────> auth/users.sqlite3
-AuthService ──> AuthRateLimitRepository ─> SqliteAuthRateLimitRepository -> auth/rate_limits.sqlite3
+ModelManager ──> TelemetryRepository ──> SQLite ou PostgreSQL (runtime ativo)
+AuthService ──> IdentityRepository ────> SQLite ou SqlAlchemyIdentityRepository
+AuthService ──> AuthRateLimitRepository ─> SQLite ou SqlAlchemyAuthRateLimitRepository
 ```
 
 ## 2. Matriz método → consumidores
@@ -109,10 +108,10 @@ Estes módulos precisam ser migrados para repositórios/serviços próprios. Nã
 |---|---|---|---|
 | `services/memory/project_memory.py` | `ProjectMemoryRepository` → API pública do `DatabaseManager` (extraído nesta etapa) | Memória de projeto | Adapter PostgreSQL do `ProjectMemoryRepository` |
 | `services/proactive_operations/webhook_service.py` | `SettingsRepository` → API pública do `DatabaseManager` (extraído nesta etapa) | Persistência de webhooks/notificações | Adapter PostgreSQL de settings/webhooks |
-| `services/memory/backup_restore.py` | Métodos públicos `create_database_backup` e `restore_database_backup` (extraído nesta etapa) | Backup/restore SQLite legado | `BackupService` por backend |
-| `services/security_core/auth_store.py` | `sqlite3.connect` independente | Contas e hashes de senha | `UserIdentityRepository` |
-| `apps/api/auth.py` | `sqlite3.connect` independente | Rate limiting persistente | `AuthRateLimitRepository` |
-| `services/observability/telemetry_store.py` | SQL SQLite independente | Telemetria e feedback | `TelemetryRepository` |
+| `services/memory/backup_restore.py` | Métodos públicos `create_database_backup` e `restore_database_backup` | Backup/restore | SQLite nativo ou snapshot lógico PostgreSQL (`services/database/backup.py`) |
+| `services/security_core/auth_store.py` | Repositório injetado; `sqlite3` apenas no adapter SQLite | Contas e hashes de senha | `SqlAlchemyIdentityRepository` em PostgreSQL |
+| `apps/api/auth.py` | Repositório injetado pelo runtime | Rate limiting persistente | `SqlAlchemyAuthRateLimitRepository` em PostgreSQL |
+| `services/observability/telemetry_store.py` | Repositório injetado pelo runtime | Telemetria e feedback | `SqlAlchemyTelemetryRepository` em PostgreSQL |
 
 ## 4. Serviços e módulos que recebem o DatabaseManager
 
@@ -160,7 +159,7 @@ Definir explicitamente o escopo de `agent_configs`, `user_settings`, `inference_
 
 ## 7. Limites desta entrega
 
-Este mapa é uma análise estática do código da branch; não substitui testes dinâmicos. Não foram executados serviços, não houve acesso a bancos locais, não foram lidos dados reais, e nenhuma chamada de runtime foi redirecionada. A migração do banco ainda não começou.
+Este mapa nasceu como análise estática do código. As secções 1–6 descrevem o ponto de partida; as secções 8 em diante registam a implementação incremental. O estado atual, os testes e o procedimento de ativação estão em `14-plano-migracao-postgresql.md` e `18-importacao-dados-postgresql.md`.
 
 
 ## 8. Implementação incremental iniciada

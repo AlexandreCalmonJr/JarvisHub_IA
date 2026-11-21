@@ -336,7 +336,29 @@ class AuthService:
         self.auth_dir = Path(auth_dir)
         self.auth_dir.mkdir(parents=True, exist_ok=True)
         self.admin_store = AdminCredentialStore(self.auth_dir / "admin.json")
-        self.user_store = UserCredentialStore(self.auth_dir / "users.sqlite3")
+        self.rate_limit_path = self.auth_dir / "rate_limits.sqlite3"
+        from services.database.config import DatabaseSettings
+
+        db_settings = DatabaseSettings.from_env()
+        if db_settings.is_postgresql:
+            from services.database.repositories.auth_rate_limit import (
+                SqlAlchemyAuthRateLimitRepository,
+            )
+            from services.database.repositories.identity import (
+                SqlAlchemyIdentityRepository,
+            )
+            from services.database.session import get_database_runtime
+
+            runtime = get_database_runtime(db_settings, verify=True)
+            self.user_store = UserCredentialStore(
+                self.auth_dir / "users.sqlite3",
+                repository=SqlAlchemyIdentityRepository(runtime.session_factory),
+            )
+            self.rate_limit_repository = SqlAlchemyAuthRateLimitRepository(runtime.session_factory)
+        else:
+            self.user_store = UserCredentialStore(self.auth_dir / "users.sqlite3")
+            self.rate_limit_repository = SqliteAuthRateLimitRepository(self.rate_limit_path)
+
         self._ensure_initial_admin_user()
         self.admin_token_path = self.auth_dir / "admin_token.txt"
         self.bootstrap_token_path = self.auth_dir / "bootstrap_token.txt"
@@ -344,8 +366,6 @@ class AuthService:
         self._bootstrap_tokens: dict[str, float] = {}
         self._bootstrap_lock = threading.Lock()
         self._attempts: dict[str, list[float]] = {}
-        self.rate_limit_path = self.auth_dir / "rate_limits.sqlite3"
-        self.rate_limit_repository = SqliteAuthRateLimitRepository(self.rate_limit_path)
         self._ensure_admin_credential()
         # Emite um bootstrap token de uso único no arranque, entregue apenas por
         # arquivo restrito. O launcher lê o arquivo e troca-o por uma sessão.

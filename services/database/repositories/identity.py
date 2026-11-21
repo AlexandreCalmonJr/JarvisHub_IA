@@ -3,13 +3,14 @@
 Password hashing and authentication policy stay in UserCredentialStore. This
 module owns only account-row persistence and its transactional invariants.
 """
+
 from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, Any
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -177,9 +178,7 @@ class SqliteIdentityRepository:
                         "SELECT COUNT(*) FROM human_users WHERE role='admin' AND is_active=1"
                     ).fetchone()[0]
                     if active_admins <= 1:
-                        raise ValueError(
-                            "Não é permitido desativar o último administrador ativo."
-                        )
+                        raise ValueError("Não é permitido desativar o último administrador ativo.")
             cursor = conn.execute(
                 """
                 UPDATE human_users SET is_active = ?, updated_at = ?
@@ -246,41 +245,31 @@ class SqlAlchemyIdentityRepository:
                     )
                 )
         except IntegrityError as exc:
-            raise ValueError(
-                "Já existe uma conta com esse nome de utilizador."
-            ) from exc
+            raise ValueError("Já existe uma conta com esse nome de utilizador.") from exc
 
     def get_auth_record(self, username: str) -> dict[str, Any] | None:
         with self._session_factory() as session:
             user = session.scalar(
-                select(HumanUser).where(
-                    HumanUser.username_normalized == username.casefold()
-                )
+                select(HumanUser).where(HumanUser.username_normalized == username.casefold())
             )
             return self._public_record(user, include_password=True) if user else None
 
     def get_user(self, username: str) -> dict[str, Any] | None:
         with self._session_factory() as session:
             user = session.scalar(
-                select(HumanUser).where(
-                    HumanUser.username_normalized == username.casefold()
-                )
+                select(HumanUser).where(HumanUser.username_normalized == username.casefold())
             )
             return self._public_record(user) if user else None
 
     def list_users(self) -> list[dict[str, Any]]:
         with self._session_factory() as session:
-            users = session.scalars(
-                select(HumanUser).order_by(HumanUser.username_normalized)
-            ).all()
+            users = session.scalars(select(HumanUser).order_by(HumanUser.username_normalized)).all()
             return [self._public_record(user) for user in users]
 
     def set_password(self, username: str, password_hash: str, updated_at: str) -> bool:
         with self._session_factory.begin() as session:
             user = session.scalar(
-                select(HumanUser).where(
-                    HumanUser.username_normalized == username.casefold()
-                )
+                select(HumanUser).where(HumanUser.username_normalized == username.casefold())
             )
             if user is None:
                 return False
@@ -291,9 +280,7 @@ class SqlAlchemyIdentityRepository:
     def set_active(self, username: str, is_active: bool, updated_at: str) -> bool:
         with self._session_factory.begin() as session:
             user = session.scalar(
-                select(HumanUser).where(
-                    HumanUser.username_normalized == username.casefold()
-                )
+                select(HumanUser).where(HumanUser.username_normalized == username.casefold())
             )
             if user is None:
                 return False
@@ -307,9 +294,7 @@ class SqlAlchemyIdentityRepository:
                     .with_for_update()
                 ).all()
                 if len(active_admins) <= 1:
-                    raise ValueError(
-                        "Não é permitido desativar o último administrador ativo."
-                    )
+                    raise ValueError("Não é permitido desativar o último administrador ativo.")
 
             user.is_active = is_active
             user.updated_at = self._parse_datetime(updated_at)

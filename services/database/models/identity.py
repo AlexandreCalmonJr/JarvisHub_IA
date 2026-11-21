@@ -22,7 +22,5 @@ class HumanUser(Base):
 
     __table_args__ = (
         UniqueConstraint("username_normalized", name="uq_human_users_username_normalized"),
-        CheckConstraint(
-            "role IN ('admin', 'developer', 'auditor')", name="ck_human_users_role"
-        ),
+        CheckConstraint("role IN ('admin', 'developer', 'auditor')", name="ck_human_users_role"),
     )

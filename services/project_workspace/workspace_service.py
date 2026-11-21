@@ -89,12 +89,16 @@ class ProjectWorkspaceService:
                         mode=mode,
                     )
                 except Exception as exc:
-                    logger.debug("Falha ao registrar permissão para projeto reidratado %s: %s", pid, exc)
+                    logger.debug(
+                        "Falha ao registrar permissão para projeto reidratado %s: %s", pid, exc
+                    )
                 try:
                     self._inventories[pid] = self.scanner.scan(project_id=pid, root_path=p_path)
                     rehydrated += 1
                 except Exception as exc:
-                    logger.debug("Falha ao escanear inventário para projeto reidratado %s: %s", pid, exc)
+                    logger.debug(
+                        "Falha ao escanear inventário para projeto reidratado %s: %s", pid, exc
+                    )
         except Exception as exc:
             logger.warning("Falha ao reidratar projetos externos do banco de dados: %s", exc)
         return rehydrated
@@ -133,7 +137,9 @@ class ProjectWorkspaceService:
                         )
                         return p_path
             except Exception as exc:
-                logger.debug("Tentativa de reidratação sob demanda falhou para %s: %s", project_id, exc)
+                logger.debug(
+                    "Tentativa de reidratação sob demanda falhou para %s: %s", project_id, exc
+                )
 
         if hasattr(self.security_core, "permission_engine") and hasattr(
             self.security_core.permission_engine, "_project_allowlists"
