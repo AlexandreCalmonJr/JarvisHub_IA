@@ -75,3 +75,20 @@ def test_data_and_architecture_roles_reinforce_absence_of_artifacts():
     """Os papéis que mais alucinavam exigem a declaração explícita de lacunas."""
     for role in (AgentRole.QA_ENGINEER, AgentRole.SOFTWARE_ARCHITECT):
         assert "dados não foram fornecidos" in AGENT_PROFILES[role].system_prompt, role
+
+
+def test_empty_allowed_tools_is_restored_from_persisted_agent_config():
+    """Uma lista vazia explícita deve continuar vazia após restaurar a configuração."""
+    from apps.api.deps import _apply_saved_agent_config, agent_registry
+
+    profile = agent_registry.get_profile(AgentRole.QA_ENGINEER)
+    assert profile is not None
+    original_tools = list(profile.allowed_tools)
+    try:
+        _apply_saved_agent_config(
+            profile,
+            {"allowed_tools": [], "system_prompt": None, "preferred_model": None},
+        )
+        assert profile.allowed_tools == []
+    finally:
+        profile.allowed_tools = original_tools
