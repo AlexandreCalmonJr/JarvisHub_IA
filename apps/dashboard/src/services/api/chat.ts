@@ -1,5 +1,5 @@
 import { TaskStateResponse, ChatSessionItem } from '../../types';
-import { API_BASE, handleApiResponse } from './client';
+import { API_BASE, apiFetch, handleApiResponse } from './client';
 
 export async function sendChatMessage(
   prompt: string,
@@ -7,7 +7,7 @@ export async function sendChatMessage(
   sessionId?: string,
   model?: string
 ): Promise<TaskStateResponse> {
-  const res = await fetch(`${API_BASE}/chat`, {
+  const res = await apiFetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, project_id: projectId, session_id: sessionId, model }),
@@ -31,7 +31,7 @@ export async function streamChatMessage(
   signal?: AbortSignal,
   model?: string
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/chat/stream`, {
+  const res = await apiFetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, project_id: projectId, session_id: sessionId, model }),
@@ -74,12 +74,12 @@ export async function streamChatMessage(
 }
 
 export async function fetchTasks(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/tasks`);
+  const res = await apiFetch(`${API_BASE}/tasks`);
   return handleApiResponse<any[]>(res, 'Falha ao carregar tarefas.');
 }
 
 export async function fetchChatSessions(): Promise<ChatSessionItem[]> {
-  const res = await fetch(`${API_BASE}/chat/sessions`);
+  const res = await apiFetch(`${API_BASE}/chat/sessions`);
   return handleApiResponse<ChatSessionItem[]>(res, 'Falha ao carregar sessões de conversa.');
 }
 
@@ -98,7 +98,7 @@ export interface ChatSessionDetails {
 }
 
 export async function fetchChatSessionDetails(sessionId: string): Promise<ChatSessionDetails> {
-  const res = await fetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`);
+  const res = await apiFetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar a conversa.' }));
     throw new Error(errorData.detail || 'Falha ao carregar a conversa.');
@@ -112,7 +112,7 @@ export async function fetchChatSessionDetails(sessionId: string): Promise<ChatSe
 }
 
 export async function fetchChatSessionTasks(sessionId: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`);
+  const res = await apiFetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar a conversa.' }));
     throw new Error(errorData.detail || 'Falha ao carregar a conversa.');
@@ -122,23 +122,23 @@ export async function fetchChatSessionTasks(sessionId: string): Promise<any[]> {
 }
 
 export async function deleteChatSession(sessionId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
   return handleApiResponse<any>(res, 'Falha ao excluir a conversa.');
 }
 
 export async function searchChatHistory(query: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/chat/search?query=${encodeURIComponent(query)}`);
+  const res = await apiFetch(`${API_BASE}/chat/search?query=${encodeURIComponent(query)}`);
   return handleApiResponse<any[]>(res, 'Falha ao pesquisar o histórico de conversas.');
 }
 
 export async function exportChatSessionMarkdown(sessionId: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/export`);
+  const res = await apiFetch(`${API_BASE}/chat/sessions/${sessionId}/export`);
   if (!res.ok) throw new Error('Falha ao exportar sessão');
   return res.text();
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
-  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+  const res = await apiFetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao excluir tarefa.' }));
     throw new Error(errorData.detail || 'Falha ao excluir tarefa.');
@@ -148,7 +148,7 @@ export async function deleteTask(taskId: string): Promise<boolean> {
 }
 
 export async function purgeTasks(daysRetention: number = 30): Promise<{ purged_count: number; retention_days: number }> {
-  const res = await fetch(`${API_BASE}/tasks/purge?days_retention=${daysRetention}`, { method: 'POST' });
+  const res = await apiFetch(`${API_BASE}/tasks/purge?days_retention=${daysRetention}`, { method: 'POST' });
   return handleApiResponse<{ purged_count: number; retention_days: number }>(res, 'Falha ao limpar tarefas antigas.');
 }
 
@@ -156,7 +156,7 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
   const formData = new FormData();
   formData.append('file', blob, 'microphone.webm');
 
-  const res = await fetch(`${API_BASE}/voice/transcribe`, {
+  const res = await apiFetch(`${API_BASE}/voice/transcribe`, {
     method: 'POST',
     body: formData,
   });
