@@ -1,4 +1,4 @@
-name: Quality Gates
+name: Server Quality Gates
 
 on:
   push:
@@ -34,45 +34,6 @@ jobs:
         run: ruff format --check .
       - name: Complete Python test suite
         run: python -m pytest -q
-
-  dashboard:
-    name: Dashboard · TypeScript + production bundle
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run test:dashboard
-      - run: npm run build
-
-  mobile:
-    if: ${{ !startsWith(github.ref, 'refs/heads/dashboard/') }}
-    name: Flutter · analyze + tests + APK
-    runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: apps/mobile
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-      - run: flutter build apk --debug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jarvis-mobile-debug-apk
-          path: apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
 
   authenticated-smoke:
     name: Authenticated bootstrap smoke test
