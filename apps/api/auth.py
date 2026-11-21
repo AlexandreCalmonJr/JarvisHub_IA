@@ -173,8 +173,8 @@ PERMISSION_RULES: list[tuple[set[str], re.Pattern[str], str]] = [
     ({"GET"}, re.compile(r"^/api/v1/skills.*$"), "skills:read"),
     ({"POST", "DELETE"}, re.compile(r"^/api/v1/skills.*$"), "skills:write"),
     # Rotas privadas de modelo por especialista (escopo da conta)
-    ({ "GET" }, re.compile(r"^/api/v1/agent-routes$"), "agents:read"),
-    ({ "PUT", "DELETE" }, re.compile(r"^/api/v1/agent-routes/[^/]+$"), "agents:write"),
+    ({"GET"}, re.compile(r"^/api/v1/agent-routes$"), "agents:read"),
+    ({"PUT", "DELETE"}, re.compile(r"^/api/v1/agent-routes/[^/]+$"), "agents:write"),
     # Agentes e ferramentas
     (
         {"POST"},
@@ -318,6 +318,3 @@ def write_private_file(path: Path, content: str) -> Path:
                     f"{account}:F",
                 ],
                 check=False,
-                capture_output=True,
-                text=True,
-                timeout=10,
