@@ -29,7 +29,8 @@
     "test:openbot-shell": "node --test scripts/openbot-shell.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:api-session": "node --test scripts/api-session.test.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
