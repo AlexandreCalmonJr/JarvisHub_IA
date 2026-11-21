@@ -33,13 +33,14 @@ def test_agent_memory_crud(tmp_path):
     assert memories[0]["importance"] == 5
 
     # 4. Atualizar memória existente (upsert por UNIQUE(agent_role, category, key))
-    db.set_agent_memory(
+    updated_mem_id = db.set_agent_memory(
         agent_role="qa_engineer",
         category="test_preference",
         key="fixture_pattern",
         content="Sempre utilizar fixtures isoladas com tmp_path, mocks controlados e asserções explícitas.",
         importance=5,
     )
+    assert updated_mem_id == mem_id
     updated_memories = db.list_agent_memories(agent_role="qa_engineer", category="test_preference")
     assert len(updated_memories) == 1
     assert "asserções explícitas" in updated_memories[0]["content"]
