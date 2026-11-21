@@ -22,6 +22,8 @@ test('OpenBot Shell: PrimaryRail has 64px width, icons and pin toggles', () => {
   assert.ok(primaryRail.includes('togglePin'), 'PrimaryRail must support pinning/unpinning');
   assert.ok(primaryRail.includes('openbot-pin-popup'), 'PrimaryRail must contain pin popup menu');
   assert.ok(primaryRail.includes('JARVIS Hub Local'), 'PrimaryRail must have server indicator');
+  assert.ok(primaryRail.includes('#f97316'), 'PrimaryRail must preserve the Jarvis orange identity');
+  assert.ok(primaryRail.includes("fontWeight: 800"), 'PrimaryRail must render the J monogram');
 });
 
 test('OpenBot Shell: AgentDock has colorful 3D squircle avatars and add button', () => {
