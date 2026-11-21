@@ -141,6 +141,24 @@ async def update_agent_config_endpoint(
     if not target_profile:
         raise HTTPException(status_code=404, detail=f"Agente '{role}' não encontrado.")
 
+    # A persistência é o primeiro passo: nunca anunciar sucesso nem alterar o
+    # catálogo/runtime em memória se o SQLite não confirmar a gravação.
+    try:
+        db_manager.set_agent_config(
+            role=clean_role,
+            system_prompt=payload.system_prompt,
+            preferred_model=payload.preferred_model,
+            allowed_tools=payload.allowed_tools,
+            is_read_only=payload.is_read_only,
+            assigned_key_id=payload.assigned_key_id,
+        )
+    except Exception:
+        logger.warning("Falha ao persistir configuração de agente no SQLite.")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível guardar a configuração do agente.",
+        )
+
     if payload.system_prompt is not None:
         target_profile.system_prompt = payload.system_prompt.strip()
     if payload.preferred_model is not None and payload.preferred_model.strip():
@@ -154,8 +172,7 @@ async def update_agent_config_endpoint(
             payload.assigned_key_id.strip() if payload.assigned_key_id.strip() else None
         )
 
-    # Mantém o registo usado pelo runtime autónomo alinhado com o catálogo,
-    # para que a alteração produza efeito imediato sem reiniciar o backend.
+    # Só atualiza o runtime depois da persistência bem-sucedida.
     registry_profile = agent_registry.get_profile(target_profile.role)
     if registry_profile is not None:
         registry_profile.system_prompt = target_profile.system_prompt
@@ -163,19 +180,6 @@ async def update_agent_config_endpoint(
         registry_profile.allowed_tools = target_profile.allowed_tools
         registry_profile.is_read_only = target_profile.is_read_only
         registry_profile.assigned_key_id = target_profile.assigned_key_id
-
-    # Persiste customização no SQLite para sobreviver a reinicializações
-    try:
-        db_manager.set_agent_config(
-            role=clean_role,
-            system_prompt=payload.system_prompt,
-            preferred_model=payload.preferred_model,
-            allowed_tools=payload.allowed_tools,
-            is_read_only=payload.is_read_only,
-            assigned_key_id=payload.assigned_key_id,
-        )
-    except Exception as exc:
-        logger.warning("Falha ao persistir configuração de agente no SQLite: %s", exc)
 
     return {
         "status": "updated",
