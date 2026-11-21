@@ -138,22 +138,19 @@ export const PrimaryRail: React.FC<PrimaryRailProps> = ({
           width: '38px',
           height: '38px',
           borderRadius: '12px',
-          backgroundColor: '#c084fc',
+          background: 'linear-gradient(135deg, #f97316 0%, #c2410c 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: '16px',
           border: 'none',
           cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(192, 132, 252, 0.35)',
+          boxShadow: '0 4px 16px rgba(249, 115, 22, 0.35)',
           transition: 'transform 0.18s ease',
         }}
         title="JARVIS AI Hub"
       >
-        <div style={{ display: 'flex', gap: '3.5px', alignItems: 'center' }}>
-          <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#1e1b4b' }} />
-          <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#1e1b4b' }} />
-        </div>
+        <span style={{ color: '#ffffff', fontWeight: 800, fontSize: '1rem', lineHeight: 1 }}>J</span>
       </button>
 
       {/* Ícones de Navegação Principais */}
