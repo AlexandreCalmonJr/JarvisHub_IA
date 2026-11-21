@@ -108,3 +108,8 @@ Somente após paridade funcional, retirar dependências do Express e confirmar q
 ## Estado desta documentação
 
 Este é o inventário inicial baseado na árvore de arquivos e em amostras dos serviços. Ainda não representa auditoria endpoint-a-endpoint nem execução de testes. Os próximos commits devem transformar a matriz em evidência verificável, sem presumir compatibilidade.
+
+
+## Plano definitivo de migração
+
+O inventário operacional e os gates de implementação/testes estão consolidados em [`definitive-migration-plan.md`](./definitive-migration-plan.md). Esse documento organiza o escopo em oito frentes: Agentes; Modelos; Brain + Brain Server; Integrações; Workflows + Orquestração; IDE + Sentinel; Companion; Android. Também mantém Creative Media Studio, Spreadsheet Studio, App Builder, GitHub Importer, Learning Center e navegação no fechamento global, para que nenhuma capacidade identificada seja perdida. Cada frente exige contrato primeiro, testes por camada, homologação e rollback antes de avançar.
