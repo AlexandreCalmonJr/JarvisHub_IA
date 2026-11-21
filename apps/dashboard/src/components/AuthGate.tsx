@@ -2,6 +2,7 @@ import React, { FormEvent, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { clearActiveAccountScope, setActiveAccountScope } from '../services/accountScope';
 import { getUserRoleLabel } from '../types';
+import { apiFetch } from '../services/api/client';
 
 type LoginMode = 'account' | 'admin' | 'bootstrap';
 
@@ -40,7 +41,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 
   const verifySession = async () => {
     try {
-      const response = await fetch('/api/v1/auth/me', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+      const response = await apiFetch('/api/v1/auth/me', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
       if (!response.ok) {
         clearActiveAccountScope();
         setStatus('anonymous');
@@ -92,7 +93,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
       const endpoint = mode === 'account' ? '/api/v1/auth/password-login'
         : mode === 'bootstrap' ? '/api/v1/auth/bootstrap/exchange' : '/api/v1/auth/login';
       const body = mode === 'account' ? { username: username.trim(), password } : { token: token.trim() };
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(body),
@@ -107,7 +108,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   };
 
   const logout = async () => {
-    try { await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
+    try { await apiFetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
     finally {
       clearActiveAccountScope();
       setSession(null);
@@ -116,7 +117,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   };
 
   const loadUsers = async () => {
-    const response = await fetch('/api/v1/auth/users', { credentials: 'same-origin' });
+    const response = await apiFetch('/api/v1/auth/users', { credentials: 'same-origin' });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.detail || 'Não foi possível carregar os utilizadores.');
     setUsers(payload.users || []);
@@ -132,7 +133,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     event.preventDefault();
     setAccessBusy(true); setAccessMessage('');
     try {
-      const response = await fetch('/api/v1/auth/users', {
+      const response = await apiFetch('/api/v1/auth/users', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser),
@@ -162,7 +163,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     }
     setAccessBusy(true); setAccessMessage('');
     try {
-      const response = await fetch(`/api/v1/auth/users/${encodeURIComponent(resetTarget)}/password`, {
+      const response = await apiFetch(`/api/v1/auth/users/${encodeURIComponent(resetTarget)}/password`, {
         method: 'PUT', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: resetPassword }),
@@ -182,7 +183,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     setDeviceBusy(true);
     setDeviceError('');
     try {
-      const response = await fetch('/api/v1/mobile/pair', {
+      const response = await apiFetch('/api/v1/mobile/pair', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -220,7 +221,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const toggleUser = async (user: UserRecord) => {
     setAccessBusy(true); setAccessMessage('');
     try {
-      const response = await fetch(`/api/v1/auth/users/${encodeURIComponent(user.username)}/status`, {
+      const response = await apiFetch(`/api/v1/auth/users/${encodeURIComponent(user.username)}/status`, {
         method: 'PATCH', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !user.is_active }),
