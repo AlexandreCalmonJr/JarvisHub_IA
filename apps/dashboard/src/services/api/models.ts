@@ -1,13 +1,13 @@
-import { API_BASE } from './client';
+import { API_BASE, apiFetch } from './client';
 
 export async function fetchModels(): Promise<any> {
-  const res = await fetch(`${API_BASE}/models`);
+  const res = await apiFetch(`${API_BASE}/models`);
   if (!res.ok) throw new Error('Falha ao carregar modelos');
   return res.json();
 }
 
 export async function fetchHybridConfig(): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/hybrid-config`);
+  const res = await apiFetch(`${API_BASE}/models/hybrid-config`);
   if (!res.ok) throw new Error('Falha ao carregar configuração do gateway híbrido');
   return res.json();
 }
@@ -20,7 +20,7 @@ export async function saveHybridConfig(config: {
   default_model?: string;
   max_budget_usd: number;
 }): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/hybrid-config`, {
+  const res = await apiFetch(`${API_BASE}/models/hybrid-config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -38,7 +38,7 @@ export async function testHybridConnection(payload: {
   base_url?: string;
   default_model?: string;
 }): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/hybrid-config/test`, {
+  const res = await apiFetch(`${API_BASE}/models/hybrid-config/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -51,19 +51,19 @@ export async function testHybridConnection(payload: {
 }
 
 export async function fetchCuratedHuggingFaceModels(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/models/huggingface/curated`);
+  const res = await apiFetch(`${API_BASE}/models/huggingface/curated`);
   if (!res.ok) throw new Error('Falha ao carregar modelos curados do Hugging Face.');
   return res.json();
 }
 
 export async function searchHuggingFaceModels(q: string = '', limit: number = 10): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/models/huggingface/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+  const res = await apiFetch(`${API_BASE}/models/huggingface/search?q=${encodeURIComponent(q)}&limit=${limit}`);
   if (!res.ok) throw new Error('Falha ao pesquisar modelos no Hugging Face.');
   return res.json();
 }
 
 export async function fetchAgentModelRecommendations(): Promise<Record<string, { model: string; reason: string }>> {
-  const res = await fetch(`${API_BASE}/models/agent-recommendations`);
+  const res = await apiFetch(`${API_BASE}/models/agent-recommendations`);
   if (!res.ok) throw new Error('Falha ao carregar recomendações de modelos dos agentes.');
   return res.json();
 }
@@ -84,7 +84,7 @@ export interface KeyVaultItem {
 }
 
 export async function fetchKeyVault(): Promise<KeyVaultItem[]> {
-  const res = await fetch(`${API_BASE}/models/vault`);
+  const res = await apiFetch(`${API_BASE}/models/vault`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Falha ao carregar o KeyVault.' }));
     throw new Error(err.detail || 'Falha ao carregar o KeyVault.');
@@ -106,7 +106,7 @@ export async function registerVaultKey(payload: {
   is_default?: boolean;
   scope?: 'account' | 'global';
 }): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/vault`, {
+  const res = await apiFetch(`${API_BASE}/models/vault`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -119,7 +119,7 @@ export async function registerVaultKey(payload: {
 }
 
 export async function deleteVaultKey(key_id: string, scope: 'account' | 'global' = 'account'): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}?scope=${scope}`, {
+  const res = await apiFetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}?scope=${scope}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -130,7 +130,7 @@ export async function deleteVaultKey(key_id: string, scope: 'account' | 'global'
 }
 
 export async function setDefaultVaultKey(key_id: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}/default`, {
+  const res = await apiFetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}/default`, {
     method: 'POST',
   });
   if (!res.ok) {
@@ -141,7 +141,7 @@ export async function setDefaultVaultKey(key_id: string): Promise<any> {
 }
 
 export async function testVaultKey(key_id: string, scope: 'account' | 'global' = 'account'): Promise<any> {
-  const res = await fetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}/test?scope=${scope}`, {
+  const res = await apiFetch(`${API_BASE}/models/vault/${encodeURIComponent(key_id)}/test?scope=${scope}`, {
     method: 'POST',
   });
   if (!res.ok) {
