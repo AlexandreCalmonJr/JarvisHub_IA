@@ -511,6 +511,8 @@ async def get_chat_session_endpoint(session_id: str, principal: Principal = Depe
     tasks = db_manager.get_session_tasks(session_id, owner_user_id=owner)
     messages = db_manager.list_chat_messages(session_id, limit=400, owner_user_id=owner)
     if not tasks and not messages:
+        if session_id.startswith("agent_") or session_id == "default":
+            return {"session_id": session_id, "tasks": [], "messages": []}
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     return {"session_id": session_id, "tasks": tasks, "messages": messages}
 
@@ -522,6 +524,8 @@ async def list_session_messages_endpoint(
     owner = _private_owner(principal)
     messages = db_manager.list_chat_messages(session_id, limit=limit, owner_user_id=owner)
     if not messages:
+        if session_id.startswith("agent_") or session_id == "default":
+            return {"session_id": session_id, "messages": []}
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     return {"session_id": session_id, "messages": messages}
 

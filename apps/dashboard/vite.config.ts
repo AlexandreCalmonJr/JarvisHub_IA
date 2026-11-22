@@ -59,6 +59,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         navigateFallbackDenylist: [/^\/api/, /^\/ws/],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
@@ -125,6 +128,38 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api/v1/android-app': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/workflows': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/office': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/devices': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/companion': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/push': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/ide': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/github': {
+        target: brainProxyTarget,
+        changeOrigin: true,
+      },
+      '/api/v1/models/hardware': {
         target: brainProxyTarget,
         changeOrigin: true,
       },

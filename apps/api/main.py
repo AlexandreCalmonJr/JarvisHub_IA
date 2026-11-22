@@ -37,6 +37,7 @@ from apps.api.deps import (
 from apps.api.routers import (
     agents,
     auth,
+    brain_proxy,
     chat,
     coding,
     data_pipeline,
@@ -199,6 +200,39 @@ app.include_router(teammates.router)
 app.include_router(symbols.router)
 app.include_router(terminal.router)
 app.include_router(learning.router)
+app.include_router(brain_proxy.router)
+
+# Rotas de fallback para ativos estáticos raiz (PWA e Mascotes)
+@app.get("/src/assets/images/{filename:path}", include_in_schema=False)
+async def serve_mascot_image(filename: str):
+    candidates = [
+        Path("apps/dashboard/dist/src/assets/images") / filename,
+        Path("apps/dashboard/src/assets/images") / filename,
+        Path("apps/dashboard/public/assets/images") / filename,
+        Path("apps/dashboard/dist/assets/images") / filename,
+    ]
+    for c in candidates:
+        if c.exists() and c.is_file():
+            media = "image/jpeg" if c.suffix in (".jpg", ".jpeg") else "image/svg+xml"
+            return FileResponse(c, media_type=media)
+    return Response(
+        content='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="28" fill="#12161f"/><circle cx="50" cy="50" r="24" fill="#f97316"/></svg>',
+        media_type="image/svg+xml",
+        status_code=200,
+    )
+
+
+@app.get("/pwa-192x192.png", include_in_schema=False)
+async def serve_pwa_192():
+    for candidate in [
+        Path("apps/dashboard/dist/pwa-192x192.png"),
+        Path("apps/dashboard/public/pwa-192x192.png"),
+        Path("apps/dashboard/public/public/pwa-192x192.png"),
+        Path("apps/dashboard/dist/public/pwa-192x192.png"),
+    ]:
+        if candidate.exists() and candidate.is_file():
+            return FileResponse(candidate, media_type="image/png")
+    return Response(status_code=404)
 
 # Monta aplicativo mobile Flutter (PWA) se compilado
 mobile_dist = Path("apps/mobile/build/web")
