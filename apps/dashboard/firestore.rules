@@ -1,0 +1,458 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net — default deny everything not explicitly permitted
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Hardened Global Primitives (Eight Pillars)
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'Alexandrecalmonjunior@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isHouseholdMember(householdId) {
+      return isVerifiedUser() &&
+        exists(/databases/$(database)/documents/households/$(householdId)) &&
+        exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid));
+    }
+
+    function isHouseholdOwner(householdId) {
+      return isVerifiedUser() &&
+        exists(/databases/$(database)/documents/households/$(householdId)) &&
+        get(/databases/$(database)/documents/households/$(householdId)).data.ownerId == request.auth.uid;
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Anti-Update-Gap)
+    // =========================================================================
+    function isValidUserIdentity(data, userId) {
+      return data.keys().hasAll([
+        'ownerId',
+        'displayName',
+        'assistantName',
+        'experienceMode',
+        'avatarIcon',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'ownerId',
+        'displayName',
+        'assistantName',
+        'assistantGreeting',
+        'experienceMode',
+        'avatarIcon',
+        'accentTheme',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.ownerId is string
+      && data.ownerId == userId
+      && data.ownerId == request.auth.uid
+      && isValidId(data.ownerId)
+      && data.displayName is string
+      && data.displayName.size() >= 1
+      && data.displayName.size() <= 80
+      && data.assistantName is string
+      && data.assistantName.size() >= 1
+      && data.assistantName.size() <= 40
+      && (!('assistantGreeting' in data) || (data.assistantGreeting is string && data.assistantGreeting.size() <= 160))
+      && data.experienceMode is string
+      && data.experienceMode in ['simple', 'engineering']
+      && data.avatarIcon is string
+      && data.avatarIcon.size() >= 1
+      && data.avatarIcon.size() <= 16
+      && (!('accentTheme' in data) || (data.accentTheme is string && data.accentTheme in ['orange', 'blue', 'purple', 'emerald']))
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateProfile(data, userId) {
+      return data.keys().hasAll(['ownerId', 'createdAt', 'updatedAt'])
+      && data.keys().hasOnly([
+        'ownerId',
+        'email',
+        'roleTitle',
+        'seniorityLevel',
+        'responseStyle',
+        'userBackground',
+        'responseGuidelines',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.ownerId is string
+      && data.ownerId == userId
+      && data.ownerId == request.auth.uid
+      && isValidId(data.ownerId)
+      && (!('email' in data) || (data.email is string && data.email.size() <= 160))
+      && (!('roleTitle' in data) || (data.roleTitle is string && data.roleTitle.size() <= 100))
+      && (!('seniorityLevel' in data) || (data.seniorityLevel is string && data.seniorityLevel in ['junior', 'mid', 'senior', 'architect']))
+      && (!('responseStyle' in data) || (data.responseStyle is string && data.responseStyle in ['concise', 'detailed', 'educational']))
+      && (!('userBackground' in data) || (data.userBackground is string && data.userBackground.size() <= 2000))
+      && (!('responseGuidelines' in data) || (data.responseGuidelines is string && data.responseGuidelines.size() <= 2000))
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidHousehold(data) {
+      return data.keys().hasAll(['ownerId', 'name', 'createdAt', 'updatedAt'])
+      && data.keys().hasOnly(['ownerId', 'name', 'createdAt', 'updatedAt'])
+      && data.ownerId is string
+      && data.ownerId == request.auth.uid
+      && isValidId(data.ownerId)
+      && data.name is string
+      && data.name.size() >= 1
+      && data.name.size() <= 80
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidHouseholdMember(data, householdId, memberId) {
+      return data.keys().hasAll([
+        'ownerId',
+        'householdId',
+        'memberRole',
+        'assistantName',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'ownerId',
+        'householdId',
+        'memberRole',
+        'assistantName',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.ownerId is string
+      && data.ownerId == memberId
+      && isValidId(data.ownerId)
+      && data.householdId is string
+      && data.householdId == householdId
+      && isValidId(data.householdId)
+      && data.memberRole is string
+      && data.memberRole in ['owner', 'member']
+      && data.assistantName is string
+      && data.assistantName.size() >= 1
+      && data.assistantName.size() <= 40
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidHouseholdMemory(data, householdId) {
+      return data.keys().hasAll([
+        'ownerId',
+        'householdId',
+        'authorAssistant',
+        'title',
+        'content',
+        'category',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'ownerId',
+        'householdId',
+        'authorAssistant',
+        'title',
+        'content',
+        'category',
+        'status',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.ownerId is string
+      && data.ownerId == request.auth.uid
+      && isValidId(data.ownerId)
+      && data.householdId is string
+      && data.householdId == householdId
+      && isValidId(data.householdId)
+      && data.authorAssistant is string
+      && data.authorAssistant.size() >= 1
+      && data.authorAssistant.size() <= 40
+      && data.title is string
+      && data.title.size() >= 1
+      && data.title.size() <= 120
+      && data.content is string
+      && data.content.size() >= 1
+      && data.content.size() <= 4000
+      && data.category is string
+      && data.category in ['family', 'studies', 'tasks', 'research', 'notes']
+      && data.status is string
+      && data.status in ['active', 'archived']
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data, adminId) {
+      return data.keys().hasAll(['ownerId', 'grantedAt'])
+      && data.keys().hasOnly(['ownerId', 'grantedAt'])
+      && data.ownerId is string
+      && data.ownerId == adminId
+      && isValidId(data.ownerId)
+      && data.grantedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming(), adminId)
+        && incoming().grantedAt == request.time
+        && isAdmin();
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(adminId) && isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserIdentity(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserIdentity(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName',
+              'assistantName',
+              'assistantGreeting',
+              'experienceMode',
+              'avatarIcon',
+              'accentTheme',
+              'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin());
+
+      // Split Collection for PII Isolation
+      match /private/{docId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && isOwner(userId)
+          && isValidUserPrivateProfile(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && isValidUserPrivateProfile(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'email',
+                'roleTitle',
+                'seniorityLevel',
+                'responseStyle',
+                'userBackground',
+                'responseGuidelines',
+                'updatedAt'
+              ])
+            )
+          );
+
+        allow delete: if isVerifiedUser() && isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    match /households/{householdId} {
+      allow get: if isVerifiedUser()
+        && isValidId(householdId)
+        && (existing().ownerId == request.auth.uid || isHouseholdMember(householdId) || isAdmin());
+      allow list: if isVerifiedUser() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(householdId)
+        && isValidHousehold(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(householdId)
+        && isValidHousehold(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().ownerId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isVerifiedUser()
+        && isValidId(householdId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+
+      match /members/{memberId} {
+        allow get: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memberId)
+          && (isOwner(memberId) || isHouseholdMember(householdId) || isAdmin());
+        allow list: if isVerifiedUser()
+          && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+        allow create: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memberId)
+          && isValidHouseholdMember(incoming(), householdId, memberId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/households/$(householdId))
+          && (
+            isAdmin() ||
+            (isHouseholdOwner(householdId) && incoming().memberRole in ['owner', 'member'])
+          );
+
+        allow update: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memberId)
+          && isValidHouseholdMember(incoming(), householdId, memberId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().householdId == existing().householdId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin() ||
+            (
+              isOwner(memberId) &&
+              isHouseholdMember(householdId) &&
+              incoming().memberRole == existing().memberRole &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['assistantName', 'updatedAt'])
+            ) ||
+            (
+              isHouseholdOwner(householdId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['memberRole', 'assistantName', 'updatedAt'])
+            )
+          );
+
+        allow delete: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memberId)
+          && (isOwner(memberId) || isHouseholdOwner(householdId) || isAdmin());
+      }
+
+      match /shared_memories/{memoryId} {
+        allow get: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memoryId)
+          && (isHouseholdMember(householdId) || isAdmin());
+        allow list: if isVerifiedUser()
+          && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+        allow create: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memoryId)
+          && isValidHouseholdMemory(incoming(), householdId)
+          && incoming().status == 'active'
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/households/$(householdId))
+          && isHouseholdMember(householdId);
+
+        allow update: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memoryId)
+          && isValidHouseholdMemory(incoming(), householdId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().householdId == existing().householdId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin() ||
+            (
+              existing().status != 'archived' &&
+              existing().ownerId == request.auth.uid &&
+              isHouseholdMember(householdId) &&
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'title',
+                  'content',
+                  'category',
+                  'authorAssistant',
+                  'updatedAt'
+                ]) ||
+                (
+                  incoming().status == 'archived' &&
+                  incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                )
+              )
+            )
+          );
+
+        allow delete: if isVerifiedUser()
+          && isValidId(householdId)
+          && isValidId(memoryId)
+          && (
+            isAdmin() ||
+            (existing().ownerId == request.auth.uid && isHouseholdMember(householdId))
+          );
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JARVIS AI Hub">
+  <defs>
+    <radialGradient id="jarvisGlow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#f97316" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#0b0d12" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="jarvisRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="#0b0d12"/>
+  <rect width="512" height="512" rx="108" fill="url(#jarvisGlow)"/>
+  <circle cx="256" cy="256" r="158" fill="none" stroke="url(#jarvisRing)" stroke-width="44" stroke-linecap="round" stroke-dasharray="860 140" transform="rotate(-70 256 256)"/>
+  <circle cx="256" cy="256" r="66" fill="#fb923c"/>
+  <circle cx="256" cy="256" r="34" fill="#fff7ed"/>
+</svg>

@@ -1,34 +1,93 @@
-import { AgentInfo } from '../../types';
+import { AgentInfo, AgentMascotMeta, AgentVersionSnapshot } from '../../types';
 import { API_BASE, handleApiResponse } from './client';
+import { apiFetch } from '../sessionTransport';
 
 export async function fetchAgents(): Promise<AgentInfo[]> {
-  const res = await fetch(`${API_BASE}/agents`);
+  const res = await apiFetch(`${API_BASE}/agents`);
   return handleApiResponse<AgentInfo[]>(res, 'Falha ao carregar o catálogo de agentes.');
 }
 
 export async function fetchAgent(role: string): Promise<AgentInfo> {
-  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}`);
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}`);
   if (!res.ok) throw new Error('Falha ao carregar especialista');
   return res.json();
 }
 
-export async function updateAgentConfig(
-  role: string,
-  config: {
-    system_prompt?: string;
-    preferred_model?: string;
-    allowed_tools?: string[];
-    is_read_only?: boolean;
-    assigned_key_id?: string;
-  }
-): Promise<any> {
-  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}/config`, {
+export interface AgentUpsertPayload {
+  role?: string;
+  name?: string;
+  proper_name?: string;
+  handle?: string;
+  category?: string;
+  mission?: string;
+  system_prompt?: string;
+  preferred_model?: string;
+  routing_policy?: 'auto_hybrid' | 'local_only' | 'online_only';
+  autonomy_level?: 'read_only' | 'ask_approval' | 'autonomous';
+  allowed_tools?: string[];
+  is_read_only?: boolean;
+  strict_focus?: boolean;
+  strict_topic?: string;
+  delegation_targets?: string[];
+  assigned_key_id?: string;
+  mascot?: AgentMascotMeta;
+  template_id?: string;
+  installed_skills?: string[];
+  change_summary?: string;
+}
+
+export async function createAgent(payload: AgentUpsertPayload): Promise<AgentInfo> {
+  const res = await apiFetch(`${API_BASE}/agents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return handleApiResponse<AgentInfo>(res, 'Falha ao criar especialista.');
+}
+
+export async function updateAgentConfig(role: string, config: AgentUpsertPayload): Promise<AgentInfo> {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
-  if (!res.ok) throw new Error('Falha ao atualizar configuração do agente');
-  return res.json();
+  return handleApiResponse<AgentInfo>(res, 'Falha ao atualizar configuração do agente.');
+}
+
+export async function deleteAgent(role: string): Promise<{ deleted: boolean }> {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}`, {
+    method: 'DELETE',
+  });
+  return handleApiResponse<{ deleted: boolean }>(res, 'Falha ao remover especialista.');
+}
+
+export async function updateAgentSkills(
+  role: string,
+  skillIds: string[]
+): Promise<{ agent: AgentInfo; attached_skill_ids: string[] }> {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/skills`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skill_ids: skillIds }),
+  });
+  return handleApiResponse<{ agent: AgentInfo; attached_skill_ids: string[] }>(
+    res,
+    'Falha ao atualizar habilidades vinculadas ao agente.'
+  );
+}
+
+export async function fetchAgentVersions(role: string): Promise<AgentVersionSnapshot[]> {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/versions`);
+  return handleApiResponse<AgentVersionSnapshot[]>(res, 'Falha ao carregar histórico de versões.');
+}
+
+export async function rollbackAgentVersion(role: string, version: number): Promise<AgentInfo> {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/rollback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+  });
+  return handleApiResponse<AgentInfo>(res, 'Falha ao reverter versão do especialista.');
 }
 
 export interface AgentRouteAssignment {
@@ -42,7 +101,7 @@ export interface AgentRouteAssignment {
 }
 
 export async function fetchAgentRoutes(): Promise<AgentRouteAssignment[]> {
-  const res = await fetch(`${API_BASE}/agent-routes`);
+  const res = await apiFetch(`${API_BASE}/agent-routes`);
   const data = await handleApiResponse<{ routes: AgentRouteAssignment[] }>(
     res,
     'Falha ao carregar as rotas dos especialistas.'
@@ -55,7 +114,7 @@ export async function setAgentRoute(
   keyId: string,
   model?: string
 ): Promise<any> {
-  const res = await fetch(`${API_BASE}/agent-routes/${encodeURIComponent(role)}`, {
+  const res = await apiFetch(`${API_BASE}/agent-routes/${encodeURIComponent(role)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key_id: keyId, model: model || undefined }),
@@ -68,7 +127,7 @@ export async function setAgentRoute(
 }
 
 export async function deleteAgentRoute(role: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/agent-routes/${encodeURIComponent(role)}`, {
+  const res = await apiFetch(`${API_BASE}/agent-routes/${encodeURIComponent(role)}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -79,7 +138,7 @@ export async function deleteAgentRoute(role: string): Promise<any> {
 }
 
 export async function fetchAgentMemories(role: string): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}/memories`);
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/memories`);
   return handleApiResponse<any[]>(res, 'Falha ao carregar memórias do agente.');
 }
 
@@ -87,7 +146,7 @@ export async function saveAgentMemory(
   role: string,
   memory: { category: string; key: string; content: string; context?: string; importance?: number }
 ): Promise<any> {
-  const res = await fetch(`${API_BASE}/agents/${role}/memories`, {
+  const res = await apiFetch(`${API_BASE}/agents/${role}/memories`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(memory),
@@ -97,7 +156,7 @@ export async function saveAgentMemory(
 }
 
 export async function deleteAgentMemory(role: string, memoryId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}/memories/${encodeURIComponent(memoryId)}`, {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/memories/${encodeURIComponent(memoryId)}`, {
     method: 'DELETE',
   });
   if (!res.ok) throw new Error('Falha ao remover memória do agente');
@@ -109,7 +168,7 @@ export async function runAgentPlayground(
   prompt: string,
   projectId?: string
 ): Promise<{ agent_role: string; agent_name: string; response: string; model_used: string; tokens_prompt: number; tokens_completion: number }> {
-  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}/playground`, {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/playground`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, project_id: projectId }),
@@ -122,7 +181,7 @@ export async function runAgentPlayground(
 }
 
 export async function fetchTools(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/tools`);
+  const res = await apiFetch(`${API_BASE}/tools`);
   return handleApiResponse<any[]>(res, 'Falha ao carregar ferramentas disponíveis.');
 }
 
@@ -138,7 +197,7 @@ export async function fetchAgentHistory(
   const url = sessionId
     ? `${API_BASE}/agents/${encodeURIComponent(role)}/history?session_id=${encodeURIComponent(sessionId)}`
     : `${API_BASE}/agents/${encodeURIComponent(role)}/history`;
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar histórico do especialista.' }));
     throw new Error(errorData.detail || 'Falha ao carregar histórico do especialista.');
@@ -150,7 +209,7 @@ export async function runAutonomousAgentTask(
   role: string,
   payload: { prompt: string; project_id?: string; session_id?: string; mode?: string }
 ): Promise<any> {
-  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}/task`, {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -168,7 +227,7 @@ export async function runAutonomousAgentStream(
   onEvent: (event: AutonomousAgentEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(role)}/stream`, {
+  const res = await apiFetch(`${API_BASE}/agents/${encodeURIComponent(role)}/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

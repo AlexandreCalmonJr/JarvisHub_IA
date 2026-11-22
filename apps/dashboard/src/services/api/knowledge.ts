@@ -1,7 +1,8 @@
 import { API_BASE, handleApiResponse } from './client';
+import { apiFetch } from '../sessionTransport';
 
 export async function fetchKnowledgeDocuments(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/knowledge/documents`, { credentials: 'include' });
+  const res = await apiFetch(`${API_BASE}/knowledge/documents`, { credentials: 'include' });
   return handleApiResponse<any[]>(res, 'Falha ao carregar documentos do Knowledge Vault.');
 }
 
@@ -9,7 +10,7 @@ export async function uploadKnowledgeDocument(file: File, category: string = 'ge
   const formData = new FormData();
   formData.append('file', file);
   formData.append('category', category);
-  const res = await fetch(`${API_BASE}/knowledge/upload`, {
+  const res = await apiFetch(`${API_BASE}/knowledge/upload`, {
     method: 'POST',
     credentials: 'include',
     body: formData,
@@ -22,7 +23,7 @@ export async function uploadKnowledgeDocument(file: File, category: string = 'ge
 }
 
 export async function indexKnowledgeFolder(folderPath: string, category: string = 'projeto'): Promise<any> {
-  const res = await fetch(`${API_BASE}/knowledge/index-folder`, {
+  const res = await apiFetch(`${API_BASE}/knowledge/index-folder`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -32,7 +33,7 @@ export async function indexKnowledgeFolder(folderPath: string, category: string 
 }
 
 export async function indexKnowledgeText(docName: string, content: string, category: string = 'anotacoes'): Promise<any> {
-  const res = await fetch(`${API_BASE}/knowledge/index-text`, {
+  const res = await apiFetch(`${API_BASE}/knowledge/index-text`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -42,7 +43,7 @@ export async function indexKnowledgeText(docName: string, content: string, categ
 }
 
 export async function searchKnowledge(query: string, limit: number = 5): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/knowledge/search`, {
+  const res = await apiFetch(`${API_BASE}/knowledge/search`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -52,7 +53,7 @@ export async function searchKnowledge(query: string, limit: number = 5): Promise
 }
 
 export async function deleteKnowledgeDocument(docName: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/knowledge/documents/${encodeURIComponent(docName)}`, {
+  const res = await apiFetch(`${API_BASE}/knowledge/documents/${encodeURIComponent(docName)}`, {
     method: 'DELETE',
     credentials: 'include',
   });

@@ -1,109 +1,181 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { AuthGate } from './components/AuthGate';
-import { PrimaryRail } from './components/navigation/PrimaryRail';
-import { AgentDock } from './components/navigation/AgentDock';
-import { DynamicIsland } from './components/navigation/DynamicIsland';
+import { AuthGate } from './features/auth/AuthGate';
+import { PrimaryRail } from './shared/navigation/PrimaryRail';
+import { AgentDock } from './shared/navigation/AgentDock';
+import { DynamicIsland } from './shared/navigation/DynamicIsland';
 import { SystemHealth, ApprovalRequestItem } from './types';
 import { fetchHealth, fetchApprovals } from './api';
 import { fetchResources, SystemResourceUsage } from './services/api/system';
 import {
-  Menu,
   ShieldAlert,
   Search,
-  ChevronLeft,
-  ChevronRight,
-  Square,
-  MessageSquare,
-  Code2,
   PanelLeft,
+  PanelRight,
   CircleHelp,
+  Plus,
+  Mic,
+  Radio,
+  LayoutDashboard,
+  MessageSquare,
+  Smartphone,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
-import { SetupWizardModal } from './components/common/SetupWizardModal';
-import { InitialPasswordChangeModal } from './components/common/InitialPasswordChangeModal';
-import { GuidedTour } from './components/GuidedTour';
-import { UserProfileModal, getUserProfile, UserProfileData } from './components/common/UserProfileModal';
-import { ToastContainer } from './components/common/Toast';
-import { ApprovalPromptHost } from './components/common/ApprovalPromptHost';
-import { CommandPalette } from './components/common/CommandPalette';
+import { useWakeWordListener } from './hooks/useWakeWordListener';
+import { SetupWizardModal } from './shared/common/SetupWizardModal';
+import { InitialPasswordChangeModal } from './shared/common/InitialPasswordChangeModal';
+import { GuidedTour } from './shared/common/GuidedTour';
+import { UserProfileModal, getUserProfile, UserProfileData } from './shared/common/UserProfileModal';
+import { ToastContainer } from './shared/common/Toast';
+import { ApprovalPromptHost } from './shared/common/ApprovalPromptHost';
+import { CommandPalette } from './shared/common/CommandPalette';
+import { OfflineIndicator, PWAInstallButton } from './shared/pwa/PWAInstallButton';
+import { VoiceLiveHudModal } from './features/companion/VoiceLiveHudModal';
+import { VoiceCalibrationModal } from './features/companion/VoiceCalibrationModal';
+import { ErrorBanner } from './shared/layout/StateFeedback';
 import { pathForTab, tabFromLocation } from './router';
 import { API_BASE } from './services/api/client';
+import { apiFetch } from './services/sessionTransport';
 import { getAccountStorageKey } from './services/accountScope';
+import {
+  AssistantIdentityProvider,
+  useAssistantIdentity,
+} from './context/AssistantIdentityContext';
 
 // Code splitting: cada tela é carregada sob demanda
 const Overview = lazy(() =>
-  import('./components/Overview').then((m) => ({ default: m.Overview }))
+  import('./features/overview/Overview').then((m) => ({ default: m.Overview }))
 );
 const ChatMaster = lazy(() =>
-  import('./components/ChatMaster').then((m) => ({ default: m.ChatMaster }))
+  import('./features/chat/ChatMaster').then((m) => ({ default: m.ChatMaster }))
 );
 const ApprovalCenter = lazy(() =>
-  import('./components/ApprovalCenter').then((m) => ({ default: m.ApprovalCenter }))
+  import('./features/approvals/ApprovalCenter').then((m) => ({ default: m.ApprovalCenter }))
 );
 const ProjectWorkspaceView = lazy(() =>
-  import('./components/ProjectWorkspaceView').then((m) => ({ default: m.ProjectWorkspaceView }))
+  import('./features/workspace/ProjectWorkspaceView').then((m) => ({ default: m.ProjectWorkspaceView }))
 );
 const AgentCenterView = lazy(() =>
-  import('./components/AgentCenterView').then((m) => ({ default: m.AgentCenterView }))
+  import('./features/agents/AgentCenterView').then((m) => ({ default: m.AgentCenterView }))
 );
 const TaskManagerView = lazy(() =>
-  import('./components/TaskManagerView').then((m) => ({ default: m.TaskManagerView }))
+  import('./features/tasks/TaskManagerView').then((m) => ({ default: m.TaskManagerView }))
 );
 const ModelManagerView = lazy(() =>
-  import('./components/ModelManagerView').then((m) => ({ default: m.ModelManagerView }))
+  import('./features/models/ModelManagerView').then((m) => ({ default: m.ModelManagerView }))
 );
 const SkillsManagerView = lazy(() =>
-  import('./components/SkillsManagerView').then((m) => ({ default: m.SkillsManagerView }))
+  import('./features/skills/SkillsManagerView').then((m) => ({ default: m.SkillsManagerView }))
 );
 const SecurityCenterView = lazy(() =>
-  import('./components/SecurityCenterView').then((m) => ({ default: m.SecurityCenterView }))
+  import('./features/security/SecurityCenterView').then((m) => ({ default: m.SecurityCenterView }))
 );
 const ServerLogsView = lazy(() =>
-  import('./components/ServerLogsView').then((m) => ({ default: m.ServerLogsView }))
+  import('./features/logs/ServerLogsView').then((m) => ({ default: m.ServerLogsView }))
 );
 const HardwareAdvisorView = lazy(() =>
-  import('./components/HardwareAdvisorView').then((m) => ({ default: m.HardwareAdvisorView }))
+  import('./features/hardware/HardwareAdvisorView').then((m) => ({ default: m.HardwareAdvisorView }))
 );
 const KnowledgeVaultView = lazy(() =>
-  import('./components/KnowledgeVaultView').then((m) => ({ default: m.KnowledgeVaultView }))
+  import('./features/knowledge/KnowledgeVaultView').then((m) => ({ default: m.KnowledgeVaultView }))
 );
 const BackendStudioView = lazy(() =>
-  import('./components/BackendStudioView').then((m) => ({ default: m.BackendStudioView }))
+  import('./features/studios/BackendStudioView').then((m) => ({ default: m.BackendStudioView }))
 );
 const QualityStudioView = lazy(() =>
-  import('./components/QualityStudioView').then((m) => ({ default: m.QualityStudioView }))
+  import('./features/studios/QualityStudioView').then((m) => ({ default: m.QualityStudioView }))
 );
 const DesignStudioView = lazy(() =>
-  import('./components/DesignStudioView').then((m) => ({ default: m.DesignStudioView }))
+  import('./features/studios/DesignStudioView').then((m) => ({ default: m.DesignStudioView }))
 );
 const ExecutiveReportView = lazy(() =>
-  import('./components/ExecutiveReportView').then((m) => ({ default: m.ExecutiveReportView }))
+  import('./features/executive/ExecutiveReportView').then((m) => ({ default: m.ExecutiveReportView }))
 );
 const CodingAgentView = lazy(() =>
-  import('./components/CodingAgentView').then((m) => ({ default: m.CodingAgentView }))
+  import('./features/coding/CodingAgentView').then((m) => ({ default: m.CodingAgentView }))
 );
 const LearningCenterView = lazy(() =>
-  import('./components/LearningCenterView').then((m) => ({ default: m.LearningCenterView }))
+  import('./features/learning/LearningCenterView').then((m) => ({ default: m.LearningCenterView }))
 );
 const AgentOfficeView = lazy(() =>
-  import('./components/office/AgentOfficeView').then((m) => ({ default: m.AgentOfficeView }))
+  import('./features/office/AgentOfficeView').then((m) => ({ default: m.AgentOfficeView }))
 );
 const SettingsView = lazy(() =>
-  import('./components/settings/SettingsView').then((m) => ({ default: m.SettingsView }))
+  import('./features/settings/SettingsView').then((m) => ({ default: m.SettingsView }))
 );
 const WorkflowCanvasView = lazy(() =>
-  import('./components/workflows/WorkflowCanvasView').then((m) => ({ default: m.WorkflowCanvasView }))
+  import('./features/workflows/WorkflowCanvasView').then((m) => ({ default: m.WorkflowCanvasView }))
 );
 const UsageAnalyticsView = lazy(() =>
-  import('./components/usage/UsageAnalyticsView').then((m) => ({ default: m.UsageAnalyticsView }))
+  import('./features/usage/UsageAnalyticsView').then((m) => ({ default: m.UsageAnalyticsView }))
+);
+const CompanionHubView = lazy(() =>
+  import('./features/companion/CompanionHubView').then((m) => ({ default: m.CompanionHubView }))
+);
+const CreativeMediaStudioView = lazy(() =>
+  import('./features/studio/CreativeMediaStudioView').then((m) => ({
+    default: m.CreativeMediaStudioView,
+  }))
+);
+const AppBuilderView = lazy(() =>
+  import('./features/studio/AppBuilderView').then((m) => ({
+    default: m.AppBuilderView,
+  }))
+);
+const GitHubImporterView = lazy(() =>
+  import('./features/github/GitHubImporterView').then((m) => ({
+    default: m.GitHubImporterView,
+  }))
+);
+const AndroidMobileHubView = lazy(() =>
+  import('./features/mobile/AndroidMobileHubView').then((m) => ({
+    default: m.AndroidMobileHubView,
+  }))
+);
+const BrainServerHubView = lazy(() =>
+  import('./features/brain/BrainServerHubView').then((m) => ({
+    default: m.BrainServerHubView,
+  }))
 );
 
 /**
- * Telas que ocupam toda a área útil: sem cabeçalho secundário, sem padding
- * externo e com scroll interno próprio. Centralizado para evitar que a lista
- * (repetida em três expressões) derive entre si.
+ * Telas que ocupam toda a área útil com layout e cabeçalho internos próprios.
  */
 const FULLSCREEN_TABS = new Set(['chat', 'workflows', 'settings', 'learning', 'skills', 'store']);
-const NO_HEADER_TABS = new Set(FULLSCREEN_TABS);
+const NO_HEADER_TABS = new Set(['chat', 'workflows']);
+
+const TAB_LABELS: Record<string, { section: string; title: string }> = {
+  overview: { section: 'Principal', title: 'Visão Geral' },
+  chat: { section: 'Principal', title: 'Conversas' },
+  tasks: { section: 'Principal', title: 'Gestor de Tarefas' },
+  workflows: { section: 'Principal', title: 'Fluxos de Trabalho' },
+  workspace: { section: 'Principal', title: 'Projetos & Biblioteca' },
+  coding: { section: 'Engenharia', title: 'Coding Agent' },
+  agents: { section: 'Engenharia', title: 'Centro de Agentes' },
+  models: { section: 'Engenharia', title: 'Modelos & Provedores' },
+  knowledge: { section: 'Engenharia', title: 'Base de Conhecimento' },
+  skills: { section: 'Engenharia', title: 'Habilidades dos Agentes' },
+  store: { section: 'Engenharia', title: 'Loja & Apps' },
+  approvals: { section: 'Governança', title: 'Central de Aprovações' },
+  usage: { section: 'Governança', title: 'Uso & Custos' },
+  security: { section: 'Governança', title: 'Segurança & Auditoria' },
+  backend_studio: { section: 'Estúdios', title: 'Backend Studio' },
+  quality: { section: 'Estúdios', title: 'Qualidade & QA' },
+  design: { section: 'Estúdios', title: 'Design Studio' },
+  office: { section: 'Operações', title: 'Escritório de Agentes' },
+  executive_report: { section: 'Governança', title: 'Relatório Executivo ROI' },
+  advisor: { section: 'Sistema', title: 'Hardware Advisor' },
+  server_logs: { section: 'Sistema', title: 'Logs do Servidor' },
+  learning: { section: 'Suporte', title: 'Central de Ajuda' },
+  settings: { section: 'Sistema', title: 'Configurações' },
+  companion: { section: 'Ecossistema', title: 'Voz, PWA & Companion' },
+  creative_studio: { section: 'Principal', title: 'Estúdio Criativo (Excel, Imagens & Vídeos)' },
+  app_builder: { section: 'Principal', title: 'Construtor de Apps (Android & Windows)' },
+  github_import: { section: 'Engenharia', title: 'Importar do GitHub' },
+  android_app: { section: 'Ecossistema', title: 'App Mobile Android (.apk / .aab)' },
+  brain_server: { section: 'Ecossistema', title: 'Cérebros & Servidor (Local / Docker)' },
+  not_found: { section: 'JARVIS', title: 'Página não encontrada' },
+};
 
 const ViewFallback: React.FC = () => (
   <div
@@ -111,25 +183,73 @@ const ViewFallback: React.FC = () => (
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '48px 16px',
+      padding: '56px 16px',
       color: 'var(--text-secondary)',
-      fontSize: '0.85rem',
+      fontSize: '0.86rem',
     }}
   >
     Carregando módulo...
   </div>
 );
 
+class ModuleErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: '24px' }}>
+          <ErrorBanner
+            message={`Não foi possível renderizar este módulo (${this.state.error.message}).`}
+            onRetry={() => this.setState({ error: null })}
+          />
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const NotFoundView: React.FC<{ onGoHome: () => void }> = ({ onGoHome }) => (
-  <section role="status" aria-labelledby="not-found-title" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-    <div style={{ fontSize: '3rem', color: 'var(--accent-color)', fontWeight: 700 }}>404</div>
-    <h1 id="not-found-title" style={{ color: 'var(--text-primary)', fontSize: '1.35rem' }}>Página não encontrada</h1>
-    <p style={{ maxWidth: '420px', fontSize: '0.9rem' }}>Este endereço não corresponde a uma página disponível no JARVIS AI Hub.</p>
-    <button type="button" className="btn btn-primary" onClick={onGoHome}>Ir para a Visão Geral</button>
+  <section
+    role="status"
+    aria-labelledby="not-found-title"
+    style={{
+      minHeight: '60vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '12px',
+      textAlign: 'center',
+      color: 'var(--text-secondary)',
+    }}
+  >
+    <div style={{ fontSize: '3rem', color: 'var(--accent-light)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+      404
+    </div>
+    <h1 id="not-found-title" style={{ color: 'var(--text-primary)', fontSize: '1.35rem' }}>
+      Página não encontrada
+    </h1>
+    <p style={{ maxWidth: '420px', fontSize: '0.9rem' }}>
+      Este endereço não corresponde a uma página disponível no JARVIS AI Hub.
+    </p>
+    <button type="button" className="btn btn-primary" onClick={onGoHome}>
+      Ir para a Visão Geral
+    </button>
   </section>
 );
 
 const DashboardApp: React.FC = () => {
+  const { assistantName, experienceMode, profile: identityProfile, updateIdentityProfile } = useAssistantIdentity();
+  const isSimpleMode = experienceMode === 'simple';
   const [authPermissions, setAuthPermissions] = useState<string[]>([]);
   const [authRole, setAuthRole] = useState<string | null>(null);
   const [authKind, setAuthKind] = useState<string | null>(null);
@@ -137,29 +257,62 @@ const DashboardApp: React.FC = () => {
   const [authMustChangePassword, setAuthMustChangePassword] = useState(false);
   const [guidedTourOpen, setGuidedTourOpen] = useState(false);
   const [learningContextTab, setLearningContextTab] = useState('overview');
-  const hasPermission = (permission: string) => authPermissions.includes('*') || authPermissions.includes(permission);
+
+  const hasPermission = (permission: string) =>
+    authPermissions.includes('*') || authPermissions.includes(permission);
+
   const canAccessTab = (tab: string) => {
     if (tab === 'not_found') return true;
     if (tab === 'advisor' || tab === 'server_logs') return authKind === 'human' && authRole === 'admin';
     const required: Record<string, string> = {
-      chat: 'chat:read', overview: 'system:read', approvals: 'approvals:read',
-      design: 'studios:read', office: 'agents:read', workspace: 'workspace:read',
-      models: 'models:read', coding: 'coding:read', agents: 'agents:read',
-      knowledge: 'knowledge:read', tasks: 'tasks:read', backend_studio: 'studios:read',
-      quality: 'studios:read', skills: 'skills:read', security: 'security:read',
-      executive_report: 'studios:read', learning: 'profile:read', settings: 'profile:read',
-      workflows: 'studios:read', usage: 'system:read', store: 'skills:read',
+      chat: 'chat:read',
+      overview: 'system:read',
+      approvals: 'approvals:read',
+      design: 'studios:read',
+      office: 'agents:read',
+      workspace: 'workspace:read',
+      models: 'models:read',
+      coding: 'coding:read',
+      agents: 'agents:read',
+      knowledge: 'knowledge:read',
+      tasks: 'tasks:read',
+      backend_studio: 'studios:read',
+      quality: 'studios:read',
+      skills: 'skills:read',
+      security: 'security:read',
+      executive_report: 'studios:read',
+      learning: 'profile:read',
+      settings: 'profile:read',
+      workflows: 'studios:read',
+      usage: 'system:read',
+      store: 'skills:read',
     };
     return !required[tab] || hasPermission(required[tab]);
   };
+
   const [activeTab, setActiveTab] = useState<string>(() =>
     tabFromLocation(window.location.pathname, window.location.search)
   );
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
+  const [showVoiceHud, setShowVoiceHud] = useState(false);
+  const [showVoiceCalibration, setShowVoiceCalibration] = useState(false);
+  const [pendingVoiceCommand, setPendingVoiceCommand] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfileData>(getUserProfile);
+
+  const wakeWord = useWakeWordListener({
+    assistantName,
+    paused: showVoiceHud || showVoiceCalibration,
+    onWakeDetected: ({ command }) => {
+      setPendingVoiceCommand(command || null);
+      setShowVoiceHud(true);
+    },
+  });
+
+  useEffect(() => {
+    setUserProfile(identityProfile);
+  }, [identityProfile]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem('jarvis_sidebar_collapsed') === 'true';
@@ -167,8 +320,10 @@ const DashboardApp: React.FC = () => {
       return false;
     }
   });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [attachedProjectId, setAttachedProjectId] = useState<string | null>(null);
   const [targetChatSessionId, setTargetChatSessionId] = useState<string | null>(null);
+  const [pendingChatPrompt, setPendingChatPrompt] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequestItem[]>([]);
   const [healthLoading, setHealthLoading] = useState(true);
@@ -176,6 +331,7 @@ const DashboardApp: React.FC = () => {
   const [healthError, setHealthError] = useState<string | null>(null);
   const [approvalsError, setApprovalsError] = useState<string | null>(null);
   const [systemResources, setSystemResources] = useState<SystemResourceUsage | null>(null);
+
   const [showDynamicIsland, setShowDynamicIsland] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem(getAccountStorageKey('jarvis_pref_dynamic_island'));
@@ -184,6 +340,7 @@ const DashboardApp: React.FC = () => {
       return true;
     }
   });
+
   const [showAgentDock, setShowAgentDock] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem(getAccountStorageKey('jarvis_pref_agent_dock'));
@@ -210,13 +367,14 @@ const DashboardApp: React.FC = () => {
       window.removeEventListener('storage', syncPreferences);
     };
   }, []);
+
   const [chatLoaded, setChatLoaded] = useState(
     () => tabFromLocation(window.location.pathname, window.location.search) === 'chat'
   );
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+    apiFetch(`${API_BASE}/auth/me`, { credentials: 'include' })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((principal) => {
         if (cancelled) return;
@@ -243,11 +401,17 @@ const DashboardApp: React.FC = () => {
   useEffect(() => {
     if (!authLoaded || authKind !== 'human' || authRole !== 'admin') return;
     let cancelled = false;
-    fetch(`${API_BASE}/system/onboarding`, { credentials: 'include' })
-      .then(async (response) => response.ok ? response.json() : null)
-      .then((status) => { if (!cancelled) setShowSetupWizard(status?.completed !== true); })
-      .catch(() => { if (!cancelled) setShowSetupWizard(false); });
-    return () => { cancelled = true; };
+    apiFetch(`${API_BASE}/system/onboarding`, { credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((status) => {
+        if (!cancelled) setShowSetupWizard(status?.completed !== true);
+      })
+      .catch(() => {
+        if (!cancelled) setShowSetupWizard(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [authLoaded, authKind, authRole]);
 
   const navigate = (tab: string) => {
@@ -255,26 +419,45 @@ const DashboardApp: React.FC = () => {
     const path = pathForTab(tab);
     if (path === '/404') return;
     setActiveTab(tab);
+    setMobileNavOpen(false);
     if (tab === 'chat') setChatLoaded(true);
-    setDesktopMenuOpen(false);
     if (window.location.pathname !== path) {
       window.history.pushState({ tab }, '', path);
     }
   };
 
   const handleToggleSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setMobileNavOpen((prev) => !prev);
+      return;
+    }
     setIsSidebarCollapsed((prev) => {
       const next = !prev;
       try {
         localStorage.setItem('jarvis_sidebar_collapsed', String(next));
-      } catch {
-        // O estado da sidebar permanece funcional nesta sessão.
-      }
+      } catch {}
       return next;
     });
   };
 
-  // Verificação de primeiro acesso (First-Run Onboarding), rota e atalhos de teclado
+  const handleToggleAgentDock = () => {
+    setShowAgentDock((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(getAccountStorageKey('jarvis_pref_agent_dock'), String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleStartChatFromOverview = (prompt?: string) => {
+    if (prompt && prompt.trim()) {
+      setTargetChatSessionId('new_' + Date.now());
+      setPendingChatPrompt(prompt.trim());
+    }
+    navigate('chat');
+  };
+
   useEffect(() => {
     const initialTab = tabFromLocation(window.location.pathname, window.location.search);
     const initialPath = pathForTab(initialTab);
@@ -288,7 +471,6 @@ const DashboardApp: React.FC = () => {
       if (tab === 'chat') setChatLoaded(true);
     };
 
-    // Atalhos globais de teclado: Ctrl + K (Comandos) e Ctrl + B (Sidebar)
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -300,11 +482,29 @@ const DashboardApp: React.FC = () => {
       }
     };
 
+    const handleOpenAndroidPairing = () => {
+      navigate('android_app');
+    };
+
+    const handleOpenBrainManager = () => {
+      navigate('brain_server');
+    };
+
+    const handleOpenVoiceCalibration = () => {
+      setShowVoiceCalibration(true);
+    };
+
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('keydown', handleGlobalKeyDown);
+    window.addEventListener('jarvis:open-android-pairing', handleOpenAndroidPairing);
+    window.addEventListener('jarvis:open-brain-manager', handleOpenBrainManager);
+    window.addEventListener('jarvis:open-voice-calibration', handleOpenVoiceCalibration);
     return () => {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('keydown', handleGlobalKeyDown);
+      window.removeEventListener('jarvis:open-android-pairing', handleOpenAndroidPairing);
+      window.removeEventListener('jarvis:open-brain-manager', handleOpenBrainManager);
+      window.removeEventListener('jarvis:open-voice-calibration', handleOpenVoiceCalibration);
     };
   }, []);
 
@@ -322,14 +522,22 @@ const DashboardApp: React.FC = () => {
       setHealth(healthResult.value);
       setHealthError(null);
     } else {
-      setHealthError(healthResult.reason instanceof Error ? healthResult.reason.message : 'Falha ao consultar a saúde do sistema.');
+      setHealthError(
+        healthResult.reason instanceof Error
+          ? healthResult.reason.message
+          : 'Falha ao consultar a saúde do sistema.'
+      );
     }
     setHealthLoading(false);
     if (approvalsResult.status === 'fulfilled') {
       setApprovals(approvalsResult.value);
       setApprovalsError(null);
     } else {
-      setApprovalsError(approvalsResult.reason instanceof Error ? approvalsResult.reason.message : 'Falha ao consultar aprovações.');
+      setApprovalsError(
+        approvalsResult.reason instanceof Error
+          ? approvalsResult.reason.message
+          : 'Falha ao consultar aprovações.'
+      );
     }
     setApprovalsLoading(false);
     if (resourcesResult.status === 'fulfilled') {
@@ -340,13 +548,14 @@ const DashboardApp: React.FC = () => {
   useEffect(() => {
     loadData({ initial: true });
     const interval = setInterval(() => {
-      // Não consulta o backend com a aba em segundo plano.
       if (document.visibilityState === 'visible') loadData();
     }, 8000);
     return () => clearInterval(interval);
   }, []);
 
   const pendingApprovalsCount = approvals.filter((a) => a.status === 'pending').length;
+  const activeMeta = TAB_LABELS[activeTab] || { section: 'JARVIS', title: 'Workspace' };
+  const isFullscreenTab = FULLSCREEN_TABS.has(activeTab);
 
   return (
     <div
@@ -360,35 +569,36 @@ const DashboardApp: React.FC = () => {
         fontFamily: 'var(--font-sans)',
         position: 'relative',
       }}
-      onClick={() => {
-        if (desktopMenuOpen) setDesktopMenuOpen(false);
-      }}
     >
-      {/* Dynamic Island no topo central (OpenBot Style) */}
-      {showDynamicIsland && (
-        <DynamicIsland
-          activeAgentName="JARVIS AI Hub"
-          systemStatus={{
-            cpu: systemResources?.cpu_percent ?? null,
-            memory: systemResources?.ram_percent ?? null,
+      {/* Backdrop móvel quando a gaveta estiver aberta */}
+      {mobileNavOpen && (
+        <div
+          role="presentation"
+          onClick={() => setMobileNavOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(5, 7, 12, 0.68)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 90,
           }}
-          onOpenVoice={() => navigate('chat')}
         />
       )}
 
-      {/* Trilho Lateral Esquerdo 64px Fixo (OpenBot Style) */}
-      {!isSidebarCollapsed && (
-        <PrimaryRail
-          activeTab={activeTab}
-          onNavigate={navigate}
-          pendingApprovalsCount={pendingApprovalsCount}
-          onOpenSettings={() => navigate('settings')}
-          onOpenHelp={() => navigate('learning')}
-          onOpenProfile={() => navigate('settings')}
-        />
-      )}
+      {/* Sidebar Colapsável (244px expandida / 68px compacta / gaveta no mobile) */}
+      <PrimaryRail
+        activeTab={activeTab}
+        onNavigate={navigate}
+        collapsed={isSidebarCollapsed}
+        mobileOpen={mobileNavOpen}
+        onToggleCollapse={handleToggleSidebar}
+        pendingApprovalsCount={pendingApprovalsCount}
+        onOpenSettings={() => navigate('settings')}
+        onOpenHelp={() => navigate('learning')}
+        onOpenProfile={() => setShowProfileModal(true)}
+      />
 
-      {/* Área Central / Conteúdo Principal (Spacious & Clean OpenBot Style) */}
+      {/* Área Central */}
       <div
         style={{
           flex: 1,
@@ -400,383 +610,372 @@ const DashboardApp: React.FC = () => {
           backgroundColor: 'var(--bg-primary)',
         }}
       >
-        {/* Top Navbar Global Desktop (Claude Topbar Style - Apenas fora das telas de área útil) */}
+        {/* Top Bar Global (Contrato SaaS limpo, sem sobreposição) */}
         {!NO_HEADER_TABS.has(activeTab) && (
-          <header
-            style={{
-            height: '46px',
-            padding: '0 16px',
-            borderBottom: '1px solid var(--border-color)',
-            backgroundColor: 'var(--bg-secondary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-            zIndex: 40,
-            position: 'relative',
-          }}
-        >
-          {/* Lado Esquerdo: ☰ Hambúrguer, ◫ Toggle Sidebar, < >, [ 💬 | </> ] */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Botão Hambúrguer ☰ com Dropdown Nativo Desktop */}
-            <div style={{ position: 'relative' }}>
+          <header className="jarvis-topbar">
+            {/* Esquerda: Toggle Sidebar + Breadcrumb Contextual */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDesktopMenuOpen((prev) => !prev);
-                }}
-                className="btn btn-ghost"
-                style={{ padding: '6px 8px', borderRadius: '6px' }}
-                title="Menu Principal"
+                onClick={handleToggleSidebar}
+                className="btn btn-ghost btn-icon"
+                title="Alternar barra lateral (Ctrl+B)"
+                aria-label="Alternar barra lateral"
               >
-                <Menu size={18} />
+                <PanelLeft size={16} />
               </button>
 
-              {/* Menu de navegação e ações rápidas */}
-              {desktopMenuOpen && (
-                <div
-                  onClick={(e) => e.stopPropagation()}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.84rem',
+                  minWidth: 0,
+                }}
+              >
+                <span className="hide-mobile" style={{ color: 'var(--text-muted)' }}>
+                  {activeMeta.section}
+                </span>
+                <span className="hide-mobile" style={{ color: 'var(--border-hover)' }}>
+                  /
+                </span>
+                <span
                   style={{
-                    position: 'absolute',
-                    top: '36px',
-                    left: 0,
-                    width: '210px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '10px',
-                    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.65)',
-                    padding: '6px',
-                    zIndex: 1000,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '2px',
+                    color: 'var(--text-primary)',
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTargetChatSessionId('new_' + Date.now());
-                      navigate('chat');
+                  {activeMeta.title}
+                </span>
+              </div>
+            </div>
+
+            {/* Direita: Telemetria Inline (DynamicIsland), Comando Ctrl+K, Ação Principal, Perfil */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+              {showDynamicIsland && !isSimpleMode && (
+                <div className="hide-mobile">
+                  <DynamicIsland
+                    variant="inline"
+                    activeAgentName={`${assistantName} AI Hub`}
+                    systemStatus={{
+                      cpu: systemResources?.cpu_percent ?? null,
+                      memory: systemResources?.ram_percent ?? null,
                     }}
-                    className="btn btn-ghost"
-                    style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
-                  >
-                    <span>Novo chat</span>
-                    <ChevronRight size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCommandPalette(true)}
-                    className="btn btn-ghost"
-                    style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
-                  >
-                    <span>Comandos e ações</span>
-                    <ChevronRight size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToggleSidebar}
-                    className="btn btn-ghost"
-                    style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
-                  >
-                    <span>Alternar barra lateral</span>
-                    <ChevronRight size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('agents')}
-                    className="btn btn-ghost"
-                    style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
-                  >
-                    <span>Centro de Agentes</span>
-                    <ChevronRight size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('advisor')}
-                    className="btn btn-ghost"
-                    style={{ justifyContent: 'space-between', padding: '6px 10px', fontSize: '0.80rem', width: '100%' }}
-                  >
-                    <span>Hardware Advisor</span>
-                    <ChevronRight size={12} />
-                  </button>
+                    onOpenVoice={() => setShowVoiceHud(true)}
+                  />
                 </div>
               )}
-            </div>
 
-            {/* Toggle da Barra Lateral (Ctrl + B) */}
-            <button
-              type="button"
-              onClick={handleToggleSidebar}
-              className="btn btn-ghost"
-              style={{ padding: '6px', borderRadius: '6px' }}
-              title="Mostrar / Ocultar barra lateral (Ctrl+B)"
-            >
-              <PanelLeft size={16} />
-            </button>
+              <PWAInstallButton compact />
 
-            {/* Navegação Histórico < > */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }} className="hide-mobile">
-              <button
-                type="button"
-                onClick={() => window.history.back()}
-                className="btn btn-ghost"
-                style={{ padding: '4px 6px', borderRadius: '4px' }}
-                title="Voltar"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => window.history.forward()}
-                className="btn btn-ghost"
-                style={{ padding: '4px 6px', borderRadius: '4px' }}
-                title="Avançar"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-
-            {/* Alternador de Modo [ 💬 | </> ] */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                borderRadius: '8px',
-                padding: '2px',
-                border: '1px solid var(--border-color)',
-                marginLeft: '4px',
-              }}
-              className="hide-mobile"
-            >
-              <button
-                type="button"
-                onClick={() => navigate('chat')}
-                className="btn btn-ghost"
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: activeTab === 'chat' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                  color: activeTab === 'chat' ? 'var(--text-primary)' : 'var(--text-muted)',
-                }}
-                title="Modo Chat Editorial"
-              >
-                <MessageSquare size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('coding')}
-                className="btn btn-ghost"
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: activeTab === 'coding' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                  color: activeTab === 'coding' ? 'var(--text-primary)' : 'var(--text-muted)',
-                }}
-                title="Modo Coding Agent / Terminal"
-              >
-                <Code2 size={13} />
-              </button>
-            </div>
-          </div>
-
-          {/* Centro: Identificador Minimalista 3.0 */}
-          <div
-            style={{
-              fontSize: '0.82rem',
-              fontWeight: 500,
-              letterSpacing: '0.05em',
-              color: 'var(--text-secondary)',
-              userSelect: 'none',
-            }}
-          >
-            JARVIS <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>3.0</span>
-          </div>
-
-          {/* Lado Direito: Busca, Status de Blindagem, Avatar e Controles Desktop ─ □ ✕ */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button type="button" className="btn btn-ghost" onClick={() => navigate('learning')} title="Ajuda contextual e tutoriais" aria-label="Abrir ajuda contextual"><CircleHelp size={16}/></button>
-
-            {/* Paleta de Comandos */}
-            <button
-              onClick={() => setShowCommandPalette(true)}
-              className="btn btn-ghost"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid var(--border-color)',
-                fontSize: '0.74rem',
-              }}
-              title="Paleta de Comandos (Ctrl+K)"
-            >
-              <Search size={13} color="var(--text-secondary)" />
-              <kbd
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                  padding: '1px 5px',
-                  borderRadius: '3px',
-                  fontSize: '0.65rem',
-                  color: 'var(--text-muted)',
-                }}
-                className="hide-mobile"
-              >
-                Ctrl K
-              </kbd>
-            </button>
-
-            {/* Alerta de Aprovação Pendente */}
-            {pendingApprovalsCount > 0 && (
-              <button
-                onClick={() => navigate('approvals')}
-                className="btn badge-warning"
-                style={{
-                  fontSize: '0.72rem',
-                  padding: '3px 8px',
-                  borderRadius: '999px',
-                  cursor: 'pointer',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                }}
-              >
-                <ShieldAlert size={12} />
-                <span>{pendingApprovalsCount}</span>
-              </button>
-            )}
-
-            {/* Avatar do Usuário Minimalista */}
-            <button
-              onClick={() => setShowProfileModal(true)}
-              className="btn btn-ghost"
-              style={{
-                width: '26px',
-                height: '26px',
-                borderRadius: '50%',
-                padding: 0,
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-secondary)',
-                fontWeight: 600,
-                fontSize: '0.74rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-              title="Perfil e Configurações"
-            >
-              {userProfile.avatarIcon || (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
-            </button>
-
-            {/* Controle de tela cheia disponível no navegador */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                marginLeft: '6px',
-                paddingLeft: '6px',
-                borderLeft: '1px solid var(--border-color)',
-              }}
-              className="hide-mobile"
-            >
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ padding: '3px 6px', color: 'var(--text-muted)' }}
-                title="Maximizar"
-                onClick={() => {
-                  if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().catch(() => {});
-                  } else {
-                    document.exitFullscreen().catch(() => {});
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingVoiceCommand(null);
+                    setShowVoiceHud(true);
+                  }}
+                  className="btn btn-secondary btn-sm"
+                  title={`Clique para falar agora com ${assistantName}`}
+                  aria-label={`Falar agora com ${assistantName}`}
+                  style={{ borderColor: 'var(--border-accent)', color: 'var(--accent-light)' }}
+                >
+                  <Mic size={13} />
+                  <span className="hide-mobile">Ei {assistantName}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={wakeWord.toggle}
+                  aria-pressed={wakeWord.enabled}
+                  className={`btn btn-icon-sm ${wakeWord.enabled ? 'btn-primary' : 'btn-ghost'}`}
+                  title={
+                    wakeWord.enabled
+                      ? `Escuta mãos-livres ativa: diga "Ei ${assistantName}" sem clicar`
+                      : `Ativar escuta contínua para chamar "Ei ${assistantName}" sem clicar`
                   }
+                  aria-label={
+                    wakeWord.enabled
+                      ? `Pausar escuta contínua Ei ${assistantName}`
+                      : `Ativar escuta contínua Ei ${assistantName}`
+                  }
+                >
+                  <Radio size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowVoiceCalibration(true)}
+                  className="btn btn-icon-sm btn-ghost"
+                  title="Calibrar sua voz gravando 3 vezes (Setup de Wake Word)"
+                  aria-label="Calibrar reconhecimento de voz"
+                  style={{ color: '#f59e0b' }}
+                >
+                  <Sparkles size={14} />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowCommandPalette(true)}
+                className="btn btn-secondary btn-sm"
+                title="Paleta de Comandos (Ctrl+K)"
+              >
+                <Search size={13} />
+                <span className="hide-mobile">Buscar...</span>
+                <kbd
+                  className="hide-mobile"
+                  style={{
+                    marginLeft: '4px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    fontSize: '0.68rem',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Ctrl K
+                </kbd>
+              </button>
+
+              {pendingApprovalsCount > 0 && !isSimpleMode && (
+                <button
+                  type="button"
+                  onClick={() => navigate('approvals')}
+                  className="btn btn-sm badge-warning tabular-nums"
+                  title="Aprovações pendentes"
+                >
+                  <ShieldAlert size={13} />
+                  <span>{pendingApprovalsCount}</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-primary btn-sm hide-mobile"
+                onClick={() => {
+                  setTargetChatSessionId('new_' + Date.now());
+                  navigate('chat');
                 }}
               >
-                <Square size={11} />
+                <Plus size={14} />
+                <span>Novo chat</span>
+              </button>
+
+              <button
+                type="button"
+                className={`btn btn-ghost btn-icon hide-tablet ${showAgentDock ? 'is-active' : ''}`}
+                onClick={handleToggleAgentDock}
+                title={showAgentDock ? 'Ocultar painel de especialistas' : 'Mostrar painel de especialistas'}
+                aria-label={showAgentDock ? 'Ocultar painel de especialistas' : 'Mostrar painel de especialistas'}
+                aria-pressed={showAgentDock}
+              >
+                <PanelRight size={16} />
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon"
+                onClick={() => navigate('learning')}
+                title="Ajuda contextual e tutoriais"
+                aria-label="Abrir ajuda contextual"
+              >
+                <CircleHelp size={16} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(true)}
+                aria-label="Perfil do usuário"
+                className="btn btn-secondary btn-icon"
+                title="Perfil e Configurações"
+              >
+                {userProfile.avatarIcon ||
+                  (userProfile.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'A')}
               </button>
             </div>
-          </div>
-        </header>
-      )}
+          </header>
+        )}
 
         {/* Viewport Principal das Telas */}
         <main
           style={{
             flex: 1,
-            overflowY: FULLSCREEN_TABS.has(activeTab) || activeTab === 'coding' ? 'hidden' : 'auto',
+            overflowY: isFullscreenTab || activeTab === 'coding' ? 'hidden' : 'auto',
             minWidth: 0,
-            padding: FULLSCREEN_TABS.has(activeTab) ? '0' : activeTab === 'coding' ? 'clamp(12px, 2vw, 24px)' : 'clamp(16px, 3vw, 36px)',
+            minHeight: 0,
+            padding: FULLSCREEN_TABS.has(activeTab) ? '0' : activeTab === 'coding' ? 'clamp(12px, 1.8vw, 20px)' : 'clamp(16px, 2.4vw, 28px)',
             backgroundColor: 'var(--bg-primary)',
           }}
         >
-          {!authLoaded ? <ViewFallback /> : !canAccessTab(activeTab) ? (
-            <section role="alert" style={{ minHeight: '55vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              <ShieldAlert size={30} color="var(--accent-color)" />
-              <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>Acesso não disponível</h2>
-              <p style={{ maxWidth: '440px', margin: 0, fontSize: '0.86rem' }}>O seu perfil não possui a permissão necessária para abrir este módulo. Se precisar de acesso, contate o administrador da plataforma.</p>
-              <button type="button" className="btn btn-primary" onClick={() => navigate(hasPermission('system:read') ? 'overview' : 'chat')}>Voltar</button>
+          {!authLoaded ? (
+            <ViewFallback />
+          ) : !canAccessTab(activeTab) ? (
+            <section
+              role="alert"
+              style={{
+                minHeight: '55vh',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '12px',
+                textAlign: 'center',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <ShieldAlert size={30} color="var(--accent-light)" />
+              <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.15rem' }}>
+                Acesso não disponível
+              </h2>
+              <p style={{ maxWidth: '440px', margin: 0, fontSize: '0.88rem' }}>
+                O seu perfil não possui a permissão necessária para abrir este módulo. Se precisar
+                de acesso, contate o administrador da plataforma.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => navigate(hasPermission('system:read') ? 'overview' : 'chat')}
+              >
+                Voltar
+              </button>
             </section>
           ) : activeTab === 'not_found' ? (
             <NotFoundView onGoHome={() => navigate('overview')} />
           ) : (
-          <Suspense fallback={<ViewFallback />}>
-            {activeTab === 'overview' && <Overview health={health} approvals={approvals} healthLoading={healthLoading} approvalsLoading={approvalsLoading} healthError={healthError} approvalsError={approvalsError} />}
-            {activeTab === 'coding' && <CodingAgentView />}
-            {activeTab === 'workflows' && <WorkflowCanvasView />}
-            {activeTab === 'usage' && <UsageAnalyticsView />}
-            {/* A Loja vive no SkillsManagerView (apps + agentes + habilidades, com
-                persistência por conta). Havia uma segunda implementação em
-                components/store/AppStoreView com dados fixos; foi removida. */}
-            {activeTab === 'store' && <SkillsManagerView />}
-            {activeTab === 'skills' && <SkillsManagerView />}
-            {chatLoaded && (
-              <div style={{ display: activeTab === 'chat' ? 'block' : 'none', height: '100%' }}>
-                <ChatMaster
-                  attachedProjectId={attachedProjectId}
-                  onDetachProject={() => setAttachedProjectId(null)}
-                  targetSessionId={targetChatSessionId}
-                />
-              </div>
-            )}
-            {activeTab === 'approvals' && <ApprovalCenter approvals={approvals} onRefresh={loadData} loading={approvalsLoading} error={approvalsError} />}
-            {activeTab === 'workspace' && (
-              <ProjectWorkspaceView
-                onSelectForChat={(id) => {
-                  setAttachedProjectId(id);
-                  navigate('chat');
-                }}
-              />
-            )}
-            {activeTab === 'office' && (
-              <AgentOfficeView
-                onSelectForChat={() => {
-                  navigate('chat');
-                }}
-              />
-            )}
-            {activeTab === 'agents' && <AgentCenterView />}
-            {activeTab === 'tasks' && <TaskManagerView />}
-            {activeTab === 'backend_studio' && <BackendStudioView />}
-            {activeTab === 'quality' && <QualityStudioView />}
-            {activeTab === 'design' && <DesignStudioView />}
-            {activeTab === 'executive_report' && <ExecutiveReportView />}
-            {activeTab === 'models' && <ModelManagerView />}
-            {activeTab === 'knowledge' && <KnowledgeVaultView />}
-            {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
-            {activeTab === 'advisor' && <HardwareAdvisorView />}
-            {activeTab === 'server_logs' && <ServerLogsView />}
-            {activeTab === 'learning' && <LearningCenterView activeTab={learningContextTab} onNavigate={navigate} onStartTour={() => setGuidedTourOpen(true)} onOpenProfile={() => setShowProfileModal(true)} />}
-            {activeTab === 'settings' && <SettingsView onNavigate={navigate} />}
-          </Suspense>
+            <div
+              style={
+                isFullscreenTab
+                  ? { width: '100%', height: '100%', minHeight: 0 }
+                  : activeTab === 'coding'
+                    ? { width: '100%', maxWidth: '1380px', height: '100%', margin: '0 auto', minHeight: 0 }
+                    : { width: '100%', maxWidth: '1380px', margin: '0 auto' }
+              }
+            >
+              <ModuleErrorBoundary key={activeTab}>
+                <Suspense fallback={<ViewFallback />}>
+                  {activeTab === 'overview' && (
+                    <Overview
+                      health={health}
+                      approvals={approvals}
+                      healthLoading={healthLoading}
+                      approvalsLoading={approvalsLoading}
+                      healthError={healthError}
+                      approvalsError={approvalsError}
+                      onStartChat={handleStartChatFromOverview}
+                      onNavigate={navigate}
+                    />
+                  )}
+                  {activeTab === 'coding' && <CodingAgentView />}
+                  {activeTab === 'workflows' && <WorkflowCanvasView />}
+                  {activeTab === 'usage' && <UsageAnalyticsView />}
+                  {activeTab === 'store' && (
+                    <SkillsManagerView
+                      initialTab="apps"
+                      onOpenGitHubImport={() => navigate('github_import')}
+                    />
+                  )}
+                  {activeTab === 'skills' && (
+                    <SkillsManagerView
+                      initialTab="skills"
+                      onOpenGitHubImport={() => navigate('github_import')}
+                    />
+                  )}
+                  {chatLoaded && (
+                    <div style={{ display: activeTab === 'chat' ? 'block' : 'none', height: '100%' }}>
+                      <ChatMaster
+                        attachedProjectId={attachedProjectId}
+                        onDetachProject={() => setAttachedProjectId(null)}
+                        targetSessionId={targetChatSessionId}
+                        initialPrompt={pendingChatPrompt}
+                        onInitialPromptConsumed={() => setPendingChatPrompt(null)}
+                      />
+                    </div>
+                  )}
+                  {activeTab === 'approvals' && (
+                    <ApprovalCenter
+                      approvals={approvals}
+                      onRefresh={loadData}
+                      loading={approvalsLoading}
+                      error={approvalsError}
+                    />
+                  )}
+                  {activeTab === 'workspace' && (
+                    <ProjectWorkspaceView
+                      onSelectForChat={(id) => {
+                        setAttachedProjectId(id);
+                        navigate('chat');
+                      }}
+                    />
+                  )}
+                  {activeTab === 'office' && (
+                    <AgentOfficeView
+                      onSelectForChat={() => {
+                        navigate('chat');
+                      }}
+                    />
+                  )}
+                  {activeTab === 'agents' && (
+                    <AgentCenterView onOpenGitHubImport={() => navigate('github_import')} />
+                  )}
+                  {activeTab === 'tasks' && <TaskManagerView />}
+                  {activeTab === 'backend_studio' && <BackendStudioView />}
+                  {activeTab === 'quality' && <QualityStudioView />}
+                  {activeTab === 'design' && <DesignStudioView />}
+                  {activeTab === 'executive_report' && <ExecutiveReportView />}
+                  {activeTab === 'models' && <ModelManagerView />}
+                  {activeTab === 'knowledge' && <KnowledgeVaultView />}
+                  {activeTab === 'security' && <SecurityCenterView onRefresh={loadData} />}
+                  {activeTab === 'advisor' && <HardwareAdvisorView />}
+                  {activeTab === 'server_logs' && <ServerLogsView />}
+                  {activeTab === 'learning' && (
+                    <LearningCenterView
+                      activeTab={learningContextTab}
+                      onNavigate={navigate}
+                      onStartTour={() => setGuidedTourOpen(true)}
+                      onOpenProfile={() => setShowProfileModal(true)}
+                    />
+                  )}
+                  {activeTab === 'settings' && <SettingsView onNavigate={navigate} />}
+                  {activeTab === 'companion' && (
+                    <CompanionHubView
+                      onOpenVoiceHud={() => setShowVoiceHud(true)}
+                      onNavigate={navigate}
+                    />
+                  )}
+                  {activeTab === 'creative_studio' && <CreativeMediaStudioView />}
+                  {activeTab === 'app_builder' && <AppBuilderView />}
+                  {activeTab === 'github_import' && <GitHubImporterView onNavigate={navigate} />}
+                  {activeTab === 'android_app' && <AndroidMobileHubView />}
+                  {activeTab === 'brain_server' && <BrainServerHubView />}
+                </Suspense>
+              </ModuleErrorBoundary>
+            </div>
           )}
         </main>
       </div>
 
+      {/* Rail Lateral Direito Não-Sobreposto de Agentes */}
+      {showAgentDock && (
+        <AgentDock
+          activeAgentId={
+            activeTab === 'chat' && targetChatSessionId?.startsWith('agent_')
+              ? targetChatSessionId.slice(6)
+              : undefined
+          }
+          onSelectAgent={(agentId) => {
+            setTargetChatSessionId('agent_' + agentId);
+            navigate('chat');
+          }}
+          onAddAgent={() => navigate('agents')}
+          onHideDock={handleToggleAgentDock}
+        />
+      )}
+
+      {/* Modais e Overlays Globais */}
       <InitialPasswordChangeModal
         isOpen={authLoaded && authMustChangePassword}
         onCompleted={() => {
@@ -792,25 +991,36 @@ const DashboardApp: React.FC = () => {
         onClose={() => setGuidedTourOpen(false)}
       />
 
-      {/* Assistente de Configuração Inicial Global */}
       <SetupWizardModal
-        isOpen={showSetupWizard && authLoaded && !authMustChangePassword && authKind === 'human' && authRole === 'admin'}
+        isOpen={
+          showSetupWizard &&
+          authLoaded &&
+          !authMustChangePassword &&
+          authKind === 'human' &&
+          authRole === 'admin'
+        }
         onClose={() => setShowSetupWizard(false)}
         onCompleted={loadData}
       />
 
-      {/* Perfil do Usuário & Configurações */}
       <UserProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
-        onOpenSetupWizard={authKind === 'human' && authRole === 'admin' ? () => {
-          setShowProfileModal(false);
-          setShowSetupWizard(true);
-        } : undefined}
-        onProfileUpdated={(updated) => setUserProfile(updated)}
+        onNavigate={navigate}
+        onOpenSetupWizard={
+          authKind === 'human' && authRole === 'admin'
+            ? () => {
+                setShowProfileModal(false);
+                setShowSetupWizard(true);
+              }
+            : undefined
+        }
+        onProfileUpdated={(updated) => {
+          setUserProfile(updated);
+          void updateIdentityProfile(updated);
+        }}
       />
 
-      {/* Paleta Global de Comandos (Ctrl + K) */}
       <CommandPalette
         isOpen={showCommandPalette}
         permissions={authPermissions}
@@ -825,21 +1035,76 @@ const DashboardApp: React.FC = () => {
         onOpenProfile={() => setShowProfileModal(true)}
       />
 
-      {/* Aprovação humana integrada para operações do Workspace */}
+      <VoiceLiveHudModal
+        isOpen={showVoiceHud}
+        onClose={() => {
+          setShowVoiceHud(false);
+          setPendingVoiceCommand(null);
+        }}
+        autoListenOnOpen
+        initialCommand={pendingVoiceCommand}
+        onInitialCommandConsumed={() => setPendingVoiceCommand(null)}
+        wakeWordEnabled={wakeWord.enabled}
+        onToggleWakeWord={wakeWord.toggle}
+      />
+
+      <VoiceCalibrationModal
+        isOpen={showVoiceCalibration}
+        onClose={() => setShowVoiceCalibration(false)}
+        assistantName={assistantName}
+        onCalibrationComplete={() => {
+          setShowVoiceCalibration(false);
+          wakeWord.setEnabled(true);
+        }}
+      />
+
+      {/* Navegação Inferior Mobile PWA (visível apenas abaixo de 768px) */}
+      <nav className="jarvis-mobile-bottom-nav" aria-label="Navegação mobile rápida">
+        <button
+          type="button"
+          onClick={() => navigate('overview')}
+          className={`jarvis-mobile-bottom-nav__btn ${activeTab === 'overview' ? 'is-active' : ''}`}
+        >
+          <LayoutDashboard size={17} />
+          <span>Início</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('chat')}
+          className={`jarvis-mobile-bottom-nav__btn ${activeTab === 'chat' ? 'is-active' : ''}`}
+        >
+          <MessageSquare size={17} />
+          <span>Chat</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowVoiceHud(true)}
+          className="jarvis-mobile-bottom-nav__btn jarvis-mobile-bottom-nav__voice"
+          aria-label={`Falar com ${assistantName}`}
+        >
+          <Mic size={18} />
+          <span>Voz</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('companion')}
+          className={`jarvis-mobile-bottom-nav__btn ${activeTab === 'companion' ? 'is-active' : ''}`}
+        >
+          <Smartphone size={17} />
+          <span>PC/PWA</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('security')}
+          className={`jarvis-mobile-bottom-nav__btn ${activeTab === 'security' ? 'is-active' : ''}`}
+        >
+          <ShieldCheck size={17} />
+          <span>Sentinela</span>
+        </button>
+      </nav>
+
+      <OfflineIndicator />
       <ApprovalPromptHost />
-
-      {/* Dock Flutuante de Agentes na Direita (OpenBot Style) */}
-      {showAgentDock && (
-        <AgentDock
-          onSelectAgent={(agentId) => {
-            setTargetChatSessionId('agent_' + agentId);
-            navigate('chat');
-          }}
-          onAddAgent={() => navigate('skills')}
-        />
-      )}
-
-      {/* Notificações Toast Globais */}
       <ToastContainer />
     </div>
   );
@@ -847,7 +1112,9 @@ const DashboardApp: React.FC = () => {
 
 export const App: React.FC = () => (
   <AuthGate>
-    <DashboardApp />
+    <AssistantIdentityProvider>
+      <DashboardApp />
+    </AssistantIdentityProvider>
   </AuthGate>
 );
 

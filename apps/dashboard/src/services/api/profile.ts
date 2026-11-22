@@ -1,4 +1,6 @@
 import { API_BASE, handleApiResponse } from './client';
+import { apiFetch } from '../sessionTransport';
+import { WorkspaceExperienceMode, normalizeAssistantName, normalizeExperienceMode } from '../assistantIdentity';
 
 export type AccountSeniorityLevel = 'junior' | 'mid' | 'senior' | 'architect';
 export type AccountResponseStyle = 'concise' | 'detailed' | 'educational';
@@ -10,6 +12,9 @@ export interface AccountProfilePayload {
   seniorityLevel: AccountSeniorityLevel;
   responseStyle: AccountResponseStyle;
   customInstructions: string;
+  assistantName?: string;
+  assistantGreeting?: string;
+  experienceMode?: WorkspaceExperienceMode;
 }
 
 const SENIORITY_LEVELS: AccountSeniorityLevel[] = ['junior', 'mid', 'senior', 'architect'];
@@ -35,8 +40,11 @@ export async function fetchUserProfileApi(): Promise<{
   responseStyle?: AccountResponseStyle;
   userBackground?: string;
   responseGuidelines?: string;
+  assistantName?: string;
+  assistantGreeting?: string;
+  experienceMode?: WorkspaceExperienceMode;
 } | null> {
-  const response = await fetch(`${API_BASE}/user/profile`, { credentials: 'include' });
+  const response = await apiFetch(`${API_BASE}/user/profile`, { credentials: 'include' });
   const stored = await handleApiResponse<Partial<AccountProfilePayload>>(
     response, 'Falha ao carregar perfil da conta.'
   );
@@ -49,6 +57,9 @@ export async function fetchUserProfileApi(): Promise<{
     responseStyle: normalizeResponseStyle(stored.responseStyle),
     userBackground: instructionParts[0] || '',
     responseGuidelines: instructionParts.slice(1).join('\n\n'),
+    assistantName: stored.assistantName ? normalizeAssistantName(stored.assistantName) : undefined,
+    assistantGreeting: stored.assistantGreeting || '',
+    experienceMode: stored.experienceMode ? normalizeExperienceMode(stored.experienceMode) : undefined,
   };
 }
 
@@ -60,6 +71,9 @@ export async function saveUserProfileApi(profile: {
   responseStyle: AccountResponseStyle;
   userBackground: string;
   responseGuidelines: string;
+  assistantName?: string;
+  assistantGreeting?: string;
+  experienceMode?: WorkspaceExperienceMode;
 }): Promise<void> {
   const payload: AccountProfilePayload = {
     displayName: profile.displayName,
@@ -71,8 +85,11 @@ export async function saveUserProfileApi(profile: {
       profile.userBackground.trim(),
       profile.responseGuidelines.trim(),
     ].filter(Boolean).join('\n\n'),
+    assistantName: normalizeAssistantName(profile.assistantName),
+    assistantGreeting: (profile.assistantGreeting || '').trim().slice(0, 160),
+    experienceMode: normalizeExperienceMode(profile.experienceMode),
   };
-  const response = await fetch(`${API_BASE}/user/profile`, {
+  const response = await apiFetch(`${API_BASE}/user/profile`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

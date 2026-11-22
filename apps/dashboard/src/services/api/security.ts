@@ -1,8 +1,9 @@
 import { ApprovalRequestItem } from '../../types';
 import { API_BASE } from './client';
+import { apiFetch } from '../sessionTransport';
 
 export async function fetchApprovals(): Promise<ApprovalRequestItem[]> {
-  const res = await fetch(`${API_BASE}/approvals`);
+  const res = await apiFetch(`${API_BASE}/approvals`);
   if (!res.ok) throw new Error('Falha ao listar aprovações');
   return res.json();
 }
@@ -12,7 +13,7 @@ export async function decideApproval(
   action: 'approve' | 'reject',
   reason?: string
 ): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE}/approvals/${requestId}/decide`, {
+  const res = await apiFetch(`${API_BASE}/approvals/${requestId}/decide`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, reason }),
@@ -25,7 +26,7 @@ export async function decideApproval(
 }
 
 export async function triggerKillSwitch(target: 'global' | 'task', taskId?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/system/kill-switch`, {
+  const res = await apiFetch(`${API_BASE}/system/kill-switch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target, task_id: taskId, reason: 'Acionado pelo painel web' }),
@@ -40,7 +41,7 @@ export async function triggerKillSwitch(target: 'global' | 'task', taskId?: stri
 export async function fetchAuditLogs(limit: number = 50, offset: number = 0, severity?: string): Promise<any> {
   let url = `${API_BASE}/audit/logs?limit=${limit}&offset=${offset}`;
   if (severity) url += `&severity=${severity}`;
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Falha ao carregar trilha de auditoria" }));
     throw new Error(err.detail || "Falha ao carregar trilha de auditoria");
@@ -49,7 +50,7 @@ export async function fetchAuditLogs(limit: number = 50, offset: number = 0, sev
 }
 
 export async function fetchCyberShieldStatus(): Promise<any> {
-  const res = await fetch(`${API_BASE}/security/cyber-shield-status`);
+  const res = await apiFetch(`${API_BASE}/security/cyber-shield-status`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Falha ao consultar estado de segurança' }));
     throw new Error(err.detail || 'Falha ao consultar estado de segurança');
@@ -58,7 +59,7 @@ export async function fetchCyberShieldStatus(): Promise<any> {
 }
 
 export async function toggleNetworkIsolation(isolated: boolean, reason?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/security/network-isolation`, {
+  const res = await apiFetch(`${API_BASE}/security/network-isolation`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ isolated, reason: reason || 'Comando do operador' }),
@@ -68,7 +69,7 @@ export async function toggleNetworkIsolation(isolated: boolean, reason?: string)
 }
 
 export async function scanProjectCVEs(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/security/scan-cves/${encodeURIComponent(projectId)}`, { method: 'POST' });
+  const res = await apiFetch(`${API_BASE}/security/scan-cves/${encodeURIComponent(projectId)}`, { method: 'POST' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Erro ao escanear CVEs' }));
     throw new Error(err.detail || 'Falha no escaneamento de dependências');
@@ -77,7 +78,7 @@ export async function scanProjectCVEs(projectId: string): Promise<any> {
 }
 
 export async function runRedTeamAudit(projectId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/security/red-team/${encodeURIComponent(projectId)}`, { method: 'POST' });
+  const res = await apiFetch(`${API_BASE}/security/red-team/${encodeURIComponent(projectId)}`, { method: 'POST' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Erro no Red Team' }));
     throw new Error(err.detail || 'Falha na auditoria de segurança');
@@ -86,7 +87,7 @@ export async function runRedTeamAudit(projectId: string): Promise<any> {
 }
 
 export async function fetchSecurityPolicyTemplates(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/security/policy-templates`);
+  const res = await apiFetch(`${API_BASE}/security/policy-templates`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Falha ao carregar templates de segurança" }));
     throw new Error(err.detail || "Falha ao carregar templates de segurança");
@@ -95,7 +96,7 @@ export async function fetchSecurityPolicyTemplates(): Promise<any[]> {
 }
 
 export async function applySecurityPolicy(projectId: string, templateId: string, approvalId?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/security/apply-policy`, {
+  const res = await apiFetch(`${API_BASE}/security/apply-policy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ project_id: projectId, template_id: templateId, approval_id: approvalId }),

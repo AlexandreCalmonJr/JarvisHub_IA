@@ -11,3 +11,8 @@ export * from './studios';
 export * from './system';
 export * from './coding';
 export * from './profile';
+export * from './brain';
+export * from './integrations';
+export * from './orchestration';
+export * from './securityPhase5';
+export * from './companionPhase6';

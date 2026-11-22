@@ -1,4 +1,5 @@
 import { API_BASE, handleApiResponse } from './client';
+import { apiFetch } from '../sessionTransport';
 
 const requestOptions: RequestInit = { credentials: 'include' };
 
@@ -28,12 +29,12 @@ export interface HardwareProfileResponse {
 }
 
 export async function fetchHardwareProfile(): Promise<HardwareProfileResponse> {
-  const res = await fetch(`${API_BASE}/system/hardware-profile`, requestOptions);
+  const res = await apiFetch(`${API_BASE}/system/hardware-profile`, requestOptions);
   return handleApiResponse(res, 'Falha ao coletar perfil de hardware.');
 }
 
 export async function applyHardwareOptimizations(): Promise<any> {
-  const res = await fetch(`${API_BASE}/system/apply-hardware-optimizations`, {
+  const res = await apiFetch(`${API_BASE}/system/apply-hardware-optimizations`, {
     ...requestOptions,
     method: 'POST',
   });
@@ -41,12 +42,12 @@ export async function applyHardwareOptimizations(): Promise<any> {
 }
 
 export async function fetchPerformanceMode(): Promise<any> {
-  const res = await fetch(`${API_BASE}/hardware/performance-mode`, requestOptions);
+  const res = await apiFetch(`${API_BASE}/hardware/performance-mode`, requestOptions);
   return handleApiResponse(res, 'Falha ao carregar modo de desempenho.');
 }
 
 export async function setPerformanceMode(mode: string, cpuThreads?: number, ecoModel?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/hardware/performance-mode`, {
+  const res = await apiFetch(`${API_BASE}/hardware/performance-mode`, {
     ...requestOptions,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

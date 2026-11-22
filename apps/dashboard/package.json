@@ -5,12 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:vite": "vite",
+    "dev:brain": "tsx server.ts",
+    "start": "tsx server.ts",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "tsx --test server/brain/polyglotBrain.test.ts server/brain/sqliteBrainStore.test.ts src/router.test.ts src/services/*.test.ts firestore.rules.test.ts",
+    "test:unit": "tsx --test server/brain/polyglotBrain.test.ts server/brain/sqliteBrainStore.test.ts src/router.test.ts src/services/*.test.ts firestore.rules.test.ts",
     "test:router": "node --test scripts/router.test.mjs",
     "test:overview": "node --test scripts/overview.test.mjs",
-    "test:dashboard": "node --test",
+    "test:dashboard": "node --test scripts/*.test.mjs",
     "test:workspace": "node --test scripts/workspace.test.mjs",
     "test:coding": "node --test scripts/coding.test.mjs",
     "test:agents": "node --test scripts/agents.test.mjs",
@@ -32,12 +38,23 @@
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
+    "@google/genai": "^3.6.1",
+    "@types/express": "^5.0.6",
     "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.2",
+    "exceljs": "^4.4.0",
+    "express": "^5.3.0",
+    "firebase": "^13.4.0",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.16.0",
+    "pptxgenjs": "^4.0.1",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "tsx": "^4.23.15",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
@@ -46,6 +63,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",
-    "vite": "^6.0.1"
+    "vite": "^6.0.1",
+    "vite-plugin-pwa": "^2.0.0"
   }
 }

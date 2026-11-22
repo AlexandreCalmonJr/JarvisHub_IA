@@ -1,8 +1,9 @@
 import { SystemHealth } from '../../types';
 import { API_BASE } from './client';
+import { apiFetch } from '../sessionTransport';
 
 export async function fetchHealth(): Promise<SystemHealth> {
-  const res = await fetch(`${API_BASE}/system/health`);
+  const res = await apiFetch(`${API_BASE}/system/health`);
   if (!res.ok) throw new Error('Falha ao obter status do sistema');
   return res.json();
 }
@@ -23,7 +24,7 @@ export interface SystemResourceUsage {
 }
 
 export async function fetchResources(): Promise<SystemResourceUsage> {
-  const res = await fetch(`${API_BASE}/system/resources`, { credentials: 'include' });
+  const res = await apiFetch(`${API_BASE}/system/resources`, { credentials: 'include' });
   if (!res.ok) throw new Error('Falha ao obter métricas de recursos do sistema');
   return res.json();
 }
@@ -36,7 +37,7 @@ export async function fetchServerLogs(
   let url = `${API_BASE}/system/server-logs?limit=${limit}`;
   if (level && level !== 'ALL') url += `&level=${encodeURIComponent(level)}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
-  const res = await fetch(url, { credentials: 'include' });
+  const res = await apiFetch(url, { credentials: 'include' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Falha ao carregar logs do servidor" }));
     throw new Error(err.detail || "Falha ao carregar logs do servidor");
@@ -45,7 +46,7 @@ export async function fetchServerLogs(
 }
 
 export async function clearServerLogs(): Promise<void> {
-  const res = await fetch(`${API_BASE}/system/server-logs/clear`, { method: 'POST', credentials: 'include' });
+  const res = await apiFetch(`${API_BASE}/system/server-logs/clear`, { method: 'POST', credentials: 'include' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Falha ao limpar logs do servidor" }));
     throw new Error(err.detail || "Falha ao limpar logs do servidor");
@@ -53,7 +54,7 @@ export async function clearServerLogs(): Promise<void> {
 }
 
 export async function createSystemBackup(): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE}/system/backup`, {
+  const res = await apiFetch(`${API_BASE}/system/backup`, {
     method: 'POST',
     credentials: 'include',
   });
@@ -79,7 +80,7 @@ export interface InferenceTelemetryRecord {
 }
 
 export async function fetchTaskInferenceTelemetry(taskId: string): Promise<InferenceTelemetryRecord[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/system/inference-telemetry?limit=100&task_id=${encodeURIComponent(taskId)}`
   );
   if (!res.ok) {
@@ -91,7 +92,7 @@ export async function fetchTaskInferenceTelemetry(taskId: string): Promise<Infer
 }
 
 export async function submitInferenceFeedback(inferenceId: string, rating: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/system/inference-feedback`, {
+  const res = await apiFetch(`${API_BASE}/system/inference-feedback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ inference_id: inferenceId, rating }),
@@ -149,7 +150,7 @@ export interface OverviewTelemetryResponse {
 }
 
 export async function fetchModelQualitySummary(): Promise<ModelQualitySummary[]> {
-  const res = await fetch(`${API_BASE}/system/inference-telemetry?limit=1`);
+  const res = await apiFetch(`${API_BASE}/system/inference-telemetry?limit=1`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Falha ao carregar qualidade dos modelos.' }));
     throw new Error(err.detail || 'Falha ao carregar qualidade dos modelos.');
@@ -159,7 +160,7 @@ export async function fetchModelQualitySummary(): Promise<ModelQualitySummary[]>
 }
 
 export async function fetchOverviewTelemetry(limit: number = 100): Promise<OverviewTelemetryResponse> {
-  const res = await fetch(`${API_BASE}/system/inference-telemetry?limit=${limit}`, {
+  const res = await apiFetch(`${API_BASE}/system/inference-telemetry?limit=${limit}`, {
     credentials: 'include',
   });
   if (!res.ok) {

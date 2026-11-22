@@ -1,4 +1,5 @@
 import { API_BASE } from './client';
+import { apiFetch } from '../sessionTransport';
 
 const requestOptions: RequestInit = { credentials: 'include' };
 
@@ -62,7 +63,7 @@ export type CodingEvent = {
 };
 
 export async function fetchCodingTools(): Promise<CodingToolsResponse> {
-  const res = await fetch(`${API_BASE}/coding/tools`, requestOptions);
+  const res = await apiFetch(`${API_BASE}/coding/tools`, requestOptions);
   if (!res.ok) throw new Error('Falha ao carregar as ferramentas do Coding Agent');
   return res.json();
 }
@@ -76,13 +77,13 @@ export interface McpReloadSummary {
 }
 
 export async function reloadMcpServers(): Promise<McpReloadSummary> {
-  const res = await fetch(`${API_BASE}/mcp/reload`, { ...requestOptions, method: 'POST' });
+  const res = await apiFetch(`${API_BASE}/mcp/reload`, { ...requestOptions, method: 'POST' });
   if (!res.ok) throw new Error('Falha ao recarregar servidores MCP');
   return res.json();
 }
 
 export async function fetchCodingMessages(sessionId: string): Promise<CodingMessage[]> {
-  const res = await fetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`, requestOptions);
+  const res = await apiFetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`, requestOptions);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'Falha ao carregar histórico do Coding Agent.' }));
     throw new Error(errorData.detail || 'Falha ao carregar histórico do Coding Agent.');
@@ -92,7 +93,7 @@ export async function fetchCodingMessages(sessionId: string): Promise<CodingMess
 }
 
 export async function clearCodingMessages(sessionId: string): Promise<number> {
-  const res = await fetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`, {
+  const res = await apiFetch(`${API_BASE}/coding/sessions/${encodeURIComponent(sessionId)}/messages`, {
     ...requestOptions,
     method: 'DELETE',
   });
@@ -106,7 +107,7 @@ export async function decideCodingApproval(
   action: 'approve' | 'reject',
   reason?: string
 ): Promise<any> {
-  const res = await fetch(`${API_BASE}/coding/approvals/${encodeURIComponent(approvalId)}/decide`, {
+  const res = await apiFetch(`${API_BASE}/coding/approvals/${encodeURIComponent(approvalId)}/decide`, {
     ...requestOptions,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -127,7 +128,7 @@ export async function runCodingAgentStream(
   onEvent: (event: CodingEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/coding/run/stream`, {
+  const res = await apiFetch(`${API_BASE}/coding/run/stream`, {
     ...requestOptions,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

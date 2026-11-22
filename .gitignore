@@ -73,7 +73,10 @@ desktop.ini
 /data/
 /backups/
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
+.jarvis-brain/
 # Pesos de LLM na raiz do repositório. Ancorado para não excluir código-fonte
 # em diretórios chamados "models" (ex.: apps/dashboard/src/components/models/).
 /models/

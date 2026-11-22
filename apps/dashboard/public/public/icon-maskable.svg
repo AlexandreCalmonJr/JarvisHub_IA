@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JARVIS AI Hub">
+  <rect width="512" height="512" fill="#1f1e1d"/>
+  <circle cx="256" cy="256" r="128" fill="#d97757"/>
+  <circle cx="212" cy="240" r="18" fill="#1f1e1d"/>
+  <circle cx="300" cy="240" r="18" fill="#1f1e1d"/>
+  <rect x="212" y="292" width="88" height="16" rx="8" fill="#1f1e1d"/>
+</svg>

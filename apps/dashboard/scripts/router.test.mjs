@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 
 const read = (path) => readFileSync(resolve(import.meta.dirname, path), 'utf8');
 const router = read('../src/router.ts');
-const rail = read('../src/components/navigation/PrimaryRail.tsx');
+const rail = read('../src/shared/navigation/PrimaryRail.tsx');
 const app = read('../src/App.tsx');
 
 const pathsBlock = router.match(/export const TAB_PATHS: Record<string, string> = \{([\s\S]*?)\n\};/)?.[1] || '';

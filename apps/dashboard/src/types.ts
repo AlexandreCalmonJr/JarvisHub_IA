@@ -27,6 +27,18 @@ export interface ApprovalRequestItem {
   requested_at: string;
 }
 
+export interface HybridSourceItem {
+  title: string;
+  url: string;
+}
+
+export interface AgentMascotMeta {
+  id: string;
+  color: string;
+  accessory: string;
+  mood?: string;
+}
+
 export interface TaskStateResponse {
   task_id: string;
   session_id: string;
@@ -43,17 +55,91 @@ export interface TaskStateResponse {
   final_summary?: string;
   is_completed: boolean;
   error?: string | null;
+  execution_mode?: 'LOCAL' | 'ONLINE';
+  provider?: 'ollama' | 'gemini' | string;
+  model_used?: string;
+  latency_ms?: number;
+  reasoning?: string;
+  routing_note?: string;
+  sources?: HybridSourceItem[];
+  agent_meta?: {
+    role: string;
+    name: string;
+    proper_name: string;
+    handle: string;
+    mascot?: AgentMascotMeta;
+  };
+  orchestration_mode?: string;
+  artifact_payload?: {
+    id: string;
+    kind: 'pptx' | 'pdf' | 'png';
+    title: string;
+    subtitle: string;
+    author: string;
+    created_at: string;
+    slides?: Array<{
+      title: string;
+      subtitle?: string;
+      bullets: string[];
+      speakerNotes?: string;
+      accent?: string;
+    }>;
+    sections?: Array<{
+      heading: string;
+      body: string;
+      highlights?: string[];
+    }>;
+    svg_markup?: string;
+    palette?: string[];
+    model_used: string;
+  } | null;
+}
+
+export interface AgentVersionSnapshot {
+  version: number;
+  saved_at: string;
+  summary: string;
+  snapshot: {
+    name: string;
+    proper_name: string;
+    handle: string;
+    mission: string;
+    system_prompt: string;
+    preferred_model: string;
+    routing_policy: 'auto_hybrid' | 'local_only' | 'online_only';
+    autonomy_level: 'read_only' | 'ask_approval' | 'autonomous';
+    is_read_only: boolean;
+    strict_focus: boolean;
+    strict_topic: string;
+    delegation_targets: string[];
+    allowed_tools: string[];
+    mascot: AgentMascotMeta;
+  };
 }
 
 export interface AgentInfo {
   role: string;
   name: string;
+  proper_name?: string;
+  handle?: string;
+  category?: 'orchestration' | 'security' | 'studies' | 'creative' | 'business' | 'dev' | 'data' | string;
   mission: string;
   preferred_model: string;
+  routing_policy?: 'auto_hybrid' | 'local_only' | 'online_only';
+  autonomy_level?: 'read_only' | 'ask_approval' | 'autonomous';
   is_read_only: boolean;
+  strict_focus?: boolean;
+  strict_topic?: string;
+  delegation_targets?: string[];
   allowed_tools: string[];
   system_prompt?: string;
   assigned_key_id?: string;
+  mascot?: AgentMascotMeta;
+  is_custom?: boolean;
+  template_id?: string;
+  installed_skills?: string[];
+  version?: number;
+  updated_at?: string;
 }
 
 export interface AgentMemoryItem {
@@ -89,12 +175,19 @@ export interface SkillInfo {
 }
 
 export const AGENT_ROLE_LABELS: Record<string, string> = {
-  jarvis_master: 'JARVIS Maestro',
+  jarvis_master: 'Maestro Orquestrador',
+  sentinel_security: 'Sentinela de Segurança',
+  english_tutor: 'Professora de Inglês',
+  math_tutor: 'Tutor de Matemática',
+  presentation_creator: 'Criador de PowerPoint',
+  document_specialist: 'Especialista em PDFs & Trabalhos',
+  finance_business: 'Analista de Finanças & Negócios',
+  flow_architect: 'Flow Architect (Criação de Fluxos)',
   software_architect: 'Arquiteto de Software',
   project_manager: 'Gerente de Projetos',
-  research_analyst: 'Analista de Pesquisa Técnica',
+  research_analyst: 'Pesquisador Web & Relatórios',
   project_designer_planner: 'Designer & Planejador de Projetos',
-  ux_ui_designer: 'Designer de UX/UI',
+  ux_ui_designer: 'Designer Visual & Imagens',
   frontend_mobile_developer: 'Desenvolvedor Frontend & Mobile',
   backend_developer: 'Desenvolvedor Backend (APIs)',
   qa_engineer: 'Engenheiro de QA & Testes',
@@ -145,7 +238,9 @@ export const getAgentLabel = (role: string): string => {
 
 export const MODEL_LABELS: Record<string, string> = {
   auto: 'Automático Local',
-  auto_hybrid: 'Roteamento Híbrido Automático',
+  auto_hybrid: 'Híbrido (Local + Gemini)',
+  'gemini-4-hydrogen': 'Gemini 4 Hydrogen (Online)',
+  'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite (Online)',
 };
 
 export const getModelLabel = (model?: string | null): string => {

@@ -1,14 +1,15 @@
 import { API_BASE, handleApiResponse } from './client';
+import { apiFetch } from '../sessionTransport';
 
 const requestOptions: RequestInit = { credentials: 'include' };
 
 async function getJson<T>(path: string, error: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, requestOptions);
+  const response = await apiFetch(`${API_BASE}${path}`, requestOptions);
   return handleApiResponse<T>(response, error);
 }
 
 async function postJson<T>(path: string, payload: unknown, error: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await apiFetch(`${API_BASE}${path}`, {
     ...requestOptions,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -26,7 +27,7 @@ export async function saveMockEndpoint(payload: any): Promise<any> {
 }
 
 export async function deleteMockEndpoint(id: string): Promise<any> {
-  const response = await fetch(`${API_BASE}/mock-server/endpoints/${encodeURIComponent(id)}`, {
+  const response = await apiFetch(`${API_BASE}/mock-server/endpoints/${encodeURIComponent(id)}`, {
     ...requestOptions,
     method: 'DELETE',
   });

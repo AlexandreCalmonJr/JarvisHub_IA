@@ -1,0 +1,8 @@
+{
+  "name": "JARVIS AI Hub",
+  "description": "Plataforma de orquestração multiagente, engenharia de software, modelos locais e governança operacional.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

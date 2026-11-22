@@ -1,0 +1,290 @@
+{
+  "entities": {
+    "UserIdentity": {
+      "title": "UserIdentity",
+      "description": "Public/non-PII assistant identity and workspace mode preferences for an authenticated user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name shown in greetings",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "assistantName": {
+          "type": "string",
+          "description": "Custom dynamic name of the personal assistant (e.g., JARVIS, João, Maria)",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "assistantGreeting": {
+          "type": "string",
+          "description": "Custom greeting style or short welcome phrase",
+          "maxLength": 160
+        },
+        "experienceMode": {
+          "type": "string",
+          "description": "Active interface mode for this user",
+          "enum": ["simple", "engineering"]
+        },
+        "avatarIcon": {
+          "type": "string",
+          "description": "Short avatar icon or initial",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "accentTheme": {
+          "type": "string",
+          "description": "Preferred accent palette",
+          "enum": ["orange", "blue", "purple", "emerald"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update"
+        }
+      },
+      "required": [
+        "ownerId",
+        "displayName",
+        "assistantName",
+        "experienceMode",
+        "avatarIcon",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateProfile": {
+      "title": "UserPrivateProfile",
+      "description": "Isolated private user details and instructions (strictly owner-only / admin-only).",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified account email (PII)",
+          "maxLength": 160
+        },
+        "roleTitle": {
+          "type": "string",
+          "description": "User role or profession",
+          "maxLength": 100
+        },
+        "seniorityLevel": {
+          "type": "string",
+          "enum": ["junior", "mid", "senior", "architect"]
+        },
+        "responseStyle": {
+          "type": "string",
+          "enum": ["concise", "detailed", "educational"]
+        },
+        "userBackground": {
+          "type": "string",
+          "description": "Background context for the assistant",
+          "maxLength": 2000
+        },
+        "responseGuidelines": {
+          "type": "string",
+          "description": "Permanent formatting and response preferences",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerId", "createdAt", "updatedAt"]
+    },
+    "Household": {
+      "title": "Household",
+      "description": "Shared family space connecting multiple personal assistants (e.g., João and Maria).",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerId", "name", "createdAt", "updatedAt"]
+    },
+    "HouseholdMember": {
+      "title": "HouseholdMember",
+      "description": "Membership record authorizing a user inside a shared household.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "householdId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "memberRole": {
+          "type": "string",
+          "enum": ["owner", "member"]
+        },
+        "assistantName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "householdId",
+        "memberRole",
+        "assistantName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "HouseholdMemory": {
+      "title": "HouseholdMemory",
+      "description": "Shared memory item exchanged between personal assistants in the same household.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "householdId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "authorAssistant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "category": {
+          "type": "string",
+          "enum": ["family", "studies", "tasks", "research", "notes"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "archived"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "householdId",
+        "authorAssistant",
+        "title",
+        "content",
+        "category",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrator marker document used for RBAC checks.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["ownerId", "grantedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserIdentity" },
+      "description": "User assistant identity and workspace mode preferences."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateProfile" },
+      "description": "Isolated PII and private assistant instructions for a user."
+    },
+    "/households/{householdId}": {
+      "schema": { "$ref": "#/entities/Household" },
+      "description": "Shared family workspace metadata."
+    },
+    "/households/{householdId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/HouseholdMember" },
+      "description": "Authorized household members and their assistant names."
+    },
+    "/households/{householdId}/shared_memories/{memoryId}": {
+      "schema": { "$ref": "#/entities/HouseholdMemory" },
+      "description": "Shared memories synced between household assistants."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator directory (read/write restricted to admins)."
+    }
+  }
+}
