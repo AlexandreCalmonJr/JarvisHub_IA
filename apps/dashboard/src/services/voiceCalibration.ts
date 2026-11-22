@@ -45,6 +45,34 @@ export const CALIBRATION_STEPS: CalibrationStepDef[] = [
 ];
 
 /**
+ * Calcula a intensidade média de frequência a partir de um buffer de bytes (0-255).
+ */
+export function calculateFrequencyVolume(buffer: Uint8Array): number {
+  if (!buffer || buffer.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    sum += buffer[i];
+  }
+  return Math.round((sum / buffer.length) * 100) / 100;
+}
+
+/**
+ * Normaliza o volume de frequência médio para uma escala percentual de 0 a 100%.
+ */
+export function normalizeVolumeLevel(avgVolume: number, maxExpected: number = 100): number {
+  if (!avgVolume || avgVolume <= 0 || isNaN(avgVolume)) return 0;
+  const percentage = (avgVolume / maxExpected) * 100;
+  return Math.min(100, Math.max(0, Math.round(percentage)));
+}
+
+/**
+ * Determina se o sinal de áudio médio ultrapassa o limiar de fala/voz física ativa.
+ */
+export function isVoiceActive(avgVolume: number, threshold: number = 14): boolean {
+  return typeof avgVolume === 'number' && !isNaN(avgVolume) && avgVolume >= threshold;
+}
+
+/**
  * Retorna os dados de calibração armazenados para a conta ativa.
  */
 export function getVoiceCalibration(): VoiceCalibrationData | null {

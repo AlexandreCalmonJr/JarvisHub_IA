@@ -115,7 +115,11 @@ export function useWakeWordListener({
         recognitionRef.current.onend = null;
         recognitionRef.current.onerror = null;
         recognitionRef.current.onresult = null;
-        recognitionRef.current.stop();
+        if (typeof recognitionRef.current.abort === 'function') {
+          recognitionRef.current.abort();
+        } else {
+          recognitionRef.current.stop();
+        }
       } catch {}
       recognitionRef.current = null;
     }

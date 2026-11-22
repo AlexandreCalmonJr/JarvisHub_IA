@@ -191,3 +191,46 @@ async def test_voice_command_blocks_when_kill_switch_active():
             assert "parada de emergência" in data["reply"]
     finally:
         security_core.kill_switch.reset_global_kill(authorized_by="admin-test")
+
+
+@pytest.mark.asyncio
+async def test_voice_briefing_and_converse_endpoints():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Briefing
+        briefing_resp = await client.get("/api/v1/voice/briefing")
+        assert briefing_resp.status_code == 200
+        bdata = briefing_resp.json()
+        assert bdata["assistant_name"] == "JARVIS"
+        assert "greeting" in bdata
+        assert "briefing_line" in bdata
+        assert len(bdata["quick_prompts"]) > 0
+
+        # 2. Converse com Wake Word apenas
+        wake_resp = await client.post(
+            "/api/v1/voice/converse",
+            json={"transcript": "Ei JARVIS", "practice_mode": "general"},
+        )
+        assert wake_resp.status_code == 200
+        wdata = wake_resp.json()
+        assert wdata["detected_wake_word"] is True
+        assert "na escuta" in wdata["reply"]
+
+        # 3. Converse com comando determinístico
+        cmd_resp = await client.post(
+            "/api/v1/voice/converse",
+            json={"transcript": "Ei JARVIS, que horas são?", "practice_mode": "general"},
+        )
+        assert cmd_resp.status_code == 200
+        cdata = cmd_resp.json()
+        assert cdata["detected_wake_word"] is True
+        assert "Agora são" in cdata["reply"]
+
+        # 4. Converse em modo inglês
+        en_resp = await client.post(
+            "/api/v1/voice/converse",
+            json={"transcript": "Hello JARVIS", "practice_mode": "english"},
+        )
+        assert en_resp.status_code == 200
+        edata = en_resp.json()
+        assert "Great job" in edata["reply"]
+

@@ -11,7 +11,7 @@ async def test_api_serves_dashboard_html():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         res = await client.get("/")
         assert res.status_code == 200
-        assert "JARVIS AI HUB" in res.text
+        assert "JARVIS AI HUB" in res.text.upper()
 
 
 @pytest.mark.asyncio

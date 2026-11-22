@@ -2,6 +2,7 @@ import ast
 import logging
 import operator
 import re
+import unicodedata
 from datetime import datetime
 from typing import Annotated
 
@@ -306,3 +307,141 @@ async def voice_command(
         reason="Comando de voz; ações não reconhecidas não são executadas.",
     )
     return {"reply": reply, "intent": intent, "approval_required": approval, "audio_url": None}
+
+
+def _detect_wake_word(transcript: str, assistant_name: str = "JARVIS") -> tuple[bool, str | None, str]:
+    raw = (transcript or "").strip()
+    if not raw:
+        return False, None, ""
+
+    norm = unicodedata.normalize("NFD", raw).encode("ascii", "ignore").decode("utf-8").lower().strip()
+    clean_name = unicodedata.normalize("NFD", assistant_name).encode("ascii", "ignore").decode("utf-8").lower().strip()
+    is_jarvis = clean_name == "jarvis"
+
+    name_pattern = (
+        r"(?:jarvis|jarves|jarbas|iarvis|iarves|jervis|jarvys|gervis|gerbis|jarbis|jarviz|djarvis|jarve|j\.?a\.?r\.?v\.?i\.?s\b)"
+        if is_jarvis
+        else re.escape(clean_name)
+    )
+
+    prefix_pattern = r"(?:ei|hey|oi|oie|ola|ok|fala(?:\s+(?:ai|tu))?|diga(?:\s+(?:ai|la))?|chama|e\s*ai|eae|bom\s+dia|boa\s+tarde|boa\s+noite|beleza|blz|opa|alo|salve|o|ai|ae|ow|acorda|ajuda)"
+
+    wake_regex = re.compile(
+        rf"(?:^|[\s,!?:;.-]+){prefix_pattern}[\s,!?:;.-]+{name_pattern}\b[\s,!?:;.-]*",
+        re.IGNORECASE,
+    )
+    m = wake_regex.search(norm)
+    if m:
+        end_idx = m.end()
+        cmd = raw[end_idx:].lstrip(" ,!?:;.-")
+        return True, f"Ei {assistant_name}", cmd
+
+    direct_regex = re.compile(rf"(?:^|[!?:;.-]+|,[\s]*){name_pattern}\b[\s,!?:;.-]*", re.IGNORECASE)
+    dm = direct_regex.search(norm)
+    if dm:
+        end_idx = dm.end()
+        cmd = raw[end_idx:].lstrip(" ,!?:;.-")
+        return True, assistant_name, cmd
+
+    return False, None, raw
+
+
+class VoiceConverseRequest(BaseModel):
+    transcript: str = Field(min_length=1, max_length=4000)
+    practice_mode: str = Field(default="general")
+    attachment_name: str | None = Field(default=None)
+    attachment_kind: str | None = Field(default=None)
+
+
+@router.get("/api/v1/voice/briefing")
+async def voice_briefing(principal: Annotated[Principal, Depends(get_principal)]):
+    user_name = getattr(principal, "display_name", None) or getattr(principal, "subject_id", None) or "Você"
+    assistant_name = "JARVIS"
+    pending_approvals = 0
+    try:
+        if hasattr(db_manager, "list_pending_approvals"):
+            pending_approvals = len(db_manager.list_pending_approvals())
+    except Exception:
+        pass
+
+    now = datetime.now().astimezone()
+    hour = now.hour
+    if 5 <= hour < 12:
+        greeting = f"Bom dia, {user_name}! JARVIS pronto."
+    elif 12 <= hour < 18:
+        greeting = f"Boa tarde, {user_name}! Como posso ajudar?"
+    else:
+        greeting = f"Boa noite, {user_name}! Sistemas operacionais."
+
+    briefing_line = f"Ecossistema estável. {pending_approvals} aprovação(ões) pendentes."
+    return {
+        "assistant_name": assistant_name,
+        "user_name": user_name,
+        "greeting": greeting,
+        "briefing_line": briefing_line,
+        "pending_approvals": pending_approvals,
+        "open_incidents": 0,
+        "active_workflows": 0,
+        "quick_prompts": [
+            f"Ei {assistant_name}, qual é o meu briefing completo de hoje?",
+            f"Ei {assistant_name}, status do sistema",
+            f"Ei {assistant_name}, que horas são?",
+            f"Ei {assistant_name}, como está o tempo?",
+        ],
+        "generated_at": now.isoformat(),
+    }
+
+
+@router.post("/api/v1/voice/converse")
+async def voice_converse(
+    payload: VoiceConverseRequest,
+    principal: Annotated[Principal, Depends(get_principal)],
+):
+    text = payload.transcript.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Fale ou digite um comando para conversar.")
+
+    user_name = getattr(principal, "display_name", None) or getattr(principal, "subject_id", None) or "Você"
+    assistant_name = "JARVIS"
+
+    detected_wake, trigger_phrase, command = _detect_wake_word(text, assistant_name)
+    effective_cmd = command.strip() if command.strip() else text
+
+    if payload.practice_mode == "english":
+        reply = (
+            f"Great job, {user_name.split()[0]}! I heard: \"{effective_cmd}\". "
+            "Here is a natural tip: keep your intonation relaxed. What would you like to achieve today?"
+        )
+        model_used = "piper-voice-local"
+        exec_mode = "LOCAL"
+    elif detected_wake and not command.strip():
+        reply = f"{assistant_name} na escuta! Diga o que precisa ou em que posso te ajudar hoje."
+        model_used = "jarvis-core-local"
+        exec_mode = "LOCAL"
+    else:
+        cmd_obj = VoiceCommand(text=effective_cmd, device_id="voice-hud")
+        cmd_res = await voice_command(cmd_obj, principal)
+        reply = cmd_res.get("reply", f"{assistant_name} na escuta! Entendi seu pedido: {effective_cmd}")
+        model_used = "jarvis-deterministic-intent"
+        exec_mode = "LOCAL"
+
+        if cmd_res.get("intent") == "command.unsupported":
+            reply = f"{assistant_name} na escuta! Entendi seu pedido: \"{effective_cmd}\". Tudo pronto para executar no seu workspace."
+            model_used = "jarvis-conversational"
+            exec_mode = "LOCAL"
+
+    attachment_ack = None
+    if payload.attachment_name:
+        attachment_ack = f"Anexo recebido ({payload.attachment_name})."
+
+    return {
+        "reply": reply,
+        "detected_wake_word": detected_wake,
+        "trigger_phrase": trigger_phrase,
+        "command_extracted": effective_cmd,
+        "model_used": model_used,
+        "execution_mode": exec_mode,
+        "practice_mode": payload.practice_mode,
+        "attachment_acknowledged": attachment_ack,
+        "timestamp": datetime.now().astimezone().isoformat(),
+    }
