@@ -237,12 +237,30 @@ async def voice_command(
         content = rm.group(1).strip() if rm else "novo lembrete"
         reply, intent, approval = f"Lembrete criado: {content}.", "reminder.create", False
     elif re.search(
-        r"\b(como est[áa] o tempo|previs[ãa]o do tempo|como est[áa] o clima|qual a temperatura|temperatura hoje|vai chover)\b",
+        r"\b(como (?:é que )?(?:est[áa]|t[áa]) o (?:tempo|clima|dia)|como (?:est[áa]|t[áa]) o dia(?: hoje)?|previs[ãa]o do (?:tempo|clima|dia)|qual a temperatura|temperatura hoje|vai chover)\b",
         normalized,
     ):
         reply, intent, approval = (
-            "O tempo está ameno com céu limpo e temperatura de 22 graus.",
+            "O dia está agradável com céu limpo, temperatura de 22 graus e sem previsão de chuva no momento.",
             "weather.info",
+            False,
+        )
+    elif re.search(r"\b(tudo bem|tudo bom|como voc[êe] est[áa]|como vai|tudo certo)\b", normalized):
+        reply, intent, approval = (
+            "Tudo ótimo por aqui! Sistemas operacionais e pronto para ajudar você.",
+            "conversational.greeting",
+            False,
+        )
+    elif re.search(r"\b(briefing|resumo do dia|resumo de hoje|o que temos para hoje|minhas pend[êe]ncias)\b", normalized):
+        reply, intent, approval = (
+            "Seu ecossistema está estável, sem alertas críticos e com todos os serviços em execução.",
+            "briefing.summary",
+            False,
+        )
+    elif re.search(r"\b(quem [ée] voc[êe]|o que voc[êe] faz|qual seu nome)\b", normalized):
+        reply, intent, approval = (
+            "Eu sou o JARVIS, sua plataforma inteligente de agentes autônomos e automação local.",
+            "assistant.identity",
             False,
         )
     elif re.search(
@@ -319,12 +337,12 @@ def _detect_wake_word(transcript: str, assistant_name: str = "JARVIS") -> tuple[
     is_jarvis = clean_name == "jarvis"
 
     name_pattern = (
-        r"(?:jarvis|jarves|jarbas|iarvis|iarves|jervis|jarvys|gervis|gerbis|jarbis|jarviz|djarvis|jarve|j\.?a\.?r\.?v\.?i\.?s\b)"
+        r"(?:jarvis|jarves|jarbas|iarvis|iarves|jervis|jarvys|gervis|gerbis|jarbis|jarviz|djarvis|jarve|joao|j\.?a\.?r\.?v\.?i\.?s\b)"
         if is_jarvis
         else re.escape(clean_name)
     )
 
-    prefix_pattern = r"(?:ei|hey|oi|oie|ola|ok|fala(?:\s+(?:ai|tu))?|diga(?:\s+(?:ai|la))?|chama|e\s*ai|eae|bom\s+dia|boa\s+tarde|boa\s+noite|beleza|blz|opa|alo|salve|o|ai|ae|ow|acorda|ajuda)"
+    prefix_pattern = r"(?:ei|hey|oi|oie|ola|ok|fala(?:\s+(?:ai|tu))?|diga(?:\s+(?:ai|la))?|chama(?:\s+[oa])?|e\s*ai|eae|eai|bom\s+dia|boa\s+tarde|boa\s+noite|beleza|blz|opa|alo|salve|o|ai|ae|ow|e|acorda|ajuda)"
 
     wake_regex = re.compile(
         rf"(?:^|[\s,!?:;.-]+){prefix_pattern}[\s,!?:;.-]+{name_pattern}\b[\s,!?:;.-]*",
@@ -438,7 +456,7 @@ async def voice_converse(
         "reply": reply,
         "detected_wake_word": detected_wake,
         "trigger_phrase": trigger_phrase,
-        "command_extracted": effective_cmd,
+        "command_extracted": "" if (detected_wake and not command.strip()) else effective_cmd,
         "model_used": model_used,
         "execution_mode": exec_mode,
         "practice_mode": payload.practice_mode,

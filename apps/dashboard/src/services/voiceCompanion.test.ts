@@ -149,6 +149,25 @@ test('detectWakeWord handles speech recognition punctuation, Portuguese idioms a
   assert.equal(iarves.detected, true);
   assert.equal(iarves.command, 'conectar');
 
+  // PT-BR Chrome Web Speech API frequent mistranscriptions of "Ei JARVIS" as "e João" / "ei João" / "João"
+  const eJoaoCmd = detectWakeWord('e João como é que tá o dia hoje', 'JARVIS');
+  assert.equal(eJoaoCmd.detected, true);
+  assert.equal(eJoaoCmd.triggerPhrase, 'Ei JARVIS');
+  assert.equal(eJoaoCmd.command, 'como é que tá o dia hoje');
+
+  const eJoaoSolo = detectWakeWord('e João', 'JARVIS');
+  assert.equal(eJoaoSolo.detected, true);
+  assert.equal(eJoaoSolo.triggerPhrase, 'Ei JARVIS');
+  assert.equal(eJoaoSolo.command, '');
+
+  const eiJoao = detectWakeWord('ei João que horas são', 'JARVIS');
+  assert.equal(eiJoao.detected, true);
+  assert.equal(eiJoao.command, 'que horas são');
+
+  const joaoSolo = detectWakeWord('João', 'JARVIS');
+  assert.equal(joaoSolo.detected, true);
+  assert.equal(joaoSolo.command, '');
+
   const jarvisDots = detectWakeWord('Ei J.A.R.V.I.S. iniciar', 'JARVIS');
   assert.equal(jarvisDots.detected, true);
   assert.equal(jarvisDots.command, 'iniciar');

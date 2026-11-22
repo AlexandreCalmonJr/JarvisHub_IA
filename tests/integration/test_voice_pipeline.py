@@ -234,3 +234,34 @@ async def test_voice_briefing_and_converse_endpoints():
         edata = en_resp.json()
         assert "Great job" in edata["reply"]
 
+        # 5. Converse com variação fonética PT-BR ("e João" -> "Ei JARVIS") + comando coloquial de dia/tempo
+        joao_resp = await client.post(
+            "/api/v1/voice/converse",
+            json={"transcript": "e João como é que tá o dia hoje", "practice_mode": "general"},
+        )
+        assert joao_resp.status_code == 200
+        jdata = joao_resp.json()
+        assert jdata["detected_wake_word"] is True
+        assert jdata["trigger_phrase"] == "Ei JARVIS"
+        assert "dia está agradável" in jdata["reply"] or "tempo" in jdata["reply"]
+        assert jdata["model_used"] == "jarvis-deterministic-intent"
+
+        # 6. Converse apenas com a chamada fonética ("e João" sem comando subsequente)
+        joao_solo_resp = await client.post(
+            "/api/v1/voice/converse",
+            json={"transcript": "e João", "practice_mode": "general"},
+        )
+        assert joao_solo_resp.status_code == 200
+        jsdata = joao_solo_resp.json()
+        assert jsdata["detected_wake_word"] is True
+        assert "JARVIS na escuta! Diga o que precisa" in jsdata["reply"]
+        assert jsdata["command_extracted"] == ""
+
+        # 7. Saudação coloquial e identidade
+        greet_resp = await client.post(
+            "/api/v1/voice/converse",
+            json={"transcript": "Ei JARVIS tudo bem", "practice_mode": "general"},
+        )
+        assert greet_resp.status_code == 200
+        assert "Tudo ótimo por aqui!" in greet_resp.json()["reply"]
+

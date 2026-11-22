@@ -45,9 +45,9 @@ export function detectWakeWord(transcript: string, assistantName: string): WakeW
   const isJarvis = cleanAssistant.replace(/[^a-z0-9]/g, '') === 'jarvis';
 
   // Variações e transcrições fonéticas comuns do Web Speech API em PT-BR para JARVIS
-  // (ex: "Jarbas", "Jarves", "Iarvis", "Iarves", "Jervis", "Jarvys", "Gervis", "Gerbis", "Jarbis", "Jarviz", "Djarvis", "Jarve", "J.A.R.V.I.S.")
+  // (ex: "Jarbas", "Jarves", "Iarvis", "Iarves", "Jervis", "Jarvys", "Gervis", "Gerbis", "Jarbis", "Jarviz", "Djarvis", "Jarve", "João", "J.A.R.V.I.S.")
   const namePattern = isJarvis
-    ? '(?:jarvis|jarves|jarbas|iarvis|iarves|jervis|jarvys|gervis|gerbis|jarbis|jarviz|djarvis|jarve|j\\.?a\\.?r\\.?v\\.?i\\.?s\\.?)'
+    ? '(?:jarvis|jarves|jarbas|iarvis|iarves|jervis|jarvys|gervis|gerbis|jarbis|jarviz|djarvis|jarve|joao|j\\.?a\\.?r\\.?v\\.?i\\.?s\\.?)'
     : cleanAssistant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const norm = stripDiacritics(raw);
@@ -55,10 +55,10 @@ export function detectWakeWord(transcript: string, assistantName: string): WakeW
   // Aceita prefixos naturais em português e inglês:
   // ei, hey, oi, oie, olá, ok, fala, fala aí, fala tu, diga, diga aí, diga lá, chama,
   // e aí, eae, eai, bom dia, boa tarde, boa noite, beleza, blz, opa, alô, salve,
-  // ô, o, aí, ai, ae, ow, acorda, ajuda
+  // ô, o, aí, ai, ae, ow, e, acorda, ajuda
   // Permite pontuações e espaços naturais entre o prefixo e o nome (ex: "Ei, JARVIS!", "E aí, Jarvis?", "Bom dia JARVIS")
   const prefixPattern =
-    '(?:ei|hey|oi|oie|ola|ok|fala(?:\\s+(?:ai|tu))?|diga(?:\\s+(?:ai|la))?|chama(?:\\s+[oa])?|e\\s*ai|eae|bom\\s+dia|boa\\s+tarde|boa\\s+noite|beleza|blz|opa|alo|salve|o|ai|ae|ow|acorda|ajuda)';
+    '(?:ei|hey|oi|oie|ola|ok|fala(?:\\s+(?:ai|tu))?|diga(?:\\s+(?:ai|la))?|chama(?:\\s+[oa])?|e\\s*ai|eae|eai|bom\\s+dia|boa\\s+tarde|boa\\s+noite|beleza|blz|opa|alo|salve|o|ai|ae|ow|e|acorda|ajuda)';
   const wakeRegex = new RegExp(`(?:^|[\\s,!?:;.-]+)${prefixPattern}[\\s,!?:;.-]+${namePattern}\\b[\\s,!?:;.-]*`, 'i');
   const match = norm.match(wakeRegex);
 
